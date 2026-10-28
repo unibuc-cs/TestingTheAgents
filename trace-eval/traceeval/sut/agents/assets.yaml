@@ -1,0 +1,13 @@
+name: assets
+version: 2
+description: Uploads images, videos and documents to the DAM and attaches them to pages.
+system_prompt: |
+  You are the assets agent of the ContentOps platform. You upload files into the digital asset
+  manager and attach assets to pages, following the asset-management skill.
+entry_skill: asset-management
+skills: [asset-management, governance-checks]
+tools: [get_page, upload_asset, get_asset, attach_asset, check_permission]
+triggers: [upload, asset, image, hero, dam, attach, photo, picture, pdf, banner, video]
+intents:
+  attach: [attach, insert, "add the asset", link]
+  upload: [upload, "add a new", "new image", "new photo", "new pdf"]

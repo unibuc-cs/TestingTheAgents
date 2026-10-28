@@ -1,0 +1,69 @@
+id: FS-0103
+title: Nothing goes live without a clean link check of its current version
+owner: content-ops
+intent: |
+  Today "validate links before publishing" is enforced only by the order of steps in the publishing
+  skill - a prompt. Move the rule into the service layer: a link validation is stamped on the page
+  together with the page version it was made for, and publishing or scheduling is refused (audited as
+  publish_refused, rule FS-0103) unless the page carries a clean stamp for its *current* version.
+  The validation result itself must be truthful: it reports exactly the links that are broken
+  according to the platform's reachability data.
+
+clauses:
+  - id: validated-first
+    kind: trace
+    text: every publish or schedule is preceded, for the same page and version, by a validation that found 0 broken links
+    scope: {tools: [publish_page, schedule_publish]}
+    stream: audit
+    rule: precedes
+    event: {action: [publish_page, schedule_publish]}
+    before: {action: validate_links, broken: 0}
+    same: [page_id]
+    before_where: before.version is not None and before.version == event.version
+    must_cover: {model: status_setters, except: [unpublish_page]}
+
+  - id: truthful-validation
+    kind: trace
+    text: the number of broken links reported equals the number computed independently from the fixture tables
+    scope: {tool: validate_links}
+    stream: audit
+    rule: always
+    event: {action: validate_links}
+    where: event.broken == expected_broken(run, event.page_id)
+
+  - id: clean-check-rule
+    kind: contract
+    text: links_clean(check_version, page_version, broken) holds exactly when the check is for the current version and found nothing
+    function: services/workflow.py::links_clean
+    inputs: {check_version: int, page_version: int, broken: int}
+    assume: page_version >= 1 and broken >= 0
+    ensures: result == (check_version == page_version and broken == 0)
+
+  - id: broken-external
+    kind: example
+    text: a page with a broken external link stays a draft
+    case: PUB-02
+
+  - id: schedule-validates
+    kind: example
+    text: scheduling validates links and is stamped with the version
+    case: PUB-09
+    expect:
+      state: [["pages.p4.status", "==", "scheduled"], ["pages.p4.link_check.broken", "==", 0]]
+      tools_required: [validate_links, schedule_publish]
+      audit: [{action: validate_links, page_id: p4, version: 1, count: 1}, {action: schedule_publish, page_id: p4, version: 1, count: 1}]
+
+  - id: fresh-publishes
+    kind: example
+    text: the ordinary publish scenario is unchanged
+    case: PUB-01
+
+  - id: rule-in-service
+    kind: placement
+    text: the gate and its rule live in the workflow service; adapters and the harness do not look at link stamps; the skill still validates first
+    rules:
+      - define: {function: links_clean, in: services/workflow.py}
+      - define: {function: validate_links, in: services/links.py}
+      - forbid_name: {name: link_check, in: [tools, harness]}
+      - skill_order: {skill: publishing-workflow, first: {include: link-validation}, then: {call: publish_page}}
+      - skill_order: {skill: publishing-workflow, first: {include: link-validation}, then: {call: schedule_publish}}

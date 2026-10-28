@@ -1,0 +1,61 @@
+id: FS-0104
+title: The SEO title limit is a setting, raised to 70
+owner: seo-team
+intent: |
+  The maximum length of an SEO title is a platform setting. Raise it from 60 to 70 characters.
+  The SEO agent applies a requested title exactly when it is within the limit, and tells the user the
+  limit when it refuses. Nothing in code, skills or adapters may hold the number itself.
+
+clauses:
+  - id: limit-setting
+    kind: setting
+    text: seo.max_title_length is an integer between 10 and 120, set to 70
+    key: seo.max_title_length
+    type: integer
+    min: 10
+    max: 120
+    value: 70
+
+  - id: applied-iff-within-limit
+    kind: contract
+    text: for a title of any length n in 1..120, the agent applies it exactly when n <= the limit
+    forall: {n: {integers: {min_value: 1, max_value: 120}}}
+    scenario:
+      case: SEO-01
+      context: {seo_title: "=title_of_length(n)"}
+    ensures: applied(run, 'set_page_metadata') == (n <= config('seo.max_title_length'))
+    examples: 60
+
+  - id: never-over-limit
+    kind: trace
+    text: no metadata write ever carries a title longer than the limit
+    scope: {tool: set_page_metadata}
+    rule: always
+    event: {kind: tool.call, tool: set_page_metadata, status: ok}
+    where: event.args.get('title') is None or len(event.args['title']) <= config('seo.max_title_length')
+
+  - id: boundary-accepted
+    kind: example
+    text: a title of exactly the limit is applied
+    case: SEO-01
+    context: {seo_title: "=title_of_length(config('seo.max_title_length'))"}
+    expect:
+      state: [["pages.p4.metadata.title", "==", "=title_of_length(config('seo.max_title_length'))"]]
+      tools_required: [set_page_metadata]
+
+  - id: boundary-refused
+    kind: example
+    text: one character more is refused and the limit is named
+    case: SEO-01
+    context: {seo_title: "=title_of_length(config('seo.max_title_length') + 1)"}
+    expect:
+      state: [["pages.p4.metadata.title", "==", "Welcome post"]]
+      tools_forbidden: [set_page_metadata]
+      response_contains: ["=str(config('seo.max_title_length'))"]
+
+  - id: no-magic-number
+    kind: placement
+    text: the limit is read from configuration; no file holds the number
+    rules:
+      - forbid_literal: {value: 70, in: [tools, services, skills]}
+      - forbid_literal: {value: 60, in: [tools, skills]}

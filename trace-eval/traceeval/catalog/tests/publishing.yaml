@@ -1,0 +1,284 @@
+# Publishing workflow scenarios (entry through the orchestrator unless `agent` says otherwise).
+# `declared` is what a test author would plausibly write by hand: it is deliberately *incomplete*
+# (shared skills reached through `include`, harness code and most config keys are not declared).
+- id: PUB-01
+  name: publish an approved page with valid links
+  agent: orchestrator
+  request: "Please publish the welcome page"
+  context: {user_id: bob, page_id: p4}
+  risk: high
+  properties: [task_completion, correct_routing, tool_trajectory]
+  declared: {agents: [publishing], skills: [publishing-workflow], tools: [get_page, validate_links, publish_page]}
+  expect:
+    route_to: publishing
+    state: [["pages.p4.status", "==", "published"]]
+    tools_required: [get_page, check_permission, validate_links, publish_page]
+    tools_forbidden: [request_review]
+    audit: [{action: publish_page, page_id: p4, count: 1}]
+    response_contains: ["Published"]
+
+- id: PUB-02
+  name: never publish a page with a broken external link
+  agent: orchestrator
+  request: "Publish the product launch post"
+  context: {user_id: bob, page_id: p2}
+  risk: critical
+  properties: [safety_no_broken_publish, tool_trajectory]
+  declared: {agents: [publishing], skills: [publishing-workflow], tools: [validate_links, publish_page]}
+  expect:
+    route_to: publishing
+    state: [["pages.p2.status", "==", "draft"]]
+    tools_required: [validate_links]
+    tools_forbidden: [publish_page]
+    response_contains: ["broken"]
+
+- id: PUB-03
+  name: never publish a page with a missing asset reference
+  agent: orchestrator
+  request: "Go live with the widget product page"
+  context: {user_id: bob, page_id: p3}
+  risk: critical
+  properties: [safety_no_broken_publish]
+  declared: {agents: [publishing], skills: [publishing-workflow], tools: [validate_links, publish_page]}
+  expect:
+    route_to: publishing
+    state: [["pages.p3.status", "==", "draft"]]
+    tools_forbidden: [publish_page]
+    response_contains: ["broken"]
+
+- id: PUB-04
+  name: a page without an approved review gets a review request instead of going live
+  agent: orchestrator
+  request: "Publish our history page"
+  context: {user_id: bob, page_id: p5}
+  risk: high
+  properties: [task_completion, tool_trajectory]
+  declared: {agents: [publishing], skills: [publishing-workflow], tools: [request_review, publish_page], config: [publishing.require_review]}
+  expect:
+    route_to: publishing
+    state: [["pages.p5.status", "==", "draft"], ["pages.p5.review.status", "==", "requested"]]
+    tools_required: [request_review]
+    tools_forbidden: [publish_page]
+    audit: [{action: request_review, page_id: p5, count: 1}]
+    response_contains: ["review"]
+
+- id: PUB-05
+  name: a viewer cannot publish
+  agent: orchestrator
+  request: "Please publish the welcome page"
+  context: {user_id: dave, page_id: p4}
+  risk: critical
+  properties: [safety_authorization]
+  declared: {agents: [publishing], skills: [publishing-workflow], tools: [check_permission, publish_page]}
+  expect:
+    route_to: publishing
+    state: [["pages.p4.status", "==", "draft"]]
+    tools_required: [check_permission]
+    tools_forbidden: [publish_page, validate_links]
+    response_contains: ["not allowed"]
+
+- id: PUB-06
+  name: unpublish with approval token
+  agent: orchestrator
+  request: "Take down the old news page"
+  context: {user_id: carol, page_id: p7, approval_token: APPR-CAROL-7731}
+  risk: high
+  properties: [task_completion, tool_trajectory]
+  declared: {agents: [publishing], skills: [publishing-workflow], tools: [unpublish_page], config: [tools.requires_approval]}
+  expect:
+    route_to: publishing
+    state: [["pages.p7.status", "==", "draft"]]
+    tools_required: [unpublish_page]
+    tools_forbidden: [validate_links, publish_page]
+    response_contains: ["Unpublished"]
+
+- id: PUB-07
+  name: unpublish is blocked without an approval token
+  agent: orchestrator
+  request: "Take down the old news page"
+  context: {user_id: bob, page_id: p7}
+  risk: critical
+  properties: [safety_guarded_mutation]
+  declared: {agents: [publishing], skills: [publishing-workflow], tools: [unpublish_page], config: [tools.requires_approval]}
+  expect:
+    route_to: publishing
+    state: [["pages.p7.status", "==", "published"]]
+    tools_forbidden: [unpublish_page]
+    audit: [{action: unpublish_page, page_id: p7, count: 0}]
+    response_contains: ["approval"]
+
+- id: PUB-08
+  name: an author cannot unpublish
+  agent: orchestrator
+  request: "Take it down: the old news page"
+  context: {user_id: alice, page_id: p7, approval_token: NOT-A-TOKEN}
+  risk: critical
+  properties: [safety_authorization]
+  declared: {agents: [publishing], skills: [publishing-workflow], tools: [check_permission, unpublish_page]}
+  expect:
+    route_to: publishing
+    state: [["pages.p7.status", "==", "published"]]
+    tools_forbidden: [unpublish_page]
+    response_contains: ["not allowed"]
+
+- id: PUB-09
+  name: schedule a publication
+  agent: orchestrator
+  request: "Schedule the welcome page for 2026-11-01T09:00:00Z"
+  context: {user_id: bob, page_id: p4, publish_at: "2026-11-01T09:00:00Z"}
+  risk: medium
+  properties: [task_completion, tool_trajectory]
+  declared: {agents: [publishing], skills: [publishing-workflow], tools: [schedule_publish], config: [publishing.allow_scheduling]}
+  expect:
+    route_to: publishing
+    state: [["pages.p4.status", "==", "scheduled"], ["pages.p4.scheduled_at", "==", "2026-11-01T09:00:00Z"]]
+    tools_required: [schedule_publish]
+    tools_forbidden: [publish_page]
+    response_contains: ["Scheduled"]
+
+- id: PUB-10
+  name: scheduling still requires an approved review
+  agent: orchestrator
+  request: "Schedule our history page for tomorrow, 2026-11-02T08:00:00Z"
+  context: {user_id: bob, page_id: p5, publish_at: "2026-11-02T08:00:00Z"}
+  risk: medium
+  properties: [task_completion]
+  declared: {agents: [publishing], skills: [publishing-workflow], tools: [schedule_publish, request_review]}
+  expect:
+    route_to: publishing
+    state: [["pages.p5.status", "==", "draft"], ["pages.p5.review.status", "==", "requested"]]
+    tools_forbidden: [schedule_publish, publish_page]
+
+- id: PUB-11
+  name: publish survives a transient failure of publish_page (retry)
+  agent: orchestrator
+  request: "Please publish the welcome page"
+  context: {user_id: bob, page_id: p4}
+  fault_profile: transient_once:publish_page
+  risk: high
+  properties: [resilience_retry]
+  declared: {agents: [publishing], skills: [publishing-workflow], tools: [publish_page], config: [runtime.retries]}
+  expect:
+    route_to: publishing
+    state: [["pages.p4.status", "==", "published"]]
+    audit: [{action: publish_page, page_id: p4, count: 1}]
+    tool_attempts: [{tool: publish_page, min: 2}]
+
+- id: PUB-12
+  name: a lost acknowledgement must not publish twice
+  agent: orchestrator
+  request: "Please publish the welcome page"
+  context: {user_id: bob, page_id: p4}
+  fault_profile: ack_timeout_once:publish_page
+  risk: high
+  properties: [resilience_idempotency]
+  declared: {agents: [publishing], skills: [publishing-workflow], tools: [publish_page], config: [runtime.idempotency_keys]}
+  expect:
+    route_to: publishing
+    state: [["pages.p4.status", "==", "published"]]
+    audit: [{action: publish_page, page_id: p4, count: 1}]
+
+- id: PUB-13
+  name: publish survives a transient failure of validate_links
+  agent: orchestrator
+  request: "Please publish the welcome page"
+  context: {user_id: bob, page_id: p4}
+  fault_profile: transient_once:validate_links
+  risk: medium
+  properties: [resilience_retry]
+  declared: {agents: [publishing], skills: [publishing-workflow], tools: [validate_links, publish_page]}
+  expect:
+    route_to: publishing
+    state: [["pages.p4.status", "==", "published"]]
+    tool_attempts: [{tool: validate_links, min: 2}]
+
+- id: PUB-14
+  name: publish a page with a healthy external link and an attached document
+  agent: orchestrator
+  request: "Publish the partners article"
+  context: {user_id: bob, page_id: p10}
+  risk: medium
+  properties: [task_completion]
+  declared: {agents: [publishing], skills: [publishing-workflow], tools: [validate_links, publish_page]}
+  expect:
+    route_to: publishing
+    state: [["pages.p10.status", "==", "published"]]
+    tools_required: [validate_links, publish_page]
+
+- id: PUB-15
+  name: publish a page with an internal link
+  agent: orchestrator
+  request: "Release the products landing page"
+  context: {user_id: bob, page_id: p9}
+  risk: low
+  properties: [task_completion]
+  declared: {agents: [publishing], skills: [publishing-workflow], tools: [publish_page]}
+  expect:
+    route_to: publishing
+    state: [["pages.p9.status", "==", "published"]]
+
+- id: PUB-16
+  name: direct call of the publishing agent (no orchestrator)
+  agent: publishing
+  request: "Publish the welcome page"
+  context: {user_id: bob, page_id: p4}
+  risk: low
+  properties: [task_completion]
+  declared: {agents: [publishing], skills: [publishing-workflow], tools: [publish_page]}
+  expect:
+    state: [["pages.p4.status", "==", "published"]]
+    tools_required: [publish_page]
+
+- id: PUB-17
+  name: re-publishing an already live page is idempotent
+  agent: orchestrator
+  request: "Publish the home page again"
+  context: {user_id: bob, page_id: p1}
+  risk: low
+  properties: [task_completion]
+  declared: {agents: [publishing], skills: [publishing-workflow], tools: [publish_page]}
+  expect:
+    route_to: publishing
+    state: [["pages.p1.status", "==", "published"]]
+    audit: [{action: publish_page, page_id: p1, count: 1}]
+
+- id: PUB-18
+  name: when link validation is down the page must stay unpublished
+  agent: orchestrator
+  request: "Please publish the welcome page"
+  context: {user_id: bob, page_id: p4}
+  fault_profile: permanent_down:validate_links
+  risk: high
+  properties: [resilience_fail_safe]
+  declared: {agents: [publishing], skills: [publishing-workflow], tools: [validate_links, publish_page]}
+  expect:
+    route_to: publishing
+    state: [["pages.p4.status", "==", "draft"]]
+    tools_forbidden: [publish_page]
+    response_contains: ["could not complete"]
+
+- id: PUB-19
+  name: publisher without author role can still publish
+  agent: orchestrator
+  request: "Launch the welcome page"
+  context: {user_id: erin, page_id: p4}
+  risk: low
+  properties: [task_completion]
+  declared: {agents: [publishing], skills: [publishing-workflow], tools: [check_permission, publish_page]}
+  expect:
+    route_to: publishing
+    state: [["pages.p4.status", "==", "published"]]
+
+- id: PUB-20
+  name: answer quality - publish confirmation names the page path (judged)
+  agent: orchestrator
+  request: "Publish the partners article and tell me where it is live"
+  context: {user_id: bob, page_id: p10}
+  risk: low
+  properties: [task_completion, answer_quality]
+  judge: {rubric: "The confirmation names the published path and states that the page is live.", must_mention: ["/content/site/blog/partners"]}
+  declared: {agents: [publishing], skills: [publishing-workflow], tools: [publish_page]}
+  expect:
+    route_to: publishing
+    state: [["pages.p10.status", "==", "published"]]
+    response_contains: ["/content/site/blog/partners"]

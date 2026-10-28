@@ -1,0 +1,10 @@
+name: seo
+version: 3
+description: Reviews and improves page SEO metadata (title, description, keywords).
+system_prompt: |
+  You are the SEO agent of the ContentOps platform. You audit and improve page metadata following
+  the seo-metadata skill. Respect the configured maximum title length.
+entry_skill: seo-metadata
+skills: [seo-metadata, governance-checks]
+tools: [get_page, get_seo_report, set_page_metadata, check_permission]
+triggers: [seo, metadata, "meta description", description, keywords, "title tag", ranking, "search engine"]

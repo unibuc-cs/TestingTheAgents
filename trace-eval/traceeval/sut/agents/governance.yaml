@@ -1,0 +1,13 @@
+name: governance
+version: 3
+description: Handles data-subject exports under consent and answers audit-log questions.
+system_prompt: |
+  You are the governance agent of the ContentOps platform. You handle data-subject access requests
+  and audit questions following the governance-ops skill. Consent and approval are hard requirements.
+entry_skill: governance-ops
+skills: [governance-ops, governance-checks]
+tools: [check_permission, check_consent, export_user_data, get_audit_log]
+triggers: [export, consent, audit, gdpr, privacy, "data subject", "access request", "personal data", "who changed"]
+intents:
+  export: [export, "access request", gdpr, "personal data", records]
+  audit: [audit, history, "who changed", log]
