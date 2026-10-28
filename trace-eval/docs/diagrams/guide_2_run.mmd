@@ -1,0 +1,26 @@
+%%{init: {"theme": "neutral", "themeVariables": {"fontSize": "15px"}, "sequence": {"width": 170, "messageMargin": 40, "mirrorActors": false}}}%%
+sequenceDiagram
+    participant C as case PUB-01
+    participant E as executor
+    participant R as runtime
+    participant B as backend
+    participant D as dispatcher
+    participant T as tool → service → state
+    participant REC as recorder
+    C->>E: request + context {user_id: bob, page_id: p4}
+    E->>R: run(orchestrator)
+    R->>REC: run.start, agent.start, skill.load
+    R->>B: next_action
+    B-->>R: route_to_agent(publishing)
+    Note over R: loads publishing-workflow + included skills
+    loop each Procedure step
+        B-->>R: tool call (get_page, check_permission, validate_links, publish_page)
+        R->>D: call(tool, args, ctx)
+        D->>T: gate, retry + idempotency key, fault injection
+        T-->>D: result or error
+        D->>REC: tool.call event
+        D-->>B: observe(result): require / on_error / then
+    end
+    B-->>R: final message "Published p4 ..."
+    E->>E: score expectations, observed deps, coverage
+    E-->>C: record (passed, checks, tokens, deps, events, state)

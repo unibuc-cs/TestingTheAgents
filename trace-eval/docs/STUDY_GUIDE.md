@@ -2,7 +2,7 @@
 
 A road-map for reading the repository in two to three hours, oriented towards the spec-driven
 development (SDD) work. Paths are relative to the repository root (`C:\Work\trace-eval`).
-Diagrams are Mermaid: they render on GitHub and in VS Code with the Mermaid extension.
+The diagrams are images rendered from the Mermaid sources in `docs/diagrams/`.
 
 ## 1. What is in the repository
 
@@ -11,34 +11,7 @@ one is the testbed that runs it, records what each run touched, and applies cont
 the top one holds the two research questions that use the testbed: test selection (the earlier work)
 and spec-driven development (this week).
 
-```mermaid
-flowchart TB
-    subgraph RQ["Research questions (top)"]
-        direction LR
-        SEL["selection/ — which tests to run after a change<br/>strategies: declared, ir_tfidf, observed, cost_aware, adaptive_bayes<br/>evaluated by replay under token budgets"]
-        SDD["spec/ + specs/ — spec-driven development<br/>5 specs, 24 PRs, evidence records, agent brief"]
-    end
-    subgraph TB["Testbed (middle)"]
-        direction LR
-        CAT["catalog/ — 134 eval cases (YAML)<br/>request + context + deterministic checks"] --> EXE["experiment/executor.py<br/>run one case on a loaded copy of the app"]
-        EXE --> TR["tracing/ — recorder (events)<br/>+ codecov (functions, lines executed)"] --> SC["scoring/ — verdict from<br/>final state, tool calls, response"]
-        MUT["mutation/ — 35 controlled changes as real file edits<br/>changeset.py: diff → component ids"]
-    end
-    subgraph SUT["The application under test: traceeval/sut/ (bottom)"]
-        direction LR
-        AG["agents/*.yaml (8)"] --> SK["skills/*/SKILL.md (10)<br/>each with a machine-readable Procedure"]
-        SK --> RT["harness/runtime.py<br/>agent loop"]
-        RT --> DI["harness/dispatcher.py — tool calls:<br/>enablement, approval gate, retry + idempotency key,<br/>fault injection, trace event"]
-        DI --> TO["tools/*.py — 22 adapters"] --> SV["services/*.py — business logic"] --> ST["services/state.py — in-memory fixture<br/>users, pages, assets, audit log"]
-        BE["backends: simulated (follows the Procedure, free)<br/>or llm_openai (real model)"] -.-> RT
-        CF["config/runtime.yaml"] -.-> DI
-    end
-    SEL -->|"uses baseline traces + change sets"| TR
-    SDD -->|"runs cases, reads traces"| EXE
-    SDD -->|"a PR = file edits + change set"| MUT
-    EXE -->|"runs cases on a copy of the app"| RT
-    MUT -->|"edits a copy of the app"| SK
-```
+![The three layers of the repository](figures/guide_1_layers.png)
 
 The single idea to internalise: **a run of a case produces a trace**, and the trace says which agents,
 skills, tools, configuration keys and code functions that run touched. Selection, the mutation ground
@@ -46,33 +19,7 @@ truth and the SDD layer are all built on "runs + traces + controlled edits of th
 
 ### 1.1 One run, end to end
 
-```mermaid
-sequenceDiagram
-    participant C as catalog case PUB-01
-    participant E as executor.run_case
-    participant R as harness.runtime
-    participant B as backend (simulated)
-    participant D as dispatcher
-    participant T as tool adapter → service → state
-    participant REC as trace recorder
-    C->>E: request "Please publish the welcome page", context {user_id: bob, page_id: p4}
-    E->>R: run(agent=orchestrator)
-    R->>REC: run.start, agent.start, skill.load
-    R->>B: next_action (orchestrator consults agents' triggers)
-    B-->>R: route_to_agent(publishing)
-    R->>R: _run_agent(publishing) loads publishing-workflow + included skills
-    loop each Procedure step
-        B-->>R: tool call (get_page, check_permission, validate_links, publish_page)
-        R->>D: call(agent, tool, args, ctx)
-        D->>T: ToolContext + retry/idempotency/approval/fault logic
-        T-->>D: result or error
-        D->>REC: tool.call event (status, attempts, key, kind)
-        D-->>B: observe(result) → require / on_error / then
-    end
-    B-->>R: final message "Published p4 at /content/site/blog/welcome."
-    E->>E: score_case(expect) + observed deps + (optional) coverage
-    E-->>C: record: passed, checks, tokens, deps, events, final state
-```
+![One run of a case, end to end](figures/guide_2_run.png)
 
 Open these three files side by side while reading this: `traceeval/catalog/tests/publishing.yaml`
 (PUB-01), `traceeval/sut/skills/publishing-workflow/SKILL.md` (the Procedure the backend executes)
@@ -105,14 +52,7 @@ place, and an evidence record. The testbed already had the raw material for thre
 The central idea is that **a clause is a compiler target**: the spec author writes *what* must hold,
 the clause kind decides *how* it is checked and which assurance rung the result can reach.
 
-```mermaid
-flowchart LR
-    S["setting<br/>typed constraint on a config key"] --> S1["schema check of the effective config<br/>no run"] --> S2["L4 static"]
-    C["contract<br/>pre/post-condition of a pure function<br/>or a property of agent behaviour"] --> C1["Hypothesis property test (find a counterexample)<br/>+ for straight-line functions: AST → Z3, prove assume ∧ ¬ensures unsat<br/>+ for behaviour: forall over data or a product-model set, one run per value"] --> C2["L2 tested / L5 proven"]
-    T["trace<br/>temporal rule over recorded runs<br/>always / never / precedes"] --> T1["monitor over the catalog runs in scope<br/>scope and completeness from the product model"] --> T2["L3 monitored"]
-    X["example<br/>one scenario, expected outcome"] --> X1["one run, catalog-format checks"] --> X2["L1 example-tested"]
-    P["placement<br/>where code must (not) live"] --> P1["AST / skill-procedure lint:<br/>define, forbid_import, forbid_name, forbid_literal, skill_order"] --> P2["L4 static"]
-```
+![Clause kinds, their checkers and the rung they reach](figures/guide_3_clauses.png)
 
 L0 (reviewed) is the prose `intent`. The rung ladder is the argument of the whole demo: a unit-level
 proof is not a system-level truth (FS-0101's "proven but never wired in" PR passes the proof and
@@ -121,16 +61,7 @@ layer" PRs pass every run and fail only placement).
 
 ### 2.2 What happens when `traceeval sdd` runs
 
-```mermaid
-flowchart LR
-    B["record_baseline<br/>134 runs on the unmodified app, with coverage (≈4 s)"] --> PM["ProductModel<br/>static facts of the tree + dynamic facts of the runs"]
-    PM --> BR["agent_brief per spec<br/>files/functions to read (locate), checks that will run,<br/>context tokens vs repository tokens"]
-    PM --> EV
-    SP["specs/FS-010x.yaml"] --> EV
-    PR["spec/prs.py: a PR = Mutation (file edits) + expected verdict"] --> EV
-    EV["evaluate_pr<br/>copy app → apply edits → change set → load variant →<br/>run every clause checker → run change-selected regression cases"] --> REC["evidence record (JSON)<br/>verdict, per-clause status + rung + details,<br/>assurance profile, cost (runs, tokens, seconds)"]
-    REC --> REP["report.md + figure"]
-```
+![The traceeval sdd pipeline](figures/guide_4_pipeline.png)
 
 A PR is evaluated against a *variant* of the application (the baseline copied and edited), loaded
 under a fresh module name so several variants can coexist. The checkers never see the expected verdict;
