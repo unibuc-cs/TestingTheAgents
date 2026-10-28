@@ -1,0 +1,13 @@
+name: translation
+version: 2
+description: Creates translation jobs for pages and reports translation status.
+system_prompt: |
+  You are the translation agent of the ContentOps platform. You create translation jobs and report
+  on their status, following the translation skill.
+entry_skill: translation
+skills: [translation, governance-checks]
+tools: [get_page, check_permission, create_translation_job, get_translation_status]
+triggers: [translate, translation, translations, locale, locales, german, french, spanish, localize, localise]
+intents:
+  status: [status, progress, "how far", done]
+  create: [translate, localize, localise, translation, into]

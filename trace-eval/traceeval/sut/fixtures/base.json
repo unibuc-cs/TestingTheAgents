@@ -1,0 +1,455 @@
+{
+  "users": {
+    "alice": {
+      "name": "Alice Author",
+      "roles": [
+        "author"
+      ]
+    },
+    "bob": {
+      "name": "Bob Publisher",
+      "roles": [
+        "author",
+        "publisher"
+      ]
+    },
+    "carol": {
+      "name": "Carol Admin",
+      "roles": [
+        "admin"
+      ],
+      "approval_token": "APPR-CAROL-7731"
+    },
+    "dave": {
+      "name": "Dave Viewer",
+      "roles": [
+        "viewer"
+      ]
+    },
+    "erin": {
+      "name": "Erin Publisher",
+      "roles": [
+        "publisher"
+      ]
+    }
+  },
+  "pages": {
+    "p1": {
+      "path": "/content/site/home",
+      "title": "Home",
+      "template": "landing",
+      "body": "Welcome. See [[/content/site/blog]] and [[https://example.com/about]].",
+      "status": "published",
+      "published_at": 1,
+      "metadata": {
+        "title": "Home | Example",
+        "description": "The example site.",
+        "keywords": [
+          "example",
+          "home"
+        ]
+      },
+      "links": [
+        "/content/site/blog",
+        "https://example.com/about"
+      ],
+      "assets": [
+        "a1"
+      ],
+      "locale": "en-US",
+      "review": {
+        "status": "approved",
+        "reviewer": "carol",
+        "approved_on": "2026-10-01"
+      },
+      "versions": [
+        {
+          "v": 1,
+          "body": "Welcome."
+        },
+        {
+          "v": 2,
+          "body": "Welcome. See [[/content/site/blog]] and [[https://example.com/about]]."
+        }
+      ],
+      "translations": {},
+      "scheduled_at": null
+    },
+    "p2": {
+      "path": "/content/site/blog/launch",
+      "title": "Product launch",
+      "template": "article",
+      "body": "Read the archive at [[https://old.example.com/gone]] or go [[/content/site/home]].",
+      "status": "draft",
+      "metadata": {
+        "title": "Product launch",
+        "description": "",
+        "keywords": []
+      },
+      "links": [
+        "https://old.example.com/gone",
+        "/content/site/home"
+      ],
+      "assets": [],
+      "locale": "en-US",
+      "review": {
+        "status": "approved",
+        "reviewer": "carol",
+        "approved_on": "2026-10-15"
+      },
+      "versions": [
+        {
+          "v": 1,
+          "body": "Read the archive at [[https://old.example.com/gone]] or go [[/content/site/home]]."
+        }
+      ],
+      "translations": {},
+      "scheduled_at": null
+    },
+    "p3": {
+      "path": "/content/site/products/widget",
+      "title": "Widget",
+      "template": "product",
+      "body": "Our widget. Brochure: [[asset:a9]].",
+      "status": "draft",
+      "metadata": {
+        "title": "Widget",
+        "description": "A widget.",
+        "keywords": [
+          "widget"
+        ]
+      },
+      "links": [
+        "asset:a9"
+      ],
+      "assets": [
+        "a1"
+      ],
+      "locale": "en-US",
+      "review": {
+        "status": "approved",
+        "reviewer": "carol",
+        "approved_on": "2026-10-20"
+      },
+      "versions": [
+        {
+          "v": 1,
+          "body": "Our widget. Brochure: [[asset:a9]]."
+        }
+      ],
+      "translations": {},
+      "scheduled_at": null
+    },
+    "p4": {
+      "path": "/content/site/blog/welcome",
+      "title": "Welcome post",
+      "template": "article",
+      "body": "Hello world.",
+      "status": "draft",
+      "metadata": {
+        "title": "Welcome post",
+        "description": "First post.",
+        "keywords": [
+          "welcome"
+        ]
+      },
+      "links": [],
+      "assets": [],
+      "locale": "en-US",
+      "review": {
+        "status": "approved",
+        "reviewer": "carol",
+        "approved_on": "2026-10-10"
+      },
+      "versions": [
+        {
+          "v": 1,
+          "body": "Hello world."
+        }
+      ],
+      "translations": {},
+      "scheduled_at": null
+    },
+    "p5": {
+      "path": "/content/site/blog/history",
+      "title": "Our history",
+      "template": "article",
+      "body": "Third draft with [[/content/site/home]].",
+      "status": "draft",
+      "metadata": {
+        "title": "Our history",
+        "description": "",
+        "keywords": []
+      },
+      "links": [
+        "/content/site/home"
+      ],
+      "assets": [],
+      "locale": "en-US",
+      "review": {
+        "status": "none",
+        "reviewer": null
+      },
+      "versions": [
+        {
+          "v": 1,
+          "body": "First draft."
+        },
+        {
+          "v": 2,
+          "body": "Second draft with [[/content/site/home]]."
+        },
+        {
+          "v": 3,
+          "body": "Third draft with [[/content/site/home]]."
+        }
+      ],
+      "translations": {},
+      "scheduled_at": null
+    },
+    "p6": {
+      "path": "/content/site/blog/long-title",
+      "title": "An exceptionally long and verbose page title that search engines will truncate",
+      "template": "article",
+      "body": "Short body.",
+      "status": "draft",
+      "metadata": {
+        "title": "An exceptionally long and verbose page title that search engines will truncate",
+        "description": "",
+        "keywords": []
+      },
+      "links": [],
+      "assets": [],
+      "locale": "en-US",
+      "review": {
+        "status": "approved",
+        "reviewer": "carol",
+        "approved_on": "2026-10-25"
+      },
+      "versions": [
+        {
+          "v": 1,
+          "body": "Short body."
+        }
+      ],
+      "translations": {},
+      "scheduled_at": null
+    },
+    "p7": {
+      "path": "/content/site/blog/old-news",
+      "title": "Old news",
+      "template": "article",
+      "body": "This is old.",
+      "status": "published",
+      "published_at": 2,
+      "metadata": {
+        "title": "Old news",
+        "description": "Old.",
+        "keywords": [
+          "old"
+        ]
+      },
+      "links": [],
+      "assets": [],
+      "locale": "en-US",
+      "review": {
+        "status": "approved",
+        "reviewer": "carol",
+        "approved_on": "2026-09-30"
+      },
+      "versions": [
+        {
+          "v": 1,
+          "body": "This is old."
+        }
+      ],
+      "translations": {},
+      "scheduled_at": null
+    },
+    "p8": {
+      "path": "/content/site/blog",
+      "title": "Blog",
+      "template": "landing",
+      "body": "All posts.",
+      "status": "published",
+      "published_at": 1,
+      "metadata": {
+        "title": "Blog",
+        "description": "All posts.",
+        "keywords": [
+          "blog"
+        ]
+      },
+      "links": [],
+      "assets": [],
+      "locale": "en-US",
+      "review": {
+        "status": "approved",
+        "reviewer": "carol",
+        "approved_on": "2026-09-30"
+      },
+      "versions": [
+        {
+          "v": 1,
+          "body": "All posts."
+        }
+      ],
+      "translations": {},
+      "scheduled_at": null
+    },
+    "p9": {
+      "path": "/content/site/products",
+      "title": "Products",
+      "template": "landing",
+      "body": "See [[/content/site/products/widget]].",
+      "status": "draft",
+      "metadata": {
+        "title": "Products",
+        "description": "All products.",
+        "keywords": [
+          "products"
+        ]
+      },
+      "links": [
+        "/content/site/products/widget"
+      ],
+      "assets": [],
+      "locale": "en-US",
+      "review": {
+        "status": "approved",
+        "reviewer": "carol",
+        "approved_on": "2026-10-20"
+      },
+      "versions": [
+        {
+          "v": 1,
+          "body": "See [[/content/site/products/widget]]."
+        }
+      ],
+      "translations": {},
+      "scheduled_at": null
+    },
+    "p10": {
+      "path": "/content/site/blog/partners",
+      "title": "Partners",
+      "template": "article",
+      "body": "Our partner: [[https://partner.example.org/x]].",
+      "status": "draft",
+      "metadata": {
+        "title": "Partners",
+        "description": "Partners.",
+        "keywords": [
+          "partners"
+        ]
+      },
+      "links": [
+        "https://partner.example.org/x"
+      ],
+      "assets": [
+        "a2"
+      ],
+      "locale": "en-US",
+      "review": {
+        "status": "approved",
+        "reviewer": "carol",
+        "approved_on": "2026-10-26"
+      },
+      "versions": [
+        {
+          "v": 1,
+          "body": "Our partner: [[https://partner.example.org/x]]."
+        }
+      ],
+      "translations": {},
+      "scheduled_at": null
+    },
+    "p11": {
+      "path": "/content/site/blog/stale-approval",
+      "title": "Stale approval",
+      "template": "article",
+      "body": "Approved a long time ago.",
+      "status": "draft",
+      "metadata": {
+        "title": "Stale approval",
+        "description": "Old approval.",
+        "keywords": [
+          "stale"
+        ]
+      },
+      "links": [],
+      "assets": [],
+      "locale": "en-US",
+      "review": {
+        "status": "approved",
+        "reviewer": "carol",
+        "approved_on": "2026-09-13"
+      },
+      "versions": [
+        {
+          "v": 1,
+          "body": "Approved a long time ago."
+        }
+      ],
+      "translations": {},
+      "scheduled_at": null
+    }
+  },
+  "assets": {
+    "a1": {
+      "name": "hero.png",
+      "folder": "/content/dam/site",
+      "mime": "image/png",
+      "uploaded_by": "alice"
+    },
+    "a2": {
+      "name": "brochure.pdf",
+      "folder": "/content/dam/site/docs",
+      "mime": "application/pdf",
+      "uploaded_by": "alice"
+    }
+  },
+  "external_links": {
+    "https://example.com/about": "ok",
+    "https://old.example.com/gone": "broken",
+    "https://partner.example.org/x": "ok"
+  },
+  "consents": {
+    "s1": true,
+    "s2": false
+  },
+  "consent_purposes": {
+    "s1": [
+      "marketing",
+      "analytics"
+    ],
+    "s2": []
+  },
+  "data_subjects": {
+    "s1": {
+      "email": "s1@example.com",
+      "records": [
+        {
+          "id": 1
+        },
+        {
+          "id": 2
+        },
+        {
+          "id": 3
+        }
+      ]
+    },
+    "s2": {
+      "email": "s2@example.com",
+      "records": [
+        {
+          "id": 7
+        }
+      ]
+    }
+  },
+  "translation_jobs": {},
+  "reviews": {},
+  "audit": [],
+  "today": "2026-10-28"
+}

@@ -1,0 +1,55 @@
+# Dataset-style eval: orchestrator routing. Each item is "prompt -> expected delegation target".
+# Items run in route-only mode (the specialist is not executed), so they are cheap but they only
+# exercise the orchestrator, the routing skill and the router code.
+id: DS-ROUTING
+name: orchestrator routing dataset
+kind: dataset
+agent: orchestrator
+risk: high
+properties: [correct_routing]
+declared: {agents: [orchestrator], skills: [routing], config: [routing.default_agent]}
+route_only: true
+context: {user_id: bob, page_id: p4, asset_id: a1, subject_id: s1, version: 1}
+items:
+  - {id: r01, request: "Publish the welcome page", expect_route: publishing}
+  - {id: r02, request: "Can you go live with the partners article today?", expect_route: publishing}
+  - {id: r03, request: "Take down the old news page", expect_route: publishing}
+  - {id: r04, request: "Schedule the products page for next Monday", expect_route: publishing}
+  - {id: r05, request: "Release the home page", expect_route: publishing}
+  - {id: r06, request: "Retract the launch announcement from the site", expect_route: publishing}
+  - {id: r07, request: "Create a new page about pricing", expect_route: authoring}
+  - {id: r08, request: "Write a draft for the careers section", expect_route: authoring}
+  - {id: r09, request: "Edit the body of the welcome post", expect_route: authoring}
+  - {id: r10, request: "Rewrite the second paragraph of the home page", expect_route: authoring}
+  - {id: r11, request: "Update the text of the history page", expect_route: authoring}
+  - {id: r12, request: "Upload the hero image for the campaign", expect_route: assets}
+  - {id: r13, request: "Attach the brochure pdf to the widget page", expect_route: assets}
+  - {id: r14, request: "Add a banner photo to the welcome post", expect_route: assets}
+  - {id: r15, request: "Put this video into the DAM", expect_route: assets}
+  - {id: r16, request: "Improve the SEO of the welcome post", expect_route: seo}
+  - {id: r17, request: "Set a meta description for the products page", expect_route: seo}
+  - {id: r18, request: "Which keywords should the home page target for search engine ranking?", expect_route: seo}
+  - {id: r19, request: "Fix the title tag of the long-title page", expect_route: seo}
+  - {id: r20, request: "Translate the welcome post into German", expect_route: translation}
+  - {id: r21, request: "Localize the products page for the French locale", expect_route: translation}
+  - {id: r22, request: "What is the status of the translation job?", expect_route: translation}
+  - {id: r23, request: "We need Spanish translations of the blog", expect_route: translation}
+  - {id: r24, request: "Export the personal data of subject s1", expect_route: governance}
+  - {id: r25, request: "Has subject s2 given consent for marketing?", expect_route: governance}
+  - {id: r26, request: "Who changed the home page yesterday?", expect_route: governance}
+  - {id: r27, request: "Handle this GDPR access request", expect_route: governance}
+  - {id: r28, request: "Show the audit log for the widget page", expect_route: governance}
+  - {id: r29, request: "Roll back the history page to the previous version", expect_route: maintenance}
+  - {id: r30, request: "Restore the earlier version of the home page", expect_route: maintenance}
+  - {id: r31, request: "Revert the welcome post to its previous version", expect_route: maintenance}
+  - {id: r32, request: "Undo the change to the products page", expect_route: maintenance}
+  # near-misses: phrase triggers must win over single-word triggers of other agents
+  - {id: r33, request: "Take it down, the update was wrong", expect_route: publishing}
+  - {id: r34, request: "Go live with the new page", expect_route: publishing}
+  - {id: r35, request: "Add the meta description and keywords to the new page", expect_route: seo}
+  - {id: r36, request: "Upload a new image for the launch", expect_route: assets}
+  - {id: r37, request: "Translate the launch page into French", expect_route: translation}
+  - {id: r38, request: "Who changed the body of the home page?", expect_route: governance}
+  # no trigger at all -> default agent
+  - {id: r39, request: "Hello there", expect_route: authoring}
+  - {id: r40, request: "Can you help me with something?", expect_route: authoring}

@@ -1,0 +1,10 @@
+name: maintenance
+version: 2
+description: Restores earlier page versions.
+system_prompt: |
+  You are the maintenance agent of the ContentOps platform. You restore earlier versions of pages
+  following the rollback skill and re-validate links afterwards.
+entry_skill: rollback
+skills: [rollback, governance-checks, link-validation]
+tools: [get_page, list_versions, rollback_page, validate_links, check_permission]
+triggers: [rollback, "roll back", restore, revert, "previous version", "earlier version", undo]

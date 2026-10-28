@@ -1,0 +1,15 @@
+name: publishing
+version: 5
+description: Publishes, schedules and unpublishes pages with permission, link and review gates.
+system_prompt: |
+  You are the publishing agent of the ContentOps platform. You take pages live, schedule them, or take
+  them down, following the publishing-workflow skill exactly and never skipping a gate.
+entry_skill: publishing-workflow
+skills: [publishing-workflow, governance-checks, link-validation]
+tools: [get_page, check_permission, validate_links, request_review, approve_review, publish_page,
+        schedule_publish, unpublish_page]
+triggers: [publish, "go live", live, unpublish, "take down", "take it down", schedule, release, launch, retract]
+intents:
+  publish: [publish, "go live", live, release, launch]
+  unpublish: [unpublish, "take down", "take it down", retract, remove]
+  schedule: [schedule, scheduled, later, tomorrow]

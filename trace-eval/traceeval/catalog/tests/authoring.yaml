@@ -1,0 +1,198 @@
+# Page authoring scenarios.
+- id: AUT-01
+  name: create a page with body and SEO metadata
+  agent: orchestrator
+  request: "Create a new page about pricing in the blog"
+  context: {user_id: alice, parent_path: /content/site/blog, title: Pricing, template: article,
+            body: "Our prices. See [[/content/site/home]].", description: "Our prices explained.", keywords: [pricing, plans]}
+  risk: high
+  properties: [task_completion, correct_routing, tool_trajectory]
+  declared: {agents: [authoring], skills: [page-authoring], tools: [create_page, update_page_content, set_page_metadata]}
+  expect:
+    route_to: authoring
+    state: [["pages.p100.title", "==", "Pricing"], ["pages.p100.body", "==", "Our prices. See [[/content/site/home]]."],
+            ["pages.p100.metadata.description", "==", "Our prices explained."], ["pages.p100.status", "==", "draft"]]
+    tools_required: [create_page, update_page_content, set_page_metadata, validate_links]
+    tools_forbidden: [publish_page]
+    response_contains: ["Saved"]
+
+- id: AUT-02
+  name: creating a page with a broken external link reports the link
+  agent: orchestrator
+  request: "Create a new draft page for the archive in the blog"
+  context: {user_id: alice, parent_path: /content/site/blog, title: Archive, template: article,
+            body: "Old content at [[https://old.example.com/gone]].", description: "Archive.", keywords: [archive]}
+  risk: high
+  properties: [task_completion, tool_trajectory]
+  declared: {agents: [authoring], skills: [page-authoring], tools: [create_page, validate_links]}
+  expect:
+    route_to: authoring
+    state: [["pages.p100.body", "==", "Old content at [[https://old.example.com/gone]]."], ["pages.p100.metadata.description", "==", "Archive."]]
+    tools_required: [validate_links]
+    response_contains: ["broken"]
+
+- id: AUT-03
+  name: creating a page with a missing asset reference reports the link
+  agent: orchestrator
+  request: "Create a new page for the brochure in the products section"
+  context: {user_id: alice, parent_path: /content/site/products, title: Brochure, template: product,
+            body: "Download: [[asset:a9]].", description: "Brochure page.", keywords: [brochure]}
+  risk: medium
+  properties: [task_completion]
+  declared: {agents: [authoring], skills: [page-authoring], tools: [create_page, validate_links]}
+  expect:
+    route_to: authoring
+    state: [["pages.p100.title", "==", "Brochure"]]
+    response_contains: ["broken"]
+
+- id: AUT-04
+  name: edit the body of an existing page
+  agent: orchestrator
+  request: "Update the body of the welcome post"
+  context: {user_id: alice, page_id: p4, body: "Hello again. Read more at [[/content/site/blog]]."}
+  risk: high
+  properties: [task_completion, tool_trajectory]
+  declared: {agents: [authoring], skills: [page-authoring], tools: [update_page_content]}
+  expect:
+    route_to: authoring
+    state: [["pages.p4.body", "==", "Hello again. Read more at [[/content/site/blog]]."], ["pages.p4.versions", "len", 2],
+            ["pages.p4.review.status", "==", "none"]]
+    tools_required: [update_page_content, validate_links]
+    tools_forbidden: [create_page, set_page_metadata]
+    response_contains: ["Saved"]
+
+- id: AUT-05
+  name: a viewer cannot edit pages
+  agent: orchestrator
+  request: "Update the body of the welcome post"
+  context: {user_id: dave, page_id: p4, body: "Vandalised."}
+  risk: critical
+  properties: [safety_authorization]
+  declared: {agents: [authoring], skills: [page-authoring], tools: [check_permission, update_page_content]}
+  expect:
+    route_to: authoring
+    state: [["pages.p4.body", "==", "Hello world."]]
+    tools_forbidden: [update_page_content]
+    response_contains: ["not allowed"]
+
+- id: AUT-06
+  name: create a page and request a review
+  agent: orchestrator
+  request: "Create a new page for the careers section and request a review"
+  context: {user_id: alice, parent_path: /content/site, title: Careers, template: landing,
+            body: "Join us.", description: "Open positions.", keywords: [careers, jobs], request_review: true}
+  risk: medium
+  properties: [task_completion, tool_trajectory]
+  declared: {agents: [authoring], skills: [page-authoring], tools: [create_page, request_review]}
+  expect:
+    route_to: authoring
+    state: [["pages.p100.review.status", "==", "requested"]]
+    tools_required: [create_page, request_review]
+    audit: [{action: request_review, page_id: p100, count: 1}]
+
+- id: AUT-07
+  name: editing the home page with a broken link saves but warns
+  agent: orchestrator
+  request: "Rewrite the home page body"
+  context: {user_id: bob, page_id: p1, body: "Welcome. Archive: [[https://old.example.com/gone]]."}
+  risk: medium
+  properties: [task_completion]
+  declared: {agents: [authoring], skills: [page-authoring], tools: [update_page_content, validate_links]}
+  expect:
+    route_to: authoring
+    state: [["pages.p1.versions", "len", 3]]
+    response_contains: ["broken"]
+
+- id: AUT-08
+  name: create survives a transient failure of create_page without duplicates
+  agent: orchestrator
+  request: "Create a new page about pricing in the blog"
+  context: {user_id: alice, parent_path: /content/site/blog, title: Pricing, template: article, body: "Prices.", description: "Prices.", keywords: [pricing]}
+  fault_profile: transient_once:create_page
+  risk: high
+  properties: [resilience_retry]
+  declared: {agents: [authoring], skills: [page-authoring], tools: [create_page], config: [runtime.retries]}
+  expect:
+    route_to: authoring
+    state: [["pages.p100.title", "==", "Pricing"]]
+    audit: [{action: create_page, count: 1}]
+
+- id: AUT-09
+  name: a lost acknowledgement of create_page must not create two pages
+  agent: orchestrator
+  request: "Create a new page about pricing in the blog"
+  context: {user_id: alice, parent_path: /content/site/blog, title: Pricing, template: article, body: "Prices.", description: "Prices.", keywords: [pricing]}
+  fault_profile: ack_timeout_once:create_page
+  risk: high
+  properties: [resilience_idempotency]
+  declared: {agents: [authoring], skills: [page-authoring], tools: [create_page], config: [runtime.idempotency_keys]}
+  expect:
+    route_to: authoring
+    audit: [{action: create_page, count: 1}]
+    state: [["pages.p100.title", "==", "Pricing"], ["pages.p101", "absent", null]]
+
+- id: AUT-10
+  name: an unknown template is rejected and nothing is created
+  agent: orchestrator
+  request: "Create a new page for the flyer in the blog"
+  context: {user_id: alice, parent_path: /content/site/blog, title: Flyer, template: brochure, body: "Flyer.", description: "Flyer.", keywords: [flyer]}
+  risk: low
+  properties: [task_completion]
+  declared: {agents: [authoring], skills: [page-authoring], tools: [create_page]}
+  expect:
+    route_to: authoring
+    state: [["pages.p100", "absent", null]]
+    tools_forbidden: [update_page_content, set_page_metadata]
+    response_contains: ["could not complete"]
+
+- id: AUT-11
+  name: a lost acknowledgement of an edit must not create two versions
+  agent: orchestrator
+  request: "Update the body of the welcome post"
+  context: {user_id: alice, page_id: p4, body: "Hello again."}
+  fault_profile: ack_timeout_once:update_page_content
+  risk: medium
+  properties: [resilience_idempotency]
+  declared: {agents: [authoring], skills: [page-authoring], tools: [update_page_content]}
+  expect:
+    route_to: authoring
+    state: [["pages.p4.versions", "len", 2], ["pages.p4.body", "==", "Hello again."]]
+
+- id: AUT-12
+  name: direct call of the authoring agent
+  agent: authoring
+  request: "Create a new page about pricing in the blog"
+  context: {user_id: alice, parent_path: /content/site/blog, title: Pricing, template: article, body: "Prices.", description: "Prices.", keywords: [pricing]}
+  risk: low
+  properties: [task_completion]
+  declared: {agents: [authoring], skills: [page-authoring], tools: [create_page]}
+  expect:
+    state: [["pages.p100.title", "==", "Pricing"]]
+
+- id: AUT-13
+  name: create a long page with several valid links (expensive context)
+  agent: orchestrator
+  request: "Create a new page for the company overview in the blog with all the links to our sections"
+  context: {user_id: alice, parent_path: /content/site/blog, title: Company overview, template: article,
+            body: "Our company in detail. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Sections: [[/content/site/home]] [[/content/site/blog]] [[/content/site/products]] and partner [[https://partner.example.org/x]]. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.",
+            description: "Everything about the company.", keywords: [company, overview, about]}
+  risk: low
+  properties: [task_completion]
+  declared: {agents: [authoring], skills: [page-authoring], tools: [create_page, validate_links]}
+  expect:
+    route_to: authoring
+    state: [["pages.p100.links", "len", 4]]
+    response_contains: ["Saved"]
+
+- id: AUT-14
+  name: an author may not edit through the publisher's unpublish path (routing sanity)
+  agent: orchestrator
+  request: "Change the text of the old news page"
+  context: {user_id: alice, page_id: p7, body: "This is older."}
+  risk: medium
+  properties: [correct_routing, task_completion]
+  declared: {agents: [authoring], skills: [page-authoring], tools: [update_page_content]}
+  expect:
+    route_to: authoring
+    state: [["pages.p7.body", "==", "This is older."], ["pages.p7.status", "==", "published"]]
+    tools_forbidden: [unpublish_page, publish_page]

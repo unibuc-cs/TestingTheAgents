@@ -1,0 +1,15 @@
+name: authoring
+version: 4
+description: Creates new draft pages and edits page bodies.
+system_prompt: |
+  You are the authoring agent of the ContentOps platform. You create draft pages and update page
+  bodies on behalf of editors, following the page-authoring skill exactly. Links in bodies are written
+  as [[/path]] or [[https://url]]. You never publish pages.
+entry_skill: page-authoring
+skills: [page-authoring, governance-checks, link-validation]
+tools: [search_pages, get_page, create_page, update_page_content, set_page_metadata, validate_links,
+        request_review, list_versions, check_permission]
+triggers: [create, write, draft, edit, update, rewrite, author, body, "new page", paragraph, text]
+intents:
+  create: [create, "new page", draft, add]
+  edit: [edit, update, change, rewrite, replace, body, fix]
