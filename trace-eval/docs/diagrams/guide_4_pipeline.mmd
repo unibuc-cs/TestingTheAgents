@@ -1,0 +1,8 @@
+%%{init: {"theme": "neutral", "flowchart": {"wrappingWidth": 340, "nodeSpacing": 30, "rankSpacing": 60, "curve": "basis"}, "themeVariables": {"fontSize": "15px"}}}%%
+flowchart LR
+    B["baseline<br/>134 runs + coverage<br/>(≈4 s)"] --> PM["product model<br/>static + dynamic facts"]
+    PM --> BR["agent brief<br/>what to read,<br/>what will run"]
+    PM --> EV
+    SP["spec<br/>FS-010x.yaml"] --> EV
+    PR["PR<br/>file edits + expected verdict"] --> EV
+    EV["evaluate_pr<br/>copy, edit, change set, load;<br/>run checkers; run selected regression"] --> REC["evidence record<br/>verdict, clause status + rung,<br/>assurance profile, cost"] --> REP["report.md<br/>+ figure"]

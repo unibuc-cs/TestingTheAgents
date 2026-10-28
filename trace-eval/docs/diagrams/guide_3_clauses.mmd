@@ -1,0 +1,7 @@
+%%{init: {"theme": "neutral", "flowchart": {"wrappingWidth": 340, "nodeSpacing": 22, "rankSpacing": 70}, "themeVariables": {"fontSize": "15px"}}}%%
+flowchart LR
+    S["setting<br/>typed constraint on a config key"] --> S1["schema check<br/>no run"] --> S2["L4 static"]
+    C["contract<br/>pre/post-condition of a function,<br/>or a property of behaviour"] --> C1["Hypothesis property test;<br/>straight-line functions: AST → Z3 proof;<br/>behaviour: forall → one run per value"] --> C2["L2 tested<br/>L5 proven"]
+    T["trace<br/>temporal rule over recorded runs"] --> T1["monitor over runs in scope<br/>(always / never / precedes)"] --> T2["L3 monitored"]
+    X["example<br/>one scenario, expected outcome"] --> X1["one run,<br/>catalog-format checks"] --> X2["L1 tested"]
+    P["placement<br/>where code must (not) live"] --> P1["AST / skill-procedure lint"] --> P2["L4 static"]
