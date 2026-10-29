@@ -31,7 +31,13 @@ def write_report(workdir: Path, specs, briefs: dict, evidence: list[dict], model
         "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for ev in evidence:
-        bad = [f"{c['clause_id']} ({c['kind']})" for c in ev["clauses"] if c["status"] in ("fail", "gap")]
+        bad = [
+            f"{c['clause_id']} ({c['kind']}"
+            + (f", {c['rung']} < {c['required']}" if not c["meets_required"] else "")
+            + ")"
+            for c in ev["clauses"]
+            if c["status"] in ("fail", "gap")
+        ]
         ok = "" if ev["verdict"].startswith(ev["expected"]) else " **(unexpected)**"
         cost = ev["cost"]
         lines.append(
@@ -89,9 +95,11 @@ def _resources_section(briefs, evidence, model) -> list[str]:
 
 
 def _request_section(spec, brief: dict, evs: list[dict]) -> list[str]:
-    lines = [f"## {spec.id}: {spec.title}", "", spec.intent.strip(), "", "**Clauses**", ""]
+    lines = [f"## {spec.id}: {spec.title}", "", spec.intent.strip(), "", "**Clauses** (template, required rung)", ""]
     for c in spec.clauses:
-        lines.append(f"- `{c.id}` ({c.kind}): {c.text}")
+        lines.append(f"- `{c.id}` ({c.kind}, {c.require}): {c.text}")
+    if brief.get("spec_check"):
+        lines += ["", "Spec check against the current product model:", ""] + [f"- {n}" for n in brief["spec_check"]]
     lines += [
         "",
         "**Agent brief (the locate step)**",
@@ -118,12 +126,13 @@ def _request_section(spec, brief: dict, evs: list[dict]) -> list[str]:
             "",
             f"Verdict: **{ev['verdict']}** (expected {ev['expected']}). {ev['note']}. " + _change_line(ev["change"]),
             "",
-            "| clause | kind | rung | status | evidence |",
-            "|---|---|---|---|---|",
+            "| clause | kind | reached | required | status | evidence |",
+            "|---|---|---|---|---|---|",
         ]
         for c in ev["clauses"]:
             lines.append(
-                f"| {c['clause_id']} | {c['kind']} | {c['rung']} | {STATUS[c['status']]} | {_md(c['summary'])} |"
+                f"| {c['clause_id']} | {c['kind']} | {c['rung']} | {c['required']} | {STATUS[c['status']]} | "
+                f"{_md(c['summary'])} |"
             )
         notes = [d for c in ev["clauses"] if c["status"] in ("fail", "gap") for d in c["details"][:8]]
         if notes:

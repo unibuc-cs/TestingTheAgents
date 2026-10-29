@@ -12,7 +12,7 @@ by replaying recorded runs. One of the strategies (`adaptive_bayes`) is the prop
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                                                   # 22 tests, ~40 s
+pytest -q                                                   # 24 tests, ~60 s
 traceeval experiment --workdir runs/exp1 --reps 3 --seeds 10
 # -> runs/exp1/results/report.md  (tables + 3 figures)
 ```
@@ -21,7 +21,7 @@ traceeval experiment --workdir runs/exp1 --reps 3 --seeds 10
 
 1. **Tests** live in [`traceeval/catalog/`](traceeval/catalog/) (YAML). Each has a request, context, and deterministic checks on the
    final state / tool calls / response.
-2. **The app under test** lives in [`traceeval/sut/`](traceeval/sut/): 8 agents defined in YAML, 10 skills ([example `SKILL.md`](traceeval/sut/skills/publishing-workflow/SKILL.md), each with
+2. **The app under test** ("ContentOps", described in [docs/CONTENTOPS.md](docs/CONTENTOPS.md)) lives in [`traceeval/sut/`](traceeval/sut/): 8 agents defined in YAML, 10 skills ([example `SKILL.md`](traceeval/sut/skills/publishing-workflow/SKILL.md), each with
    a machine-readable procedure), 22 tools, a config file. A *simulated* agent follows the skills so runs are
    free; an *LLM* backend can replace it (`--backend llm`, OpenAI-compatible endpoint).
 3. **Changes** are the 35 entries in [`traceeval/mutation/catalog.py`](traceeval/mutation/catalog.py), applied as real file edits. Running the
@@ -39,10 +39,12 @@ benign changes. ([experiment 1 report](docs/results/exp1/report.md), [flaky-agen
 ## Spec-driven development on the same testbed
 
 `traceeval sdd` applies five change requests written as machine-checkable specs
-([`traceeval/specs/`](traceeval/specs/)) to 24 pull requests (1–4 files each) and writes an evidence report: which
-clause failed, the counterexample or the misplaced code, the assurance rung reached (example-tested …
-proven), and what a coding agent had to read and run. Start with [docs/SDD_DEMO.md](docs/SDD_DEMO.md);
-the report is in [docs/sdd/report.md](docs/sdd/report.md).
+([`traceeval/specs/`](traceeval/specs/), clauses picked from a [catalog of templates](traceeval/spec/catalog.yaml))
+to 25 pull requests (1–4 files each) and writes an evidence report: which clause failed, the counterexample
+or the misplaced code, the assurance rung reached versus required (example-tested … proven), and what a
+coding agent had to read and run. `traceeval sdd draft` lets a model draft a spec from a prose request for
+a person to confirm. Start with [docs/SDD_GUIDE.md](docs/SDD_GUIDE.md) (from scratch) or
+[docs/SDD_DEMO.md](docs/SDD_DEMO.md) (the results); the report is in [docs/sdd/report.md](docs/sdd/report.md).
 
 ## Read more only if you need it
 

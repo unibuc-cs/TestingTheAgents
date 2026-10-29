@@ -7,11 +7,12 @@ systems. Read `README.md` (5 minutes), then `docs/USER_GUIDE.md` only when you n
 
 ```
 pip install -e ".[dev,ml]"          # or: uv pip install -e ".[dev,ml]"
-pytest -q                           # ~40 s; must stay green
+pytest -q                           # ~60 s; must stay green
 ruff check traceeval tests --select E,F,W,I,B --line-length 120
 ruff format traceeval tests --line-length 120   # see "Gotchas" before formatting sut/
 traceeval experiment --workdir runs/exp1 --reps 3 --seeds 10     # full simulated experiment, ~5 min
-traceeval sdd --workdir runs/sdd                                 # spec-driven development demo, ~25 s
+traceeval sdd --workdir runs/sdd                                 # spec-driven development demo, ~30 s
+traceeval sdd draft --request r.md --id FS-0106 [--replay a.json]  # draft a spec with a model
 ```
 
 ## Layout (one line each)
@@ -24,8 +25,9 @@ traceeval sdd --workdir runs/sdd                                 # spec-driven d
 - `traceeval/mutation/` — controlled changes (patch operators), change-set extraction.
 - `traceeval/selection/` — `strategies.py` baselines, `adaptive_bayes.py` the proposed method, `extras.py` optional baselines.
 - `traceeval/experiment/` — SUT loader, executor, history, runner, replay evaluator, metrics, report.
-- `traceeval/spec/` — spec-driven development layer: clause model, one checker per clause kind (`checks/`),
-  product model, demo PRs, runner, report. Specs live in `traceeval/specs/FS-*.yaml` (see `docs/SDD_DEMO.md`).
+- `traceeval/spec/` — spec-driven development layer: clause catalog (`catalog.yaml`) and model, one checker per
+  clause kind (`checks/`), product model, demo PRs, runner, report, drafting with a model (`draft.py`).
+  Specs live in `traceeval/specs/FS-*.yaml` as catalog templates + slots (see `docs/SDD_GUIDE.md`).
 - `tests/` — pytest; `runs/` — experiment outputs (git-ignored); `docs/` — guide, plan, related work, results.
 
 ## Conventions
@@ -41,6 +43,9 @@ traceeval sdd --workdir runs/sdd                                 # spec-driven d
 - Keep the catalog passing on the baseline (`tests/test_sut.py::test_full_catalog_passes_on_baseline`).
 - Demo PRs in `traceeval/spec/prs.py` are mutations too (literal anchors, same rule); every PR's expected
   verdict is checked by `tests/test_sdd.py` and flagged in the sdd report when it differs.
+- A new kind of clause is a template in `traceeval/spec/catalog.yaml` (and a row in `docs/SDD_GUIDE.md`);
+  the checkers only ever see expanded clauses. Specs reference the application by name (tools, config keys,
+  functions, cases); `validate_spec` reports names the current product model does not have.
 
 ## Gotchas
 

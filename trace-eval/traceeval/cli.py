@@ -9,6 +9,7 @@ traceeval evaluate --workdir runs/exp1 --seeds 10
 traceeval report   --workdir runs/exp1
 traceeval experiment --workdir runs/exp1   (baseline + mutants + evaluate + report)
 traceeval sdd --workdir runs/sdd [--specs FS-0101 ...] [--out docs/sdd]   spec-driven development demo
+traceeval sdd draft --request request.md --id FS-0106 [--replay answer.json]   draft a spec with an LLM
 """
 
 import argparse
@@ -109,7 +110,34 @@ def cmd_experiment(args):
 def cmd_sdd(args):
     from traceeval.spec.runner import run_demo
 
+    if args.action == "draft":
+        return cmd_sdd_draft(args)
     run_demo(Path(args.workdir), spec_ids=args.specs or None, out=Path(args.out) if args.out else None)
+
+
+def cmd_sdd_draft(args):
+    from traceeval.catalog import load_catalog
+    from traceeval.spec.draft import draft
+    from traceeval.spec.product import ProductModel
+    from traceeval.spec.runner import record_baseline
+
+    if not args.request:
+        raise SystemExit("sdd draft needs --request <file>")
+    catalog = {c.id: c for c in load_catalog()}
+    sut_dir, runs, deps = record_baseline(Path(args.workdir), catalog)
+    out = Path(args.out) if args.out else Path("traceeval/specs") / f"{args.id}.draft.yaml"
+    result = draft(
+        Path(args.request),
+        args.id,
+        out,
+        ProductModel(sut_dir, runs, deps),
+        catalog,
+        replay=Path(args.replay) if args.replay else None,
+        save_response=Path(args.save_response) if args.save_response else None,
+    )
+    print(f"draft: {result['draft']}\nrendering: {result['rendering']}")
+    for n in result["problems"] + result["validation"]:
+        print(f"  {n}")
 
 
 def main(argv=None):
@@ -153,9 +181,14 @@ def main(argv=None):
         sp.set_defaults(fn=fn)
 
     sd = sub.add_parser("sdd")
+    sd.add_argument("action", nargs="?", default="run", choices=["run", "draft"])
     sd.add_argument("--workdir", default="runs/sdd")
-    sd.add_argument("--specs", nargs="*", help="spec ids (default: all)")
-    sd.add_argument("--out", default=None, help="where to write report.md and figures (default: the workdir)")
+    sd.add_argument("--specs", nargs="*", help="run: spec ids (default: all)")
+    sd.add_argument("--out", default=None, help="run: report directory (default: the workdir); draft: the draft file")
+    sd.add_argument("--request", help="draft: the change request (markdown or text)")
+    sd.add_argument("--id", default="FS-0106", help="draft: id of the new spec")
+    sd.add_argument("--replay", help="draft: a saved model answer to use instead of calling the endpoint")
+    sd.add_argument("--save-response", help="draft: save the model's answer here for later --replay")
     sd.set_defaults(fn=cmd_sdd)
 
     args = p.parse_args(argv)

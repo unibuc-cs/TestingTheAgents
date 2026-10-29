@@ -8,61 +8,48 @@ intent: |
   Approving a review records the approval date.
 
 clauses:
-  - id: window-setting
-    kind: setting
-    text: the validity window is a configuration value between 1 and 365 days, set to 30
-    key: publishing.review_max_age_days
-    type: integer
-    min: 1
-    max: 365
-    value: 30
+  - use: setting_in_range
+    with: {key: publishing.review_max_age_days, min: 1, max: 365, value: 30}
 
-  - id: age-rule
-    kind: contract
-    text: review_age_ok(age, max) holds exactly when 0 <= age <= max, for every max >= 1
-    function: services/workflow.py::review_age_ok
-    inputs: {age_days: int, max_age_days: int}
-    assume: max_age_days >= 1
-    ensures: result == (0 <= age_days <= max_age_days)
-    examples: 300
+  - use: function_contract
+    with:
+      function: services/workflow.py::review_age_ok
+      inputs: {age_days: int, max_age_days: int}
+      assume: max_age_days >= 1
+      ensures: result == (0 <= age_days <= max_age_days)
+      examples: 300
+    require: L5
 
-  - id: no-stale-go-live
-    kind: trace
-    text: whenever a page goes live, its approval was at most the configured number of days old
-    scope: {tools: [publish_page, schedule_publish]}
-    rule: always
-    event: {kind: tool.call, tool: [publish_page, schedule_publish], status: ok}
-    where: approval_age(run, event.args.page_id) <= config('publishing.review_max_age_days')
+  - use: always_on_calls
+    with:
+      tools: [publish_page, schedule_publish]
+      where: approval_age(run, event.args.page_id) <= config('publishing.review_max_age_days')
 
-  - id: stale-refused
-    kind: example
-    text: publishing a page approved 45 days ago is refused, audited, and explained
-    case:
-      agent: orchestrator
-      request: "Please publish the stale-approval page"
-      context: {user_id: bob, page_id: p11}
-    expect:
-      state: [["pages.p11.status", "==", "draft"]]
-      tools_forbidden: [request_review]
-      audit: [{action: publish_refused, page_id: p11, rule_id: FS-0101, count: 1}, {action: publish_page, page_id: p11, count: 0}]
-      response_contains: ["=str(config('publishing.review_max_age_days')) + ' days'", "new review"]
+  - use: scenario
+    with:
+      case:
+        agent: orchestrator
+        request: "Please publish the stale-approval page"
+        context: {user_id: bob, page_id: p11}
+      expect:
+        state: [["pages.p11.status", "==", "draft"]]
+        tools_forbidden: [request_review]
+        audit:
+          - {action: publish_refused, page_id: p11, rule_id: FS-0101, count: 1}
+          - {action: publish_page, page_id: p11, count: 0}
+        response_contains: ["=str(config('publishing.review_max_age_days')) + ' days'", "new review"]
 
-  - id: boundary-publishes
-    kind: example
-    text: a page approved exactly max days ago still publishes (boundary)
-    case: PUB-01
-    fixture_patch: {pages.p4.review.approved_on: "2026-09-28"}
+  - use: scenario
+    with: {case: PUB-01, fixture_patch: {pages.p4.review.approved_on: "2026-09-28"}}
 
-  - id: fresh-publishes
-    kind: example
-    text: the ordinary publish scenario is unchanged
-    case: PUB-01
+  - use: scenario
+    with: {case: PUB-01}
 
-  - id: lives-in-service
-    kind: placement
-    text: the rule is a service function; adapters, skills and the harness do no date arithmetic and hold no limit
-    rules:
-      - define: {function: review_age_ok, in: services/workflow.py}
-      - define: {function: approval_age_days, in: services/workflow.py}
-      - forbid_import: {module: datetime, in: [tools, harness]}
-      - forbid_literal: {value: 30, in: [services/workflow.py, tools, skills]}
+  - use: function_in_layer
+    with: {function: review_age_ok, file: services/workflow.py}
+  - use: function_in_layer
+    with: {function: approval_age_days, file: services/workflow.py}
+  - use: forbid_import_in
+    with: {module: datetime, dirs: [tools, harness]}
+  - use: forbid_literal_in
+    with: {value: 30, dirs: [services/workflow.py, tools, skills]}
