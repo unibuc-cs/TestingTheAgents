@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 600" width="1100" height="600" role="img" aria-label="ContentOps: a user request goes to the orchestrator, which delegates once to one of seven specialist agents; the specialist follows its skill's procedure, each step being a tool call that passes through the dispatcher's gates into tool adapters, services and the state." font-family="Helvetica, Arial, sans-serif" font-size="14" fill="#1f2937">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4b5563"/>
+    </marker>
+  </defs>
+  <rect width="1100" height="600" fill="#ffffff"/>
+
+  <!-- user -->
+  <rect x="40" y="30" width="230" height="60" rx="6" fill="#fff7ed" stroke="#9a3412"/>
+  <text x="155" y="54" text-anchor="middle" font-weight="bold" font-size="13">a user: alice, bob, carol or dave</text>
+  <text x="155" y="74" text-anchor="middle" font-size="12">"Please publish the welcome page"</text>
+
+  <!-- orchestrator -->
+  <rect x="330" y="30" width="440" height="60" rx="6" fill="#f5f3ff" stroke="#5b21b6"/>
+  <text x="550" y="54" text-anchor="middle" font-weight="bold">orchestrator — skill: routing</text>
+  <text x="550" y="74" text-anchor="middle" font-size="12">reads every specialist's trigger words, delegates exactly once (route_to_agent)</text>
+  <path d="M270,60 L330,60" fill="none" stroke="#4b5563" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="300" y="50" text-anchor="middle" font-size="11">request</text>
+
+  <!-- backend -->
+  <rect x="830" y="30" width="250" height="60" rx="6" fill="#f9fafb" stroke="#9ca3af" stroke-dasharray="5 3"/>
+  <text x="955" y="54" text-anchor="middle" font-weight="bold" font-size="13">backend — picks each next action</text>
+  <text x="955" y="74" text-anchor="middle" font-size="12">simulated (follows the Procedure) or an LLM</text>
+  <path d="M830,60 L770,60" fill="none" stroke="#9ca3af" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#a)"/>
+
+  <!-- fan-out to specialists -->
+  <path d="M550,90 L550,118" fill="none" stroke="#4b5563" stroke-width="1.5"/>
+  <line x1="110" y1="118" x2="990" y2="118" stroke="#4b5563" stroke-width="1.5"/>
+  <text x="560" y="112" font-size="12">one of seven, by trigger words (default: authoring)</text>
+  <g stroke="#4b5563" stroke-width="1.5" fill="none" marker-end="url(#a)">
+    <path d="M110,118 L110,140"/><path d="M257,118 L257,140"/><path d="M404,118 L404,140"/><path d="M550,118 L550,140"/>
+    <path d="M696,118 L696,140"/><path d="M843,118 L843,140"/><path d="M990,118 L990,140"/>
+  </g>
+
+  <!-- specialists: 7 boxes, 136 wide, centres 110,257,404,550,696,843,990 -->
+  <g font-size="12">
+    <rect x="42" y="140" width="136" height="96" rx="6" fill="#ffffff" stroke="#374151"/>
+    <text x="110" y="160" text-anchor="middle" font-weight="bold" font-size="13">authoring</text>
+    <text x="110" y="178" text-anchor="middle">page-authoring</text>
+    <text x="110" y="196" text-anchor="middle">create_page</text>
+    <text x="110" y="211" text-anchor="middle">update_page_content</text>
+    <text x="110" y="226" text-anchor="middle">set_page_metadata</text>
+
+    <rect x="189" y="140" width="136" height="96" rx="6" fill="#ffffff" stroke="#374151"/>
+    <text x="257" y="160" text-anchor="middle" font-weight="bold" font-size="13">publishing</text>
+    <text x="257" y="178" text-anchor="middle">publishing-workflow</text>
+    <text x="257" y="196" text-anchor="middle">publish_page</text>
+    <text x="257" y="211" text-anchor="middle">schedule_publish</text>
+    <text x="257" y="226" text-anchor="middle">unpublish_page *</text>
+
+    <rect x="336" y="140" width="136" height="96" rx="6" fill="#ffffff" stroke="#374151"/>
+    <text x="404" y="160" text-anchor="middle" font-weight="bold" font-size="13">seo</text>
+    <text x="404" y="178" text-anchor="middle">seo-metadata</text>
+    <text x="404" y="196" text-anchor="middle">get_seo_report</text>
+    <text x="404" y="211" text-anchor="middle">set_page_metadata</text>
+
+    <rect x="482" y="140" width="136" height="96" rx="6" fill="#ffffff" stroke="#374151"/>
+    <text x="550" y="160" text-anchor="middle" font-weight="bold" font-size="13">assets</text>
+    <text x="550" y="178" text-anchor="middle">asset-management</text>
+    <text x="550" y="196" text-anchor="middle">upload_asset</text>
+    <text x="550" y="211" text-anchor="middle">attach_asset</text>
+
+    <rect x="628" y="140" width="136" height="96" rx="6" fill="#ffffff" stroke="#374151"/>
+    <text x="696" y="160" text-anchor="middle" font-weight="bold" font-size="13">translation</text>
+    <text x="696" y="178" text-anchor="middle">translation</text>
+    <text x="696" y="196" text-anchor="middle">create_translation_job</text>
+    <text x="696" y="211" text-anchor="middle">get_translation_status</text>
+
+    <rect x="775" y="140" width="136" height="96" rx="6" fill="#ffffff" stroke="#374151"/>
+    <text x="843" y="160" text-anchor="middle" font-weight="bold" font-size="13">governance</text>
+    <text x="843" y="178" text-anchor="middle">governance-ops</text>
+    <text x="843" y="196" text-anchor="middle">check_consent</text>
+    <text x="843" y="211" text-anchor="middle">export_user_data *</text>
+    <text x="843" y="226" text-anchor="middle">get_audit_log</text>
+
+    <rect x="922" y="140" width="136" height="96" rx="6" fill="#ffffff" stroke="#374151"/>
+    <text x="990" y="160" text-anchor="middle" font-weight="bold" font-size="13">maintenance</text>
+    <text x="990" y="178" text-anchor="middle">rollback</text>
+    <text x="990" y="196" text-anchor="middle">list_versions</text>
+    <text x="990" y="211" text-anchor="middle">rollback_page</text>
+  </g>
+  <text x="1058" y="252" text-anchor="end" font-size="11" fill="#4b5563">each box: agent · entry skill · its main tools · * = guarded, needs an approval token</text>
+
+  <!-- shared skills -->
+  <rect x="42" y="268" width="1016" height="44" rx="6" fill="#f9fafb" stroke="#9ca3af"/>
+  <text x="56" y="286" font-size="13" font-weight="bold">shared skills, included by the specialists' procedures</text>
+  <text x="56" y="304" font-size="12">governance-checks → check_permission before any write (all specialists) · link-validation → validate_links before publishing, scheduling, after editing (authoring, publishing, maintenance)</text>
+
+  <!-- every step is a tool call -->
+  <path d="M550,312 L550,340" fill="none" stroke="#4b5563" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="560" y="332" font-size="12">every procedure step = one tool call</text>
+
+  <!-- dispatcher -->
+  <rect x="42" y="340" width="1016" height="70" rx="6" fill="#eff6ff" stroke="#1e40af"/>
+  <text x="56" y="360" font-size="13" font-weight="bold">dispatcher — the one gate every call passes (harness/dispatcher.py)</text>
+  <g font-size="12">
+    <text x="56" y="382">tool enabled? → agent allowed this tool? → guarded tool: valid approval token? → fault injection (test profiles) →</text>
+    <text x="56" y="399">retry on transient failure, write tools with an idempotency key → trace event tool.call (args, status, attempts, key)</text>
+  </g>
+
+  <!-- tools -> services -> state -->
+  <path d="M550,410 L550,436" fill="none" stroke="#4b5563" stroke-width="1.5" marker-end="url(#a)"/>
+  <g font-size="12">
+    <rect x="42" y="436" width="320" height="64" rx="6" fill="#ffffff" stroke="#374151"/>
+    <text x="202" y="456" text-anchor="middle" font-weight="bold" font-size="13">tools — 22 adapters (tools/*.py)</text>
+    <text x="202" y="474" text-anchor="middle">name, kind (read / write / guarded), JSON schema;</text>
+    <text x="202" y="490" text-anchor="middle">pass the call to a service, nothing else</text>
+
+    <path d="M362,468 L390,468" fill="none" stroke="#4b5563" stroke-width="1.5" marker-end="url(#a)"/>
+
+    <rect x="390" y="436" width="320" height="64" rx="6" fill="#ffffff" stroke="#374151"/>
+    <text x="550" y="456" text-anchor="middle" font-weight="bold" font-size="13">services — the business rules (services/*.py)</text>
+    <text x="550" y="474" text-anchor="middle">repository, workflow, links, seo, permissions,</text>
+    <text x="550" y="490" text-anchor="middle">governance, translation</text>
+
+    <path d="M710,468 L738,468" fill="none" stroke="#4b5563" stroke-width="1.5" marker-end="url(#a)"/>
+
+    <rect x="738" y="436" width="320" height="64" rx="6" fill="#ffffff" stroke="#374151"/>
+    <text x="898" y="456" text-anchor="middle" font-weight="bold" font-size="13">state — in memory (fixtures/base.json)</text>
+    <text x="898" y="474" text-anchor="middle">5 users, 11 pages with versions and links, assets,</text>
+    <text x="898" y="490" text-anchor="middle">consents, translation jobs, audit log, idempotency memory</text>
+  </g>
+
+  <!-- config -->
+  <rect x="42" y="520" width="1016" height="50" rx="6" fill="#f9fafb" stroke="#9ca3af"/>
+  <text x="56" y="540" font-size="13" font-weight="bold">config/runtime.yaml — read by the harness and the skills</text>
+  <text x="56" y="558" font-size="11">runtime.max_tool_calls, retries, idempotency_keys · tools.disabled, requires_approval · routing.default_agent · publishing.require_review, allow_scheduling · seo.max_title_length · translation.default_locales</text>
+</svg>

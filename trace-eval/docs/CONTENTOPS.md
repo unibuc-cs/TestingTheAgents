@@ -14,6 +14,12 @@ translation jobs; an audit log of every write.
 
 ## How it is built
 
+![ContentOps: the user, the orchestrator, the seven specialists, the shared skills, the dispatcher, tools, services, state and configuration](figures/contentops_agents.svg)
+
+*One request, top to bottom: the orchestrator delegates once; the specialist follows its skill's
+procedure; every step is a tool call through the dispatcher; adapters hand over to services; services
+change the state and write the audit log.*
+
 ```
 request --> orchestrator (routes by trigger words) --> one specialist agent --> its skills --> tools --> services --> state
 ```
@@ -29,18 +35,53 @@ request --> orchestrator (routes by trigger words) --> one specialist agent --> 
 | config | the runtime settings: step budget, retries, idempotency keys, disabled and guarded tools, default agent, review/scheduling flags, SEO limits, default locales | `sut/config/runtime.yaml` |
 | backends | *simulated*: executes the skill's procedure step by step, deterministic and free; *LLM*: a real model on an OpenAI-compatible endpoint, with tool calling | `sut/harness/backends/` |
 
-The agents and what they own:
+## The agents and who talks to whom
 
-| agent | does | skills |
-|---|---|---|
-| orchestrator | front door: routes every request to the specialist that owns the workflow | routing |
-| authoring | creates draft pages, edits page bodies | page-authoring, governance-checks, link-validation |
-| publishing | publishes, schedules, unpublishes, with permission, link and review gates | publishing-workflow, governance-checks, link-validation |
-| seo | reviews and sets SEO metadata within the configured limits | seo-metadata, governance-checks |
-| assets | uploads assets to the DAM and attaches them to pages | asset-management, governance-checks |
-| translation | creates translation jobs, reports their status | translation, governance-checks |
-| governance | data-subject exports under consent, audit-log questions | governance-ops, governance-checks |
-| maintenance | restores earlier page versions | rollback, governance-checks, link-validation |
+Agents do not talk to each other freely: the only inter-agent message is the orchestrator's single
+delegation (`route_to_agent`), and the only way an agent acts on the world is a tool call through the
+dispatcher. Everything else is inside one agent: its skills, its backend, its context.
+
+- **orchestrator** — the front door. Reads the request, consults every specialist's description and
+  trigger words (recorded as `agent.consult` events), delegates exactly once; if no trigger matches,
+  the configured default (`routing.default_agent: authoring`) gets it. Skill: `routing`. Tool: only
+  `route_to_agent`.
+- **authoring** — creates draft pages and edits page bodies. Skill `page-authoring`; includes
+  `governance-checks` (permission first) and `link-validation` (after an edit). Tools: `search_pages`,
+  `get_page`, `create_page`, `update_page_content`, `set_page_metadata`, `validate_links`,
+  `request_review`, `list_versions`, `check_permission`.
+- **publishing** — takes pages live, schedules them, takes them down. Skill `publishing-workflow`;
+  includes `governance-checks` and `link-validation` (before publishing or scheduling). Tools:
+  `get_page`, `check_permission`, `validate_links`, `request_review`, `approve_review`*,
+  `publish_page`, `schedule_publish`, `unpublish_page`*.
+- **seo** — reviews and sets SEO metadata within the configured title limit. Skill `seo-metadata` +
+  `governance-checks`. Tools: `get_page`, `get_seo_report`, `set_page_metadata`, `check_permission`.
+- **assets** — uploads assets to the DAM and attaches them to pages. Skill `asset-management` +
+  `governance-checks`. Tools: `get_page`, `upload_asset`, `get_asset`, `attach_asset`, `check_permission`.
+- **translation** — creates translation jobs and reports their status. Skill `translation` +
+  `governance-checks`. Tools: `get_page`, `check_permission`, `create_translation_job`,
+  `get_translation_status`.
+- **governance** — data-subject exports under consent, audit-log questions. Skill `governance-ops` +
+  `governance-checks`. Tools: `check_permission`, `check_consent`, `export_user_data`*, `get_audit_log`.
+- **maintenance** — restores earlier page versions. Skill `rollback` + `governance-checks` +
+  `link-validation`. Tools: `get_page`, `list_versions`, `rollback_page`, `validate_links`,
+  `check_permission`.
+
+\* guarded: the dispatcher refuses the call unless the request carries a valid approval token.
+
+Shared skills are the platform's way of saying "every specialist does this the same way":
+`governance-checks` calls `check_permission(user, action)` before any write and stops with an
+explanation when the user may not; `link-validation` calls `validate_links(page)` and stops when
+anything is broken. A specialist's procedure *includes* them, so a change to a shared skill changes
+every specialist that includes it — which is exactly what the test-selection work tracks.
+
+### One request, step by step
+
+![One run of a case, end to end](figures/guide_2_run.png)
+
+*"Please publish the welcome page" as bob: the executor starts the orchestrator, the orchestrator
+routes to publishing, the publishing agent follows its procedure (fetch, permission, links, publish),
+each step goes through the dispatcher and is recorded, and the final state and message are scored
+against the case's expectations.*
 
 ## The rules the harness enforces on every tool call
 

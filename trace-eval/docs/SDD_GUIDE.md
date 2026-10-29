@@ -16,6 +16,12 @@ runs, a concrete scenario must end a given way, a piece of code must live in a g
 is checked by exactly one checker, and each check produces evidence with a rung: how strong the evidence
 is. A PR is accepted when every clause holds and the required rungs are reached.
 
+![From a prose request to a verdict: the person writes and confirms, the model drafts within the catalog, the machine checks the PR](figures/sdd_1_loop.svg)
+
+*Who does what. The person only ever writes prose and confirms; the model can only pick templates and
+fill slots; the machine validates, checks and reports. Nothing enters the spec that the catalog and the
+product model do not know.*
+
 ## 2. A spec file
 
 Specs live in `traceeval/specs/FS-*.yaml` (the `FS` ids are just "feature spec" numbers). A spec is:
@@ -46,6 +52,11 @@ the one-line reading (`seo.max_title_length is an integer between 10 and 120`) f
 hands the result to the checker of that kind. A clause may carry `require: L5` to raise the rung it must
 reach (see §5); otherwise the template's default applies.
 
+![Anatomy of one clause: written as template plus slots, expanded through the catalog, checked, reported as evidence](figures/sdd_2_clause.svg)
+
+*One clause from FS-0101, end to end: what the author writes, the template it refers to, what the
+loader makes of it, what the checker does with it, and the one line of evidence that comes out.*
+
 ## 3. The catalog of clause templates
 
 The catalog is one file, `traceeval/spec/catalog.yaml`. It is the closed menu of what a spec may say.
@@ -69,6 +80,11 @@ Slot types are checked against the product model (§6) before anything runs.
 | `forbid_name_in` | placement | name, dirs | nothing under *dirs* uses the name *name* | L4 |
 | `forbid_literal_in` | placement | value, dirs | nothing under *dirs* hard-codes *value* | L4 |
 | `skill_step_order` | placement | skill, first, then | in skill *skill*, step *first* comes before step *then* | L4 |
+
+![The five clause kinds and what each one inspects: configuration, file tree, one function, recorded runs, one scenario](figures/sdd_3_kinds.svg)
+
+*What each kind looks at. Two kinds are static and run nothing; three execute the PR's copy of the
+real application. The badge is the rung a passing check reaches.*
 
 Slot types: `config_key`, `function` (`file.py::name`), `file`, `tool`/`tools`, `skill`, `case` (a catalog
 case id or an inline case with `agent`, `request`, `context`), `dirs`, `module`, `expr`, `inputs`, `set`
@@ -123,6 +139,11 @@ Every check reports the rung it **reached** — a fact about what the checker co
 | L3 monitored | a rule held over every recorded run in scope | the monitor over the catalog runs |
 | L4 statically checked | a fact about the artifact itself (config, code structure) | schema check, AST lint |
 | L5 proven | a solver showed no input (within `assume`) violates `ensures` | Z3 on the function's source |
+
+![The assurance ladder and how reached and required rungs give a status and a verdict](figures/sdd_4_rungs.svg)
+
+*Left: what the evidence at each rung covers. Right: the comparison that turns a check into a status,
+with the three FS-0101 PRs that show each outcome.*
 
 A clause also has a **required** rung — a decision, not a fact: the template's default, or `require:`
 in the spec. The verdict compares the two: a clause that holds but reaches less than required is reported

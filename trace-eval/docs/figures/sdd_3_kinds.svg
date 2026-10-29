@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 430" width="1100" height="430" role="img" aria-label="The five clause kinds and what each one inspects in the application: setting reads the configuration file, contract reads a function and runs it on generated inputs or proves it, trace replays recorded runs, example runs one scenario, placement reads the file tree. Static checks run no code; dynamic checks execute the real application." font-family="Helvetica, Arial, sans-serif" font-size="14" fill="#1f2937">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4b5563"/>
+    </marker>
+  </defs>
+  <rect width="1100" height="430" fill="#ffffff"/>
+
+  <!-- column guides: 5 columns of 200px starting at x=40 (centres at 140, 350, 560, 770, 980) -->
+  <!-- static / dynamic bands -->
+  <rect x="30" y="18" width="1040" height="30" rx="6" fill="#f3f4f6"/>
+  <text x="140" y="38" text-anchor="middle" font-size="13" font-weight="bold" fill="#374151">STATIC — reads the artifact, runs nothing</text>
+  <text x="770" y="38" text-anchor="middle" font-size="13" font-weight="bold" fill="#374151">DYNAMIC — executes the real application (the PR's copy)</text>
+  <line x1="450" y1="18" x2="450" y2="48" stroke="#9ca3af"/>
+
+  <!-- clause kind boxes (row 1) -->
+  <g>
+    <rect x="40" y="70" width="200" height="74" rx="6" fill="#ffffff" stroke="#374151"/>
+    <text x="140" y="94" text-anchor="middle" font-weight="bold">setting</text>
+    <text x="140" y="113" text-anchor="middle" font-size="13">a typed constraint</text>
+    <text x="140" y="131" text-anchor="middle" font-size="13">on a config key</text>
+  </g>
+  <g>
+    <rect x="250" y="70" width="200" height="74" rx="6" fill="#ffffff" stroke="#374151"/>
+    <text x="350" y="94" text-anchor="middle" font-weight="bold">placement</text>
+    <text x="350" y="113" text-anchor="middle" font-size="13">where code must</text>
+    <text x="350" y="131" text-anchor="middle" font-size="13">(not) live</text>
+  </g>
+  <g>
+    <rect x="460" y="70" width="200" height="74" rx="6" fill="#ffffff" stroke="#374151"/>
+    <text x="560" y="94" text-anchor="middle" font-weight="bold">contract</text>
+    <text x="560" y="113" text-anchor="middle" font-size="13">pre/post-condition of a</text>
+    <text x="560" y="131" text-anchor="middle" font-size="13">function, or a property</text>
+  </g>
+  <g>
+    <rect x="670" y="70" width="200" height="74" rx="6" fill="#ffffff" stroke="#374151"/>
+    <text x="770" y="94" text-anchor="middle" font-weight="bold">trace</text>
+    <text x="770" y="113" text-anchor="middle" font-size="13">always / never / precedes</text>
+    <text x="770" y="131" text-anchor="middle" font-size="13">over recorded runs</text>
+  </g>
+  <g>
+    <rect x="880" y="70" width="200" height="74" rx="6" fill="#ffffff" stroke="#374151"/>
+    <text x="980" y="94" text-anchor="middle" font-weight="bold">example</text>
+    <text x="980" y="113" text-anchor="middle" font-size="13">one scenario,</text>
+    <text x="980" y="131" text-anchor="middle" font-size="13">expected outcome</text>
+  </g>
+
+  <!-- arrows with the check on them (row 2) -->
+  <path d="M140,144 L140,250" fill="none" stroke="#4b5563" stroke-width="1.5" marker-end="url(#a)"/>
+  <rect x="62" y="172" width="156" height="50" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="140" y="192" text-anchor="middle" font-size="12">schema check: type,</text>
+  <text x="140" y="209" text-anchor="middle" font-size="12">range, value, contains</text>
+
+  <path d="M350,144 L350,250" fill="none" stroke="#4b5563" stroke-width="1.5" marker-end="url(#a)"/>
+  <rect x="272" y="172" width="156" height="50" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="350" y="192" text-anchor="middle" font-size="12">AST lint: defined-in,</text>
+  <text x="350" y="209" text-anchor="middle" font-size="12">no import / name / literal</text>
+
+  <path d="M560,144 L560,250" fill="none" stroke="#4b5563" stroke-width="1.5" marker-end="url(#a)"/>
+  <rect x="470" y="166" width="180" height="62" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="560" y="184" text-anchor="middle" font-size="12">Hypothesis: generated inputs</text>
+  <text x="560" y="201" text-anchor="middle" font-size="12">Z3: source → formula, prove</text>
+  <text x="560" y="218" text-anchor="middle" font-size="12">forall: one run per value</text>
+
+  <path d="M770,144 L770,250" fill="none" stroke="#4b5563" stroke-width="1.5" marker-end="url(#a)"/>
+  <rect x="692" y="172" width="156" height="50" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="770" y="192" text-anchor="middle" font-size="12">monitor: replay the runs</text>
+  <text x="770" y="209" text-anchor="middle" font-size="12">in scope, check each event</text>
+
+  <path d="M980,144 L980,250" fill="none" stroke="#4b5563" stroke-width="1.5" marker-end="url(#a)"/>
+  <rect x="902" y="172" width="156" height="50" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="980" y="192" text-anchor="middle" font-size="12">one run, then checks on</text>
+  <text x="980" y="209" text-anchor="middle" font-size="12">state, tool calls, audit, reply</text>
+
+  <!-- what is inspected (row 3) -->
+  <g>
+    <rect x="40" y="250" width="200" height="70" rx="6" fill="#eff6ff" stroke="#1e40af"/>
+    <text x="140" y="274" text-anchor="middle" font-weight="bold" font-size="13">config/runtime.yaml</text>
+    <text x="140" y="294" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="12">review_max_age_days: 30</text>
+    <text x="140" y="311" text-anchor="middle" font-size="12">the effective configuration</text>
+  </g>
+  <g>
+    <rect x="250" y="250" width="200" height="70" rx="6" fill="#eff6ff" stroke="#1e40af"/>
+    <text x="350" y="274" text-anchor="middle" font-weight="bold" font-size="13">the file tree</text>
+    <text x="350" y="294" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="12">services/ tools/ skills/</text>
+    <text x="350" y="311" text-anchor="middle" font-size="12">ASTs and skill procedures</text>
+  </g>
+  <g>
+    <rect x="460" y="250" width="200" height="70" rx="6" fill="#eff6ff" stroke="#1e40af"/>
+    <text x="560" y="274" text-anchor="middle" font-weight="bold" font-size="13">one function (or the agent)</text>
+    <text x="560" y="294" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="12">review_age_ok(age, max)</text>
+    <text x="560" y="311" text-anchor="middle" font-size="12">called on many inputs / proven</text>
+  </g>
+  <g>
+    <rect x="670" y="250" width="200" height="70" rx="6" fill="#eff6ff" stroke="#1e40af"/>
+    <text x="770" y="274" text-anchor="middle" font-weight="bold" font-size="13">recorded runs in scope</text>
+    <text x="770" y="294" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="12">15 of 134 cases</text>
+    <text x="770" y="311" text-anchor="middle" font-size="12">tool.call events, audit log</text>
+  </g>
+  <g>
+    <rect x="880" y="250" width="200" height="70" rx="6" fill="#eff6ff" stroke="#1e40af"/>
+    <text x="980" y="274" text-anchor="middle" font-weight="bold" font-size="13">one scenario</text>
+    <text x="980" y="294" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="12">bob publishes p11</text>
+    <text x="980" y="311" text-anchor="middle" font-size="12">final state, calls, reply</text>
+  </g>
+
+  <!-- rung badges (row 4) -->
+  <g font-size="13" font-weight="bold">
+    <rect x="95" y="340" width="90" height="26" rx="13" fill="#374151"/>
+    <text x="140" y="358" text-anchor="middle" fill="#ffffff">L4 static</text>
+    <rect x="305" y="340" width="90" height="26" rx="13" fill="#374151"/>
+    <text x="350" y="358" text-anchor="middle" fill="#ffffff">L4 static</text>
+    <rect x="490" y="340" width="140" height="26" rx="13" fill="#374151"/>
+    <text x="560" y="358" text-anchor="middle" fill="#ffffff">L2 tested · L5 proven</text>
+    <rect x="715" y="340" width="110" height="26" rx="13" fill="#374151"/>
+    <text x="770" y="358" text-anchor="middle" fill="#ffffff">L3 monitored</text>
+    <rect x="930" y="340" width="100" height="26" rx="13" fill="#374151"/>
+    <text x="980" y="358" text-anchor="middle" fill="#ffffff">L1 tested</text>
+  </g>
+  <text x="550" y="400" text-anchor="middle" font-size="13" fill="#4b5563">the rung a clause reaches when its check passes — what the evidence covers: the artifact (L4), all inputs in the domain (L5), many inputs (L2), every recorded run (L3), one input (L1)</text>
+</svg>
