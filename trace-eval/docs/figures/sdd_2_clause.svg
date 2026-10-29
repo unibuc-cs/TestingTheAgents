@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 470" width="1100" height="470" role="img" aria-label="Anatomy of one clause: written as template plus slots, expanded by the loader through the catalog into an id, a text and checker fields, checked by the checker of its kind, and reported as evidence with reached and required rung." font-family="Helvetica, Arial, sans-serif" font-size="14" fill="#1f2937">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4b5563"/>
+    </marker>
+  </defs>
+  <rect width="1100" height="470" fill="#ffffff"/>
+
+  <!-- 1. as written -->
+  <text x="40" y="36" font-size="15" font-weight="bold">1. as written in the spec (a person or the model)</text>
+  <rect x="40" y="48" width="390" height="130" rx="6" fill="#f9fafb" stroke="#9ca3af"/>
+  <text x="56" y="72" font-family="Menlo, Consolas, monospace" font-size="12" xml:space="preserve">- use: function_contract</text>
+  <text x="56" y="92" font-family="Menlo, Consolas, monospace" font-size="12" xml:space="preserve">  with:</text>
+  <text x="56" y="112" font-family="Menlo, Consolas, monospace" font-size="12" xml:space="preserve">    function: services/workflow.py::review_age_ok</text>
+  <text x="56" y="132" font-family="Menlo, Consolas, monospace" font-size="12" xml:space="preserve">    inputs: {age_days: int, max_age_days: int}</text>
+  <text x="56" y="152" font-family="Menlo, Consolas, monospace" font-size="12" xml:space="preserve">    ensures: result == (0 &lt;= age_days &lt;= max)</text>
+  <text x="56" y="172" font-family="Menlo, Consolas, monospace" font-size="12" xml:space="preserve">  require: L5</text>
+
+  <!-- 2. the template -->
+  <text x="40" y="226" font-size="15" font-weight="bold">2. the template, from catalog.yaml</text>
+  <rect x="40" y="238" width="390" height="120" rx="6" fill="#f9fafb" stroke="#9ca3af"/>
+  <text x="56" y="262" font-family="Menlo, Consolas, monospace" font-size="12" xml:space="preserve">function_contract:</text>
+  <text x="56" y="282" font-family="Menlo, Consolas, monospace" font-size="12" xml:space="preserve">  kind: contract</text>
+  <text x="56" y="302" font-family="Menlo, Consolas, monospace" font-size="12" xml:space="preserve">  slots: {function, inputs, ensures, assume?}</text>
+  <text x="56" y="322" font-family="Menlo, Consolas, monospace" font-size="12" xml:space="preserve">  gloss: "{function}: for every input, {ensures}"</text>
+  <text x="56" y="342" font-family="Menlo, Consolas, monospace" font-size="12" xml:space="preserve">  require: L2   # default; raised to L5 above</text>
+
+  <!-- arrows into expansion -->
+  <path d="M430,113 L455,113 L455,200 L480,200" fill="none" stroke="#4b5563" stroke-width="1.5" marker-end="url(#a)"/>
+  <path d="M430,298 L455,298 L455,200" fill="none" stroke="#4b5563" stroke-width="1.5"/>
+  <text x="448" y="196" font-size="12" text-anchor="end">slots +</text>
+  <text x="448" y="212" font-size="12" text-anchor="end">template</text>
+
+  <!-- 3. expanded clause -->
+  <text x="480" y="36" font-size="15" font-weight="bold">3. expanded by the loader</text>
+  <rect x="480" y="48" width="280" height="300" rx="6" fill="#eff6ff" stroke="#1e40af"/>
+  <text x="494" y="72" font-size="13" font-weight="bold">id (generated)</text>
+  <text x="494" y="90" font-family="Menlo, Consolas, monospace" font-size="12" xml:space="preserve">function_contract:review_age_ok</text>
+  <text x="494" y="118" font-size="13" font-weight="bold">text (from the gloss)</text>
+  <text x="494" y="136" font-size="13">review_age_ok: for every input with</text>
+  <text x="494" y="153" font-size="13">max_age_days &gt;= 1, result == (0 &lt;= ...)</text>
+  <text x="494" y="181" font-size="13" font-weight="bold">fields the checker reads</text>
+  <text x="494" y="199" font-family="Menlo, Consolas, monospace" font-size="12" xml:space="preserve">function, inputs, assume, ensures</text>
+  <text x="494" y="227" font-size="13" font-weight="bold">required rung</text>
+  <text x="494" y="245" font-family="Menlo, Consolas, monospace" font-size="12" xml:space="preserve">L5</text>
+  <text x="494" y="273" font-size="13" font-weight="bold">spec check (validate_spec)</text>
+  <text x="494" y="291" font-size="13">slot values looked up in the product model:</text>
+  <text x="494" y="308" font-size="13">unknown tool / case / skill / dir = error,</text>
+  <text x="494" y="325" font-size="13">function or key not yet in the code = note</text>
+
+  <!-- arrow to checker -->
+  <path d="M760,200 L800,200" fill="none" stroke="#4b5563" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- 4. checker -->
+  <text x="800" y="36" font-size="15" font-weight="bold">4. checked (checks/contracts.py)</text>
+  <rect x="800" y="48" width="270" height="150" rx="6" fill="#f9fafb" stroke="#9ca3af"/>
+  <text x="816" y="72" font-size="13">on the PR's copy of the application:</text>
+  <text x="816" y="96" font-size="13">a. Hypothesis: 300 generated inputs,</text>
+  <text x="816" y="113" font-size="13">    looking for a counterexample</text>
+  <text x="816" y="137" font-size="13">b. Z3: the function's source translated</text>
+  <text x="816" y="154" font-size="13">    to a formula, assume ∧ ¬ensures unsat?</text>
+  <text x="816" y="178" font-size="13">straight-line code only for b.</text>
+
+  <!-- arrow to evidence -->
+  <path d="M935,198 L935,236" fill="none" stroke="#4b5563" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- 5. evidence -->
+  <text x="800" y="256" font-size="15" font-weight="bold">5. evidence (one line of the record)</text>
+  <rect x="800" y="268" width="270" height="80" rx="6" fill="#f0fdf4" stroke="#15803d"/>
+  <text x="816" y="292" font-size="13">status: <tspan font-weight="bold" fill="#15803d">pass</tspan>   reached: <tspan font-weight="bold">L5</tspan>   required: <tspan font-weight="bold">L5</tspan></text>
+  <text x="816" y="312" font-size="13">"proven for all inputs in the stated</text>
+  <text x="816" y="329" font-size="13">domain (solver: unsat)"</text>
+
+  <!-- three outcomes -->
+  <rect x="40" y="380" width="1030" height="70" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="56" y="404" font-size="13" font-weight="bold">The same clause on other PRs</text>
+  <text x="56" y="426" font-size="13"><tspan fill="#b91c1c" font-weight="bold">fail</tspan> — no lower bound: solver counterexample age_days = -1 (and Hypothesis finds it too) → PR rejected</text>
+  <text x="56" y="444" font-size="13"><tspan fill="#b45309" font-weight="bold">gap</tspan> — written with an if-branch: 300 examples pass, no proof possible, reached L2 &lt; required L5 → accepted with gaps, the owner decides</text>
+</svg>
