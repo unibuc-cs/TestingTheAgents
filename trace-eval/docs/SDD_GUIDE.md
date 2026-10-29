@@ -1,6 +1,6 @@
-# Spec-driven development here, explained from the start
+# Spec-driven development here
 
-This page explains the SDD layer of the repository for someone who has not seen it before: what a spec
+This page explains the SDD layer of the repository: what a spec
 is, where its clauses come from (the catalog), how a spec gets written (by a model, confirmed by a
 person), how a PR is judged against it, and what the assurance rungs mean. For the demo results see
 [SDD_DEMO.md](SDD_DEMO.md); for the architecture of the whole repository see [STUDY_GUIDE.md](STUDY_GUIDE.md);
