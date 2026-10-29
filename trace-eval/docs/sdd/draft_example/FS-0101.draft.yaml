@@ -1,0 +1,73 @@
+# DRAFT - generated from a change request; review, edit, then rename to .yaml to confirm.
+# note: setting_in_range:publishing.review_max_age_days (key): config key publishing.review_max_age_days is not in the current configuration - the request introduces it
+# note: function_contract:review_age_ok (function): services/workflow.py::review_age_ok is not in the current code - the request introduces it
+id: FS-0101
+title: Editorial approvals expire after a configurable number of days
+intent: |
+  An approval is valid for a configurable number of days (30 to start). Publishing or scheduling a page whose approval is older is refused with a message that asks for a new review, and the refusal is audited. Approving a review records the approval date.
+clauses:
+- use: setting_in_range
+  with:
+    key: publishing.review_max_age_days
+    min: 1
+    max: 365
+    value: 30
+- use: function_contract
+  with:
+    function: services/workflow.py::review_age_ok
+    inputs:
+      age_days: int
+      max_age_days: int
+    assume: max_age_days >= 1
+    ensures: result == (0 <= age_days <= max_age_days)
+  require: L5
+- use: always_on_calls
+  with:
+    tools:
+    - publish_page
+    - schedule_publish
+    where: approval_age(run, event.args.page_id) <= config('publishing.review_max_age_days')
+- use: scenario
+  with:
+    case:
+      agent: orchestrator
+      request: Please publish the stale-approval page
+      context:
+        user_id: bob
+        page_id: p11
+    expect:
+      state:
+      - - pages.p11.status
+        - ==
+        - draft
+      audit:
+      - action: publish_refused
+        page_id: p11
+        count: 1
+      response_contains:
+      - new review
+- use: scenario
+  with:
+    case: PUB-01
+- use: scenario
+  with:
+    case: PUB-01
+    fixture_patch:
+      pages.p4.review.approved_on: '2026-09-28'
+- use: function_in_layer
+  with:
+    function: review_age_ok
+    file: services/workflow.py
+- use: forbid_literal_in
+  with:
+    value: 30
+    dirs:
+    - services/workflow.py
+    - tools
+    - skills
+- use: forbid_import_in
+  with:
+    module: datetime
+    dirs:
+    - tools
+    - harness

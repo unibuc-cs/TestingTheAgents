@@ -5,13 +5,17 @@
 change - while a coding agent reads less and runs fewer checks than "read the repo, run everything"?
 
 **What this adds.** A spec layer (`traceeval/spec/`) on top of the ContentOps testbed: five change
-requests written as specs (`traceeval/specs/FS-010x.yaml`), 24 pull requests with known verdicts
-(`traceeval/spec/prs.py`; every accepted PR is a real code change of 1–4 files), and one command that
-produces the evidence report.
+requests written as specs (`traceeval/specs/FS-010x.yaml`, clauses picked from the template catalog
+`traceeval/spec/catalog.yaml`), 25 pull requests with known verdicts (`traceeval/spec/prs.py`; every
+accepted PR is a real code change of 1–4 files), a command that produces the evidence report, and a
+command that drafts a spec from a prose request with a model. New to this? Read [SDD_GUIDE.md](SDD_GUIDE.md)
+first; the application is described in [CONTENTOPS.md](CONTENTOPS.md).
 
 ```bash
 pip install -e ".[dev]"                 # adds hypothesis + z3-solver
-traceeval sdd --workdir runs/sdd        # ~25 s  ->  runs/sdd/report.md (+ evidence/*.json, one figure)
+traceeval sdd --workdir runs/sdd        # ~30 s  ->  runs/sdd/report.md (+ evidence/*.json, one figure)
+traceeval sdd draft --request docs/sdd/draft_example/request.md --id FS-0101 \
+    --replay docs/sdd/draft_example/answer.json --out /tmp/FS-0101.draft.yaml   # draft a spec (offline example)
 ```
 
 A copy of the report is in [`docs/sdd/report.md`](sdd/report.md).
@@ -26,15 +30,18 @@ A copy of the report is in [`docs/sdd/report.md`](sdd/report.md).
 | `example` | one scenario with an expected outcome (catalog case or inline, values may be `=expressions`) | one run | L1 |
 | `placement` | where code must (not) live: `define`, `forbid_import`, `forbid_name`, `forbid_literal`, `skill_order` | AST / procedure lint, no run | L4 static |
 
-The clause formats are documented in the module docstrings of `traceeval/spec/checks/*.py`; the
-helpers usable in expressions (`config`, `approval_age`, `audit_count`, `applied`, ...) in
-`traceeval/spec/context.py`. L0 (reviewed) is the prose `intent`.
+Clauses are written as catalog templates plus slot values (`use: setting_in_range`, `with: {...}`); the
+loader expands them, generates ids and the one-line readings, and validates slot values against the
+product model. The catalog is `traceeval/spec/catalog.yaml` (documented in [SDD_GUIDE.md §3](SDD_GUIDE.md));
+the checker fields are in the docstrings of `traceeval/spec/checks/*.py`; the helpers usable in
+expressions in `traceeval/spec/context.py`. L0 (reviewed) is the prose `intent`. Every clause has a
+*required* rung (template default or `require:`); a clause that holds below it is reported as a gap.
 
 ## The five requests, chosen for diversity
 
 | request | the accepted PR | what it demonstrates |
 |---|---|---|
-| FS-0101 approvals expire after 30 days | new feature, 4 files (config, workflow service, publish adapters, skill prose), 55 diff lines | a **proof** (L5) of the rule for all inputs; the proof catches a future-dated approval no fixture has; an off-by-one; the same logic in the wrong layer (only placement fails); a proven function that is never wired in (only the monitor and example fail) |
+| FS-0101 approvals expire after 30 days | new feature, 4 files (config, workflow service, publish adapters, skill prose), 55 diff lines | a **proof** (L5) of the rule for all inputs; the proof catches a future-dated approval no fixture has; an off-by-one; the same logic in the wrong layer (only placement fails); a proven function that is never wired in (only the monitor and example fail); a correct but branchy implementation that the prover cannot translate — accepted *with a gap* because the clause requires L5 |
 | FS-0102 guarded operations need a *valid* token and record the approver | security fix, 2 files (permissions service, dispatcher), 17 diff lines | the spec first **exposes a weakness of the current code** (any made-up token passes); the property, the monitor and the example catch a "self-approved" variant; a lookup written inside the harness is caught only by placement |
 | FS-0103 nothing goes live without a clean link check of its current version | defence in depth, 2 files (links service, workflow service), 28 diff lines | the rule moves from a skill procedure (a prompt) into the service and is **proven**; a gate that ignores the check's version is missed by 200 random examples and found by the solver; a **temporal** rule (`precedes`) with completeness against the product model; a skill reordering is stopped by the service gate and still rejected |
 | FS-0104 SEO title limit raised to 70 | configuration only, 1 file, 2 diff lines | a property over **agent behaviour** (titles of every length); boundary examples computed from config; a hard-coded constant caught only by placement |
@@ -52,7 +59,7 @@ dependency selection: the Q12 answer), tokens, seconds. Per request it also show
 tool adapters, the services behind them, the skills calling them, the config keys), as a fraction of
 the repository - and which checks will run.
 
-Headline numbers from `runs/sdd`: the brief is 10–18% of the repository (12% on average); all 24
+Headline numbers from `runs/sdd`: the brief is 10–18% of the repository (12% on average); all 25
 verdicts are as expected; every wrong PR is rejected with the clause, the counterexample or the
 misplaced code named; two rules are proven for all inputs (FS-0101, FS-0103); two specs find defects in
 the current code before any PR is written (FS-0102, FS-0105).

@@ -1,0 +1,164 @@
+# The clause catalog: the closed menu of clause templates a spec may use.
+#
+# A spec clause is written as   - use: <template>   with: {<slot>: <value>, ...}   [require: L<n>]
+# and the loader expands it into the clause the checkers understand (see checks/*.py for the fields).
+# Each template has:
+#   kind     which checker runs it: setting | contract | trace | example | placement
+#   gloss    the one-line human reading, with {slot} placeholders (becomes the clause text)
+#   slots    name -> type; types are validated against the product model where possible:
+#              config_key, function (file.py::name), file, tool, tools, skill, case (catalog id or an inline
+#              case), module, dirs (files or directories), expr (an expression), inputs (name -> int|bool|str),
+#              set (write_tools | catalog_cases | {skill_write_tools: <skill>} | [literal list]), int, str, any
+#   optional slots that may be left out (their keys are then dropped from the clause)
+#   require  the assurance rung the clause must reach for the PR to be accepted without a gap
+#   clause   the clause body; "{slot}" is replaced by the slot value (a bare "{slot}" keeps the value's type)
+#
+# The id of an expanded clause is "<template>:<first slot value>", so nobody writes ids by hand.
+
+setting_in_range:
+  kind: setting
+  gloss: "{key} is an integer between {min} and {max}"
+  slots: {key: config_key, min: int, max: int, value: any}
+  optional: [value]
+  require: L4
+  clause: {key: "{key}", type: integer, min: "{min}", max: "{max}", value: "{value}"}
+
+setting_equals:
+  kind: setting
+  gloss: "{key} is set to {value}"
+  slots: {key: config_key, value: any, type: str}
+  optional: [type]
+  require: L4
+  clause: {key: "{key}", value: "{value}", type: "{type}"}
+
+setting_contains:
+  kind: setting
+  gloss: "{key} contains {items}"
+  slots: {key: config_key, items: any}
+  require: L4
+  clause: {key: "{key}", type: list, contains: "{items}"}
+
+function_contract:
+  kind: contract
+  gloss: "{function}: for every input with {assume}, {ensures}"
+  slots: {function: function, inputs: inputs, ensures: expr, assume: expr, examples: int}
+  optional: [assume, examples]
+  require: L2
+  clause: {function: "{function}", inputs: "{inputs}", assume: "{assume}", ensures: "{ensures}", examples: "{examples}"}
+
+property_over_set:
+  kind: contract
+  gloss: "for every {var} in {set}: {ensures}"
+  slots: {var: str, set: set, scenario: any, ensures: expr}
+  require: L2
+  clause: {forall: {"{var}": "{set}"}, scenario: "{scenario}", ensures: "{ensures}"}
+
+property_over_range:
+  kind: contract
+  gloss: "for every {var} in {min}..{max}: {ensures}"
+  slots: {var: str, min: int, max: int, scenario: any, ensures: expr, examples: int}
+  optional: [examples]
+  require: L2
+  clause:
+    forall: {"{var}": {integers: {min_value: "{min}", max_value: "{max}"}}}
+    scenario: "{scenario}"
+    ensures: "{ensures}"
+    examples: "{examples}"
+
+always_on_calls:
+  kind: trace
+  gloss: "every successful call of {tools} satisfies: {where}"
+  slots: {tools: tools, where: expr}
+  require: L3
+  clause:
+    scope: {tools: "{tools}"}
+    rule: always
+    event: {kind: tool.call, tool: "{tools}", status: ok}
+    where: "{where}"
+
+never_on_calls:
+  kind: trace
+  gloss: "no call of {tools} ever happens with: {where}"
+  slots: {tools: tools, where: expr}
+  require: L3
+  clause:
+    scope: {tools: "{tools}"}
+    rule: never
+    event: {kind: tool.call, tool: "{tools}"}
+    where: "{where}"
+
+always_in_audit:
+  kind: trace
+  gloss: "every audit entry {actions} satisfies: {where}"
+  slots: {actions: tools, where: expr}
+  require: L3
+  clause:
+    scope: {tools: "{actions}"}
+    stream: audit
+    rule: always
+    event: {action: "{actions}"}
+    where: "{where}"
+
+precedes_in_audit:
+  kind: trace
+  gloss: "every {actions} is preceded, for the same {same}, by {before}"
+  slots: {actions: tools, before: any, same: any, before_where: expr, must_cover_except: any}
+  optional: [before_where, must_cover_except]
+  require: L3
+  clause:
+    scope: {tools: "{actions}"}
+    stream: audit
+    rule: precedes
+    event: {action: "{actions}"}
+    before: "{before}"
+    same: "{same}"
+    before_where: "{before_where}"
+    must_cover: {model: status_setters, except: "{must_cover_except}"}
+
+scenario:
+  kind: example
+  gloss: "scenario {case} ends as expected"
+  slots: {case: case, context: any, fixture_patch: any, expect: any, fault_profile: str}
+  optional: [context, fixture_patch, expect, fault_profile]
+  require: L1
+  clause:
+    case: "{case}"
+    context: "{context}"
+    fixture_patch: "{fixture_patch}"
+    expect: "{expect}"
+    fault_profile: "{fault_profile}"
+
+function_in_layer:
+  kind: placement
+  gloss: "{function} is defined in {file}"
+  slots: {function: str, file: file}
+  require: L4
+  clause: {rules: [{define: {function: "{function}", in: "{file}"}}]}
+
+forbid_import_in:
+  kind: placement
+  gloss: "nothing under {dirs} imports {module}"
+  slots: {module: module, dirs: dirs}
+  require: L4
+  clause: {rules: [{forbid_import: {module: "{module}", in: "{dirs}"}}]}
+
+forbid_name_in:
+  kind: placement
+  gloss: "nothing under {dirs} uses the name {name}"
+  slots: {name: str, dirs: dirs}
+  require: L4
+  clause: {rules: [{forbid_name: {name: "{name}", in: "{dirs}"}}]}
+
+forbid_literal_in:
+  kind: placement
+  gloss: "nothing under {dirs} hard-codes the value {value}"
+  slots: {value: any, dirs: dirs}
+  require: L4
+  clause: {rules: [{forbid_literal: {value: "{value}", in: "{dirs}"}}]}
+
+skill_step_order:
+  kind: placement
+  gloss: "in skill {skill}, the step {first} comes before the step {then}"
+  slots: {skill: skill, first: any, then: any}
+  require: L4
+  clause: {rules: [{skill_order: {skill: "{skill}", first: "{first}", then: "{then}"}}]}

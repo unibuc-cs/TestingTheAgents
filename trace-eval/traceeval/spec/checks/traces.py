@@ -95,7 +95,7 @@ def _preceded(earlier: list[dict], item: dict, clause, ctx, rec) -> bool:
 
 def _coverage_gap(clause, ctx) -> list[str]:
     mc = clause.get("must_cover")
-    if not mc:
+    if not mc or "model" not in mc:
         return []
     field = mc.get("field", "action" if clause.get("stream") == "audit" else "tool")
     covered = clause["event"].get(field)

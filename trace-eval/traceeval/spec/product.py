@@ -36,6 +36,19 @@ class ProductModel:
         self.config = yaml.safe_load(self.files["config/runtime.yaml"]) or {}
 
     # ---------------------------------------------------------------- static queries
+    def config_value(self, key: str):
+        """Dotted lookup in the effective configuration (None when the key does not exist)."""
+        node = self.config
+        for part in key.split("."):
+            if not isinstance(node, dict) or part not in node:
+                return None
+            node = node[part]
+        return node
+
+    @property
+    def catalog_ids(self) -> set[str]:
+        return set(self.baseline_runs)
+
     def repo_tokens(self) -> int:
         return sum(approx_tokens(t) for t in self.files.values())
 

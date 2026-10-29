@@ -9,71 +9,57 @@ intent: |
   a permissions-service function; the harness never inspects the user table itself.
 
 clauses:
-  - id: guarded-list
-    kind: setting
-    text: the three guarded tools are in the list of tools that require approval
-    key: tools.requires_approval
-    type: list
-    contains: [unpublish_page, approve_review, export_user_data]
+  - use: setting_contains
+    with: {key: tools.requires_approval, items: [unpublish_page, approve_review, export_user_data]}
 
-  - id: made-up-token-refused
-    kind: contract
-    text: for each guarded tool with a recorded run, the same request with a made-up token is refused and nothing is audited
-    forall: {tool: [unpublish_page, export_user_data]}
-    scenario:
-      case: "=first_case_calling(tool)"
-      context: {approval_token: APPR-FAKE-0000}
-    ensures: not applied(run, tool) and audit_count(run, tool) == 0 and audit_count(run, 'approval_used') == 0
+  - use: property_over_set
+    with:
+      var: tool
+      set: [unpublish_page, export_user_data]
+      scenario: {case: "=first_case_calling(tool)", context: {approval_token: APPR-FAKE-0000}}
+      ensures: not applied(run, tool) and audit_count(run, tool) == 0 and audit_count(run, 'approval_used') == 0
 
-  - id: approver-recorded
-    kind: trace
-    text: every successful guarded call names the owner of the token that was presented
-    scope: {tool_kind: guarded}
-    rule: always
-    event: {kind: tool.call, tool_kind: guarded, status: ok}
-    where: event.approved_by is not None and event.approved_by == token_owner(run, run.context.approval_token)
+  - use: always_on_calls
+    with:
+      tools: [unpublish_page, export_user_data, approve_review]
+      where: event.approved_by is not None and event.approved_by == token_owner(run, run.context.approval_token)
 
-  - id: no-unknown-token
-    kind: trace
-    text: no guarded call ever succeeds on a token that belongs to nobody
-    scope: {tool_kind: guarded}
-    rule: never
-    event: {kind: tool.call, tool_kind: guarded, status: ok}
-    where: token_owner(run, run.context.approval_token) is None
+  - use: never_on_calls
+    with:
+      tools: [unpublish_page, export_user_data, approve_review]
+      where: event.status == 'ok' and token_owner(run, run.context.approval_token) is None
 
-  - id: with-token
-    kind: example
-    text: an admin with her own token can take a page down, and the approval is audited to her
-    case: PUB-06
-    expect:
-      state: [["pages.p7.status", "==", "draft"]]
-      tools_required: [unpublish_page]
-      audit: [{action: unpublish_page, page_id: p7, count: 1}, {action: approval_used, actor: carol, tool: unpublish_page, count: 1}]
-      response_contains: ["Unpublished"]
+  - use: scenario
+    with:
+      case: PUB-06
+      expect:
+        state: [["pages.p7.status", "==", "draft"]]
+        tools_required: [unpublish_page]
+        audit:
+          - {action: unpublish_page, page_id: p7, count: 1}
+          - {action: approval_used, actor: carol, tool: unpublish_page, count: 1}
+        response_contains: ["Unpublished"]
 
-  - id: made-up-token
-    kind: example
-    text: a publisher with a made-up token is refused
-    case:
-      agent: orchestrator
-      request: "Take down the old news page"
-      context: {user_id: bob, page_id: p7, approval_token: APPR-BOB-0000}
-    expect:
-      state: [["pages.p7.status", "==", "published"]]
-      tools_forbidden: [unpublish_page]
-      audit: [{action: unpublish_page, count: 0}, {action: approval_used, count: 0}]
-      response_contains: ["approval"]
+  - use: scenario
+    with:
+      case:
+        agent: orchestrator
+        request: "Take down the old news page"
+        context: {user_id: bob, page_id: p7, approval_token: APPR-BOB-0000}
+      expect:
+        state: [["pages.p7.status", "==", "published"]]
+        tools_forbidden: [unpublish_page]
+        audit: [{action: unpublish_page, count: 0}, {action: approval_used, count: 0}]
+        response_contains: ["approval"]
 
-  - id: without-token
-    kind: example
-    text: without any token the request is refused
-    case: PUB-07
+  - use: scenario
+    with: {case: PUB-07}
 
-  - id: one-gate
-    kind: placement
-    text: the gate is the dispatcher; token resolution is a permissions-service function; the harness never reads the user table
-    rules:
-      - define: {function: approver_for, in: services/permissions.py}
-      - define: {function: Dispatcher._needs_approval, in: harness/dispatcher.py}
-      - forbid_name: {name: users, in: [harness]}
-      - forbid_literal: {value: tools.requires_approval, in: [tools, services, skills]}
+  - use: function_in_layer
+    with: {function: approver_for, file: services/permissions.py}
+  - use: function_in_layer
+    with: {function: Dispatcher._needs_approval, file: harness/dispatcher.py}
+  - use: forbid_name_in
+    with: {name: users, dirs: [harness]}
+  - use: forbid_literal_in
+    with: {value: tools.requires_approval, dirs: [tools, services, skills]}

@@ -460,6 +460,27 @@ PRS: list[PR] = [
         "an approval exactly 30 days old is refused",
     ),
     PR(
+        "FS-0101/pr_branchy",
+        "FS-0101",
+        "Same rule, written with an if-branch instead of one comparison",
+        ACCEPTED,
+        _m(
+            "FS-0101_pr_branchy",
+            "approval window, branchy implementation",
+            _with(
+                FS0101_CORRECT,
+                (
+                    "replace",
+                    "services/workflow.py",
+                    "    return 0 <= age_days <= max_age_days\n",
+                    "    if age_days < 0:\n        return False\n    return age_days <= max_age_days\n",
+                ),
+            ),
+        ),
+        "behaviourally correct, but the proof backend only translates straight-line code: the contract stays at L2 "
+        "and the required L5 is reported as a gap for the owner to decide on",
+    ),
+    PR(
         "FS-0101/pr_in_adapter",
         "FS-0101",
         "Same behaviour, but the date logic written inside tools/publish_tools.py",

@@ -32,7 +32,7 @@ traceeval = "traceeval.cli:main"
 include = ["traceeval*"]
 
 [tool.setuptools.package-data]
-traceeval = ["sut/**/*.md", "sut/**/*.yaml", "sut/**/*.json", "catalog/**/*.yaml", "specs/*.yaml"]
+traceeval = ["sut/**/*.md", "sut/**/*.yaml", "sut/**/*.json", "catalog/**/*.yaml", "specs/*.yaml", "spec/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

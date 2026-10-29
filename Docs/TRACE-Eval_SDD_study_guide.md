@@ -90,9 +90,10 @@ production traces unchanged: they only need the event format.
 
 ### 3.1 FS-0101 in detail — read this one fully
 
-`traceeval/specs/FS-0101.yaml` has seven clauses; `traceeval/spec/prs.py` (first section) has the
-correct PR and four wrong ones. The matrix below is the heart of the demo: every wrong PR fails a
-*different kind* of clause.
+`traceeval/specs/FS-0101.yaml` has ten clauses written against the catalog (`use: <template>`,
+`with: {slots}`; ids and texts are generated); `traceeval/spec/prs.py` (first section) has the correct
+PR, four wrong ones and one correct-but-branchy one. The matrix below is the heart of the demo: every
+wrong PR fails a *different kind* of clause (clause ids shortened).
 
 | clause (kind) | pr_correct | no lower bound | off by one (`<`) | logic in adapter | not wired in |
 |---|---|---|---|---|---|
@@ -105,6 +106,10 @@ correct PR and four wrong ones. The matrix below is the heart of the demo: every
 | lives-in-service (placement) | pass | pass | pass | **fail** | pass |
 | regression (31 change-selected cases) | pass | pass | pass | pass | pass |
 
+The sixth PR, `pr_branchy`, writes the same rule with an `if`: every check passes, but the contract only
+reaches L2 (the prover translates straight-line code only) while the clause requires L5, so the verdict is
+"accepted with gaps" — the owner decides.
+
 How the proof works, in one sentence: `review_age_ok`'s source is parsed, its single `return`
 expression is rewritten into Z3 operators (`and`/`or`/`not` and chained comparisons become
 `z3.And/Or/Not`), the inputs become `z3.Int` symbols, and the solver is asked for an input satisfying
@@ -115,7 +120,8 @@ not translated — the clause then stays at L2 and the record says so.
 
 | file | lines | role |
 |---|---|---|
-| `traceeval/spec/model.py` | 92 | `Spec`, `Clause`, `ClauseResult`, the rung names, `load_spec` |
+| `traceeval/spec/catalog.yaml` + `model.py` | 110 + 230 | the clause templates; `Spec`, `Clause`, `ClauseResult`; expansion of `use/with` clauses, generated ids and texts; `validate_spec` against the product model |
+| `traceeval/spec/draft.py` | 220 | `traceeval sdd draft`: product-model slice + catalog → prompt → model answer → expanded, validated draft spec and its plain-language rendering |
 | `traceeval/spec/product.py` | 182 | the product model: files and token counts, functions (AST), tool registry (from decorators), skill procedures, config; queries `locate`, `cases_calling`, `status_setters`, `skill_write_tools`, `model_set` |
 | `traceeval/spec/context.py` | 181 | `CheckContext`: runs cases on the variant with cost accounting, resolves scopes, builds the expression environment; the helpers usable in clauses (`config`, `approval_age`, `expected_broken`, `audit_count`, `applied`, `token_owner`, `title_of_length`, `first_case_calling`, `baseline_run`) |
 | `traceeval/spec/checks/settings.py` | 47 | schema check |
@@ -132,6 +138,11 @@ Where things would be extended: a new clause kind = one checker module + one lin
 `checks/__init__.py`; a new proof backend = another branch in `contracts._prove`; a new product-model
 query = a method on `ProductModel`; a new helper for clause expressions = a function in `context.py`
 added to `CheckContext.env`.
+
+Two things were added after the first version of this guide and are explained in
+[SDD_GUIDE.md](../trace-eval/docs/SDD_GUIDE.md): the clause catalog (specs are template + slots, nothing hand-written) and
+the drafting command (a model drafts a spec from a prose request, a person confirms); and every clause
+now carries a required rung next to the reached one.
 
 ## 5. Suggested two to three hours
 

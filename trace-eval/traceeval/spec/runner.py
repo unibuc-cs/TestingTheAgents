@@ -22,7 +22,7 @@ from traceeval.tracing.codecov import CoverageSession
 
 from .checks import CHECKERS
 from .context import CheckContext
-from .model import RUNG_LABEL, ClauseResult, Spec, load_specs
+from .model import RUNG_LABEL, ClauseResult, Spec, load_specs, validate_spec
 from .product import ProductModel
 from .prs import PR, prs_for
 
@@ -97,6 +97,7 @@ def agent_brief(spec: Spec, model: ProductModel, catalog: dict) -> dict:
     return {
         "request": spec.id,
         "tools": tools,
+        "spec_check": [f"{level}: {msg}" for level, msg in validate_spec(spec, model)],
         "read": read,
         "context_tokens": model.tokens_of(read),
         "repo_tokens": model.repo_tokens(),
@@ -122,11 +123,14 @@ def evaluate_pr(spec: Spec, pr: PR, workdir: Path, catalog: dict, baseline_runs:
     results: list[ClauseResult] = []
     for clause in spec.clauses:
         try:
-            results.append(CHECKERS[clause.kind](clause, ctx))
+            res = CHECKERS[clause.kind](clause, ctx)
         except Exception as exc:  # noqa: BLE001 - a crashing checker is itself evidence
-            results.append(
-                ClauseResult(clause.id, clause.kind, "L0", "fail", f"checker error: {type(exc).__name__}: {exc}")
-            )
+            res = ClauseResult(clause.id, clause.kind, "L0", "fail", f"checker error: {type(exc).__name__}: {exc}")
+        res.required = clause.require
+        if res.status == "pass" and not res.meets_required:
+            res.status = "gap"
+            res.summary += f"; reached {res.rung}, {res.required} required"
+        results.append(res)
     clause_runs = ctx.cost["runs"]
     # regression: the catalog cases whose recorded traces touch the changed components (trace-eval selection)
     selected = sorted(t for t in catalog if affinity(change, baseline_deps[t]) > 0)
@@ -144,6 +148,8 @@ def evaluate_pr(spec: Spec, pr: PR, workdir: Path, catalog: dict, baseline_runs:
         )
     )
     sut.unload()
+    # verdict: any failing clause rejects; a clause with a gap (unexercised value, uncovered path, or a rung
+    # below the required one) is reported but does not reject
     statuses = {r.status for r in results}
     verdict = "rejected" if "fail" in statuses else ("accepted with gaps" if "gap" in statuses else "accepted")
     profile: dict[str, int] = {}

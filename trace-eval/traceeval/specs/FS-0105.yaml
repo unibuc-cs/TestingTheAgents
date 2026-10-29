@@ -8,56 +8,38 @@ intent: |
   place); services honour the key; adapters only pass it through.
 
 clauses:
-  - id: retries-on
-    kind: setting
-    text: transient failures are retried at least once
-    key: runtime.retries
-    type: integer
-    min: 1
-    max: 5
+  - use: setting_in_range
+    with: {key: runtime.retries, min: 1, max: 5}
 
-  - id: keys-on
-    kind: setting
-    text: idempotency keys are enabled
-    key: runtime.idempotency_keys
-    type: boolean
-    value: true
+  - use: setting_equals
+    with: {key: runtime.idempotency_keys, value: true, type: boolean}
 
-  - id: once-per-write
-    kind: contract
-    text: for every write tool the publishing skill calls (from the product model), a run that loses the acknowledgement still succeeds and audits the write exactly once
-    forall: {tool: {skill_write_tools: publishing-workflow}}
-    scenario:
-      case: "=first_case_calling(tool)"
-      fault_profile: "='ack_timeout_once:' + tool"
-    ensures: run.passed and audit_count(run, tool) == audit_count(baseline_run(run.test_id), tool)
+  - use: property_over_set
+    with:
+      var: tool
+      set: {skill_write_tools: publishing-workflow}
+      scenario: {case: "=first_case_calling(tool)", fault_profile: "='ack_timeout_once:' + tool"}
+      ensures: run.passed and audit_count(run, tool) == audit_count(baseline_run(run.test_id), tool)
 
-  - id: keyed-writes
-    kind: trace
-    text: every successful publishing write carried an idempotency key
-    scope: {tools: [publish_page, schedule_publish, unpublish_page, request_review]}
-    rule: always
-    event: {kind: tool.call, tool: [publish_page, schedule_publish, unpublish_page, request_review], status: ok}
-    where: event.idempotency_key is not None
+  - use: always_on_calls
+    with:
+      tools: [publish_page, schedule_publish, unpublish_page, request_review]
+      where: event.idempotency_key is not None
 
-  - id: lost-ack-publish
-    kind: example
-    text: a lost acknowledgement of publish_page publishes once
-    case: PUB-12
+  - use: scenario
+    with: {case: PUB-12}
 
-  - id: lost-ack-schedule
-    kind: example
-    text: a lost acknowledgement of schedule_publish schedules once
-    case: PUB-09
-    fault_profile: ack_timeout_once:schedule_publish
-    expect:
-      state: [["pages.p4.status", "==", "scheduled"]]
-      audit: [{action: schedule_publish, page_id: p4, count: 1}]
+  - use: scenario
+    with:
+      case: PUB-09
+      fault_profile: ack_timeout_once:schedule_publish
+      expect:
+        state: [["pages.p4.status", "==", "scheduled"]]
+        audit: [{action: schedule_publish, page_id: p4, count: 1}]
 
-  - id: retry-in-one-place
-    kind: placement
-    text: retrying lives in the harness; adapters neither retry nor swallow transient errors
-    rules:
-      - define: {function: with_retry, in: harness/retry.py}
-      - forbid_name: {name: TransientError, in: [tools]}
-      - forbid_name: {name: with_retry, in: [tools, services]}
+  - use: function_in_layer
+    with: {function: with_retry, file: harness/retry.py}
+  - use: forbid_name_in
+    with: {name: TransientError, dirs: [tools]}
+  - use: forbid_name_in
+    with: {name: with_retry, dirs: [tools, services]}
