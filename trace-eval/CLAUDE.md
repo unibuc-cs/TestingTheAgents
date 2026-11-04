@@ -41,6 +41,8 @@ traceeval sdd draft --request r.md --id FS-0106 [--replay a.json]  # draft a spe
 - Mutation operators assert their anchors; a new mutation must be revealed by ≥ 1 test if labelled a regression
   and by none if labelled benign (the report's sanity line checks this).
 - Keep the catalog passing on the baseline (`tests/test_sut.py::test_full_catalog_passes_on_baseline`).
+- Derive seeds from names with a stable hash (`zlib.crc32`), never `hash()`: str hashes are salted per process,
+  so runs would differ from one process to the next.
 - A test that expects a tool error declares it (`expect.tool_errors: {tool: code}`); any other unrecovered tool
   error or tool crash fails the test as TOOL_ERROR.
 - Demo PRs in `traceeval/spec/prs.py` are mutations too (literal anchors, same rule); every PR's expected

@@ -1,5 +1,8 @@
 """Unit tests for the system under test, the harness and the scoring layer."""
 
+import os
+import subprocess
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -108,3 +111,21 @@ def test_recovered_tool_error_is_tolerated():
     assert score_case(case, {"tool_calls": calls}, {}, {}).classification == "PASS"
     assert score_case(case, {"tool_calls": calls[:1]}, {}, {}).classification == "TOOL_ERROR"
     assert score_case(SimpleNamespace(expect={"tool_errors": "*"}), {"tool_calls": calls[:1]}, {}, {}).passed
+
+
+def test_simulated_runs_do_not_depend_on_the_hash_salt():
+    """Per-test randomness (token jitter, slips) is the same in every process, whatever PYTHONHASHSEED is."""
+    code = (
+        "from traceeval.catalog import load_catalog\n"
+        "from traceeval.experiment.executor import run_case\n"
+        "from traceeval.experiment.sutloader import load_sut\n"
+        "from traceeval.sut import SUT_ROOT\n"
+        "sut = load_sut(SUT_ROOT)\n"
+        "print([run_case(sut, c)['tokens'] for c in load_catalog()[:10]])\n"
+    )
+    outs = set()
+    for salt in ("1", "2"):
+        env = {**os.environ, "PYTHONHASHSEED": salt}
+        proc = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, check=True)
+        outs.add(proc.stdout)
+    assert len(outs) == 1, outs

@@ -9,6 +9,7 @@ import copy
 import json
 import time
 import traceback
+import zlib
 from pathlib import Path
 
 from traceeval.catalog import EvalCase
@@ -82,9 +83,9 @@ def run_case(
         if backend == "simulated":
             sim = sut.sub("harness.backends.simulated")
             flakiness = float(config.data.get("simulated", {}).get("flakiness", 0.0))
-            factory = sim.make_backend_factory(
-                flakiness=flakiness, seed=seed * 7919 + rep * 104729 + hash(case.id) % 10007
-            )
+            # crc32, not hash(): str hashes are salted per process, which made runs differ between processes
+            case_key = zlib.crc32(case.id.encode()) % 10007
+            factory = sim.make_backend_factory(flakiness=flakiness, seed=seed * 7919 + rep * 104729 + case_key)
         elif backend == "llm":
             llm = sut.sub("harness.backends.llm_openai")
             factory = llm.make_backend_factory(settings=llm_settings, client=llm_client)
