@@ -59,7 +59,7 @@ dependency selection: the Q12 answer), tokens, seconds. Per request it also show
 tool adapters, the services behind them, the skills calling them, the config keys), as a fraction of
 the repository - and which checks will run.
 
-Headline numbers from `runs/sdd`: the brief is 10–18% of the repository (12% on average); all 25
+Headline numbers from `runs/sdd`: the brief is 10–19% of the repository (12% on average); all 25
 verdicts are as expected; every wrong PR is rejected with the clause, the counterexample or the
 misplaced code named; two rules are proven for all inputs (FS-0101, FS-0103); two specs find defects in
 the current code before any PR is written (FS-0102, FS-0105).

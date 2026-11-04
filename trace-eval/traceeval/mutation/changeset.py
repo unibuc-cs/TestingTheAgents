@@ -253,7 +253,7 @@ def compute_changeset(baseline: Path, variant: Path, name: str = "variant") -> C
     for root in (baseline, variant):
         for p in root.rglob("*"):
             if p.is_file() and p.suffix in TEXT_SUFFIXES and "__pycache__" not in p.parts:
-                rels.add(str(p.relative_to(root)))
+                rels.add(p.relative_to(root).as_posix())
     cs = ChangeSet(variant=name)
     diffs = []
     for rel in sorted(rels):

@@ -140,6 +140,7 @@
   properties: [task_completion]
   declared: {agents: [authoring], skills: [page-authoring], tools: [create_page]}
   expect:
+    tool_errors: {create_page: validation_error}
     route_to: authoring
     state: [["pages.p100", "absent", null]]
     tools_forbidden: [update_page_content, set_page_metadata]

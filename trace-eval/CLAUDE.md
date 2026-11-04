@@ -41,6 +41,8 @@ traceeval sdd draft --request r.md --id FS-0106 [--replay a.json]  # draft a spe
 - Mutation operators assert their anchors; a new mutation must be revealed by ≥ 1 test if labelled a regression
   and by none if labelled benign (the report's sanity line checks this).
 - Keep the catalog passing on the baseline (`tests/test_sut.py::test_full_catalog_passes_on_baseline`).
+- A test that expects a tool error declares it (`expect.tool_errors: {tool: code}`); any other unrecovered tool
+  error or tool crash fails the test as TOOL_ERROR.
 - Demo PRs in `traceeval/spec/prs.py` are mutations too (literal anchors, same rule); every PR's expected
   verdict is checked by `tests/test_sdd.py` and flagged in the sdd report when it differs.
 - A new kind of clause is a template in `traceeval/spec/catalog.yaml` (and a row in `docs/SDD_GUIDE.md`);
@@ -54,3 +56,5 @@ traceeval sdd draft --request r.md --id FS-0106 [--replay a.json]  # draft a spe
 - Skills' `## Procedure` blocks are executed by the simulated backend and read verbatim by the LLM backend;
   the YAML in them must stay parseable and its step keys are documented in `sut/harness/backends/simulated.py`.
 - `runs/*/history/*.jsonl` include line-level coverage and are large; do not commit them.
+- Record experiments on Python 3.12: on 3.15 coverage.py uses its sys.monitoring core, which does not support the
+  per-test dynamic contexts (warning `no-sysmon-context`), so observed code dependencies may be incomplete.

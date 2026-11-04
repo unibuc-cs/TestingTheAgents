@@ -51,7 +51,7 @@ def write_report(workdir: Path, specs, briefs: dict, evidence: list[dict], model
     for spec in specs:
         lines += _request_section(spec, briefs[spec.id], [e for e in evidence if e["request"] == spec.id])
     path = out / "report.md"
-    path.write_text("\n".join(lines) + "\n")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     return path
 
 

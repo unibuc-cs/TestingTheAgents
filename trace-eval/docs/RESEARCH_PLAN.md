@@ -14,12 +14,12 @@ Ciprian Păduraru · University of Bucharest · working document, 6 October 2026
   match them to tests through dependencies *observed in traces*; rank tests by expected information per token in
   a Bayesian model whose sensitivities are calibrated from history; stop when the probability of a regression is
   low. Implemented as `adaptive_bayes`; six baselines next to it.
-- **Testbed.** A small real multi-agent app (`traceeval/sut`), 134 tests, 35 controlled changes applied as real
+- **Testbed.** A small real multi-agent app (`traceeval/sut`), 136 tests, 37 controlled changes applied as real
   edits (6 benign), full-suite runs as ground truth, offline replay to compare strategies.
-- **Results so far (simulated agent).** Hand-written dependencies catch 66% of regressions; trace-based selection
-  catches 90% for 20% of the full-suite tokens; the adaptive method catches 86% for 11–26% and stops correctly on
-  benign changes; under 5% agent flakiness it never raises a false regression while the others do in 40–69% of
-  replays. TF-IDF over the diff is a surprisingly strong baseline (93% at 5%).
+- **Results so far (simulated agent).** Hand-written dependencies catch 65% of regressions; trace-based selection
+  catches 90% for 20% of the full-suite tokens; the adaptive method catches 84% for 10–27% and stops correctly on
+  benign changes; under 5% agent flakiness it never raises a false regression while the others do in 41–60% of
+  replays. TF-IDF over the diff is a surprisingly strong baseline (90% at 5%).
 - **Next.** Calibrate sensitivities per test (not per kind), fold the IR signal into the model, run the LLM backend
   on the DGX, then tau2-bench as the external system under test. Paper: ASE/ISSTA/ICST framing.
 
@@ -37,7 +37,7 @@ This plan consolidates five earlier inputs — the requirements captured from th
 | Agent runtime | Pure Python harness with an OpenAI-compatible LLM backend; Pi is not used in the prototype. | Shortest path; the harness code must itself be mutable and instrumentable (coverage contexts). A Pi adapter remains possible later. |
 | Observability | Own trace recorder with an OpenTelemetry-compatible event model (agent/skill/tool/config/llm spans) rather than Phoenix/OpenInference as a dependency. | Keeps the loop free of services; exporting to OTel is a thin addition. |
 | Oracles | Deterministic (final state, tool trajectories, audit log, response substrings); an LLM judge only for explicitly marked answer-quality properties, executed after deterministic checks pass, simulated in the free mode. | Regression tracking must not depend on judge noise (docx report §"LLM-as-a-judge bottleneck"). |
-| Ground truth | Mutation analysis: 35 controlled changes applied as real file edits; the selectors only ever see the diff. Benign changes included. | Required to measure detection rate honestly and to measure wasted budget. |
+| Ground truth | Mutation analysis: 37 controlled changes applied as real file edits; the selectors only ever see the diff. Benign changes included. | Required to measure detection rate honestly and to measure wasted budget. |
 | Evaluation | Record-then-replay: run the full suite once per variant, evaluate all strategies offline. | Decouples method development (thousands of replays) from execution cost (one recording per variant). |
 
 ---
@@ -84,7 +84,7 @@ c(t) = agent tokens (prompt + completion over all LLM calls in the delegation ch
 
 ### 2.4 Outcome model
 
-A test run is PASS / AGENT_FAILURE / HARNESS_ERROR (INFRA_INVALID reserved for environment faults). With K repetitions per variant, the ground truth "t reveals Δ" is a *majority flip*: baseline pass rate ≥ 0.5 and variant pass rate < 0.5. Flakiness f(t) = 1 − baseline pass rate is a first-class input to the selectors.
+A test run is PASS / TOOL_ERROR (a tool crashed, or failed in a way the case does not allow) / AGENT_FAILURE / HARNESS_ERROR (INFRA_INVALID reserved for environment faults); only pass/fail enters the ground truth. With K repetitions per variant, the ground truth "t reveals Δ" is a *majority flip*: baseline pass rate ≥ 0.5 and variant pass rate < 0.5. Flakiness f(t) = 1 − baseline pass rate is a first-class input to the selectors.
 
 ---
 
@@ -160,35 +160,37 @@ Testbed sanity property (checked by the report): every regression-inducing chang
 
 ---
 
-## 5. First results (simulated backend, `runs/exp1`: 134 cases × 3 reps baseline, 35 variants × 3 reps, 10 replay seeds; 472k tokens per full-suite run)
+## 5. First results (simulated backend, `runs/exp1`: 136 cases × 3 reps baseline, 37 variants × 3 reps, 10 replay seeds; 483k tokens per full-suite run)
 
-Detection rate of regression-inducing changes (29) vs. nominal budget, and tokens actually spent:
+Re-run 2026-11-04 with the tool-error oracle (tests also fail on unexpected tool errors and on tool crashes, classified TOOL_ERROR: 225 of the 807 failing variant runs) and two crash mutations, each revealed by one new test. The stricter oracle alone adds revealing tests to four changes (both retry changes 4→8, `config_disable_validate_links` 32→42, `skill_governance_drop_consent` 4→5).
+
+Detection rate of regression-inducing changes (31) vs. nominal budget, and tokens actually spent:
 
 | strategy | 5% | 10% | 20% | 50% | 100% | spent @20% | spent @100% | waste on benign @100% |
 |---|---|---|---|---|---|---|---|---|
-| full (catalog order) | 0.14 | 0.31 | 0.52 | 0.79 | 1.00 | 0.20 | 0.97 | 1.00 |
-| random | 0.21 | 0.34 | 0.54 | 0.83 | 1.00 | 0.20 | 0.97 | 1.00 |
-| declared | 0.59 | 0.62 | 0.62 | 0.66 | **0.66** | 0.06 | 0.09 | 0.09 |
-| ir_tfidf | 0.93 | 0.97 | 0.97 | 1.00 | 1.00 | 0.20 | 0.97 | 0.99 |
-| observed | 0.62 | 0.69 | 0.90 | 0.97 | 1.00 | 0.16 | 0.49 | 0.22 |
-| cost_aware | 0.66 | 0.69 | 0.90 | 0.97 | 1.00 | 0.20 | 0.97 | 0.99 |
-| adaptive_bayes | 0.62 | 0.83 | 0.86 | 0.86 | 0.86 | **0.11** | **0.26** | **0.36** |
+| full (catalog order) | 0.13 | 0.29 | 0.52 | 0.77 | 1.00 | 0.20 | 0.97 | 1.00 |
+| random | 0.22 | 0.39 | 0.57 | 0.84 | 1.00 | 0.20 | 0.97 | 0.99 |
+| declared | 0.55 | 0.65 | 0.65 | 0.65 | **0.65** | 0.06 | 0.09 | 0.09 |
+| ir_tfidf | 0.90 | 0.97 | 0.97 | 1.00 | 1.00 | 0.20 | 0.97 | 0.99 |
+| observed | 0.65 | 0.71 | 0.90 | 0.97 | 1.00 | 0.16 | 0.47 | 0.22 |
+| cost_aware | 0.65 | 0.71 | 0.90 | 0.97 | 1.00 | 0.20 | 0.97 | 0.99 |
+| adaptive_bayes | 0.71 | 0.84 | 0.84 | 0.84 | 0.84 | **0.10** | **0.27** | **0.31** |
 
-Two optional baselines (`observed_diverse`, `history_ml`; `--strategies all`) land between `observed` and `cost_aware` on every metric. APFD / APFD_c of the full prioritized order: full 0.68/0.58, random 0.54/0.54, declared 0.81/0.77 (selection recall 0.53), ir_tfidf 0.83/0.83, observed 0.80/0.83 (selection recall 1.00 at 52% of the suite cost), observed_diverse 0.82/0.79, cost_aware 0.81/0.84, history_ml 0.79/0.81, adaptive_bayes 0.81/0.79. Cost to first detection: declared 0.02, ir 0.02, adaptive 0.03, observed/cost_aware 0.05, random 0.15 of the full suite.
+Two optional baselines (`observed_diverse`, `history_ml`; `--strategies all`) stay within ±0.13 of `observed` at every budget. APFD / APFD_c of the full prioritized order: full 0.68/0.58, random 0.49/0.50, declared 0.80/0.75 (selection recall 0.51), ir_tfidf 0.83/0.83, observed 0.81/0.84 (selection recall 1.00 at 50% of the suite cost), observed_diverse 0.83/0.80, cost_aware 0.82/0.84, history_ml 0.80/0.82, adaptive_bayes 0.82/0.79. Cost to first detection: declared 0.02, ir 0.02, adaptive 0.02, observed/cost_aware 0.05, random 0.14 of the full suite.
 
 **Reading.**
-- *RQ1/RQ2.* Declared metadata caps detection at 66% because shared skills reached through `include`, harness code (retry, dispatcher, runtime loop) and configuration keys are not declared; observed dependencies recover full selection recall and reach 90% detection at 20% of the cost. This is the central quantitative argument for trace-informed selection.
-- *RQ3.* All informed strategies roughly double random's APFD_c; cost-aware ranking gives the best APFD_c.
-- *RQ4.* Only the adaptive method returns budget: 86% detection for 11–26% of the cost, 36% on benign changes. On the six benign changes it stopped "clean" in 220 and "nothing informative left" in 20 of the 240 replays that were not budget-limited, and it raised **no false regression alarm** in any replay. The four changes it never detects (termination off-by-six, translation-intent reorder, authoring metadata step, shared link-validation asset rule) are all cases where one to three tests among dozens of covering ones reveal the change: the calibrated sensitivities and the near-duplicate discount make the posterior clear before those tests are reached — the honest limit of coverage-based evidence, to be addressed by learned sensitivities at test level and a stronger IR term (§7). Conversely, a behaviour-preserving edit inside a widely used function (`benign_code_rename_locals`) is never declared clean: with calibrated sensitivities the model (correctly) does not believe that passing covering tests prove such an edit harmless, and the budget cap decides.
-- *A finding to take seriously:* IR/TF-IDF over the diff is the strongest prioritizer on this testbed (93% at 5%). Test names, requests and declared tool names share vocabulary with the edited artefacts (skill procedures mention tool names; config keys appear in diffs). Agent test suites are unusually "textual", which makes IR a serious baseline — and a signal to fold into the Bayesian model more strongly than the current lexical tilt. Whether this holds on tau2-bench (policy text vs. task descriptions) is one of the first external-validity questions.
+- *RQ1/RQ2.* Declared metadata caps detection at 65% because shared skills reached through `include`, harness code (retry, dispatcher, runtime loop) and configuration keys are not declared; observed dependencies recover full selection recall and reach 90% detection at 20% of the cost. This is the central quantitative argument for trace-informed selection.
+- *RQ3.* Informed strategies raise APFD_c from 0.50 (random) to 0.75–0.84; cost-aware ranking gives the best APFD_c.
+- *RQ4.* Only the adaptive method returns budget: 84% detection for 10–27% of the cost, 31% on benign changes. On the six benign changes it stopped "clean" in 230 and "nothing informative left" in 10 of the 240 replays that were not budget-limited, and it raised **no false regression alarm** in any replay. Both crash mutations (one revealing test each) are found at every budget from 2% (`declared` never finds the links-service crash). Four of the five changes it never detects (termination off-by-six, translation-intent reorder, authoring metadata step, shared link-validation asset rule) are cases where one to three tests among dozens of covering ones reveal the change: the calibrated sensitivities and the near-duplicate discount make the posterior clear before those tests are reached — the honest limit of coverage-based evidence, to be addressed by learned sensitivities at test level and a stronger IR term (§7). The fifth, `config_max_tool_calls_5` (11 revealing tests), is new and shows that kind-level calibration is brittle: the stricter oracle and the new tests raised the calibrated reveal ratio of config changes from 0.13 to 0.17, so 17 passing covering tests (7.5% of the suite) clear the posterior before any revealing test runs; with the previous ratio it is detected in 10/10 replays. Conversely, a behaviour-preserving edit inside a widely used function (`benign_code_rename_locals`) is never declared clean: with calibrated sensitivities the model (correctly) does not believe that passing covering tests prove such an edit harmless, and the budget cap decides.
+- *A finding to take seriously:* IR/TF-IDF over the diff is the strongest prioritizer on this testbed (90% at 5%). Test names, requests and declared tool names share vocabulary with the edited artefacts (skill procedures mention tool names; config keys appear in diffs). Agent test suites are unusually "textual", which makes IR a serious baseline — and a signal to fold into the Bayesian model more strongly than the current lexical tilt. Whether this holds on tau2-bench (policy text vs. task descriptions) is one of the first external-validity questions.
 
-**Nondeterministic condition** (`runs/exp2_flaky`: simulated agent with a 5% slot-slip rate, 5 reps per variant, 19 of 134 tests flaky at baseline). The majority-flip ground truth stays clean (sanity check OK), detection curves are within ±4 points of the deterministic condition for every strategy (adaptive 0.69/0.83/0.86 at 5/10/20%; observed 0.62/0.69/0.90; ir 0.90/0.97/0.97), and the difference between families shows where it matters: strategies without an outcome model observe at least one spurious failure in 40–69% of replays (full 0.69, cost_aware 0.61, history_ml 0.58, random 0.52, ir 0.44, observed 0.40) — in practice a false "regression" alert each time — whereas the Bayesian selector, which carries each test's baseline flakiness in its likelihood and re-runs flaky tests once, observes one in 8% of replays and **never stops with a "regression" verdict on a benign change** (0 of 420). This is the nondeterminism argument of the requirements document made quantitative.
+**Nondeterministic condition** (`runs/exp2_flaky`: simulated agent with a 5% slot-slip rate, 5 reps per variant, 29 of 136 tests flaky at baseline). The majority-flip ground truth stays clean (sanity check OK), detection curves are within ±4 points of the deterministic condition for every core strategy except at 2% (adaptive −10) and 10% (observed +10, cost_aware +13) (adaptive 0.74/0.84/0.84 at 5/10/20%; observed 0.68/0.81/0.90; ir 0.92/0.97/0.97; the two optional baselines within ±6), and the difference between families shows where it matters: strategies without an outcome model observe at least one spurious failure in 41–60% of replays (random 0.60, ir 0.59, cost_aware 0.58, history_ml 0.57, full 0.52, observed 0.41) — in practice a false "regression" alert each time — whereas the Bayesian selector, which carries each test's baseline flakiness in its likelihood and re-runs flaky tests once, observes one in 9% of replays and **never stops with a "regression" verdict on a benign change** (0 of 420). It misses `code_retry_disabled` here instead of `skill_linkval_ignore_assets`. This is the nondeterminism argument of the requirements document made quantitative.
 
 ---
 
 ## 6. Second system under test and the real-LLM mode
 
-- **ContentOps + LLM backend** (implemented, tested against a scripted client): set `TRACEEVAL_LLM_BASE_URL/API_KEY/MODEL` to the local vLLM endpoint (Muse Glimmer 30B per the setup notes) and run `traceeval baseline/mutants --backend llm`. Expected cost per case: 2–8k tokens × delegation; a 35-variant × 3-rep recording is ≈ 134 × 36 × 3 ≈ 14.5k runs ≈ 60–100M tokens — free on the DGX, several hours of wall-clock with batching. Start with 10 variants.
+- **ContentOps + LLM backend** (implemented, tested against a scripted client): set `TRACEEVAL_LLM_BASE_URL/API_KEY/MODEL` to the local vLLM endpoint (Muse Glimmer 30B per the setup notes) and run `traceeval baseline/mutants --backend llm`. Expected cost per case: 2–8k tokens × delegation; a 37-variant × 3-rep recording is ≈ 136 × 38 × 3 ≈ 15.5k runs ≈ 60–100M tokens — free on the DGX, several hours of wall-clock with batching. Start with 10 variants.
 - **tau2-bench** (verified facts and adapter design in `docs/tau2_integration.md`): airline domain first (50 tasks, DB + communicate reward, no NL judge), agent and user simulator on the local vLLM via `--agent-llm openai/<model> --agent-llm-args '{"api_base": ..., "api_key": "EMPTY"}'` (and the same for `--user-llm`), `TAU2_DATA_DIR` pointed at a mutated copy of `data/` for policy mutations, a mutated checkout for tool-code mutations, change sets from `git diff`, outcomes/tokens parsed from `results.json` into the same history format. The replay evaluator and all strategies then run unchanged. Expect large per-simulation token counts (tens of thousands) and pass^k well below 1 — exactly the nondeterministic regime the method must handle.
 
 ---
@@ -213,7 +215,7 @@ Immediate next steps (in order): run `runs/exp2_flaky`'s report and compare; imp
 
 **Working title.** TRACE-Eval: change-aware, cost-bounded regression test selection for LLM agent systems.
 
-**Abstract (draft).** Agent platforms ship dozens of agents assembled from skills, prompts, tools, harness code and configuration, and verify them with tests and statistical evals whose cost is dominated by tokens. After a change, teams either re-run everything or guess. We formulate selection, prioritization and budget-aware stopping of agent tests as one problem and propose a method that (i) extracts a change set from the diff at the granularity of code lines, skill procedures, agent-definition fields and configuration keys, (ii) maps it to tests through dependencies *observed* in execution traces rather than declared metadata, (iii) ranks tests by expected information per token in a Bayesian model whose sensitivities are calibrated from history, and (iv) stops when the posterior probability of a regression is low. We evaluate on a testbed with a real multi-agent application, 134 tests/eval items, and 35 controlled changes with mutation-based ground truth, under simulated and LLM-driven agents. Trace-informed selection recovers the 34% of regressions invisible to declared dependencies; the adaptive method detects 86% of regressions for 11–26% of the full-suite tokens and returns most of the budget on benign changes.
+**Abstract (draft).** Agent platforms ship dozens of agents assembled from skills, prompts, tools, harness code and configuration, and verify them with tests and statistical evals whose cost is dominated by tokens. After a change, teams either re-run everything or guess. We formulate selection, prioritization and budget-aware stopping of agent tests as one problem and propose a method that (i) extracts a change set from the diff at the granularity of code lines, skill procedures, agent-definition fields and configuration keys, (ii) maps it to tests through dependencies *observed* in execution traces rather than declared metadata, (iii) ranks tests by expected information per token in a Bayesian model whose sensitivities are calibrated from history, and (iv) stops when the posterior probability of a regression is low. We evaluate on a testbed with a real multi-agent application, 136 tests/eval items, and 37 controlled changes with mutation-based ground truth, under simulated and LLM-driven agents. Trace-informed selection recovers the 35% of regressions invisible to declared dependencies; the adaptive method detects 84% of regressions for 10–27% of the full-suite tokens and returns most of the budget on benign changes.
 
 **Outline.** 1 Introduction (motivation from AEM-scale platforms; nightly batch + PR use; three sub-problems) · 2 Background and related work (RTS/TCP; efficient LLM evaluation; agent benchmarks; fault injection; CASPER as closest work) · 3 Problem formulation and models (§1–2) · 4 Method (§3.1) · 5 Testbed (§4) · 6 Evaluation (RQ1–RQ4 + ablations + LLM/tau2 external validity) · 7 Threats to validity (synthetic mutants vs. real regressions; simulated agent realism; single primary domain; calibration leakage controlled by leave-one-change-out; textual testbed favouring IR) · 8 Conclusion.
 

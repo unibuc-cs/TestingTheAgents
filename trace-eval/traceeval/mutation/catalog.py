@@ -1,4 +1,4 @@
-"""The 35 controlled changes ("mutations"), written as data.
+"""The 37 controlled changes ("mutations"), written as data.
 
 A mutation is a controlled change to the system under test, applied as a real file edit. The
 experiment never shows the selectors the mutation label - only the diff. ``regression`` says whether
@@ -110,6 +110,11 @@ MUTATIONS: list[Mutation] = [
              [('replace', 'tools/content_tools.py', '"review_approved": page["review"]["status"] == "approved",', '"review_approved": page["review"]["status"] == "requested",')]),
     Mutation('code_edit_keeps_review', CODE, 'Editing a page no longer invalidates its approved review.', True,
              [('delete_line', 'services/repository.py', 'page["review"] = {"status": "none", "reviewer": None}  # edits invalidate')]),
+    # crashes: the tool raises an unhandled exception, only on some inputs (verdict TOOL_ERROR)
+    Mutation('code_metadata_keywords_crash', CODE, 'Tool adapter normalises keywords and crashes when none are given (TypeError).', True,
+             [('replace', 'tools/content_tools.py', 'keywords=keywords, actor=ctx.user_id', 'keywords=[k.strip() for k in keywords], actor=ctx.user_id')]),
+    Mutation('code_links_unknown_url_crash', CODE, 'Link validation crashes on external URLs missing from the reachability table (KeyError).', True,
+             [('replace', 'services/links.py', 'return table.get(url, "unknown")', 'return table[url]')]),
     # ---------------------------------------------------------------- runtime (agent loop)
     Mutation('code_termination_off_by_six', RUNTIME, 'Agent loop stops six tool calls before the configured budget.', True,
              [('replace', 'harness/runtime.py', 'if self.steps >= max_tool_calls:', 'if self.steps >= max_tool_calls - 6:')]),

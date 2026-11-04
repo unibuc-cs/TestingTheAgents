@@ -3,7 +3,8 @@
 case: PUB-01                       a catalog case, or an inline case (agent, request, context, ...)
 context / fixture_patch            overrides merged into the case (values may be "=expr")
 expect                             replaces the case's expectations (catalog format: state,
-                                   tools_required, tools_forbidden, audit, response_contains, ...)
+                                   tools_required, tools_forbidden, audit, response_contains, ...);
+                                   tool errors are allowed unless it lists tool_errors (crashes never are)
 fault_profile                      e.g. ack_timeout_once:publish_page
 """
 
@@ -20,7 +21,7 @@ def check(clause, ctx) -> ClauseResult:
     sc = resolve(clause.data, ctx.env())
     case = _make_case(sc, ctx)
     if sc.get("expect"):
-        case = replace(case, expect=sc["expect"])
+        case = replace(case, expect={"tool_errors": "*", **sc["expect"]})
     rec = ctx.run(case, fault_profile=sc.get("fault_profile"), cache=False)
     failed = rec["failed_checks"]
     details = [f"case {case.id}: {case.request!r} -> {rec['final_message'][:120]!r}"]

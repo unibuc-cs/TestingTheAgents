@@ -1,10 +1,14 @@
 """Unit tests for the system under test, the harness and the scoring layer."""
 
+from types import SimpleNamespace
+
 import pytest
 
 from traceeval.catalog import load_catalog
 from traceeval.experiment.executor import run_case
 from traceeval.experiment.sutloader import load_sut
+from traceeval.mutation import get_mutation, materialize_variant
+from traceeval.scoring import score_case
 from traceeval.sut import SUT_ROOT
 from traceeval.sut.harness.expressions import DotDict, resolve_value, safe_eval
 from traceeval.sut.harness.router import detect_intent, route
@@ -76,3 +80,31 @@ def test_harness_error_is_classified(sut, cases):
     broken = type(case)(**{**case.__dict__, "id": "X", "fixture": "does-not-exist"})
     rec = run_case(sut, broken)
     assert rec["classification"] == "HARNESS_ERROR" and rec["passed"] is False
+
+
+def test_tool_crash_is_classified(tmp_path, cases):
+    sut_dir, _ = materialize_variant(get_mutation("code_metadata_keywords_crash"), tmp_path)
+    rec = run_case(load_sut(sut_dir), cases["SEO-08"])
+    assert rec["classification"] == "TOOL_ERROR" and rec["passed"] is False
+    assert "crash:set_page_metadata" in rec["failed_checks"]
+    crash = next(c for c in rec["checks"] if c["name"] == "crash:set_page_metadata")
+    assert crash["detail"].startswith("tool_crash: TypeError")  # raised inside the tool, not bad arguments
+
+
+def test_undeclared_tool_error_fails_the_case(sut, cases):
+    case = cases["PUB-07"]  # the approval_required refusal is expected, and declared in expect.tool_errors
+    strict = type(case)(**{**case.__dict__, "expect": {k: v for k, v in case.expect.items() if k != "tool_errors"}})
+    rec = run_case(sut, strict)
+    assert rec["classification"] == "TOOL_ERROR"
+    assert rec["failed_checks"] == ["tool_error:unpublish_page"]
+
+
+def test_recovered_tool_error_is_tolerated():
+    case = SimpleNamespace(expect={"tools_required": ["get_page"]})
+    calls = [
+        {"tool": "get_page", "status": "error", "error": "invalid_arguments"},
+        {"tool": "get_page", "status": "ok", "error": None},
+    ]
+    assert score_case(case, {"tool_calls": calls}, {}, {}).classification == "PASS"
+    assert score_case(case, {"tool_calls": calls[:1]}, {}, {}).classification == "TOOL_ERROR"
+    assert score_case(SimpleNamespace(expect={"tool_errors": "*"}), {"tool_calls": calls[:1]}, {}, {}).passed

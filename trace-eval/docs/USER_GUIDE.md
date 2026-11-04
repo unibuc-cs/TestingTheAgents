@@ -5,11 +5,11 @@ Read the README first. This guide adds the minimum needed to work *inside* the r
 ## 1. Data flow
 
 ```
- catalog (134 tests) ─┐                                 ┌─ strategy picks tests from: the change set +
+ catalog (136 tests) ─┐                                 ┌─ strategy picks tests from: the change set +
                       ▼                                 │  baseline traces + costs + flakiness
  baseline app ──► run all tests K× ──► traces, costs ───┤
                                                         ├─► "execute" = look up the recorded outcome
- 35 changes ──► 35 edited copies ──► diff ─► change set ┤   of that test under that change
+ 37 changes ──► 37 edited copies ──► diff ─► change set ┤   of that test under that change
        │                                                │
        └─────► run all tests K× ──► which tests fail ───┘─► metrics ─► report
 ```
@@ -59,9 +59,14 @@ Everything else is plumbing (loaders, tracing, report).
 
 - **Test**: add a YAML entry; `expect` supports `route_to`, `state` (`[path, op, value]` with `==`, `!=`, `len`,
   `contains`, `in`, `>=`, `<=`, `absent`, `exists`), `tools_required`, `tools_forbidden`, `tool_attempts`,
-  `audit`, `response_contains`, `max_steps`, `termination`; optional `fixture_patch`, `fault_profile`
+  `audit`, `response_contains`, `max_steps`, `termination`, `tool_errors`; optional `fixture_patch`, `fault_profile`
   (`transient_once:<tool>`, `ack_timeout_once:<tool>`, `permanent_down:<tool>`). `pytest` checks the whole
   catalog passes on the baseline.
+- **Tool errors**: a tool error the test intends (a refusal, a missing page, an injected outage) must be listed,
+  e.g. `tool_errors: {unpublish_page: approval_required}`. Any other error fails the test as `tool_error:<tool>`
+  unless a later call of the same tool succeeded; a crash in tool or service code (any exception other than a
+  `ToolError`) always fails it as `crash:<tool>`. Both are classified `TOOL_ERROR`. `tool_errors: "*"` allows
+  any error; a spec scenario (`traceeval/specs/`) that writes its own `expect` gets that by default.
 - **Change**: add a `Mutation(...)` to the table in `mutation/catalog.py` with `replace` / `delete_line` /
   `delete_block` / `append` edits. Anchors are literal text (reformatting `sut/` breaks them; the operators
   raise). A regression must be revealed by ≥1 test, a benign change by none.

@@ -13,7 +13,7 @@ def function_index(sut_dir: Path) -> dict[str, list[tuple[str, int, int]]]:
     """relpath -> [(qualname, first_line, last_line)] for every function/method in the SUT."""
     index: dict[str, list[tuple[str, int, int]]] = {}
     for path in sorted(Path(sut_dir).rglob("*.py")):
-        rel = str(path.relative_to(sut_dir))
+        rel = path.relative_to(sut_dir).as_posix()
         try:
             tree = ast.parse(path.read_text())
         except SyntaxError:
@@ -73,7 +73,7 @@ class CoverageSession:
         result: dict[str, set[str]] = {}
         for filename in data.measured_files():
             rel = (
-                str(Path(filename).resolve().relative_to(self.sut_dir))
+                Path(filename).resolve().relative_to(self.sut_dir).as_posix()
                 if str(filename).startswith(str(self.sut_dir))
                 else None
             )

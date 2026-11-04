@@ -1,7 +1,15 @@
 """Deterministic scorers over (final state, trace, final message) plus an optional judge step.
 
-Result classification follows the TRACE-Eval handoff: PASS, AGENT_FAILURE, HARNESS_ERROR.
-(INFRA_INVALID is reserved for runs where the environment, not the agent, was broken.)"""
+Result classification follows the TRACE-Eval handoff, extended with the tool boundary:
+    PASS           every expectation holds
+    TOOL_ERROR     a tool call crashed, or failed with an error the case does not allow and was not recovered
+    AGENT_FAILURE  tool calls behaved as allowed, but an expectation failed
+    HARNESS_ERROR  the run itself raised (fixture, config, agent loop)
+(INFRA_INVALID is reserved for runs where the environment, not the agent, was broken.)
+
+Tool errors: a case lists the errors it expects in ``expect.tool_errors`` ({tool: code or [codes]}, or
+``"*"`` for any). Any other error fails the case (check ``tool_error:<tool>``) unless a later call of the same tool
+succeeded - e.g. an agent that fixes its own arguments. A crash (check ``crash:<tool>``) always fails."""
 
 from dataclasses import dataclass, field
 
@@ -11,7 +19,7 @@ _MISSING = object()
 @dataclass
 class Verdict:
     passed: bool
-    classification: str  # PASS | AGENT_FAILURE | HARNESS_ERROR | INFRA_INVALID
+    classification: str  # PASS | TOOL_ERROR | AGENT_FAILURE | HARNESS_ERROR | INFRA_INVALID
     checks: list[dict] = field(default_factory=list)
     judge: dict | None = None
 
@@ -110,9 +118,40 @@ def score_case(case, trace: dict, state: dict, run: dict, error: str | None = No
         add("max_steps", (run.get("steps") or 0) <= exp["max_steps"], f"steps {run.get('steps')}")
     if "termination" in exp:
         add("termination", run.get("termination") == exp["termination"], f"got {run.get('termination')}")
+    for name, detail in _tool_failures(calls, exp.get("tool_errors") or {}):
+        add(name, False, detail)
 
     passed = all(c["ok"] for c in checks)
-    return Verdict(passed, "PASS" if passed else "AGENT_FAILURE", checks)
+    if passed:
+        return Verdict(True, "PASS", checks)
+    at_tool = any(c["name"].startswith(("crash:", "tool_error:")) for c in checks if not c["ok"])
+    return Verdict(False, "TOOL_ERROR" if at_tool else "AGENT_FAILURE", checks)
+
+
+def _tool_failures(calls: list[dict], allowed) -> list[tuple[str, str]]:
+    """(check name, detail) for every crash, and for every disallowed error that no later call of the
+    same tool recovered from (``allowed == "*"`` allows every error). One entry per (tool, error code)."""
+    out, seen = [], set()
+    for i, call in enumerate(calls):
+        tool, status, code = call["tool"], call.get("status"), call.get("error")
+        if status == "crash":
+            name = f"crash:{tool}"
+        elif status == "error" and allowed != "*" and code not in _codes(allowed.get(tool)):
+            if any(c["tool"] == tool and c.get("status") == "ok" for c in calls[i + 1 :]):
+                continue
+            name = f"tool_error:{tool}"
+        else:
+            continue
+        if (name, code) not in seen:
+            seen.add((name, code))
+            out.append((name, f"{code}: {call.get('message') or ''}"))
+    return out
+
+
+def _codes(value) -> set[str]:
+    if value is None:
+        return set()
+    return {value} if isinstance(value, str) else set(value)
 
 
 def simulated_judge(case, message: str) -> dict:

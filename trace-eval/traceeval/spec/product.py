@@ -28,7 +28,7 @@ class ProductModel:
         self.baseline_runs = baseline_runs  # test_id -> record (with events / states)
         self.baseline_deps = baseline_deps  # test_id -> observed components incl. code functions
         self.files = {
-            str(p.relative_to(self.sut_dir)): p.read_text()
+            p.relative_to(self.sut_dir).as_posix(): p.read_text()
             for p in sorted(self.sut_dir.rglob("*"))
             if p.is_file() and p.suffix in SOURCE_SUFFIXES and "__pycache__" not in p.parts
         }

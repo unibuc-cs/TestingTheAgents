@@ -5,14 +5,14 @@ tests should run, in what order, and when can we stop — so that tokens and tim
 still caught?
 
 **What this repo is.** A testbed to answer that question without needing an LLM: a small but real
-multi-agent app, 134 tests, 35 controlled changes with known effects, and 7 selection strategies compared
+multi-agent app, 136 tests, 37 controlled changes with known effects, and 7 selection strategies compared
 by replaying recorded runs. One of the strategies (`adaptive_bayes`) is the proposed method.
 
 ## Run it (5 minutes, no API keys)
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                                                   # 24 tests, ~60 s
+pytest -q                                                   # 27 tests, ~60 s
 traceeval experiment --workdir runs/exp1 --reps 3 --seeds 10
 # -> runs/exp1/results/report.md  (tables + 3 figures)
 ```
@@ -22,9 +22,9 @@ traceeval experiment --workdir runs/exp1 --reps 3 --seeds 10
 1. **Tests** live in [`traceeval/catalog/`](traceeval/catalog/) (YAML). Each has a request, context, and deterministic checks on the
    final state / tool calls / response.
 2. **The app under test** ("ContentOps", described in [docs/CONTENTOPS.md](docs/CONTENTOPS.md)) lives in [`traceeval/sut/`](traceeval/sut/): 8 agents defined in YAML, 10 skills ([example `SKILL.md`](traceeval/sut/skills/publishing-workflow/SKILL.md), each with
-   a machine-readable procedure), 22 tools, a config file. A *simulated* agent follows the skills so runs are
+   a machine-readable procedure), 23 tools, a config file. A *simulated* agent follows the skills so runs are
    free; an *LLM* backend can replace it (`--backend llm`, OpenAI-compatible endpoint).
-3. **Changes** are the 35 entries in [`traceeval/mutation/catalog.py`](traceeval/mutation/catalog.py), applied as real file edits. Running the
+3. **Changes** are the 37 entries in [`traceeval/mutation/catalog.py`](traceeval/mutation/catalog.py), applied as real file edits. Running the
    full suite on each gives the ground truth: which tests reveal which change.
 4. **Strategies** in `traceeval/selection/` see only the diff plus the baseline traces (which agents, skills,
    tools, config keys and code lines each test touched) and pick tests under a token budget.
@@ -32,8 +32,8 @@ traceeval experiment --workdir runs/exp1 --reps 3 --seeds 10
 5. **The report** answers: how many changes does each strategy catch for how many tokens, how much does it
    waste on harmless changes, and does the adaptive one stop at the right moment.
 
-Headline from `runs/exp1`: hand-written dependencies catch 66% of regressions; trace-based selection catches
-90% for 20% of the full-suite tokens; the adaptive method catches 86% for 11–26% and stops correctly on
+Headline from `runs/exp1`: hand-written dependencies catch 65% of regressions; trace-based selection catches
+90% for 20% of the full-suite tokens; the adaptive method catches 84% for 10–27% and stops correctly on
 benign changes. ([experiment 1 report](docs/results/exp1/report.md), [flaky-agent condition](docs/results/exp2_flaky/report.md))
 
 ## Spec-driven development on the same testbed

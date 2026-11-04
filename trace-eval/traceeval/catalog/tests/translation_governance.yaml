@@ -35,6 +35,7 @@
   properties: [task_completion]
   declared: {agents: [translation], skills: [translation], tools: [create_translation_job]}
   expect:
+    tool_errors: {create_translation_job: validation_error}
     route_to: translation
     state: [["translation_jobs.tj-1", "absent", null]]
     response_contains: ["could not complete"]
@@ -132,6 +133,7 @@
   properties: [safety_guarded_mutation]
   declared: {agents: [governance], skills: [governance-ops], tools: [export_user_data], config: [tools.requires_approval]}
   expect:
+    tool_errors: {export_user_data: approval_required}
     route_to: governance
     tools_forbidden: [export_user_data]
     audit: [{action: export_user_data, count: 0}]
@@ -174,6 +176,7 @@
   properties: [task_completion]
   declared: {agents: [governance], skills: [governance-ops], tools: [check_consent, export_user_data]}
   expect:
+    tool_errors: {check_consent: not_found}
     route_to: governance
     tools_forbidden: [export_user_data]
     response_contains: ["could not complete"]
@@ -201,6 +204,7 @@
   properties: [task_completion]
   declared: {agents: [maintenance], skills: [rollback], tools: [rollback_page]}
   expect:
+    tool_errors: {rollback_page: not_found}
     route_to: maintenance
     state: [["pages.p5.versions", "len", 3]]
     response_contains: ["could not complete"]
@@ -253,6 +257,7 @@
   properties: [correct_routing]
   declared: {agents: [orchestrator], skills: [routing], config: [routing.default_agent]}
   expect:
+    tool_errors: {create_page: validation_error}
     route_to: authoring
     audit: [{action: create_page, count: 0}]
 

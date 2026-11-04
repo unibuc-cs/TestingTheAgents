@@ -173,9 +173,9 @@ def write_report(workdir: Path) -> Path:
     parts = [
         "# TRACE-Eval experiment report",
         "",
-        f"`{workdir}` · {summ['tests']} tests · {summ['variants']} changes · {summ['baseline_reps']} baseline "
-        f"repetitions · full suite = {summ['total_tokens_full_suite']:,} tokens · {len(summ['flaky_tests'])} flaky "
-        "tests at baseline",
+        f"`{workdir.as_posix()}` · {summ['tests']} tests · {summ['variants']} changes · {summ['baseline_reps']} "
+        f"baseline repetitions · full suite = {summ['total_tokens_full_suite']:,} tokens · "
+        f"{len(summ['flaky_tests'])} flaky tests at baseline",
         "",
         "## 1. Ground truth — which changes are revealed by how many tests",
         "",
@@ -236,5 +236,5 @@ def write_report(workdir: Path) -> Path:
         "",
     ]
     out = res / "report.md"
-    out.write_text("\n".join(parts))
+    out.write_text("\n".join(parts), encoding="utf-8", newline="\n")
     return out

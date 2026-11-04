@@ -98,4 +98,4 @@ It is deliberately *small but real*: enough layers (prompt, skill, tool, service
 change can land in the wrong one, enough rules (gates, retries, budgets) that a change can break one
 without touching the feature it was meant for, and fully deterministic under the simulated backend so
 that thousands of runs cost nothing. A one-line walkthrough of a request is in
-[STUDY_GUIDE.md §1.1](STUDY_GUIDE.md); the 134 scenarios that exercise it are in `traceeval/catalog/`.
+[STUDY_GUIDE.md §1.1](STUDY_GUIDE.md); the 136 scenarios that exercise it are in `traceeval/catalog/`.
