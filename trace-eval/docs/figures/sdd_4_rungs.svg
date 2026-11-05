@@ -20,7 +20,7 @@
     <text x="48" y="280" text-anchor="end" font-weight="bold">L2</text>
     <text x="180" y="268" text-anchor="middle"><tspan font-weight="bold">property-tested</tspan> — generated inputs</text>
     <text x="316" y="280" font-size="12" fill="#4b5563">covers: many inputs, not all</text>
-    <text x="316" y="295" font-size="12" fill="#4b5563">(200 random examples missed a bug)</text>
+    <text x="316" y="295" font-size="12" fill="#4b5563">(random examples can miss a bug)</text>
 
     <line x1="60" y1="214" x2="300" y2="214" stroke="#9ca3af" stroke-width="3"/>
     <text x="48" y="218" text-anchor="end" font-weight="bold">L3</text>

@@ -11,7 +11,7 @@ one is the testbed that runs it, records what each run touched, and applies cont
 the top one holds the two research questions that use the testbed: test selection (the earlier work)
 and spec-driven development (this week).
 
-![The three layers of the repository](figures/guide_1_layers.png)
+![The layers of the repository](figures/guide_1_layers.png)
 
 The single idea to internalise: **a run of a case produces a trace**, and the trace says which agents,
 skills, tools, configuration keys and code functions that run touched. Selection, the mutation ground

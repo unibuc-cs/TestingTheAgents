@@ -14,10 +14,10 @@ translation jobs; an audit log of every write.
 
 ## How it is built
 
-![ContentOps: the user, the orchestrator, the seven specialists, the shared skills, the dispatcher, tools, services, state and configuration](figures/contentops_agents.svg)
+![ContentOps: the user, the orchestrator, the specialists, the shared skills, the dispatcher, tools, services, state and configuration](figures/contentops_agents.svg)
 
 *One request, top to bottom: the orchestrator delegates once; the specialist follows its skill's
-procedure; every step is a tool call through the dispatcher; adapters hand over to services; services
+procedure; every tool call goes through the dispatcher; adapters hand over to services; services
 change the state and write the audit log.*
 
 ```
@@ -28,7 +28,7 @@ request --> orchestrator (routes by trigger words) --> one specialist agent --> 
 |---|---|---|
 | agents (8) | YAML definitions: system prompt, the skills they may use, the tools they may call, trigger words for routing | `sut/agents/*.yaml` |
 | skills (10) | markdown files with a machine-readable `Procedure` (the steps to follow) plus prose rules; shared skills (`governance-checks`, `link-validation`) are included by others | `sut/skills/*/SKILL.md` |
-| tools (22) | thin adapters with a name, a kind (`read`, `write`, `guarded`) and a JSON schema, registered with a decorator | `sut/tools/*.py` |
+| tools (23) | thin adapters with a name, a kind (`read`, `write`, `guarded`) and a JSON schema, registered with a decorator; the orchestrator's `route_to_agent` is an extra control tool | `sut/tools/*.py` |
 | services | the business logic: repository (pages, versions, assets), workflow (review, publish, schedule, unpublish), links, SEO, permissions, governance, translation | `sut/services/*.py` |
 | state | an in-memory copy of a JSON fixture: users, pages, assets, consents, audit log; idempotency memory | `sut/services/state.py`, `sut/fixtures/base.json` |
 | harness | the agent loop (`runtime.py`), the dispatcher that governs every tool call (`dispatcher.py`), the router, the skill loader, the config reader, fault injection, retries | `sut/harness/` |
@@ -66,7 +66,7 @@ dispatcher. Everything else is inside one agent: its skills, its backend, its co
   `link-validation`. Tools: `get_page`, `list_versions`, `rollback_page`, `validate_links`,
   `check_permission`.
 
-\* guarded: the dispatcher refuses the call unless the request carries a valid approval token.
+\* guarded: the dispatcher refuses the call unless the request carries an approval token; checking that the token is the right user's is left to the service.
 
 Shared skills are the platform's way of saying "every specialist does this the same way":
 `governance-checks` calls `check_permission(user, action)` before any write and stops with an

@@ -1,22 +1,22 @@
 %%{init: {"theme": "neutral", "flowchart": {"wrappingWidth": 340, "nodeSpacing": 28, "rankSpacing": 40, "curve": "basis"}, "themeVariables": {"fontSize": "15px"}}}%%
 flowchart TB
     subgraph RQ["Research questions"]
-        SEL["selection/<br/>which tests after a change<br/>(5 strategies, replay)"]
-        SDD["spec/ + specs/<br/>spec-driven development<br/>(5 specs, 25 PRs)"]
+        SEL["selection/<br/>which tests after a change<br/>(strategies, replay)"]
+        SDD["spec/ + specs/<br/>spec-driven development<br/>(specs, demo PRs)"]
     end
-    subgraph TB["Testbed"]
+    subgraph TESTBED["Testbed"]
         direction LR
-        CAT["catalog/<br/>134 eval cases"] --> EXE["executor<br/>runs one case"] --> TR["tracing/<br/>events + coverage"] --> SC["scoring/<br/>verdict"]
-        MUT["mutation/<br/>35 edits, change sets"] -.->|"variant"| EXE
+        CAT["catalog/<br/>eval cases"] --> EXE["executor<br/>runs one case"] --> TR["tracing/<br/>events + coverage"] --> SC["scoring/<br/>verdict"]
+        MUT["mutation/<br/>controlled edits, change sets"] -.->|"variant"| EXE
     end
     subgraph SUT["Application under test: traceeval/sut/"]
         direction LR
-        AG["agents<br/>8 YAML"] --> SK["skills<br/>10, each with a Procedure"] --> RT["runtime<br/>agent loop"] --> DI["dispatcher<br/>gate, retry, faults, trace"] --> TO["tools<br/>22 adapters"] --> SV["services<br/>business logic"] --> ST["state<br/>fixture + audit"]
+        AG["agents<br/>YAML definitions"] --> SK["skills<br/>each with a Procedure"] --> RT["runtime<br/>agent loop"] --> DI["dispatcher<br/>gate, retry, faults, trace"] --> TO["tools<br/>thin adapters"] --> SV["services<br/>business logic"] --> ST["state<br/>fixture + audit"]
         BE["backend: simulated or LLM"] -.-> RT
         CF["config/runtime.yaml"] -.-> DI
     end
-    SEL -->|"baseline traces + change sets"| TR
-    SDD -->|"runs cases, reads traces"| TR
-    SDD -->|"a PR = file edits + change set"| MUT
-    EXE -->|"runs cases on a copy"| RT
-    MUT -->|"edits a copy"| SK
+    SEL -->|"baseline traces + change sets"| TESTBED
+    SDD -->|"runs cases, reads traces"| TESTBED
+    SDD -->|"a PR = file edits + change set"| TESTBED
+    TESTBED -->|"runs cases on a copy"| SUT
+    TESTBED -->|"edits a copy"| SUT

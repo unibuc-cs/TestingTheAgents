@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 430" width="1100" height="430" role="img" aria-label="The five clause kinds and what each one inspects in the application: setting reads the configuration file, contract reads a function and runs it on generated inputs or proves it, trace replays recorded runs, example runs one scenario, placement reads the file tree. Static checks run no code; dynamic checks execute the real application." font-family="Helvetica, Arial, sans-serif" font-size="14" fill="#1f2937">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 430" width="1100" height="430" role="img" aria-label="The clause kinds and what each one inspects in the application: setting reads the configuration file, contract reads a function and runs it on generated inputs or proves it, trace replays recorded runs, example runs one scenario, placement reads the file tree. Static checks run no code; dynamic checks execute the real application." font-family="Helvetica, Arial, sans-serif" font-size="14" fill="#1f2937">
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#4b5563"/>
@@ -94,7 +94,7 @@
   <g>
     <rect x="670" y="250" width="200" height="70" rx="6" fill="#eff6ff" stroke="#1e40af"/>
     <text x="770" y="274" text-anchor="middle" font-weight="bold" font-size="13">recorded runs in scope</text>
-    <text x="770" y="294" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="12">15 of 134 cases</text>
+    <text x="770" y="294" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="12">tools: [publish_page]</text>
     <text x="770" y="311" text-anchor="middle" font-size="12">tool.call events, audit log</text>
   </g>
   <g>

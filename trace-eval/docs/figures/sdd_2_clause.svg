@@ -55,7 +55,7 @@
   <text x="800" y="36" font-size="15" font-weight="bold">4. checked (checks/contracts.py)</text>
   <rect x="800" y="48" width="270" height="150" rx="6" fill="#f9fafb" stroke="#9ca3af"/>
   <text x="816" y="72" font-size="13">on the PR's copy of the application:</text>
-  <text x="816" y="96" font-size="13">a. Hypothesis: 300 generated inputs,</text>
+  <text x="816" y="96" font-size="13">a. Hypothesis: generated inputs,</text>
   <text x="816" y="113" font-size="13">    looking for a counterexample</text>
   <text x="816" y="137" font-size="13">b. Z3: the function's source translated</text>
   <text x="816" y="154" font-size="13">    to a formula, assume ∧ ¬ensures unsat?</text>

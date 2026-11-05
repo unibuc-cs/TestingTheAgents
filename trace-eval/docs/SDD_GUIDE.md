@@ -81,7 +81,7 @@ Slot types are checked against the product model (§6) before anything runs.
 | `forbid_literal_in` | placement | value, dirs | nothing under *dirs* hard-codes *value* | L4 |
 | `skill_step_order` | placement | skill, first, then | in skill *skill*, step *first* comes before step *then* | L4 |
 
-![The five clause kinds and what each one inspects: configuration, file tree, one function, recorded runs, one scenario](figures/sdd_3_kinds.svg)
+![The clause kinds and what each one inspects: configuration, file tree, one function, recorded runs, one scenario](figures/sdd_3_kinds.svg)
 
 *What each kind looks at. Two kinds are static and run nothing; three execute the PR's copy of the
 real application. The badge is the rung a passing check reaches.*

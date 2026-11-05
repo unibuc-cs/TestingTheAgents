@@ -42,7 +42,7 @@
   <!-- machine: inputs to the model -->
   <rect x="40" y="380" width="160" height="56" rx="6" fill="#ffffff" stroke="#1e40af"/>
   <text x="120" y="403" text-anchor="middle" font-weight="bold">clause catalog</text>
-  <text x="120" y="421" text-anchor="middle" font-size="13">16 templates</text>
+  <text x="120" y="421" text-anchor="middle" font-size="13">catalog.yaml</text>
   <path d="M120,436 L120,444" fill="none" stroke="#4b5563" stroke-width="1.5"/>
   <rect x="40" y="444" width="160" height="50" rx="6" fill="#ffffff" stroke="#1e40af"/>
   <text x="120" y="465" text-anchor="middle" font-weight="bold">product model</text>

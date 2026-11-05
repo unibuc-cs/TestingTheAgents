@@ -128,7 +128,7 @@ They span the design space the literature covers: classic RTS/TCP on declared co
 
 ### 4.1 System under test — ContentOps
 
-`traceeval/sut`: eight agents (orchestrator, authoring, publishing, assets, seo, translation, governance, maintenance), ten skills, 22 tools over deterministic services (repository with versions, workflow with reviews/scheduling, links, governance with consent and approval tokens, translation, SEO), a harness (configuration with instrumented reads, skill loader with a procedure DSL, keyword router, retry helper with idempotency keys, dispatcher with tool enablement + approval gate + fault injection, runtime loop with delegation and a step budget) and `config/runtime.yaml`.
+`traceeval/sut`: eight agents (orchestrator, authoring, publishing, assets, seo, translation, governance, maintenance), ten skills, 23 tools over deterministic services (repository with versions, workflow with reviews/scheduling, links, governance with consent and approval tokens, translation, SEO), a harness (configuration with instrumented reads, skill loader with a procedure DSL, keyword router, retry helper with idempotency keys, dispatcher with tool enablement + approval gate + fault injection, runtime loop with delegation and a step budget) and `config/runtime.yaml`.
 
 Deliberate structure: shared components with wide blast radius (`governance-checks` and `link-validation` are included by several skills; `get_page` and `check_permission` are used by every agent; the retry helper wraps every tool call), narrow components (the approval gate matters to one test), policies enforced only in skills (publish permission) vs. also in tools (approval tokens) — so that selection is non-trivial and defence-in-depth questions can be discussed.
 
