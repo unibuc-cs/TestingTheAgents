@@ -9,30 +9,43 @@ from .agents import AgentLoader
 from .dispatcher import Dispatcher
 from .skills import SkillLoader
 
+# How deep delegation may nest. The entry agent (the one the request is addressed to) runs at depth 0, and
+# each delegation runs its target one level deeper; an agent may delegate only while its own depth is below
+# this limit. With the limit at 2, the orchestrator can hand the request to a specialist and that specialist
+# can hand it on once more; at 0, no agent may delegate at all.
 MAX_DELEGATION_DEPTH = 2
 
 
 @dataclass
 class Action:
+    """One move proposed by a backend: call a tool, or end the agent's turn with an answer."""
+
     type: str  # "tool" | "final"
-    name: str | None = None
-    args: dict = field(default_factory=dict)
-    message: str = ""
+    name: str | None = None  # the tool to call; None for a final answer
+    args: dict = field(default_factory=dict)  # the arguments the backend chose for the tool
+    message: str = ""  # the answer text of a final action
     raw: object = None  # backend-specific handle (e.g. tool_call_id)
 
 
 @dataclass
 class Session:
-    agent: object
-    skills: list
-    ctx: dict
+    """What one agent works with during its turn: its definition and skills, the request and its context,
+    the calls it has made so far and the tokens its model calls used."""
+
+    agent: object  # the AgentDef of the agent this session belongs to
+    skills: list  # the Skill objects named in the agent definition, loaded when the agent started
+    ctx: dict  # the request context (user id, page id, approval token, ...), shared by all agents of the run
     request: str
-    history: list = field(default_factory=list)
+    history: list = field(default_factory=list)  # (Action, result) per tool call or delegation, in order
+    # Token usage and number of model calls of this agent alone; the Runtime adds up the whole run.
     prompt_tokens: int = 0
     completion_tokens: int = 0
     llm_calls: int = 0
 
     def add_usage(self, prompt: int, completion: int, runtime=None):
+        """Record the tokens of one model call. When ``runtime`` is given, the call is also written to the
+        trace as an ``llm.call`` event, which is where the trace's token totals come from, and added to the
+        totals of the whole run."""
         self.prompt_tokens += prompt
         self.completion_tokens += completion
         self.llm_calls += 1
@@ -43,28 +56,55 @@ class Session:
 
 
 class Runtime:
+    """Runs one request through the agents: the entry agent, and every agent it delegates to.
+
+    A backend (simulated or LLM) decides what an agent does next, and the runtime carries the decision
+    out: it sends tool calls to the dispatcher, handles ``route_to_agent`` itself by running the target
+    agent, and stops an agent that would go over the step budget. The budget, the token totals and the
+    termination reason belong to the whole run, so all agents of a delegation chain share them, and a
+    Runtime serves a single request.
+
+    ``backend_factory(agent, runtime, session)`` makes a fresh backend for every agent turn. A backend
+    offers ``next_action(session)``, which returns an ``Action``, and ``observe(action, result)``, which
+    receives the result of that action.
+    """
+
     def __init__(self, sut_dir: str | Path, config, state, tracer, backend_factory, faults, tools: dict):
-        self.sut_dir = Path(sut_dir)
-        self.config = config
-        self.state = state
-        self.tracer = tracer
+        self.sut_dir = Path(sut_dir)  # root of the SUT copy; agent definitions and skills are read from it
+        self.config = config  # runtime settings: config/runtime.yaml plus any overrides for this run
+        self.state = state  # the in-memory platform data that the tools read and change
+        self.tracer = tracer  # the trace recorder that every event of the run goes to
         self.backend_factory = backend_factory
         self.agents = AgentLoader(self.sut_dir / "agents")
-        self.skills = SkillLoader(self.sut_dir / "skills", tracer=tracer)
-        self.dispatcher = Dispatcher(tools, config, state, tracer, faults)
-        self.steps = 0
+        self.skills = SkillLoader(self.sut_dir / "skills", tracer=tracer)  # every skill load is traced
+        self.dispatcher = Dispatcher(tools, config, state, tracer, faults)  # every tool call except delegation
+        # State of the whole run, shared by all agents of the delegation chain.
+        self.steps = 0  # tool calls and delegations made so far; the step budget limits this number
         self.prompt_tokens = 0
         self.completion_tokens = 0
-        self.termination_reason = "final"
-        self.agent_path: list[str] = []
+        self.termination_reason = "final"  # becomes "max_tool_calls" when an agent is stopped by the budget
+        self.agent_path: list[str] = []  # the agents in the order they started, the entry agent first
 
     # ---------------------------------------------------------------- public entry point
     def run(self, agent_name: str, request: str, context: dict) -> dict:
+        """Run ``request`` through ``agent_name`` (and every agent it delegates to); return a summary.
+
+        ``context`` holds the request slots (user id, page id, approval token, ...). Keys that start with
+        an underscore are switches for the harness itself, such as ``_route_only``, which skips running
+        the chosen specialist; they are kept out of the trace. The summary gives the final message, the
+        number of steps, why the run ended, the token totals and the agents in the order they ran.
+        """
+        # Work on a copy, so that neither the runtime nor the agents' procedures change the caller's dict.
+        # The request itself becomes a slot as well.
         ctx = dict(context)
         ctx["request"] = request
+        # The trace gets the context without the harness switches.
         public_ctx = {k: v for k, v in ctx.items() if not k.startswith("_")}
         self.tracer.event("run.start", agent=agent_name, request=request, context=public_ctx)
+        # The entry agent runs at depth 0; any delegation runs nested inside this call.
         message = self._run_agent(agent_name, request, ctx, depth=0)
+        # Close the trace with the totals of the run. The final message the trace reports is the one in
+        # this event.
         self.tracer.event(
             "run.end",
             message=message,
@@ -84,46 +124,72 @@ class Runtime:
 
     # ---------------------------------------------------------------- agent loop
     def _run_agent(self, agent_name: str, request: str, ctx: dict, depth: int) -> str:
+        """Run one agent's turn and return its final message. The turn ends when the backend gives a final
+        answer or when the run's step budget is used up. ``depth`` is the number of delegations that led
+        to this agent (0 for the entry agent)."""
+        # Announce the agent. Version and digest identify exactly which definition ran.
         agent = self.agents.load(agent_name)
         self.agent_path.append(agent_name)
         self.tracer.event("agent.start", agent=agent.name, version=agent.version, digest=agent.digest, depth=depth)
+        # Load the skills the definition names; each load is traced, so the run depends on these skills.
         skills = [self.skills.load(s) for s in agent.skills]
+        # An orchestrator chooses by reading the triggers and the description of every specialist. Record
+        # that for all of them, not just the one chosen: a change to any of these fields can change the
+        # choice. (The LLM backend shows the model both fields; the keyword router uses only the triggers.)
         if agent.is_orchestrator:
             for other in self.agents.load_all().values():
                 if not other.is_orchestrator:
                     self.tracer.event("agent.consult", agent=other.name, fields=["triggers", "description"])
+        # A fresh session and backend for this turn. The context dict is the same one the other agents of
+        # the run use, so slots that one agent sets are visible to the agents that run after it.
         session = Session(agent=agent, skills=skills, ctx=ctx, request=request)
         backend = self.backend_factory(agent, self, session)
+        # The budget counts the tool calls of the whole run, delegations included, not of this agent alone.
         max_tool_calls = int(self.config.get("runtime.max_tool_calls"))
         while True:
+            # Ask the backend for the next move. A final answer ends the turn, even when the budget is spent.
             action = backend.next_action(session)
             if action.type == "final":
                 self.tracer.event("agent.end", agent=agent.name, message=action.message)
                 return action.message
+            # The budget is used up: the call is not made, the agent stops with a fixed message (which the
+            # agent that delegated to it receives as its answer), and the run is marked as cut short.
             if self.steps >= max_tool_calls:
                 self.termination_reason = "max_tool_calls"
                 self.tracer.event("agent.end", agent=agent.name, message="step limit reached")
                 return "I stopped because the tool-call limit was reached before the task completed."
+            # Count the step, then carry it out. A delegation is handled here, by running the target agent;
+            # every other call goes through the dispatcher and its gates.
             self.steps += 1
             if action.name == "route_to_agent":
                 result = self._delegate(agent, action, request, ctx, depth)
             else:
                 result = self.dispatcher.call(agent, action.name, action.args, ctx)
+            # Keep the call in the session and let the backend see the result before it plans its next move.
             session.history.append((action, result))
             backend.observe(action, result)
 
     def _delegate(self, agent, action: Action, request: str, ctx: dict, depth: int) -> dict:
+        """Carry out a ``route_to_agent`` call. The target agent runs on the same request and context, one
+        level deeper, and its final message comes back as the result of the call. An unknown target, or a
+        chain that is already at the depth limit, gets an error result instead, which the delegating agent
+        sees like any other refused call."""
         target = action.args.get("agent")
         reason = action.args.get("reason", "")
+        # Refuse a target that has no definition: a model can invent an agent name, and a default agent
+        # misconfigured in routing.default_agent ends up here as well.
         if target not in self.agents.available():
             self.tracer.event("agent.route", source=agent.name, target=target, status="error", reason=reason)
             return {"error": "unknown_agent", "message": f"no agent named '{target}'"}
+        # Refuse to nest deeper than the limit, which also ends any chain of agents handing the request on.
         if depth >= MAX_DELEGATION_DEPTH:
             self.tracer.event("agent.route", source=agent.name, target=target, status="error", reason="max_depth")
             return {"error": "max_delegation_depth", "message": "delegation depth exceeded"}
+        # The delegation is accepted and recorded as a route.
         self.tracer.event("agent.route", source=agent.name, target=target, status="ok", reason=reason)
         if ctx.get("_route_only"):
             # routing-dataset evaluation: score the delegation decision without executing the specialist
             return {"agent": target, "delegated_response": f"(route-only evaluation: delegated to {target})"}
+        # Run the target agent; its final answer is what the delegating agent observes.
         message = self._run_agent(target, request, ctx, depth + 1)
         return {"agent": target, "delegated_response": message}

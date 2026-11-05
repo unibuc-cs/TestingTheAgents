@@ -9,40 +9,53 @@ import yaml
 
 @dataclass
 class AgentDef:
+    """One agent definition, as read from ``agents/<name>.yaml``."""
+
     name: str
-    version: str
-    description: str
+    version: str  # always kept as a string; "0" when the YAML has none
+    description: str  # what the agent owns, in one line; the orchestrator reads it when it routes
     system_prompt: str
-    skills: list[str]
-    tools: list[str]
-    entry_skill: str | None = None
+    skills: list[str]  # skills loaded when the agent starts; the LLM backend puts their text in the prompt
+    tools: list[str]  # the only tools this agent may call; the dispatcher refuses any other
+    entry_skill: str | None = None  # skill whose procedure the simulated backend follows, if the agent has one
     triggers: list[str] = field(default_factory=list)  # routing keywords (orchestrator uses them)
-    intents: dict[str, list[str]] = field(default_factory=dict)
-    is_orchestrator: bool = False
-    raw: dict = field(default_factory=dict)
+    intents: dict[str, list[str]] = field(default_factory=dict)  # intent name -> keywords that signal it
+    is_orchestrator: bool = False  # "orchestrator: true" in the YAML; never a candidate of the keyword router
+    raw: dict = field(default_factory=dict)  # the YAML document as loaded, kept for the digest
 
     @property
     def digest(self) -> str:
+        """Short fingerprint of the definition (the first 12 hex digits of a SHA-256). It is computed from
+        the parsed YAML with sorted keys, so reformatting the file or editing its comments leaves it
+        unchanged, while a change to any value changes it."""
         return hashlib.sha256(yaml.safe_dump(self.raw, sort_keys=True).encode()).hexdigest()[:12]
 
     @property
     def prompt_tokens(self) -> int:
+        """Rough size of the system prompt in tokens (about four characters per token, at least 1)."""
         return max(1, len(self.system_prompt) // 4)
 
 
 class AgentLoader:
+    """Reads agent definitions from ``<agents_dir>/<name>.yaml`` and keeps each one after its first load."""
+
     def __init__(self, agents_dir: str | Path):
         self.agents_dir = Path(agents_dir)
-        self._cache: dict[str, AgentDef] = {}
+        self._cache: dict[str, AgentDef] = {}  # file name without ".yaml" -> parsed definition
 
     def available(self) -> list[str]:
+        """Names of all agent definitions on disk (the YAML file names without extension), sorted."""
         return sorted(p.stem for p in self.agents_dir.glob("*.yaml"))
 
     def load(self, name: str) -> AgentDef:
+        """Return the definition in ``<name>.yaml``, reading the file on first use. Raises
+        FileNotFoundError for an agent that does not exist."""
         if name not in self._cache:
             path = self.agents_dir / f"{name}.yaml"
             if not path.exists():
                 raise FileNotFoundError(f"agent '{name}' not found under {self.agents_dir}")
+            # Only "name" is required. A missing version reads as "0", and any other missing key gives an
+            # empty value (no skills, tools, triggers or intents; not an orchestrator).
             raw = yaml.safe_load(path.read_text())
             self._cache[name] = AgentDef(
                 name=raw["name"],
@@ -60,4 +73,6 @@ class AgentLoader:
         return self._cache[name]
 
     def load_all(self) -> dict[str, AgentDef]:
+        """Every agent definition keyed by file name, in alphabetical order; the keyword router breaks
+        ties in this order."""
         return {n: self.load(n) for n in self.available()}

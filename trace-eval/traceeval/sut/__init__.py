@@ -8,5 +8,5 @@ must not import anything from ``traceeval`` outside of ``traceeval.sut``.
 
 from pathlib import Path
 
-SUT_ROOT = Path(__file__).resolve().parent
-SUT_VERSION = "1.0.0"
+SUT_ROOT = Path(__file__).resolve().parent  # this package's directory: the baseline that each variant is copied from
+SUT_VERSION = "1.0.0"  # version of the platform as a whole; agents and skills carry their own versions

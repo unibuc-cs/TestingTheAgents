@@ -1,4 +1,21 @@
-"""Deterministic application services behind the tools (the "real application" the agents operate)."""
+"""Deterministic application services behind the tools (the "real application" the agents operate).
+
+The services hold the business rules of the ContentOps platform and read and change the in-memory ``State``;
+the tool adapters in ``tools/`` are thin wrappers around them. A service refuses a request by raising one
+of the ``ToolError`` subclasses re-exported here, which the dispatcher turns into an error result for the
+agent. The modules:
+
+    state        the platform data (users, pages, assets, ...), the audit log, the logical clock and the
+                 idempotency cache
+    errors       the refusals a service can raise
+    repository   pages, versions, SEO metadata, assets and search
+    workflow     review requests and approvals, publishing, scheduling and taking pages down
+    links        link validation of a page
+    seo          the SEO report of a page
+    permissions  roles and the actions they allow
+    governance   permission checks, consent, personal-data export and the audit log
+    translation  translation jobs
+"""
 
 from .errors import ApprovalRequired, NotFound, PermissionDenied, ToolError, TransientError, ValidationError
 from .state import State
