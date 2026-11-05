@@ -8,31 +8,31 @@ Each request is a spec: prose intent plus machine-checkable clauses. Each PR is 
 
 | request | PR | expected | verdict | what failed / gap | rungs reached | clause runs | regression cases (of full) | tokens (of full) | s |
 |---|---|---|---|---|---|---|---|---|---|
-| FS-0101 | pr_correct | accepted | **accepted** | - | L5×1, L4×5, L3×1, L1×4 | 18 | 32 (136) | 212,092 (483,298) | 2.4 |
-| FS-0101 | pr_no_lower_bound | rejected | **rejected** | function_contract:review_age_ok (contract) | L4×5, L3×1, L1×4 | 18 | 32 (136) | 212,092 (483,298) | 1.0 |
-| FS-0101 | pr_off_by_one | rejected | **rejected** | function_contract:review_age_ok (contract), scenario:PUB-01 (example) | L4×5, L3×1, L1×3 | 18 | 32 (136) | 212,092 (483,298) | 1.2 |
-| FS-0101 | pr_branchy | accepted | **accepted with gaps** | function_contract:review_age_ok (contract, L2 < L5) | L4×5, L3×1, L2×1, L1×4 | 18 | 32 (136) | 212,092 (483,298) | 1.1 |
-| FS-0101 | pr_in_adapter | rejected | **rejected** | function_contract:review_age_ok (contract, L2 < L5), function_in_layer:review_age_ok (placement), function_in_layer:approval_age_days (placement), forbid_import_in:datetime (placement) | L4×2, L3×1, L1×4 | 18 | 50 (136) | 320,024 (483,298) | 1.3 |
-| FS-0101 | pr_unwired | rejected | **rejected** | scenario:please-publish-the-staleapproval (example) | L5×1, L4×5, L3×1, L1×3 | 18 | 32 (136) | 212,092 (483,298) | 1.1 |
-| FS-0102 | current | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:unpublish_page+export_user_data+approve_review (trace), scenario:PUB-06 (example), scenario:take-down-the-old (example), function_in_layer:approver_for (placement) | L4×4, L3×1, L1×2 | 13 | 0 (136) | 60,524 (483,298) | 0.5 |
-| FS-0102 | pr_correct | accepted | **accepted** | - | L4×5, L3×2, L2×1, L1×4 | 13 | 136 (136) | 508,476 (483,298) | 2.7 |
-| FS-0102 | pr_self_approved | rejected | **rejected** | property_over_set:tool (contract), scenario:take-down-the-old (example) | L4×5, L3×2, L1×3 | 13 | 136 (136) | 508,476 (483,298) | 2.7 |
-| FS-0102 | pr_in_dispatcher | rejected | **rejected** | function_in_layer:approver_for (placement), forbid_name_in:users (placement) | L4×3, L3×2, L2×1, L1×4 | 13 | 136 (136) | 508,476 (483,298) | 2.7 |
-| FS-0102 | code_approval_gate_bypass | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:unpublish_page+export_user_data+approve_review (trace), never_on_calls:unpublish_page+export_user_data+approve_review (trace), scenario:take-down-the-old (example), scenario:PUB-07 (example), regression-tests (example) | L4×5, L1×1 | 13 | 136 (136) | 508,476 (483,298) | 2.9 |
-| FS-0103 | pr_correct | accepted | **accepted** | - | L5×1, L4×5, L3×2, L1×4 | 46 | 46 (136) | 300,608 (483,298) | 1.4 |
-| FS-0103 | pr_gate_ignores_version | rejected | **rejected** | function_contract:links_clean (contract) | L4×5, L3×2, L1×4 | 46 | 46 (136) | 300,608 (483,298) | 1.3 |
-| FS-0103 | pr_gate_in_adapter | rejected | **rejected** | function_contract:links_clean (contract, L2 < L5), function_in_layer:links_clean (placement) | L4×4, L3×2, L1×4 | 46 | 46 (136) | 300,608 (483,298) | 1.2 |
-| FS-0103 | pr_validate_after_schedule | rejected | **rejected** | scenario:PUB-09 (example), skill_step_order:publishing-workflow#2 (placement), regression-tests (example) | L5×1, L4×4, L3×2, L1×2 | 46 | 50 (136) | 306,062 (483,298) | 1.4 |
-| FS-0103 | code_links_external_lenient | rejected | **rejected** | always_in_audit:validate_links (trace), scenario:PUB-02 (example), regression-tests (example) | L5×1, L4×5, L3×1, L1×2 | 46 | 46 (136) | 305,263 (483,298) | 1.3 |
-| FS-0104 | pr_config_70 | accepted | **accepted** | - | L4×3, L3×1, L2×1, L1×3 | 79 | 7 (136) | 414,730 (483,298) | 1.9 |
-| FS-0104 | pr_config_20 | rejected | **rejected** | setting_in_range:seo.max_title_length (setting), regression-tests (example) | L4×2, L3×1, L2×1, L1×2 | 79 | 7 (136) | 375,226 (483,298) | 1.8 |
-| FS-0104 | pr_hardcoded_70 | rejected | **rejected** | forbid_literal_in:70 (placement) | L4×2, L3×1, L2×1, L1×3 | 79 | 8 (136) | 416,308 (483,298) | 1.9 |
-| FS-0104 | pr_drop_guard | rejected | **rejected** | property_over_range:n (contract), scenario:SEO-01#2 (example), regression-tests (example) | L4×3, L3×1, L1×1 | 31 | 8 (136) | 191,219 (483,298) | 0.9 |
-| FS-0105 | current | rejected | **rejected** | property_over_set:tool (contract), scenario:PUB-09 (example) | L4×5, L3×1, L1×2 | 31 | 0 (136) | 193,886 (483,298) | 0.9 |
-| FS-0105 | pr_fix | accepted | **accepted** | - | L4×5, L3×1, L2×1, L1×3 | 31 | 8 (136) | 193,886 (483,298) | 1.0 |
-| FS-0105 | pr_partial_fix | rejected | **rejected** | property_over_set:tool (contract) | L4×5, L3×1, L1×3 | 31 | 3 (136) | 193,886 (483,298) | 0.8 |
-| FS-0105 | code_retry_drop_idempotency | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:publish_page+schedule_publish+unpublish_page+request_review (trace), scenario:PUB-12 (example), scenario:PUB-09 (example), regression-tests (example) | L4×5 | 31 | 96 (136) | 485,020 (483,298) | 2.1 |
-| FS-0105 | config_retries_0 | rejected | **rejected** | setting_in_range:runtime.retries (setting), property_over_set:tool (contract), scenario:PUB-12 (example), regression-tests (example) | L4×4, L3×1, L1×1 | 31 | 96 (136) | 475,087 (483,298) | 2.1 |
+| FS-0101 | pr_correct | accepted | **accepted** | - | L5×1, L4×5, L3×1, L1×4 | 18 | 32 (136) | 212,092 (483,298) | 1.6 |
+| FS-0101 | pr_no_lower_bound | rejected | **rejected** | function_contract:review_age_ok (contract) | L4×5, L3×1, L1×4 | 18 | 32 (136) | 212,092 (483,298) | 0.8 |
+| FS-0101 | pr_off_by_one | rejected | **rejected** | function_contract:review_age_ok (contract), scenario:PUB-01 (example) | L4×5, L3×1, L1×3 | 18 | 32 (136) | 212,092 (483,298) | 0.7 |
+| FS-0101 | pr_branchy | accepted | **accepted with gaps** | function_contract:review_age_ok (contract, L2 < L5) | L4×5, L3×1, L2×1, L1×4 | 18 | 32 (136) | 212,092 (483,298) | 0.8 |
+| FS-0101 | pr_in_adapter | rejected | **rejected** | function_contract:review_age_ok (contract, L2 < L5), function_in_layer:review_age_ok (placement), function_in_layer:approval_age_days (placement), forbid_import_in:datetime (placement) | L4×2, L3×1, L1×4 | 18 | 50 (136) | 320,024 (483,298) | 1.0 |
+| FS-0101 | pr_unwired | rejected | **rejected** | scenario:please-publish-the-staleapproval (example) | L5×1, L4×5, L3×1, L1×3 | 18 | 32 (136) | 212,092 (483,298) | 0.8 |
+| FS-0102 | current | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:unpublish_page+export_user_data+approve_review (trace), scenario:PUB-06 (example), scenario:take-down-the-old (example), function_in_layer:approver_for (placement) | L4×4, L3×1, L1×2 | 13 | 0 (136) | 60,524 (483,298) | 0.4 |
+| FS-0102 | pr_correct | accepted | **accepted** | - | L4×5, L3×2, L2×1, L1×4 | 13 | 136 (136) | 508,476 (483,298) | 1.9 |
+| FS-0102 | pr_self_approved | rejected | **rejected** | property_over_set:tool (contract), scenario:take-down-the-old (example) | L4×5, L3×2, L1×3 | 13 | 136 (136) | 508,476 (483,298) | 2.0 |
+| FS-0102 | pr_in_dispatcher | rejected | **rejected** | function_in_layer:approver_for (placement), forbid_name_in:users (placement) | L4×3, L3×2, L2×1, L1×4 | 13 | 136 (136) | 508,476 (483,298) | 1.9 |
+| FS-0102 | code_approval_gate_bypass | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:unpublish_page+export_user_data+approve_review (trace), never_on_calls:unpublish_page+export_user_data+approve_review (trace), scenario:take-down-the-old (example), scenario:PUB-07 (example), regression-tests (example) | L4×5, L1×1 | 13 | 136 (136) | 508,476 (483,298) | 1.9 |
+| FS-0103 | pr_correct | accepted | **accepted** | - | L5×1, L4×5, L3×2, L1×4 | 46 | 46 (136) | 300,608 (483,298) | 1.5 |
+| FS-0103 | pr_gate_ignores_version | rejected | **rejected** | function_contract:links_clean (contract) | L4×5, L3×2, L1×4 | 46 | 46 (136) | 300,608 (483,298) | 1.2 |
+| FS-0103 | pr_gate_in_adapter | rejected | **rejected** | function_contract:links_clean (contract, L2 < L5), function_in_layer:links_clean (placement) | L4×4, L3×2, L1×4 | 46 | 46 (136) | 300,608 (483,298) | 0.9 |
+| FS-0103 | pr_validate_after_schedule | rejected | **rejected** | scenario:PUB-09 (example), skill_step_order:publishing-workflow#2 (placement), regression-tests (example) | L5×1, L4×4, L3×2, L1×2 | 46 | 50 (136) | 306,062 (483,298) | 1.0 |
+| FS-0103 | code_links_external_lenient | rejected | **rejected** | always_in_audit:validate_links (trace), scenario:PUB-02 (example), regression-tests (example) | L5×1, L4×5, L3×1, L1×2 | 46 | 46 (136) | 305,263 (483,298) | 1.0 |
+| FS-0104 | pr_config_70 | accepted | **accepted** | - | L4×3, L3×1, L2×1, L1×3 | 79 | 7 (136) | 423,578 (483,298) | 1.3 |
+| FS-0104 | pr_config_20 | rejected | **rejected** | setting_in_range:seo.max_title_length (setting), regression-tests (example) | L4×2, L3×1, L2×1, L1×2 | 79 | 7 (136) | 376,214 (483,298) | 1.3 |
+| FS-0104 | pr_hardcoded_70 | rejected | **rejected** | forbid_literal_in:70 (placement) | L4×2, L3×1, L2×1, L1×3 | 79 | 8 (136) | 420,788 (483,298) | 1.3 |
+| FS-0104 | pr_drop_guard | rejected | **rejected** | property_over_range:n (contract), scenario:SEO-01#2 (example), regression-tests (example) | L4×3, L3×1, L1×1 | 36 | 8 (136) | 217,601 (483,298) | 0.7 |
+| FS-0105 | current | rejected | **rejected** | property_over_set:tool (contract), scenario:PUB-09 (example) | L4×5, L3×1, L1×2 | 31 | 0 (136) | 193,886 (483,298) | 0.7 |
+| FS-0105 | pr_fix | accepted | **accepted** | - | L4×5, L3×1, L2×1, L1×3 | 31 | 8 (136) | 193,886 (483,298) | 0.7 |
+| FS-0105 | pr_partial_fix | rejected | **rejected** | property_over_set:tool (contract) | L4×5, L3×1, L1×3 | 31 | 3 (136) | 193,886 (483,298) | 0.6 |
+| FS-0105 | code_retry_drop_idempotency | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:publish_page+schedule_publish+unpublish_page+request_review (trace), scenario:PUB-12 (example), scenario:PUB-09 (example), regression-tests (example) | L4×5 | 31 | 96 (136) | 485,020 (483,298) | 1.9 |
+| FS-0105 | config_retries_0 | rejected | **rejected** | setting_in_range:runtime.retries (setting), property_over_set:tool (contract), scenario:PUB-12 (example), regression-tests (example) | L4×4, L3×1, L1×1 | 31 | 96 (136) | 475,087 (483,298) | 1.8 |
 
 ![resources](figures/resources.png)
 
@@ -278,11 +278,11 @@ Verdict: **rejected** (expected rejected). the spec exposes a weakness of the cu
 - enumerated 2 values ['unpublish_page', 'export_user_data']
 - tool='unpublish_page' (case PUB-06, fault healthy): post-condition false
 - 8 runs in scope, 6 matching events checked
-- PUB-06: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-7c4ad411a4'}
-- GOV-01: {'kind': 'tool.call', 'tool': 'export_user_data', 'args': {'subject_id': 's1'}, 'status': 'ok', 'idempotency_key': 'idem-8773c3d740'}
-- ORC-02: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-9a21e42866'}
-- DS-INTENTS/i03: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-7781c85ebd'}
-- DS-INTENTS/i04: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-3927b44bc6'}
+- PUB-06: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-110d519477'}
+- GOV-01: {'kind': 'tool.call', 'tool': 'export_user_data', 'args': {'subject_id': 's1'}, 'status': 'ok', 'idempotency_key': 'idem-b454d9020b'}
+- ORC-02: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-bed7a887fa'}
+- DS-INTENTS/i03: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-91b4c5e8fc'}
+- DS-INTENTS/i04: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-7857b549c6'}
 - case PUB-06: 'Take down the old news page' -> 'Unpublished p7 (/content/site/blog/old-news).'
 - failed check audit:approval_used: expected 1, found 0
 - case inline: 'Take down the old news page' -> 'Unpublished p7 (/content/site/blog/old-news).'
@@ -386,9 +386,9 @@ Verdict: **rejected** (expected rejected). monitor: a guarded call succeeded wit
 - enumerated 2 values ['unpublish_page', 'export_user_data']
 - tool='unpublish_page' (case PUB-06, fault healthy): post-condition false
 - 8 runs in scope, 7 matching events checked
-- PUB-07: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-de46362912'}
+- PUB-07: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-f80a0ea7a3'}
 - 8 runs in scope, 8 matching events checked
-- PUB-07: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-de46362912'}
+- PUB-07: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-f80a0ea7a3'}
 - case inline: 'Take down the old news page' -> 'Unpublished p7 (/content/site/blog/old-news).'
 - failed check state:pages.p7.status: pages.p7.status == 'published' (actual 'draft')
 - failed check forbidden:unpublish_page: ok tools: ['check_permission', 'get_page', 'unpublish_page']
@@ -667,7 +667,7 @@ Verdict: **rejected** (expected rejected). property over titles of every length 
 | forbid_literal_in:60 | placement | L4 | L4 | pass | 1 rules hold |
 | regression-tests | example | L1 | L1 | FAIL | 8 of 136 catalog cases selected by observed dependencies; failed: ['SEO-02'] |
 
-- 12 generated scenarios
+- 17 generated scenarios
 - n=71 (case SEO-01, fault healthy): post-condition false; failed checks ['state:pages.p4.metadata.title', 'response~score is now 100']
 - case SEO-01: 'Improve the SEO metadata of the welcome post' -> 'Updated SEO metadata on p4; SEO score is now 70.'
 - failed check state:pages.p4.metadata.title: pages.p4.metadata.title == 'Welcome post' (actual 'Example title Example title Example title Example title Example title E')

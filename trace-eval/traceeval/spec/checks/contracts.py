@@ -123,6 +123,7 @@ def find(strat, predicate, budget, settings, Phase, HealthCheck):
         settings=settings(
             max_examples=budget,
             database=None,
+            derandomize=True,  # the same examples on every run, so example counts and costs repeat
             phases=(Phase.generate, Phase.shrink),
             suppress_health_check=list(HealthCheck),
             deadline=None,
