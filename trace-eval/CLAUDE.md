@@ -38,6 +38,8 @@ traceeval sdd draft --request r.md --id FS-0106 [--replay a.json]  # draft a spe
   `config:<key>`); do not invent parallel schemes.
 - Strategies may use only baseline history, change sets and *other* variants' outcomes (`ctx.train_variants`);
   never the variant under evaluation.
+- Change sets hold code only: comments, docstrings, blank lines and formatting add no component and no diff
+  line (`mutation/changeset.py`), so no strategy and no probability may depend on them.
 - Mutation operators assert their anchors; a new mutation must be revealed by ≥ 1 test if labelled a regression
   and by none if labelled benign (the report's sanity line checks this).
 - Keep the catalog passing on the baseline (`tests/test_sut.py::test_full_catalog_passes_on_baseline`).

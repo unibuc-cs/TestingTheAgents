@@ -9,24 +9,59 @@ from traceeval.experiment.evaluate import evaluate, make_oracle
 from traceeval.experiment.history import History
 from traceeval.experiment.metrics import apfd, apfdc
 from traceeval.experiment.runner import record_baseline, record_mutants
+from traceeval.experiment.sutloader import copy_sut
 from traceeval.mutation import MUTATIONS, get_mutation, materialize_variant
+from traceeval.mutation.changeset import _yaml_code_lines
 from traceeval.selection import SelectionContext, get_strategy
+from traceeval.sut import SUT_ROOT
+
+COMMENT_ONLY = {"benign_code_comment_docstring", "benign_config_comments_reordered"}
 
 
 def test_every_mutation_applies_and_changes_something(tmp_path):
     for m in MUTATIONS:
         _, cs = materialize_variant(m, tmp_path / "v")
-        assert cs.files, m.id
-        assert cs.components, m.id
+        if m.id in COMMENT_ONLY:  # comments and formatting reach no selector
+            assert not (cs.files or cs.components or cs.diff), m.id
+        else:
+            assert cs.files and cs.components, m.id
 
 
-def test_changeset_flags_ast_equivalent_edits(tmp_path):
+def test_changeset_leaves_out_comments(tmp_path):
     _, cs = materialize_variant(get_mutation("benign_code_comment_docstring"), tmp_path / "v")
     assert cs.is_provably_benign()
     _, cs = materialize_variant(get_mutation("code_retry_disabled"), tmp_path / "v")
     assert not cs.is_provably_benign()
     assert any(c.id == "code:harness/retry.py::with_retry" for c in cs.components)
     assert any(c.kind == "line" for c in cs.components)
+    _, cs = materialize_variant(get_mutation("config_retries_0"), tmp_path / "v")
+    assert "retries: 0" in cs.diff and "transient" not in cs.diff  # the trailing YAML comment is cut off
+
+
+def test_commenting_the_code_does_not_change_the_changeset(tmp_path):
+    commented = copy_sut(tmp_path / "commented", SUT_ROOT)
+    retry = commented / "harness" / "retry.py"
+    retry.write_text(
+        "# A new comment at the top.\n"
+        + retry.read_text().replace(
+            "            if attempt > retries:\n",
+            "            # A new comment above the line.\n            if attempt > retries:  # and a trailing one\n",
+        )
+    )
+    m = get_mutation("code_retry_disabled")
+    _, plain = materialize_variant(m, tmp_path / "v1")
+    _, again = materialize_variant(m, tmp_path / "v2", baseline=commented)
+    assert again.diff == plain.diff
+    assert [(c.kind, c.detail) for c in again.components] == [(c.kind, c.detail) for c in plain.components]
+    assert [c.id for c in again.components if c.kind != "line"] == [c.id for c in plain.components if c.kind != "line"]
+    # line components still name real lines of the file: the two new comment lines sit above the change
+    plain_lines = [int(c.id.rsplit(":", 1)[1]) for c in plain.components if c.kind == "line"]
+    assert [int(c.id.rsplit(":", 1)[1]) for c in again.components if c.kind == "line"] == [n + 2 for n in plain_lines]
+
+
+def test_yaml_comments_are_cut_but_a_hash_inside_a_scalar_stays():
+    text = 'a: 1  # note\n# a whole-line comment\nb: "x # y"\nc: |\n  # part of the prompt\n  text\n'
+    assert [t for _, t in _yaml_code_lines(text)] == ["a: 1", 'b: "x # y"', "c: |", "  # part of the prompt", "  text"]
 
 
 def test_changeset_is_order_sensitive_for_intents(tmp_path):

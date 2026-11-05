@@ -41,9 +41,9 @@ expressions in `traceeval/spec/context.py`. L0 (reviewed) is the prose `intent`.
 
 | request | the accepted PR | what it demonstrates |
 |---|---|---|
-| FS-0101 approvals expire after 30 days | new feature, 4 files (config, workflow service, publish adapters, skill prose), 55 diff lines | a **proof** (L5) of the rule for all inputs; the proof catches a future-dated approval no fixture has; an off-by-one; the same logic in the wrong layer (only placement fails); a proven function that is never wired in (only the monitor and example fail); a correct but branchy implementation that the prover cannot translate — accepted *with a gap* because the clause requires L5 |
-| FS-0102 guarded operations need a *valid* token and record the approver | security fix, 2 files (permissions service, dispatcher), 17 diff lines | the spec first **exposes a weakness of the current code** (any made-up token passes); the property, the monitor and the example catch a "self-approved" variant; a lookup written inside the harness is caught only by placement |
-| FS-0103 nothing goes live without a clean link check of its current version | defence in depth, 2 files (links service, workflow service), 28 diff lines | the rule moves from a skill procedure (a prompt) into the service and is **proven**; a gate that ignores the check's version is missed by 200 random examples and found by the solver; a **temporal** rule (`precedes`) with completeness against the product model; a skill reordering is stopped by the service gate and still rejected |
+| FS-0101 approvals expire after 30 days | new feature, 4 files (config, workflow service, publish adapters, skill prose), 45 diff lines | a **proof** (L5) of the rule for all inputs; the proof catches a future-dated approval no fixture has; an off-by-one; the same logic in the wrong layer (only placement fails); a proven function that is never wired in (only the monitor and example fail); a correct but branchy implementation that the prover cannot translate — accepted *with a gap* because the clause requires L5 |
+| FS-0102 guarded operations need a *valid* token and record the approver | security fix, 2 files (permissions service, dispatcher), 13 diff lines | the spec first **exposes a weakness of the current code** (any made-up token passes); the property, the monitor and the example catch a "self-approved" variant; a lookup written inside the harness is caught only by placement |
+| FS-0103 nothing goes live without a clean link check of its current version | defence in depth, 2 files (links service, workflow service), 22 diff lines | the rule moves from a skill procedure (a prompt) into the service and is **proven**; a gate that ignores the check's version is missed by 200 random examples and found by the solver; a **temporal** rule (`precedes`) with completeness against the product model; a skill reordering is stopped by the service gate and still rejected |
 | FS-0104 SEO title limit raised to 70 | configuration only, 1 file, 2 diff lines | a property over **agent behaviour** (titles of every length); boundary examples computed from config; a hard-coded constant caught only by placement |
 | FS-0105 retried publishing writes never duplicate | bug fix, 2 files (workflow service, publish adapters), 22 diff lines | the spec, quantified over the write tools the publishing skill uses (from the product model), **finds a latent defect** in the current code; a partial fix is caught by the same quantifier |
 
@@ -59,7 +59,7 @@ dependency selection: the Q12 answer), tokens, seconds. Per request it also show
 tool adapters, the services behind them, the skills calling them, the config keys), as a fraction of
 the repository - and which checks will run.
 
-Headline numbers from `runs/sdd`: the brief is 10–19% of the repository (12% on average); all 25
+Headline numbers from `runs/sdd`: the brief is 10–19% of the repository (13% on average); all 25
 verdicts are as expected; every wrong PR is rejected with the clause, the counterexample or the
 misplaced code named; two rules are proven for all inputs (FS-0101, FS-0103); two specs find defects in
 the current code before any PR is written (FS-0102, FS-0105).

@@ -1,6 +1,6 @@
 # Spec-driven development: evidence report
 
-5 change requests, 25 pull requests, 136 recorded baseline runs (23,813 tokens of source in 52 files).
+5 change requests, 25 pull requests, 136 recorded baseline runs (42,888 tokens of source in 52 files).
 
 Each request is a spec: prose intent plus machine-checkable clauses. Each PR is a variant of the system. The clauses are checked, the change-affected regression tests are run, and the result is an evidence record with the assurance rung reached per clause (L0 reviewed, L1 example-tested, L2 property-tested, L3 monitored, L4 statically checked, L5 proven).
 
@@ -8,31 +8,31 @@ Each request is a spec: prose intent plus machine-checkable clauses. Each PR is 
 
 | request | PR | expected | verdict | what failed / gap | rungs reached | clause runs | regression cases (of full) | tokens (of full) | s |
 |---|---|---|---|---|---|---|---|---|---|
-| FS-0101 | pr_correct | accepted | **accepted** | - | L5×1, L4×5, L3×1, L1×4 | 18 | 32 (136) | 212,092 (483,298) | 1.7 |
+| FS-0101 | pr_correct | accepted | **accepted** | - | L5×1, L4×5, L3×1, L1×4 | 18 | 32 (136) | 212,092 (483,298) | 2.4 |
 | FS-0101 | pr_no_lower_bound | rejected | **rejected** | function_contract:review_age_ok (contract) | L4×5, L3×1, L1×4 | 18 | 32 (136) | 212,092 (483,298) | 1.0 |
-| FS-0101 | pr_off_by_one | rejected | **rejected** | function_contract:review_age_ok (contract), scenario:PUB-01 (example) | L4×5, L3×1, L1×3 | 18 | 32 (136) | 212,092 (483,298) | 0.9 |
-| FS-0101 | pr_branchy | accepted | **accepted with gaps** | function_contract:review_age_ok (contract, L2 < L5) | L4×5, L3×1, L2×1, L1×4 | 18 | 32 (136) | 212,092 (483,298) | 1.0 |
-| FS-0101 | pr_in_adapter | rejected | **rejected** | function_contract:review_age_ok (contract, L2 < L5), function_in_layer:review_age_ok (placement), function_in_layer:approval_age_days (placement), forbid_import_in:datetime (placement) | L4×2, L3×1, L1×4 | 18 | 50 (136) | 320,024 (483,298) | 1.2 |
-| FS-0101 | pr_unwired | rejected | **rejected** | scenario:please-publish-the-staleapproval (example) | L5×1, L4×5, L3×1, L1×3 | 18 | 32 (136) | 212,092 (483,298) | 1.0 |
+| FS-0101 | pr_off_by_one | rejected | **rejected** | function_contract:review_age_ok (contract), scenario:PUB-01 (example) | L4×5, L3×1, L1×3 | 18 | 32 (136) | 212,092 (483,298) | 1.2 |
+| FS-0101 | pr_branchy | accepted | **accepted with gaps** | function_contract:review_age_ok (contract, L2 < L5) | L4×5, L3×1, L2×1, L1×4 | 18 | 32 (136) | 212,092 (483,298) | 1.1 |
+| FS-0101 | pr_in_adapter | rejected | **rejected** | function_contract:review_age_ok (contract, L2 < L5), function_in_layer:review_age_ok (placement), function_in_layer:approval_age_days (placement), forbid_import_in:datetime (placement) | L4×2, L3×1, L1×4 | 18 | 50 (136) | 320,024 (483,298) | 1.3 |
+| FS-0101 | pr_unwired | rejected | **rejected** | scenario:please-publish-the-staleapproval (example) | L5×1, L4×5, L3×1, L1×3 | 18 | 32 (136) | 212,092 (483,298) | 1.1 |
 | FS-0102 | current | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:unpublish_page+export_user_data+approve_review (trace), scenario:PUB-06 (example), scenario:take-down-the-old (example), function_in_layer:approver_for (placement) | L4×4, L3×1, L1×2 | 13 | 0 (136) | 60,524 (483,298) | 0.5 |
-| FS-0102 | pr_correct | accepted | **accepted** | - | L4×5, L3×2, L2×1, L1×4 | 13 | 136 (136) | 508,476 (483,298) | 2.5 |
+| FS-0102 | pr_correct | accepted | **accepted** | - | L4×5, L3×2, L2×1, L1×4 | 13 | 136 (136) | 508,476 (483,298) | 2.7 |
 | FS-0102 | pr_self_approved | rejected | **rejected** | property_over_set:tool (contract), scenario:take-down-the-old (example) | L4×5, L3×2, L1×3 | 13 | 136 (136) | 508,476 (483,298) | 2.7 |
-| FS-0102 | pr_in_dispatcher | rejected | **rejected** | function_in_layer:approver_for (placement), forbid_name_in:users (placement) | L4×3, L3×2, L2×1, L1×4 | 13 | 136 (136) | 508,476 (483,298) | 2.4 |
-| FS-0102 | code_approval_gate_bypass | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:unpublish_page+export_user_data+approve_review (trace), never_on_calls:unpublish_page+export_user_data+approve_review (trace), scenario:take-down-the-old (example), scenario:PUB-07 (example), regression-tests (example) | L4×5, L1×1 | 13 | 136 (136) | 508,476 (483,298) | 2.5 |
+| FS-0102 | pr_in_dispatcher | rejected | **rejected** | function_in_layer:approver_for (placement), forbid_name_in:users (placement) | L4×3, L3×2, L2×1, L1×4 | 13 | 136 (136) | 508,476 (483,298) | 2.7 |
+| FS-0102 | code_approval_gate_bypass | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:unpublish_page+export_user_data+approve_review (trace), never_on_calls:unpublish_page+export_user_data+approve_review (trace), scenario:take-down-the-old (example), scenario:PUB-07 (example), regression-tests (example) | L4×5, L1×1 | 13 | 136 (136) | 508,476 (483,298) | 2.9 |
 | FS-0103 | pr_correct | accepted | **accepted** | - | L5×1, L4×5, L3×2, L1×4 | 46 | 46 (136) | 300,608 (483,298) | 1.4 |
-| FS-0103 | pr_gate_ignores_version | rejected | **rejected** | function_contract:links_clean (contract) | L4×5, L3×2, L1×4 | 46 | 46 (136) | 300,608 (483,298) | 1.2 |
-| FS-0103 | pr_gate_in_adapter | rejected | **rejected** | function_contract:links_clean (contract, L2 < L5), function_in_layer:links_clean (placement) | L4×4, L3×2, L1×4 | 46 | 46 (136) | 300,608 (483,298) | 1.1 |
-| FS-0103 | pr_validate_after_schedule | rejected | **rejected** | scenario:PUB-09 (example), skill_step_order:publishing-workflow#2 (placement), regression-tests (example) | L5×1, L4×4, L3×2, L1×2 | 46 | 50 (136) | 306,062 (483,298) | 1.3 |
-| FS-0103 | code_links_external_lenient | rejected | **rejected** | always_in_audit:validate_links (trace), scenario:PUB-02 (example), regression-tests (example) | L5×1, L4×5, L3×1, L1×2 | 46 | 46 (136) | 305,263 (483,298) | 1.2 |
-| FS-0104 | pr_config_70 | accepted | **accepted** | - | L4×3, L3×1, L2×1, L1×3 | 79 | 7 (136) | 423,576 (483,298) | 1.7 |
-| FS-0104 | pr_config_20 | rejected | **rejected** | setting_in_range:seo.max_title_length (setting), regression-tests (example) | L4×2, L3×1, L2×1, L1×2 | 79 | 7 (136) | 376,546 (483,298) | 1.8 |
-| FS-0104 | pr_hardcoded_70 | rejected | **rejected** | forbid_literal_in:70 (placement) | L4×2, L3×1, L2×1, L1×3 | 79 | 8 (136) | 416,612 (483,298) | 1.7 |
-| FS-0104 | pr_drop_guard | rejected | **rejected** | property_over_range:n (contract), scenario:SEO-01#2 (example), regression-tests (example) | L4×3, L3×1, L1×1 | 32 | 8 (136) | 196,425 (483,298) | 0.8 |
-| FS-0105 | current | rejected | **rejected** | property_over_set:tool (contract), scenario:PUB-09 (example) | L4×5, L3×1, L1×2 | 31 | 0 (136) | 193,886 (483,298) | 0.8 |
-| FS-0105 | pr_fix | accepted | **accepted** | - | L4×5, L3×1, L2×1, L1×3 | 31 | 8 (136) | 193,886 (483,298) | 0.8 |
+| FS-0103 | pr_gate_ignores_version | rejected | **rejected** | function_contract:links_clean (contract) | L4×5, L3×2, L1×4 | 46 | 46 (136) | 300,608 (483,298) | 1.3 |
+| FS-0103 | pr_gate_in_adapter | rejected | **rejected** | function_contract:links_clean (contract, L2 < L5), function_in_layer:links_clean (placement) | L4×4, L3×2, L1×4 | 46 | 46 (136) | 300,608 (483,298) | 1.2 |
+| FS-0103 | pr_validate_after_schedule | rejected | **rejected** | scenario:PUB-09 (example), skill_step_order:publishing-workflow#2 (placement), regression-tests (example) | L5×1, L4×4, L3×2, L1×2 | 46 | 50 (136) | 306,062 (483,298) | 1.4 |
+| FS-0103 | code_links_external_lenient | rejected | **rejected** | always_in_audit:validate_links (trace), scenario:PUB-02 (example), regression-tests (example) | L5×1, L4×5, L3×1, L1×2 | 46 | 46 (136) | 305,263 (483,298) | 1.3 |
+| FS-0104 | pr_config_70 | accepted | **accepted** | - | L4×3, L3×1, L2×1, L1×3 | 79 | 7 (136) | 414,730 (483,298) | 1.9 |
+| FS-0104 | pr_config_20 | rejected | **rejected** | setting_in_range:seo.max_title_length (setting), regression-tests (example) | L4×2, L3×1, L2×1, L1×2 | 79 | 7 (136) | 375,226 (483,298) | 1.8 |
+| FS-0104 | pr_hardcoded_70 | rejected | **rejected** | forbid_literal_in:70 (placement) | L4×2, L3×1, L2×1, L1×3 | 79 | 8 (136) | 416,308 (483,298) | 1.9 |
+| FS-0104 | pr_drop_guard | rejected | **rejected** | property_over_range:n (contract), scenario:SEO-01#2 (example), regression-tests (example) | L4×3, L3×1, L1×1 | 31 | 8 (136) | 191,219 (483,298) | 0.9 |
+| FS-0105 | current | rejected | **rejected** | property_over_set:tool (contract), scenario:PUB-09 (example) | L4×5, L3×1, L1×2 | 31 | 0 (136) | 193,886 (483,298) | 0.9 |
+| FS-0105 | pr_fix | accepted | **accepted** | - | L4×5, L3×1, L2×1, L1×3 | 31 | 8 (136) | 193,886 (483,298) | 1.0 |
 | FS-0105 | pr_partial_fix | rejected | **rejected** | property_over_set:tool (contract) | L4×5, L3×1, L1×3 | 31 | 3 (136) | 193,886 (483,298) | 0.8 |
-| FS-0105 | code_retry_drop_idempotency | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:publish_page+schedule_publish+unpublish_page+request_review (trace), scenario:PUB-12 (example), scenario:PUB-09 (example), regression-tests (example) | L4×5 | 31 | 96 (136) | 485,020 (483,298) | 1.9 |
-| FS-0105 | config_retries_0 | rejected | **rejected** | setting_in_range:runtime.retries (setting), property_over_set:tool (contract), scenario:PUB-12 (example), regression-tests (example) | L4×4, L3×1, L1×1 | 31 | 96 (136) | 475,087 (483,298) | 1.8 |
+| FS-0105 | code_retry_drop_idempotency | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:publish_page+schedule_publish+unpublish_page+request_review (trace), scenario:PUB-12 (example), scenario:PUB-09 (example), regression-tests (example) | L4×5 | 31 | 96 (136) | 485,020 (483,298) | 2.1 |
+| FS-0105 | config_retries_0 | rejected | **rejected** | setting_in_range:runtime.retries (setting), property_over_set:tool (contract), scenario:PUB-12 (example), regression-tests (example) | L4×4, L3×1, L1×1 | 31 | 96 (136) | 475,087 (483,298) | 2.1 |
 
 ![resources](figures/resources.png)
 
@@ -40,7 +40,7 @@ Each request is a spec: prose intent plus machine-checkable clauses. Each PR is 
 
 | | without a spec (today) | with the spec (this run) |
 |---|---|---|
-| context handed to the coding agent | the repository: 23,813 tokens, 52 files | the brief: 2,301–4,471 tokens (12% of the repo on average) |
+| context handed to the coding agent | the repository: 42,888 tokens, 52 files | the brief: 4,256–8,360 tokens (13% of the repo on average) |
 | checks per PR | full suite: 136 runs, 483,298 agent tokens | clause checks: 13–79 runs; change-selected regression cases: 0–136 of 136 (36% on average; a harness change selects most of the suite, a config change a few cases); 66% of the full-suite tokens in total |
 | what the checks say | pass/fail of example tests (L1) | per clause: 2 at L5, 28 at L4, 8 at L3, 4 at L2, 22 at L1 over the accepted PRs |
 | when a PR is wrong | a test fails, somewhere | the failing clause names the rule, the counterexample or the misplaced code |
@@ -72,7 +72,7 @@ Spec check against the current product model:
 
 **Agent brief (the locate step)**
 
-Read 5 files, ~2,338 tokens (10% of the repository):
+Read 5 files, ~4,256 tokens (10% of the repository):
 
 - `config/runtime.yaml` — publishing.review_max_age_days
 - `services/workflow.py` — publish_page, request_review, schedule_publish
@@ -84,7 +84,7 @@ Checks that will run: setting_in_range:publishing.review_max_age_days (setting, 
 
 ### FS-0101/pr_correct — Add the 30-day approval window (config + service + adapters + skill prose)
 
-Verdict: **accepted** (expected accepted). rule in the service layer, limit in config, proven for all inputs. Change: 4 file(s), 55 diff lines; components: `code:services/workflow.py`, `code:services/workflow.py::_check_review_age`, `code:services/workflow.py::approval_age_days`, `code:services/workflow.py::approve_review`, `code:services/workflow.py::publish_page`, `code:services/workflow.py::review_age_ok`, `code:services/workflow.py::schedule_publish`, `code:tools/publish_tools.py::publish_page` ….
+Verdict: **accepted** (expected accepted). rule in the service layer, limit in config, proven for all inputs. Change: 4 file(s), 45 diff lines; components: `code:services/workflow.py`, `code:services/workflow.py::_check_review_age`, `code:services/workflow.py::approval_age_days`, `code:services/workflow.py::approve_review`, `code:services/workflow.py::publish_page`, `code:services/workflow.py::review_age_ok`, `code:services/workflow.py::schedule_publish`, `code:tools/publish_tools.py::publish_page` ….
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
@@ -102,7 +102,7 @@ Verdict: **accepted** (expected accepted). rule in the service layer, limit in c
 
 ### FS-0101/pr_no_lower_bound — Same, but `age_days <= max_age_days` (no lower bound)
 
-Verdict: **rejected** (expected rejected). a future-dated approval (negative age) would be accepted; no fixture has one, only the proof sees it. Change: 4 file(s), 55 diff lines; components: `code:services/workflow.py`, `code:services/workflow.py::_check_review_age`, `code:services/workflow.py::approval_age_days`, `code:services/workflow.py::approve_review`, `code:services/workflow.py::publish_page`, `code:services/workflow.py::review_age_ok`, `code:services/workflow.py::schedule_publish`, `code:tools/publish_tools.py::publish_page` ….
+Verdict: **rejected** (expected rejected). a future-dated approval (negative age) would be accepted; no fixture has one, only the proof sees it. Change: 4 file(s), 45 diff lines; components: `code:services/workflow.py`, `code:services/workflow.py::_check_review_age`, `code:services/workflow.py::approval_age_days`, `code:services/workflow.py::approve_review`, `code:services/workflow.py::publish_page`, `code:services/workflow.py::review_age_ok`, `code:services/workflow.py::schedule_publish`, `code:tools/publish_tools.py::publish_page` ….
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
@@ -123,7 +123,7 @@ Verdict: **rejected** (expected rejected). a future-dated approval (negative age
 
 ### FS-0101/pr_off_by_one — Same, but `<` instead of `<=` at the boundary
 
-Verdict: **rejected** (expected rejected). an approval exactly 30 days old is refused. Change: 4 file(s), 55 diff lines; components: `code:services/workflow.py`, `code:services/workflow.py::_check_review_age`, `code:services/workflow.py::approval_age_days`, `code:services/workflow.py::approve_review`, `code:services/workflow.py::publish_page`, `code:services/workflow.py::review_age_ok`, `code:services/workflow.py::schedule_publish`, `code:tools/publish_tools.py::publish_page` ….
+Verdict: **rejected** (expected rejected). an approval exactly 30 days old is refused. Change: 4 file(s), 45 diff lines; components: `code:services/workflow.py`, `code:services/workflow.py::_check_review_age`, `code:services/workflow.py::approval_age_days`, `code:services/workflow.py::approve_review`, `code:services/workflow.py::publish_page`, `code:services/workflow.py::review_age_ok`, `code:services/workflow.py::schedule_publish`, `code:tools/publish_tools.py::publish_page` ….
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
@@ -150,7 +150,7 @@ Verdict: **rejected** (expected rejected). an approval exactly 30 days old is re
 
 ### FS-0101/pr_branchy — Same rule, written with an if-branch instead of one comparison
 
-Verdict: **accepted with gaps** (expected accepted). behaviourally correct, but the proof backend only translates straight-line code: the contract stays at L2 and the required L5 is reported as a gap for the owner to decide on. Change: 4 file(s), 57 diff lines; components: `code:services/workflow.py`, `code:services/workflow.py::_check_review_age`, `code:services/workflow.py::approval_age_days`, `code:services/workflow.py::approve_review`, `code:services/workflow.py::publish_page`, `code:services/workflow.py::review_age_ok`, `code:services/workflow.py::schedule_publish`, `code:tools/publish_tools.py::publish_page` ….
+Verdict: **accepted with gaps** (expected accepted). behaviourally correct, but the proof backend only translates straight-line code: the contract stays at L2 and the required L5 is reported as a gap for the owner to decide on. Change: 4 file(s), 47 diff lines; components: `code:services/workflow.py`, `code:services/workflow.py::_check_review_age`, `code:services/workflow.py::approval_age_days`, `code:services/workflow.py::approve_review`, `code:services/workflow.py::publish_page`, `code:services/workflow.py::review_age_ok`, `code:services/workflow.py::schedule_publish`, `code:tools/publish_tools.py::publish_page` ….
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
@@ -170,7 +170,7 @@ Verdict: **accepted with gaps** (expected accepted). behaviourally correct, but 
 
 ### FS-0101/pr_in_adapter — Same behaviour, but the date logic written inside tools/publish_tools.py
 
-Verdict: **rejected** (expected rejected). every run-time check passes; the contract cannot find the function where the spec says it lives, and the placement rules fail. Change: 4 file(s), 25 diff lines; components: `code:services/workflow.py::approve_review`, `code:tools/publish_tools.py`, `code:tools/publish_tools.py::_refuse_stale_approval`, `code:tools/publish_tools.py::publish_page`, `code:tools/publish_tools.py::schedule_publish`, `config:publishing.review_max_age_days`, `line:services/workflow.py:29`, `line:tools/publish_tools.py:2` ….
+Verdict: **rejected** (expected rejected). every run-time check passes; the contract cannot find the function where the spec says it lives, and the placement rules fail. Change: 4 file(s), 22 diff lines; components: `code:services/workflow.py::approve_review`, `code:tools/publish_tools.py`, `code:tools/publish_tools.py::_refuse_stale_approval`, `code:tools/publish_tools.py::publish_page`, `code:tools/publish_tools.py::schedule_publish`, `config:publishing.review_max_age_days`, `line:services/workflow.py:59`, `line:tools/publish_tools.py:59` ….
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
@@ -182,7 +182,7 @@ Verdict: **rejected** (expected rejected). every run-time check passes; the cont
 | scenario:PUB-01#2 | example | L1 | L1 | pass | expected outcome observed |
 | function_in_layer:review_age_ok | placement | L4 | L4 | FAIL | review_age_ok is not defined in services/workflow.py |
 | function_in_layer:approval_age_days | placement | L4 | L4 | FAIL | approval_age_days is not defined in services/workflow.py |
-| forbid_import_in:datetime | placement | L4 | L4 | FAIL | tools/publish_tools.py imports datetime (line 3) |
+| forbid_import_in:datetime | placement | L4 | L4 | FAIL | tools/publish_tools.py imports datetime (line 7) |
 | forbid_literal_in:30 | placement | L4 | L4 | pass | 1 rules hold |
 | regression-tests | example | L1 | L1 | pass | 50 of 136 catalog cases selected by observed dependencies; all pass |
 
@@ -191,11 +191,11 @@ Verdict: **rejected** (expected rejected). every run-time check passes; the cont
 - define {'function': 'approval_age_days', 'in': 'services/workflow.py'}
 - approval_age_days is not defined in services/workflow.py
 - forbid_import {'module': 'datetime', 'in': ['tools', 'harness']}
-- tools/publish_tools.py imports datetime (line 3)
+- tools/publish_tools.py imports datetime (line 7)
 
 ### FS-0101/pr_unwired — Service functions added and proven, but the adapters never pass the limit
 
-Verdict: **rejected** (expected rejected). the unit-level proof holds, the system-level monitor and the example fail. Change: 3 file(s), 43 diff lines; components: `code:services/workflow.py`, `code:services/workflow.py::_check_review_age`, `code:services/workflow.py::approval_age_days`, `code:services/workflow.py::approve_review`, `code:services/workflow.py::publish_page`, `code:services/workflow.py::review_age_ok`, `code:services/workflow.py::schedule_publish`, `config:publishing.review_max_age_days` ….
+Verdict: **rejected** (expected rejected). the unit-level proof holds, the system-level monitor and the example fail. Change: 3 file(s), 33 diff lines; components: `code:services/workflow.py`, `code:services/workflow.py::_check_review_age`, `code:services/workflow.py::approval_age_days`, `code:services/workflow.py::approve_review`, `code:services/workflow.py::publish_page`, `code:services/workflow.py::review_age_ok`, `code:services/workflow.py::schedule_publish`, `config:publishing.review_max_age_days` ….
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
@@ -242,7 +242,7 @@ a permissions-service function; the harness never inspects the user table itself
 
 **Agent brief (the locate step)**
 
-Read 9 files, ~4,471 tokens (19% of the repository):
+Read 9 files, ~8,360 tokens (19% of the repository):
 
 - `config/runtime.yaml` — tools.requires_approval
 - `harness/dispatcher.py`
@@ -278,11 +278,11 @@ Verdict: **rejected** (expected rejected). the spec exposes a weakness of the cu
 - enumerated 2 values ['unpublish_page', 'export_user_data']
 - tool='unpublish_page' (case PUB-06, fault healthy): post-condition false
 - 8 runs in scope, 6 matching events checked
-- PUB-06: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-4dde1268d9'}
-- GOV-01: {'kind': 'tool.call', 'tool': 'export_user_data', 'args': {'subject_id': 's1'}, 'status': 'ok', 'idempotency_key': 'idem-f3db3d2760'}
-- ORC-02: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-efead846df'}
-- DS-INTENTS/i03: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-0d7787fa8c'}
-- DS-INTENTS/i04: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-98dc4a1c42'}
+- PUB-06: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-7c4ad411a4'}
+- GOV-01: {'kind': 'tool.call', 'tool': 'export_user_data', 'args': {'subject_id': 's1'}, 'status': 'ok', 'idempotency_key': 'idem-8773c3d740'}
+- ORC-02: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-9a21e42866'}
+- DS-INTENTS/i03: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-7781c85ebd'}
+- DS-INTENTS/i04: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-3927b44bc6'}
 - case PUB-06: 'Take down the old news page' -> 'Unpublished p7 (/content/site/blog/old-news).'
 - failed check audit:approval_used: expected 1, found 0
 - case inline: 'Take down the old news page' -> 'Unpublished p7 (/content/site/blog/old-news).'
@@ -295,7 +295,7 @@ Verdict: **rejected** (expected rejected). the spec exposes a weakness of the cu
 
 ### FS-0102/pr_correct — Resolve the token against the user table (permissions service) and record the approver (dispatcher)
 
-Verdict: **accepted** (expected accepted). 2 files: the lookup is a permissions-service function, the gate stays in the one place it lives. Change: 2 file(s), 17 diff lines; components: `code:harness/dispatcher.py`, `code:harness/dispatcher.py::Dispatcher.call`, `code:services/permissions.py::approver_for`, `line:harness/dispatcher.py:11`, `line:harness/dispatcher.py:12`, `line:harness/dispatcher.py:28`, `line:harness/dispatcher.py:29`, `line:harness/dispatcher.py:36` ….
+Verdict: **accepted** (expected accepted). 2 files: the lookup is a permissions-service function, the gate stays in the one place it lives. Change: 2 file(s), 13 diff lines; components: `code:harness/dispatcher.py`, `code:harness/dispatcher.py::Dispatcher.call`, `code:services/permissions.py::approver_for`, `line:harness/dispatcher.py:10`, `line:harness/dispatcher.py:103`, `line:harness/dispatcher.py:104`, `line:harness/dispatcher.py:117`, `line:harness/dispatcher.py:118` ….
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
@@ -314,7 +314,7 @@ Verdict: **accepted** (expected accepted). 2 files: the lookup is a permissions-
 
 ### FS-0102/pr_self_approved — Same, but an unknown token falls back to 'approved by the caller'
 
-Verdict: **rejected** (expected rejected). property, monitor and example all catch the made-up token. Change: 2 file(s), 19 diff lines; components: `code:harness/dispatcher.py`, `code:harness/dispatcher.py::Dispatcher.call`, `code:services/permissions.py::approver_for`, `line:harness/dispatcher.py:11`, `line:harness/dispatcher.py:12`, `line:harness/dispatcher.py:28`, `line:harness/dispatcher.py:29`, `line:harness/dispatcher.py:36` ….
+Verdict: **rejected** (expected rejected). property, monitor and example all catch the made-up token. Change: 2 file(s), 15 diff lines; components: `code:harness/dispatcher.py`, `code:harness/dispatcher.py::Dispatcher.call`, `code:services/permissions.py::approver_for`, `line:harness/dispatcher.py:10`, `line:harness/dispatcher.py:103`, `line:harness/dispatcher.py:104`, `line:harness/dispatcher.py:117`, `line:harness/dispatcher.py:118` ….
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
@@ -342,7 +342,7 @@ Verdict: **rejected** (expected rejected). property, monitor and example all cat
 
 ### FS-0102/pr_in_dispatcher — Same behaviour, but the user-table lookup written inside the dispatcher
 
-Verdict: **rejected** (expected rejected). every run-time check passes; the harness must not inspect the user table (placement). Change: 1 file(s), 12 diff lines; components: `code:harness/dispatcher.py`, `code:harness/dispatcher.py::Dispatcher.call`, `line:harness/dispatcher.py:11`, `line:harness/dispatcher.py:12`, `line:harness/dispatcher.py:28`, `line:harness/dispatcher.py:29`, `line:harness/dispatcher.py:36`, `line:harness/dispatcher.py:39` ….
+Verdict: **rejected** (expected rejected). every run-time check passes; the harness must not inspect the user table (placement). Change: 1 file(s), 12 diff lines; components: `code:harness/dispatcher.py`, `code:harness/dispatcher.py::Dispatcher.call`, `line:harness/dispatcher.py:10`, `line:harness/dispatcher.py:103`, `line:harness/dispatcher.py:104`, `line:harness/dispatcher.py:117`, `line:harness/dispatcher.py:118`, `line:harness/dispatcher.py:12` ….
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
@@ -355,18 +355,18 @@ Verdict: **rejected** (expected rejected). every run-time check passes; the harn
 | scenario:PUB-07 | example | L1 | L1 | pass | expected outcome observed |
 | function_in_layer:approver_for | placement | L4 | L4 | FAIL | approver_for is not defined in services/permissions.py |
 | function_in_layer:Dispatcher._needs_approval | placement | L4 | L4 | pass | 1 rules hold |
-| forbid_name_in:users | placement | L4 | L4 | FAIL | harness/dispatcher.py uses users (line 32) |
+| forbid_name_in:users | placement | L4 | L4 | FAIL | harness/dispatcher.py uses users (line 46) |
 | forbid_literal_in:tools.requires_approval | placement | L4 | L4 | pass | 1 rules hold |
 | regression-tests | example | L1 | L1 | pass | 136 of 136 catalog cases selected by observed dependencies; all pass |
 
 - define {'function': 'approver_for', 'in': 'services/permissions.py'}
 - approver_for is not defined in services/permissions.py
 - forbid_name {'name': 'users', 'in': ['harness']}
-- harness/dispatcher.py uses users (line 32)
+- harness/dispatcher.py uses users (line 46)
 
 ### FS-0102/code_approval_gate_bypass — Correct PR plus a later change: the dispatcher stops enforcing the gate
 
-Verdict: **rejected** (expected rejected). monitor: a guarded call succeeded without an approver. Change: 2 file(s), 19 diff lines; components: `code:harness/dispatcher.py`, `code:harness/dispatcher.py::Dispatcher._needs_approval`, `code:harness/dispatcher.py::Dispatcher.call`, `code:services/permissions.py::approver_for`, `line:harness/dispatcher.py:11`, `line:harness/dispatcher.py:12`, `line:harness/dispatcher.py:28`, `line:harness/dispatcher.py:29` ….
+Verdict: **rejected** (expected rejected). monitor: a guarded call succeeded without an approver. Change: 2 file(s), 15 diff lines; components: `code:harness/dispatcher.py`, `code:harness/dispatcher.py::Dispatcher._needs_approval`, `code:harness/dispatcher.py::Dispatcher.call`, `code:services/permissions.py::approver_for`, `line:harness/dispatcher.py:10`, `line:harness/dispatcher.py:103`, `line:harness/dispatcher.py:104`, `line:harness/dispatcher.py:117` ….
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
@@ -386,9 +386,9 @@ Verdict: **rejected** (expected rejected). monitor: a guarded call succeeded wit
 - enumerated 2 values ['unpublish_page', 'export_user_data']
 - tool='unpublish_page' (case PUB-06, fault healthy): post-condition false
 - 8 runs in scope, 7 matching events checked
-- PUB-07: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-bac02b4f81'}
+- PUB-07: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-de46362912'}
 - 8 runs in scope, 8 matching events checked
-- PUB-07: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-bac02b4f81'}
+- PUB-07: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-de46362912'}
 - case inline: 'Take down the old news page' -> 'Unpublished p7 (/content/site/blog/old-news).'
 - failed check state:pages.p7.status: pages.p7.status == 'published' (actual 'draft')
 - failed check forbidden:unpublish_page: ok tools: ['check_permission', 'get_page', 'unpublish_page']
@@ -431,7 +431,7 @@ Spec check against the current product model:
 
 **Agent brief (the locate step)**
 
-Read 5 files, ~2,301 tokens (10% of the repository):
+Read 5 files, ~4,598 tokens (11% of the repository):
 
 - `services/links.py` — validate_links
 - `services/workflow.py` — publish_page, schedule_publish, unpublish_page
@@ -443,7 +443,7 @@ Checks that will run: precedes_in_audit:publish_page+schedule_publish (trace, 15
 
 ### FS-0103/pr_correct — Stamp each validation on the page (links service); publish and schedule refuse without a clean stamp for the current version (workflow service)
 
-Verdict: **accepted** (expected accepted). 2 files: the rule moves from the skill procedure (a prompt) into the service, and is proven. Change: 2 file(s), 28 diff lines; components: `code:services/links.py::validate_links`, `code:services/workflow.py::_require_clean_links`, `code:services/workflow.py::links_clean`, `code:services/workflow.py::publish_page`, `code:services/workflow.py::schedule_publish`, `line:services/links.py:35`, `line:services/links.py:36`, `line:services/workflow.py:38` ….
+Verdict: **accepted** (expected accepted). 2 files: the rule moves from the skill procedure (a prompt) into the service, and is proven. Change: 2 file(s), 22 diff lines; components: `code:services/links.py::validate_links`, `code:services/workflow.py::_require_clean_links`, `code:services/workflow.py::links_clean`, `code:services/workflow.py::publish_page`, `code:services/workflow.py::schedule_publish`, `line:services/links.py:53`, `line:services/links.py:54`, `line:services/workflow.py:101` ….
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
@@ -462,7 +462,7 @@ Verdict: **accepted** (expected accepted). 2 files: the rule moves from the skil
 
 ### FS-0103/pr_gate_ignores_version — Same, but the gate looks only at the broken count, not at the version the check was made for
 
-Verdict: **rejected** (expected rejected). no recorded scenario edits a page after validating it; only the proof sees the stale check. Change: 2 file(s), 28 diff lines; components: `code:services/links.py::validate_links`, `code:services/workflow.py::_require_clean_links`, `code:services/workflow.py::links_clean`, `code:services/workflow.py::publish_page`, `code:services/workflow.py::schedule_publish`, `line:services/links.py:35`, `line:services/links.py:36`, `line:services/workflow.py:38` ….
+Verdict: **rejected** (expected rejected). no recorded scenario edits a page after validating it; only the proof sees the stale check. Change: 2 file(s), 22 diff lines; components: `code:services/links.py::validate_links`, `code:services/workflow.py::_require_clean_links`, `code:services/workflow.py::links_clean`, `code:services/workflow.py::publish_page`, `code:services/workflow.py::schedule_publish`, `line:services/links.py:53`, `line:services/links.py:54`, `line:services/workflow.py:101` ….
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
@@ -484,7 +484,7 @@ Verdict: **rejected** (expected rejected). no recorded scenario edits a page aft
 
 ### FS-0103/pr_gate_in_adapter — Same behaviour, but the gate written inside tools/publish_tools.py
 
-Verdict: **rejected** (expected rejected). every run-time check passes; the contract cannot find links_clean in the service and the placement rules fail. Change: 3 file(s), 25 diff lines; components: `code:services/links.py::validate_links`, `code:services/workflow.py::publish_page`, `code:services/workflow.py::schedule_publish`, `code:tools/publish_tools.py::_require_clean_links`, `code:tools/publish_tools.py::publish_page`, `code:tools/publish_tools.py::schedule_publish`, `line:services/links.py:35`, `line:services/links.py:36` ….
+Verdict: **rejected** (expected rejected). every run-time check passes; the contract cannot find links_clean in the service and the placement rules fail. Change: 3 file(s), 22 diff lines; components: `code:services/links.py::validate_links`, `code:services/workflow.py::publish_page`, `code:services/workflow.py::schedule_publish`, `code:tools/publish_tools.py::_require_clean_links`, `code:tools/publish_tools.py::publish_page`, `code:tools/publish_tools.py::schedule_publish`, `line:services/links.py:53`, `line:services/links.py:54` ….
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
@@ -506,7 +506,7 @@ Verdict: **rejected** (expected rejected). every run-time check passes; the cont
 
 ### FS-0103/pr_validate_after_schedule — Correct PR plus a skill reordering: link validation moved after the schedule step
 
-Verdict: **rejected** (expected rejected). the service gate holds (nothing unvalidated is scheduled) but scheduling stops working: example and skill-order lint fail. Change: 3 file(s), 30 diff lines; components: `code:services/links.py::validate_links`, `code:services/workflow.py::_require_clean_links`, `code:services/workflow.py::links_clean`, `code:services/workflow.py::publish_page`, `code:services/workflow.py::schedule_publish`, `line:services/links.py:35`, `line:services/links.py:36`, `line:services/workflow.py:38` ….
+Verdict: **rejected** (expected rejected). the service gate holds (nothing unvalidated is scheduled) but scheduling stops working: example and skill-order lint fail. Change: 3 file(s), 24 diff lines; components: `code:services/links.py::validate_links`, `code:services/workflow.py::_require_clean_links`, `code:services/workflow.py::links_clean`, `code:services/workflow.py::publish_page`, `code:services/workflow.py::schedule_publish`, `line:services/links.py:53`, `line:services/links.py:54`, `line:services/workflow.py:101` ….
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
@@ -538,7 +538,7 @@ Verdict: **rejected** (expected rejected). the service gate holds (nothing unval
 
 ### FS-0103/code_links_external_lenient — Correct PR plus a later change: validate_links treats every external URL as reachable
 
-Verdict: **rejected** (expected rejected). ordering and the gate hold; the independent oracle on the validation result fails. Change: 2 file(s), 30 diff lines; components: `code:services/links.py::validate_links`, `code:services/workflow.py::_require_clean_links`, `code:services/workflow.py::links_clean`, `code:services/workflow.py::publish_page`, `code:services/workflow.py::schedule_publish`, `line:services/links.py:22`, `line:services/links.py:35`, `line:services/links.py:36` ….
+Verdict: **rejected** (expected rejected). ordering and the gate hold; the independent oracle on the validation result fails. Change: 2 file(s), 24 diff lines; components: `code:services/links.py::validate_links`, `code:services/workflow.py::_require_clean_links`, `code:services/workflow.py::links_clean`, `code:services/workflow.py::publish_page`, `code:services/workflow.py::schedule_publish`, `line:services/links.py:37`, `line:services/links.py:53`, `line:services/links.py:54` ….
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
@@ -590,7 +590,7 @@ limit when it refuses. Nothing in code, skills or adapters may hold the number i
 
 **Agent brief (the locate step)**
 
-Read 5 files, ~3,164 tokens (13% of the repository):
+Read 5 files, ~5,419 tokens (13% of the repository):
 
 - `config/runtime.yaml` — seo.max_title_length
 - `services/repository.py` — set_page_metadata
@@ -667,7 +667,7 @@ Verdict: **rejected** (expected rejected). property over titles of every length 
 | forbid_literal_in:60 | placement | L4 | L4 | pass | 1 rules hold |
 | regression-tests | example | L1 | L1 | FAIL | 8 of 136 catalog cases selected by observed dependencies; failed: ['SEO-02'] |
 
-- 13 generated scenarios
+- 12 generated scenarios
 - n=71 (case SEO-01, fault healthy): post-condition false; failed checks ['state:pages.p4.metadata.title', 'response~score is now 100']
 - case SEO-01: 'Improve the SEO metadata of the welcome post' -> 'Updated SEO metadata on p4; SEO score is now 70.'
 - failed check state:pages.p4.metadata.title: pages.p4.metadata.title == 'Welcome post' (actual 'Example title Example title Example title Example title Example title E')
@@ -695,7 +695,7 @@ place); services honour the key; adapters only pass it through.
 
 **Agent brief (the locate step)**
 
-Read 6 files, ~2,582 tokens (11% of the repository):
+Read 6 files, ~4,714 tokens (11% of the repository):
 
 - `config/runtime.yaml` — runtime.idempotency_keys, runtime.retries
 - `harness/retry.py`
@@ -731,7 +731,7 @@ Verdict: **rejected** (expected rejected). the spec finds a latent defect: sched
 
 ### FS-0105/pr_fix — Thread the idempotency key through schedule_publish and unpublish_page
 
-Verdict: **accepted** (expected accepted). 2 files: the two services honour the key, the two adapters pass it through. Change: 2 file(s), 22 diff lines; components: `code:services/workflow.py::schedule_publish`, `code:services/workflow.py::unpublish_page`, `code:tools/publish_tools.py::schedule_publish`, `code:tools/publish_tools.py::unpublish_page`, `line:services/workflow.py:49`, `line:services/workflow.py:55`, `line:services/workflow.py:56`, `line:services/workflow.py:59` ….
+Verdict: **accepted** (expected accepted). 2 files: the two services honour the key, the two adapters pass it through. Change: 2 file(s), 22 diff lines; components: `code:services/workflow.py::schedule_publish`, `code:services/workflow.py::unpublish_page`, `code:tools/publish_tools.py::schedule_publish`, `code:tools/publish_tools.py::unpublish_page`, `line:services/workflow.py:101`, `line:services/workflow.py:102`, `line:services/workflow.py:110`, `line:services/workflow.py:115` ….
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
@@ -748,7 +748,7 @@ Verdict: **accepted** (expected accepted). 2 files: the two services honour the 
 
 ### FS-0105/pr_partial_fix — Same fix, but unpublish_page forgotten
 
-Verdict: **rejected** (expected rejected). quantifying over the skill's write tools (from the product model) catches the one left out. Change: 2 file(s), 11 diff lines; components: `code:services/workflow.py::schedule_publish`, `code:tools/publish_tools.py::schedule_publish`, `line:services/workflow.py:49`, `line:services/workflow.py:55`, `line:services/workflow.py:56`, `line:tools/publish_tools.py:48`, `tool:schedule_publish`.
+Verdict: **rejected** (expected rejected). quantifying over the skill's write tools (from the product model) catches the one left out. Change: 2 file(s), 11 diff lines; components: `code:services/workflow.py::schedule_publish`, `code:tools/publish_tools.py::schedule_publish`, `line:services/workflow.py:101`, `line:services/workflow.py:102`, `line:services/workflow.py:93`, `line:tools/publish_tools.py:81`, `tool:schedule_publish`.
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
@@ -768,7 +768,7 @@ Verdict: **rejected** (expected rejected). quantifying over the skill's write to
 
 ### FS-0105/code_retry_drop_idempotency — Correct PR plus a later change: retries no longer carry idempotency keys
 
-Verdict: **rejected** (expected rejected). monitor: successful writes without a key; property: the duplicates are back. Change: 3 file(s), 24 diff lines; components: `code:harness/retry.py::with_retry`, `code:services/workflow.py::schedule_publish`, `code:services/workflow.py::unpublish_page`, `code:tools/publish_tools.py::schedule_publish`, `code:tools/publish_tools.py::unpublish_page`, `line:harness/retry.py:15`, `line:services/workflow.py:49`, `line:services/workflow.py:55` ….
+Verdict: **rejected** (expected rejected). monitor: successful writes without a key; property: the duplicates are back. Change: 3 file(s), 24 diff lines; components: `code:harness/retry.py::with_retry`, `code:services/workflow.py::schedule_publish`, `code:services/workflow.py::unpublish_page`, `code:tools/publish_tools.py::schedule_publish`, `code:tools/publish_tools.py::unpublish_page`, `line:harness/retry.py:26`, `line:services/workflow.py:101`, `line:services/workflow.py:102` ….
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
@@ -806,7 +806,7 @@ Verdict: **rejected** (expected rejected). monitor: successful writes without a 
 
 ### FS-0105/config_retries_0 — Correct PR plus a later change: transient failures no longer retried
 
-Verdict: **rejected** (expected rejected). setting clause (static) and the property both fail. Change: 3 file(s), 24 diff lines; components: `code:services/workflow.py::schedule_publish`, `code:services/workflow.py::unpublish_page`, `code:tools/publish_tools.py::schedule_publish`, `code:tools/publish_tools.py::unpublish_page`, `config:runtime.retries`, `line:services/workflow.py:49`, `line:services/workflow.py:55`, `line:services/workflow.py:56` ….
+Verdict: **rejected** (expected rejected). setting clause (static) and the property both fail. Change: 3 file(s), 24 diff lines; components: `code:services/workflow.py::schedule_publish`, `code:services/workflow.py::unpublish_page`, `code:tools/publish_tools.py::schedule_publish`, `code:tools/publish_tools.py::unpublish_page`, `config:runtime.retries`, `line:services/workflow.py:101`, `line:services/workflow.py:102`, `line:services/workflow.py:110` ….
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|

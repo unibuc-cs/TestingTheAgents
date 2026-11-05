@@ -26,14 +26,14 @@ traceeval experiment --workdir runs/exp1 --reps 3 --seeds 10
    free; an *LLM* backend can replace it (`--backend llm`, OpenAI-compatible endpoint).
 3. **Changes** are the 37 entries in [`traceeval/mutation/catalog.py`](traceeval/mutation/catalog.py), applied as real file edits. Running the
    full suite on each gives the ground truth: which tests reveal which change.
-4. **Strategies** in `traceeval/selection/` see only the diff plus the baseline traces (which agents, skills,
+4. **Strategies** in `traceeval/selection/` see only the diff of the code (comments are left out) plus the baseline traces (which agents, skills,
    tools, config keys and code lines each test touched) and pick tests under a token budget.
    [`strategies.py`](traceeval/selection/strategies.py) = baselines, [`adaptive_bayes.py`](traceeval/selection/adaptive_bayes.py) = the method.
 5. **The report** answers: how many changes does each strategy catch for how many tokens, how much does it
    waste on harmless changes, and does the adaptive one stop at the right moment.
 
 Headline from `runs/exp1`: hand-written dependencies catch 65% of regressions; trace-based selection catches
-90% for 20% of the full-suite tokens; the adaptive method catches 84% for 10–27% and stops correctly on
+90% for 20% of the full-suite tokens; the adaptive method catches 84% for 11–27% and stops correctly on
 benign changes. ([experiment 1 report](docs/results/exp1/report.md), [flaky-agent condition](docs/results/exp2_flaky/report.md))
 
 ## Spec-driven development on the same testbed

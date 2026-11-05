@@ -25,7 +25,7 @@ copies (`variants/`), the recordings (`history/*.jsonl`) and the results (`resul
 - **Observed dependencies**: what the trace shows the run touched: `agent:x`, `skill:x`, `tool:x`,
   `config:key`, `code:file::function`, `line:file:n`.
 - **Change set**: the diff turned into components with the same identifiers (`traceeval/mutation/changeset.py`).
-  Comment-only edits are flagged `semantic=False`.
+  Comments, docstrings, blank lines and formatting are left out: they add no component and no diff line.
 - **Revealing test**: passes on the baseline, fails on the changed copy (majority over K repetitions).
 - **Budget**: tokens, shown as a fraction of the full-suite cost.
 - **Stop reason** (`adaptive_bayes` only): `clean`, `regression`, `budget`, `uninformative`.

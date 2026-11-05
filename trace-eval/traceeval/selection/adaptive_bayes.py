@@ -35,7 +35,6 @@ PRIOR = {
     "fixture": 0.3,
     "other": 0.3,
 }
-PRIOR_NONSEMANTIC = 0.02  # comment/whitespace-only edits
 # fallback reveal ratios when no history is available to calibrate from
 DEFAULT_REVEAL = {
     "code:line": 0.12,
@@ -76,7 +75,7 @@ class AdaptiveBayes(Strategy):
             if c.kind in ("tool", "line") or c.id in seen:
                 continue
             seen.add(c.id)
-            comps.append((c, PRIOR.get(c.kind, 0.3) if c.semantic else PRIOR_NONSEMANTIC))
+            comps.append((c, PRIOR.get(c.kind, 0.3)))
         comps.sort(key=lambda cp: -cp[1])
         return comps[: self.max_components]
 
@@ -112,7 +111,7 @@ class AdaptiveBayes(Strategy):
                 continue
             revealing = ctx.history.revealing_tests(v)
             for comp in change.components:
-                if comp.kind in ("line", "tool") or not comp.semantic:
+                if comp.kind in ("line", "tool"):
                     continue
                 if (v, comp.id) not in impacted_cache:
                     impacted_cache[(v, comp.id)] = self.impacted(ctx, change, comp)

@@ -166,7 +166,7 @@ def evaluate_pr(spec: Spec, pr: PR, workdir: Path, catalog: dict, baseline_runs:
         "note": pr.note,
         "change": {
             "files": change.files,
-            "components": sorted(change.ids(semantic_only=True)),
+            "components": sorted(change.ids()),
             "diff_lines": sum(
                 1
                 for line in change.diff.splitlines()

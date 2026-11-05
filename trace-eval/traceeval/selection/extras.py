@@ -45,16 +45,13 @@ def _features(ctx, t, change):
     freq = st.dep_frequency()
     deps = set(freq)
     kinds = defaultdict(int)
-    nonsem = 0
     for c in change.components:
-        if not c.semantic:
-            nonsem += 1
-        elif matches(c, deps):
+        if matches(c, deps):
             kinds[c.kind] += 1
     return [
         1.0,
         math.log1p(weighted_affinity(change, freq)),
-        float(affinity(change, case.declared_components(), semantic_only=False)),
+        float(affinity(change, case.declared_components())),
         float(line_hit(change, deps)),
         kinds["code"],
         kinds["tool"],
@@ -63,7 +60,6 @@ def _features(ctx, t, change):
         kinds["agent"],
         kinds["agent-prompt"],
         kinds["config"],
-        float(nonsem),
         math.log(ctx.cost(t)),
         case.severity,
         float(case.fault_profile != "healthy"),

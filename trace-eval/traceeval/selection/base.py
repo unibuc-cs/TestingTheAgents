@@ -58,17 +58,14 @@ def matches(component: ChangedComponent, deps: set[str]) -> bool:
         return True
     if cid.startswith("code:") and "::" not in cid and "#" not in cid:
         return any(d.startswith(cid + "::") for d in deps)  # module-level change in a used file
-    if cid.startswith("code:") and "#text" in cid:
-        file_id = cid.split("#", 1)[0]
-        return any(d.startswith(file_id + "::") for d in deps)
     return False
 
 
-def affinity(change: ChangeSet, deps: set[str], semantic_only: bool = True) -> int:
+def affinity(change: ChangeSet, deps: set[str]) -> int:
     """Number of changed components touching ``deps`` (line-level hits count once per file)."""
     n, line_files = 0, set()
     for c in change.components:
-        if not (c.semantic or not semantic_only) or not matches(c, deps):
+        if not matches(c, deps):
             continue
         if c.kind == "line":
             line_files.add(c.file)
@@ -77,22 +74,22 @@ def affinity(change: ChangeSet, deps: set[str], semantic_only: bool = True) -> i
     return n + len(line_files)
 
 
-def line_hit(change: ChangeSet, deps: set[str], semantic_only: bool = True) -> bool:
+def line_hit(change: ChangeSet, deps: set[str]) -> bool:
     """Did the test execute at least one changed line (finest-grained evidence of impact)?"""
-    return any(c.kind == "line" and (c.semantic or not semantic_only) and c.id in deps for c in change.components)
+    return any(c.kind == "line" and c.id in deps for c in change.components)
 
 
 def code_components(change: ChangeSet) -> list[ChangedComponent]:
     return [c for c in change.components if c.kind in ("code", "tool")]
 
 
-def weighted_affinity(change: ChangeSet, dep_freq: dict[str, float], semantic_only: bool = True) -> float:
+def weighted_affinity(change: ChangeSet, dep_freq: dict[str, float]) -> float:
     """Affinity weighted by how often the component was exercised in the test's baseline runs."""
     total = 0.0
     deps = set(dep_freq)
     line_files: dict[str, float] = {}
     for c in change.components:
-        if not (c.semantic or not semantic_only) or not matches(c, deps):
+        if not matches(c, deps):
             continue
         if c.kind == "line":
             line_files[c.file] = max(line_files.get(c.file, 0.0), dep_freq.get(c.id, 1.0))

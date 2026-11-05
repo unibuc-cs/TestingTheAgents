@@ -34,7 +34,8 @@ def tokens(text: str) -> list[str]:
 
 
 def change_text(change) -> str:
-    """Everything textual we know about a change: file names, component ids, the diff itself."""
+    """Everything textual we know about a change: file names, component ids and the diff of the code
+    (comments, docstrings and blank lines are never part of a change set)."""
     return " ".join(change.files) + " " + " ".join(c.id for c in change.components) + " " + change.diff
 
 
@@ -66,7 +67,7 @@ class Declared(Strategy):
     def order(self, ctx):
         scored = []
         for t in ctx.tests():
-            a = affinity(ctx.change, ctx.catalog[t].declared_components(), semantic_only=False)
+            a = affinity(ctx.change, ctx.catalog[t].declared_components())
             if a > 0:
                 scored.append((-ctx.catalog[t].severity, -a, ctx.cost(t), t))
         return [t for *_, t in sorted(scored)]
