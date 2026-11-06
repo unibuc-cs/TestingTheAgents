@@ -97,6 +97,7 @@ def test_idempotency_keys_follow_the_operation(sut):
     outs, keys, edits = _edit_p1_three_times(sut)
     assert outs[0]["error"] == "transient_error"  # the edit was made, but its acknowledgement was lost
     assert "error" not in outs[1]  # made again: the service hands back the first answer
+    assert keys[0] == keys[1] is not None  # the failed write is traced with its key, and the repeat reuses it
     assert keys[1] != keys[2]  # made again after it went through: a new operation with a new key
     assert edits == 2  # the lost acknowledgement did not cost a duplicate edit
     assert _edit_p1_three_times(sut)[1] == keys  # deterministic

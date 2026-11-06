@@ -81,6 +81,10 @@ class Dispatcher:
             def attempt(idem_key):
                 # One try. The fault injector may fail it before the tool runs (the call never happened)
                 # or after it ran (the change was made, but the acknowledgement was lost on the way back).
+                # The try is counted and its key kept here, so that the trace has both even when the last
+                # try fails and with_retry raises instead of returning them.
+                nonlocal attempts, key
+                attempts, key = attempts + 1, idem_key
                 self.faults.before(name)
                 tctx = ToolContext(
                     state=self.state,
@@ -134,7 +138,7 @@ class Dispatcher:
             status=status,
             error=out.get("error"),
             message=out.get("message") if status != "ok" else None,
-            attempts=attempts,  # 0 when a gate refused the call, otherwise how many tries it took
+            attempts=attempts,  # 0 when a gate refused the call, otherwise how many tries it took, failed ones too
             idempotency_key=key,
             tool_kind=spec.kind if spec else None,
             agent=agent.name,
