@@ -2,29 +2,30 @@
 
 This page explains the SDD layer of the repository: what a spec
 is, where its clauses come from (the catalog), how a spec gets written (by a model, confirmed by a
-person), how a PR is judged against it, and what the assurance rungs mean. For the demo results see
-[SDD_DEMO.md](SDD_DEMO.md); for the architecture of the whole repository see [STUDY_GUIDE.md](STUDY_GUIDE.md);
-for the application the specs talk about see [CONTENTOPS.md](CONTENTOPS.md).
+person), how a PR is judged against it, and what the assurance rungs mean. The demo results are in
+[SDD_DEMO.md](SDD_DEMO.md), the architecture of the whole repository in [STUDY_GUIDE.md](STUDY_GUIDE.md),
+and the application the specs describe in [CONTENTOPS.md](CONTENTOPS.md).
 
 ## 1. The idea in one paragraph
 
-A change request is usually prose: "approvals should expire after 30 days". Prose cannot be checked by
-a machine. A *spec* keeps the prose (as the *intent*, which a person reviews) and adds *clauses*: small,
-typed statements that a machine can check against a pull request — a configuration key must be in a
-range, a function must satisfy a pre/post-condition, something must always or never happen in recorded
-runs, a concrete scenario must end a given way, a piece of code must live in a given layer. Each clause
-is checked by exactly one checker, and each check produces evidence with a rung: how strong the evidence
-is. A PR is accepted when every clause holds and the required rungs are reached.
+A change request is usually prose, such as "approvals should expire after 30 days", and a machine cannot
+check prose. A *spec* keeps the prose as the *intent*, which a person reviews, and adds *clauses*: small,
+typed statements that a machine can check against a pull request. A clause can say that a configuration
+key must be in a range, that a function must satisfy a pre/post-condition, that something must always or
+never happen in recorded runs, that a concrete scenario must end a given way, or that a piece of code must
+live in a given layer. Each clause is checked by exactly one checker, and each check produces evidence
+with a rung, which says how strong the evidence is. A PR is accepted when every clause holds and reaches
+its required rung.
 
 ![From a prose request to a verdict: the person writes and confirms, the model drafts within the catalog, the machine checks the PR](figures/sdd_1_loop.svg)
 
-*Who does what. The person only ever writes prose and confirms; the model can only pick templates and
-fill slots; the machine validates, checks and reports. Nothing enters the spec that the catalog and the
+*Who does what. The person only writes prose and confirms. The model can only pick templates and fill
+slots. The machine validates, checks and reports. Nothing enters the spec that the catalog and the
 product model do not know.*
 
 ## 2. A spec file
 
-Specs live in `traceeval/specs/FS-*.yaml` (the `FS` ids are just "feature spec" numbers). A spec is:
+Specs live in `traceeval/specs/FS-*.yaml` (`FS` ids are "feature spec" numbers). A spec looks like this:
 
 ```yaml
 id: FS-0104
@@ -46,11 +47,11 @@ clauses:
     with: {value: 70, dirs: [tools, services, skills]}
 ```
 
-Nobody writes ids, kinds or checker fields: a clause is a **template name plus slot values**. The loader
-(`traceeval/spec/model.py`) expands it, generates the id (`setting_in_range:seo.max_title_length`) and
-the one-line reading (`seo.max_title_length is an integer between 10 and 120`) from the template, and
+A clause is a template name plus slot values. Nobody writes ids, kinds or checker fields. The loader
+(`traceeval/spec/model.py`) expands the clause, generates the id (`setting_in_range:seo.max_title_length`)
+and the one-line reading (`seo.max_title_length is an integer between 10 and 120`) from the template, and
 hands the result to the checker of that kind. A clause may carry `require: L5` to raise the rung it must
-reach (see §5); otherwise the template's default applies.
+reach (see §5). Otherwise the template's default applies.
 
 ![Anatomy of one clause: written as template plus slots, expanded through the catalog, checked, reported as evidence](figures/sdd_2_clause.svg)
 
@@ -83,8 +84,8 @@ Slot types are checked against the product model (§6) before anything runs.
 
 ![The clause kinds and what each one inspects: configuration, file tree, one function, recorded runs, one scenario](figures/sdd_3_kinds.svg)
 
-*What each kind looks at. Two kinds are static and run nothing; three execute the PR's copy of the
-real application. The badge is the rung a passing check reaches.*
+*What each kind looks at. Two kinds are static and run nothing. The other three execute the PR's copy
+of the application itself. The badge is the rung a passing check reaches.*
 
 Slot types: `config_key`, `function` (`file.py::name`), `file`, `tool`/`tools`, `skill`, `case` (a catalog
 case id or an inline case with `agent`, `request`, `context`), `dirs`, `module`, `expr`, `inputs`, `set`
@@ -94,8 +95,8 @@ Expressions (`where`, `ensures`) are Python expressions over a small vocabulary:
 `approval_age(run, page_id)`, `expected_broken(run, page_id)`, `audit_count(run, action, ...)`,
 `applied(run, tool)`, `token_owner(run, token)`, `title_of_length(n)`, `first_case_calling(tool)`,
 `baseline_run(test_id)`; `event.<field>` for the call or audit entry being checked and `run.<field>` for
-the run (all in `traceeval/spec/context.py`). Adding a template is adding ten lines to the catalog; adding
-a helper is adding a function to `context.py`.
+the run (all in `traceeval/spec/context.py`). A new template takes ten lines in the catalog. A new
+helper is a function in `context.py`.
 
 ## 4. How a spec gets written: model drafts, person confirms
 
@@ -104,14 +105,15 @@ traceeval sdd draft --request request.md --id FS-0106 [--save-response answer.js
 traceeval sdd draft --request request.md --id FS-0106 --replay answer.json      # no model needed
 ```
 
-The model (any OpenAI-compatible endpoint, configured with `TRACEEVAL_LLM_BASE_URL`, `TRACEEVAL_LLM_API_KEY`,
-`TRACEEVAL_LLM_MODEL`) receives the catalog, a *slice of the product model* (every tool with its kind and
-the service functions behind it, every configuration key with its value, every skill with the tools it
-calls, the code paths that change a page status, every recorded case) and the request, and must answer
-with JSON: template names and slot values only. The answer is expanded through the catalog (clauses that
-do not fit a template are dropped and reported), validated against the product model (an unknown tool,
-case, skill or directory is an *error*; a function or configuration key the request introduces is a
-*note*), and written as `FS-0106.draft.yaml` with a plain-language rendering `FS-0106.draft.md`:
+The model can be any OpenAI-compatible endpoint, configured with `TRACEEVAL_LLM_BASE_URL`,
+`TRACEEVAL_LLM_API_KEY` and `TRACEEVAL_LLM_MODEL`. It receives the catalog, the request and a *slice of
+the product model*: every tool with its kind and the service functions behind it, every configuration key
+with its value, every skill with the tools it calls, the code paths that change a page status, and every
+recorded case. It must answer in JSON, with template names and slot values only. The answer is expanded
+through the catalog, and clauses that do not fit a template are dropped and reported. The result is
+validated against the product model: an unknown tool, case, skill or directory is an *error*, and a
+function or configuration key the request introduces is a *note*. The draft is written as
+`FS-0106.draft.yaml`, with a plain-language rendering in `FS-0106.draft.md`:
 
 ```
 1. publishing.review_max_age_days is an integer between 1 and 365
@@ -121,15 +123,15 @@ case, skill or directory is an *error*; a function or configuration key the requ
 ...
 ```
 
-The owner reads the rendering, edits the YAML (drop, add, change a slot, raise a `require`), and renames
-the file to `.yaml`: that is the confirmation. A worked example — request, the model's answer, the
-generated draft and rendering — is in [sdd/draft_example/](sdd/draft_example/) (the answer there was
-written by hand in the model's format because no endpoint was reachable when the example was made;
-`--save-response` on a live run replaces it).
+The owner reads the rendering, edits the YAML (drop, add, change a slot, raise a `require`), and confirms
+the spec by renaming the file to `.yaml`. [sdd/draft_example/](sdd/draft_example/) has a worked example:
+the request, the model's answer, the generated draft and its rendering. The answer there was written by
+hand in the model's format, because no endpoint was reachable when the example was made.
+`--save-response` on a live run replaces it.
 
 ## 5. Rungs: achieved vs required
 
-Every check reports the rung it **reached** — a fact about what the checker could establish:
+Every check reports the rung it **reached**. This is a fact about what the checker could establish:
 
 | rung | meaning | the check behind it |
 |---|---|---|
@@ -145,12 +147,12 @@ Every check reports the rung it **reached** — a fact about what the checker co
 *Left: what the evidence at each rung covers. Right: the comparison that turns a check into a status,
 with the three FS-0101 PRs that show each outcome.*
 
-A clause also has a **required** rung — a decision, not a fact: the template's default, or `require:`
-in the spec. The verdict compares the two: a clause that holds but reaches less than required is reported
-as a *gap* ("reached L2, L5 required"), and the PR is "accepted with gaps" rather than "accepted". The
-demo has one such case: FS-0101's rule written with an if-branch is correct (300 examples pass) but the
-proof backend only translates straight-line code, so the owner sees the gap and decides — simplify the
-code, add a proof backend, or accept L2.
+A clause also has a **required** rung. This is a decision, not a fact: the template's default, or
+`require:` in the spec. The verdict compares the two. A clause that holds but reaches less than required
+is reported as a *gap* ("reached L2, L5 required"), and the PR is "accepted with gaps" rather than
+"accepted". The demo has one such case. FS-0101's rule written with an if-branch is correct (300 examples
+pass), but the proof backend only translates straight-line code. The owner sees the gap and decides
+whether to simplify the code, add a proof backend, or accept L2.
 
 ## 6. How a PR is judged
 
@@ -164,8 +166,8 @@ code, add a proof backend, or accept L2.
 4. Every clause runs through its checker; the result carries status (pass / fail / gap), reached rung,
    required rung, a one-line summary and details (the counterexample, the violating run, the misplaced
    file).
-5. The catalog cases whose recorded traces touch the change set are run as regression tests (this is the
-   earlier work on test selection, reused).
+5. The catalog cases whose recorded traces touch the change set are run as regression tests (the earlier
+   test-selection work, reused).
 6. Verdict: **rejected** if any clause or regression test fails; **accepted with gaps** if something
    holds but below its required rung, or a quantifier value had no recorded run, or a rule does not cover
    every path the product model found; **accepted** otherwise. The evidence record (JSON) and the report
@@ -175,30 +177,32 @@ code, add a proof backend, or accept L2.
 
 | tool / family | what it does | why it is not enough here |
 |---|---|---|
-| nl2spec (Cosler et al., 2023) | LLM turns natural language into LTL formulas, with sub-translations a person can correct | output is temporal logic over abstract propositions: someone still has to bind each proposition to a real event, and it covers only the temporal kind of clause — no settings, examples, contracts or placement |
+| nl2spec (Cosler et al., 2023) | LLM turns natural language into LTL formulas, with sub-translations a person can correct | output is temporal logic over abstract propositions: someone still has to bind each proposition to an actual event, and it covers only the temporal kind of clause (no settings, examples, contracts or placement) |
 | SpecGen, AutoSpec (2024) | LLM generates JML / ACSL contracts for existing Java / C code, refined until a verifier accepts them | they describe what the *code already does* (code → spec), not what a *request wants*; function-level only; verifier languages for Java/C, while this system is Python, prompts and YAML |
 | Hypothesis ghostwriter | writes property-based test skeletons from a function's signature (round-trip, idempotence, equivalence) | properties are generic, not derived from a requirement; function-level; a person still has to make them meaningful |
 | ArchUnit, import-linter, Semgrep rule packs | assert structural rules: layers, dependency direction, forbidden imports, naming | static only and written by developers; nothing about behaviour, settings, examples or run-time evidence; no link to a change request |
-| Dafny, Verus, F*, Lean, Alloy, TLA+ (the note's Q1) | whole-program or model proofs | the system would have to be rewritten in the proof language; agents, prompts and skills have no counterpart there — so here proofs are confined to pure functions (via Z3) and the rest is monitored or tested |
+| Dafny, Verus, F*, Lean, Alloy, TLA+ (the note's Q1) | whole-program or model proofs | the system would have to be rewritten in the proof language; agents, prompts and skills have no counterpart there. Here, proofs are confined to pure functions (via Z3) and the rest is monitored or tested |
 | Spec Kit, Kiro-style "spec-driven" agent workflows | prose specs that guide a coding agent | prose only: nothing is machine-checked, so there is no evidence and no rung |
 
-What this layer takes from them: nl2spec's idea of a constrained translation a person confirms;
-SpecGen's loop of generating and checking; the ghostwriter's property templates; the architecture
-linters' rule shapes; the solver from the proof world — behind one catalog, one evidence record.
+This layer takes something from each and puts it behind one catalog and one evidence record: nl2spec's
+idea of a constrained translation that a person confirms, SpecGen's loop of generating and checking, the
+ghostwriter's property templates, the rule shapes of the architecture linters, and the solver from the
+proof world.
 
 ## 8. Questions people ask
 
-*Why YAML and not a proof language?* Because the clauses are of five different natures and only one of
-them (a pure-function contract) is a proof obligation; the YAML is the intermediate representation the
-note asks for, and each kind is compiled to the right checker.
+*Why YAML and not a proof language?* The clauses are of five different kinds, and only one of them (a
+pure-function contract) is a proof obligation. The YAML is the intermediate representation the note asks
+for, and each kind is compiled to its own checker.
 
 *What stops the model from inventing things?* The catalog (it can only pick templates and fill slots),
 the validation against the product model (unknown names are errors), and the person who confirms.
 
 *Can a PR change the spec to make itself pass?* Specs live outside the application folder that a PR
-edits, under their own review; the spec check also reports what a spec references that the current code
-does not have, so a PR that silently removes a function is visible.
+edits, and they are reviewed separately. The spec check also reports anything a spec references that the
+current code does not have, so a PR that silently removes a function shows up.
 
 *What does "proven" prove?* That the function satisfies its post-condition for every input in the stated
-domain. Not that it is called: that is what the trace rule and the scenarios are for, and the demo has a
-PR that passes the proof and fails them.
+domain. It does not prove that the function is called. The trace rule and the scenarios check that. The
+demo has a PR that passes the proof and fails the stale-approval scenario; the trace rule does not catch it,
+because no recorded run has a stale approval.

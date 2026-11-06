@@ -81,7 +81,7 @@ allow the action. `unpublish_page` gets no such check, so any token will do.
 
 ### The shared skills
 
-Two skills are shared. They are the platform's way of saying "every specialist does this the same way":
+Two skills are shared, for the steps every specialist does the same way:
 
 - [governance-checks](../traceeval/sut/skills/governance-checks/SKILL.md) asks `check_permission` whether
   the user may do what they asked, and stops with an explanation if they may not. Every specialist
@@ -91,7 +91,7 @@ Two skills are shared. They are the platform's way of saying "every specialist d
   live or scheduling it, and maintenance after a rollback.
 
 Specialists *include* these skills rather than copying them, so a change to a shared skill changes every
-agent that includes it. That ripple is exactly what the test-selection work has to follow.
+agent that includes it. Test selection has to follow that ripple.
 
 ### Where the tools live
 
@@ -115,8 +115,8 @@ data and the answer are scored against what the test case expects.*
 
 ## Who enforces which rule
 
-The rules sit in three places. It matters which is which: if a change removes a check from a skill, the
-layers below it will not catch the mistake.
+The rules sit in three places, and the difference matters: when a change removes a check from a skill,
+usually nothing below the skill catches the mistake.
 
 **The harness, on every tool call.** The dispatcher refuses a call when the tool does not exist, when the
 settings have switched it off, when this agent is not allowed to use it, when it is guarded and the request
@@ -124,11 +124,10 @@ has no approval token, or when the arguments do not fit. A call that gets throug
 injection, and transient failures are retried. Write tools get an idempotency key, so the services that
 honour it do not repeat a change when a retry follows a lost acknowledgement. The key comes from what the
 call does: the request, the tool, its arguments, and how often that same call has already gone through in
-this request. So an agent that makes a failed write again gets the same key and cannot duplicate it, the
-same write made deliberately after it went through gets a new key, and every run gets the same keys.
-Every call leaves a
-`tool.call` event in the trace. Around the dispatcher, the agent loop limits how many steps a request may
-take (delegations count too) and how deep delegation may go. The code is in
+this request. An agent that repeats a failed write therefore gets the same key and cannot apply it twice.
+The same write made on purpose after the first one went through gets a new key. Every run gets the same
+keys. Every call leaves a `tool.call` event in the trace. Around the dispatcher, the agent loop limits how
+many steps a request may take (delegations count too) and how deep delegation may go. The code is in
 [`dispatcher.py`](../traceeval/sut/harness/dispatcher.py) and [`runtime.py`](../traceeval/sut/harness/runtime.py).
 
 **The skills.** The skills hold most of the business rules: check the permission before acting, never
@@ -151,7 +150,7 @@ tool it hits ([`faults.py`](../traceeval/sut/harness/faults.py)):
 
 ## Why it is shaped like this
 
-It is meant to be small but realistic. It has enough layers (instructions, skills, tools, services,
+The application is small but realistic. It has enough layers (instructions, skills, tools, services,
 settings, harness) that a change can land in the wrong one. It has enough rules (gates, retries, budgets)
 that a change can break one without touching the feature it was aimed at. And under the simulated backend
 every run is deterministic and free, so the whole catalog can be run again and again.

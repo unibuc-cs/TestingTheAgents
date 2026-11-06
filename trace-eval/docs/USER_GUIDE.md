@@ -1,6 +1,6 @@
 # User guide
 
-Read the README first. This guide adds the minimum needed to work *inside* the repository.
+Read the README first. This guide adds what you need to work inside the repository.
 
 ## 1. Data flow
 
@@ -14,23 +14,24 @@ Read the README first. This guide adds the minimum needed to work *inside* the r
        └─────► run all tests K× ──► which tests fail ───┘─► metrics ─► report
 ```
 
-Record once (free with the simulated agent), replay thousands of times. `runs/<name>/` holds the edited
-copies (`variants/`), the recordings (`history/*.jsonl`) and the results (`results/`).
+The runs are recorded once (free with the simulated agent) and replayed thousands of times. `runs/<name>/`
+holds the edited copies (`variants/`), the recordings (`history/*.jsonl`) and the results (`results/`).
 
 ## 2. Vocabulary
 
 - **Case / test**: one entry of the catalog. Scenario tests in `catalog/tests/*.yaml`; dataset items in
   `catalog/datasets/*.yaml` (ids `DS-ROUTING/r01` etc.).
-- **Declared dependencies**: the `declared:` block a test author writes — deliberately incomplete.
-- **Observed dependencies**: what the trace shows the run touched: `agent:x`, `skill:x`, `tool:x`,
-  `config:key`, `code:file::function`, `line:file:n`.
+- **Declared dependencies**: the `declared:` block a test author writes. It is deliberately incomplete.
+- **Observed dependencies**: the components the trace shows the run touched (`agent:x`, `skill:x`, `tool:x`,
+  `config:key`, `code:file::function`, `line:file:n`).
 - **Change set**: the diff turned into components with the same identifiers (`traceeval/mutation/changeset.py`).
   Comments, docstrings, blank lines and formatting are left out: they add no component and no diff line.
 - **Revealing test**: passes on the baseline, fails on the changed copy (majority over K repetitions).
 - **Budget**: tokens, shown as a fraction of the full-suite cost.
-- **Stop reason** (`adaptive_bayes` only): `clean`, `regression` (after a failure, re-run once when it does not
-  settle the question alone), `budget`, `uninformative` (no test left that could change the verdict),
-  `no_components` (the change set is empty, e.g. a comment-only edit, so there is nothing to test).
+- **Stop reason** (`adaptive_bayes` only): `clean`, `regression` (after a failure; a failure that does not
+  settle the question alone is first re-run once), `budget`, `uninformative` (no test left that could change
+  the verdict), `no_components` (the change set is empty, e.g. after a comment-only edit, so there is nothing
+  to test).
 
 ## 3. Where to look in the code (in this order)
 
@@ -41,47 +42,49 @@ copies (`variants/`), the recordings (`history/*.jsonl`) and the results (`resul
 | how a test is run and scored | `experiment/executor.py` (`run_case`), `scoring/scorers.py` |
 | how a change becomes components | `mutation/catalog.py` (data), `mutation/changeset.py` |
 | the baselines | `selection/strategies.py` (about 140 lines) |
-| the proposed method | `selection/adaptive_bayes.py` — the docstring explains the four ideas |
+| the proposed method | `selection/adaptive_bayes.py` (its docstring explains the four ideas) |
 | the metrics | `experiment/metrics.py`, `experiment/evaluate.py` |
 
 Everything else is plumbing (loaders, tracing, report).
 
 ## 4. How to read the report
 
-- **Section 1** must say sanity **OK** — otherwise the testbed, not the strategies, is broken.
-- **Section 2**: `detected` = fraction of changes where at least one revealing test was run *and failed*.
-  Compare strategies by the second table (tokens actually *spent*), not by the nominal budget: selecting
-  strategies run out of tests, the adaptive one stops early, the rest always spend everything.
-- **Section 3**: tokens burned on changes that break nothing; the stop-reason table shows whether the
-  adaptive strategy said `clean` on benign changes and `regression` on real ones.
+- **Section 1** must say sanity OK. If it does not, the testbed is broken, not the strategies.
+- **Section 2**: `detected` is the fraction of changes where at least one revealing test was run and failed.
+  Compare strategies by the second table (tokens actually spent), not by the nominal budget. Selecting
+  strategies run out of tests, the adaptive one stops early, and the rest always spend the whole budget.
+- **Section 3**: tokens spent on changes that break nothing. The stop-reason table shows whether the
+  adaptive strategy said `clean` on benign changes and `regression` on regressions.
 - **Section 4**: APFD / APFD_c of the complete order (prioritization quality) and selection recall.
 - `replay.csv` has one row per (change, strategy, budget, seed) if you want to slice it yourself.
 
 ## 5. How to extend
 
-- **Test**: add a YAML entry; `expect` supports `route_to`, `state` (`[path, op, value]` with `==`, `!=`, `len`,
-  `contains`, `in`, `>=`, `<=`, `absent`, `exists`), `tools_required`, `tools_forbidden`, `tool_attempts`,
-  `audit`, `response_contains`, `max_steps`, `termination`, `tool_errors`; optional `fixture_patch`, `fault_profile`
-  (`transient_once:<tool>`, `ack_timeout_once:<tool>`, `permanent_down:<tool>`). `pytest` checks the whole
-  catalog passes on the baseline.
+- **Test**: add a YAML entry. `expect` supports `route_to`, `state` (`[path, op, value]` with `==`, `!=`, `len`,
+  `contains`, `in`, `>=`, `<=`, `absent`, `exists`), `tools_required`, `tools_forbidden`, `tools_not_attempted`,
+  `tool_attempts`, `audit`, `response_contains`, `response_excludes`, `max_steps`, `termination` and `tool_errors`. A test can also set `fixture_patch`
+  and `fault_profile` (`transient_once:<tool>`, `ack_timeout_once:<tool>`, `permanent_down:<tool>`). `pytest`
+  checks that the whole catalog passes on the baseline.
 - **Tool errors**: a tool error the test intends (a refusal, a missing page, an injected outage) must be listed,
-  e.g. `tool_errors: {unpublish_page: approval_required}`. Any other error fails the test as `tool_error:<tool>`
-  unless a later call of the same tool succeeded; a crash in tool or service code (any exception other than a
+  e.g. `tool_errors: {unpublish_page: approval_required}`. Any other error fails the test as `tool_error:<tool>`,
+  unless a later call of the same tool succeeded. A crash in tool or service code (any exception other than a
   `ToolError`) always fails it as `crash:<tool>`. Both are classified `TOOL_ERROR`. `tool_errors: "*"` allows
-  any error; a spec scenario (`traceeval/specs/`) that writes its own `expect` gets that by default.
-- **Change**: add a `Mutation(...)` to the table in `mutation/catalog.py` with `replace` / `delete_line` /
-  `delete_block` / `append` edits. Anchors are literal text (reformatting `sut/` breaks them; the operators
-  raise). A regression must be revealed by ≥1 test, a benign change by none.
-- **Strategy**: subclass `Strategy` in `selection/strategies.py`, implement `order(ctx)` (a prioritized list;
-  leaving tests out = not selecting them) and decorate with `@register`. Adaptive strategies implement
-  `run(ctx, oracle)`. Use only `ctx.change`, `ctx.catalog`, `ctx.history` baseline facts and the other
-  changes' outcomes (`ctx.train_variants`). Add the name to `CORE` to include it in the default comparison.
-- **LLM backend**: `pip install -e ".[llm]"`, set `TRACEEVAL_LLM_BASE_URL`, `TRACEEVAL_LLM_API_KEY`,
-  `TRACEEVAL_LLM_MODEL`, use `--backend llm`. Start with `traceeval run --test PUB-01 --backend llm`.
+  any error. A spec scenario (`traceeval/specs/`) that writes its own `expect` gets that by default.
+- **Change**: add a `Mutation(...)` to the table in `mutation/catalog.py` with `replace`, `delete_line`,
+  `delete_block` or `append` edits. Anchors are literal text, so reformatting `sut/` breaks them, and the
+  operators then raise an error. A regression must be revealed by ≥1 test, a benign change by none.
+- **Strategy**: in `selection/strategies.py`, subclass `Strategy` (from `selection/base.py`), implement `order(ctx)`, which returns a
+  prioritized list (tests left out are not selected), and decorate the class with `@register`. Adaptive
+  strategies implement `run(ctx, oracle)`. Use only `ctx.change`, `ctx.catalog`, the baseline facts in
+  `ctx.history` and the other changes' outcomes (`ctx.train_variants`). Add the name to `CORE` to include it
+  in the default comparison.
+- **LLM backend**: `pip install -e ".[llm]"`, set `TRACEEVAL_LLM_BASE_URL`, `TRACEEVAL_LLM_API_KEY` and
+  `TRACEEVAL_LLM_MODEL`, and pass `--backend llm`. Start with `traceeval run --test PUB-01 --backend llm`.
 
 ## 6. Gotchas
 
-- Simulated tokens are synthetic (shape is realistic, absolute values are not).
+- Simulated token counts are synthetic: their shape is realistic, their absolute values are not.
 - Test texts share vocabulary with skills and config keys, which is why `ir_tfidf` is strong here.
-- `history_ml` (needs scikit-learn) and `observed_diverse` are optional: `--strategies all`.
-- `runs/` is git-ignored and large (line-level coverage); copy `results/` into `docs/results/` to keep one.
+- `history_ml` (needs scikit-learn) and `observed_diverse` are optional. `--strategies all` includes them.
+- `runs/` is git-ignored and large (it holds line-level coverage). To keep a run, copy its `results/` into
+  `docs/results/`.

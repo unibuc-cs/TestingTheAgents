@@ -510,7 +510,7 @@ PRS: list[PR] = [
             "approval window not wired into the adapters",
             [_CFG_MAX_AGE, _WF_IMPORT, _WF_APPROVE, _WF_PUBLISH, _WF_SCHEDULE, _WF_FUNCTIONS, _SKILL_PROSE],
         ),
-        "the unit-level proof holds, the system-level monitor and the example fail",
+        "the unit-level proof holds; the stale-approval example fails (no recorded run has a stale approval for the monitor to see)",
     ),
     # FS-0102 ------------------------------------------------------------------------------------
     PR(
@@ -535,7 +535,7 @@ PRS: list[PR] = [
         "Same, but an unknown token falls back to 'approved by the caller'",
         REJECTED,
         _m("FS-0102_pr_self_approved", "unknown tokens approved by the caller", _with(FS0102_CORRECT, _DISP_SELF)),
-        "property, monitor and example all catch the made-up token",
+        "the property and an example catch the made-up token",
     ),
     PR(
         "FS-0102/pr_in_dispatcher",
