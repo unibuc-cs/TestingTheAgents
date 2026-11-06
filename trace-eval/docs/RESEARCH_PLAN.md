@@ -128,7 +128,7 @@ They span the design space the literature covers: classic RTS/TCP on declared co
 
 ### 4.1 System under test — ContentOps
 
-`traceeval/sut`: eight agents (orchestrator, authoring, publishing, assets, seo, translation, governance, maintenance), ten skills, 23 tools over deterministic services (repository with versions, workflow with reviews/scheduling, links, governance with consent and approval tokens, translation, SEO), a harness (configuration with instrumented reads, skill loader with a procedure DSL, keyword router, retry helper with idempotency keys, dispatcher with tool enablement + approval gate + fault injection, runtime loop with delegation and a step budget) and `config/runtime.yaml`.
+`traceeval/sut`: eight agents (orchestrator, authoring, publishing, assets, seo, translation, governance, maintenance), ten skills, 24 tools over deterministic services (repository with versions, workflow with reviews/scheduling, links, governance with consent and approval tokens, translation, SEO), a harness (configuration with instrumented reads, skill loader with a procedure DSL, keyword router, retry helper with idempotency keys, dispatcher with tool enablement + approval gate + fault injection, runtime loop with delegation and a step budget) and `config/runtime.yaml`.
 
 Deliberate structure: shared components with wide blast radius (`governance-checks` and `link-validation` are included by several skills; `get_page` and `check_permission` are used by every agent; the retry helper wraps every tool call), narrow components (the approval gate matters to one test), policies enforced only in skills (publish permission) vs. also in tools (approval tokens) — so that selection is non-trivial and defence-in-depth questions can be discussed.
 
@@ -136,21 +136,21 @@ Deliberate structure: shared components with wide blast radius (`governance-chec
 
 ### 4.2 Eval catalog
 
-70 scenario tests (publishing 20, authoring 14, assets/SEO 15, translation/governance/maintenance/orchestration 21) and two dataset-style evals (40 routing items, prompt → expected delegation, run in route-only mode; 24 intent items, prompt → expected tool invocation). Each case: agent entry point, request, context slots, fixture (+ optional patch), fault profile (`healthy`, `transient_once:<tool>`, `ack_timeout_once:<tool>`, `permanent_down:<tool>`), risk (critical/high/medium/low → severity 4/3/2/1), properties (functional, routing, trajectory, safety_*, resilience_*, efficiency, answer_quality), declared dependencies, expectations (state assertions, required/forbidden tools, attempt counts, audit counts, response substrings, step limits, termination) and, for two cases, a judge rubric.
+72 scenario tests (publishing 21, authoring 14, assets/SEO 16, translation/governance/maintenance/orchestration 21) and two dataset-style evals (40 routing items, prompt → expected delegation, run in route-only mode; 24 intent items, prompt → expected tool invocation). Each case: agent entry point, request, context slots, fixture (+ optional patch), fault profile (`healthy`, `transient_once:<tool>`, `ack_timeout_once:<tool>`, `permanent_down:<tool>`), risk (critical/high/medium/low → severity 4/3/2/1), properties (functional, routing, trajectory, safety_*, resilience_*, efficiency, answer_quality), declared dependencies, expectations (state assertions, required/forbidden tools, attempt counts, audit counts, response substrings, step limits, termination) and, for two cases, a judge rubric.
 
-### 4.3 Controlled changes (35)
+### 4.3 Controlled changes (38)
 
 | Category | Count | Examples |
 |---|---|---|
-| code (tool adapters, services, harness) | 8 | argument-mapping bug in `set_page_metadata`; retry drops idempotency keys; retry disabled; approval gate bypass; external links treated as reachable; phrase triggers lose weight; shared `get_page` reports the wrong review flag; edits keep approvals |
+| code (tool adapters, services, harness) | 10 | argument-mapping bug in `set_page_metadata`; retry drops idempotency keys; retry disabled; approval gate bypass; external links treated as reachable; phrase triggers lose weight; shared `get_page` reports the wrong review flag; edits keep approvals; `set_page_metadata` crashes when no keywords are given; link validation crashes on an unknown external URL |
 | runtime | 2 | termination six steps early; delegation depth zero (catastrophic) |
-| skill | 8 | publishing skill drops link validation / permission check; authoring drops metadata; translation hard-codes en-US; rollback restores the latest version; **shared** link-validation tolerates broken assets; governance drops the consent check; SEO drops the title-length guard |
+| skill | 9 | publishing skill drops link validation / permission check; authoring drops metadata; translation hard-codes en-US; rollback drops its permission check (the service still refuses); rollback restores the latest version; **shared** link-validation tolerates broken assets; governance drops the consent check; SEO drops the title-length guard |
 | prompt / agent definition | 3 | publishing loses its "take down" triggers; SEO loses a tool; translation intents re-ordered (order-sensitive YAML) |
 | configuration | 7 | validate_links disabled; review not required; step budget 5; retries 0; title limit 20; default agent changed; unpublish removed from the approval list |
 | combined | 1 | keyword-count rule in code + very low limit in config (each alone harmless) |
 | benign | 6 | prose reflow; comment/docstring edit (AST-equivalent); local-variable renames; config comments/ordering; new unused tool; orchestrator prompt wording |
 
-Testbed sanity property (checked by the report): every regression-inducing change is revealed by ≥ 1 test; no benign change is revealed by any test. Revealing-set sizes range from 1 to 107 tests.
+Testbed sanity property (checked by the report): every regression-inducing change is revealed by ≥ 1 test; no benign change is revealed by any test. Revealing-set sizes range from 1 to 109 tests.
 
 ### 4.4 Protocol and metrics
 

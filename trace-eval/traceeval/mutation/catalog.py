@@ -97,7 +97,7 @@ MUTATIONS: list[Mutation] = [
     Mutation('code_metadata_arg_swap', CODE, 'Tool adapter maps the title into the description argument.', True,
              [('replace', 'tools/content_tools.py', 'title=title, description=description,', 'title=title, description=title,')]),
     Mutation('code_retry_drop_idempotency', CODE, 'Retries no longer carry idempotency keys (duplicates after lost acks).', True,
-             [('replace', 'harness/retry.py', 'key = new_idempotency_key() if (is_write and idempotency_enabled) else None', 'key = None')]),
+             [('replace', 'harness/retry.py', 'key = idempotency_key(operation) if (is_write and idempotency_enabled) else None', 'key = None')]),
     Mutation('code_retry_disabled', CODE, 'Retry helper gives up after the first transient failure.', True,
              [('replace', 'harness/retry.py', 'if attempt > retries:', 'if attempt > 0:')]),
     Mutation('code_approval_gate_bypass', CODE, 'Dispatcher no longer enforces approval tokens for guarded tools.', True,

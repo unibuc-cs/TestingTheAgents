@@ -7,6 +7,7 @@ service code raised any other exception - a defect in the SUT, returned to the a
 the way a tool server answers with HTTP 500."""
 
 import inspect
+import json
 import time
 
 from ..services.errors import ToolError
@@ -29,6 +30,18 @@ class Dispatcher:
         self.state = state  # the in-memory platform data that the tools read and change
         self.tracer = tracer  # receives one "tool.call" event per call; scorers and selectors read them
         self.faults = faults  # the test's fault profile, fired just before and just after a tool runs
+        self.request_id = None  # the request being served, set by start_request; part of every write's key
+        self._succeeded: dict[str, int] = {}  # call identity -> how often that call has succeeded in this request
+
+    def start_request(self, request_id: str):
+        """Begin serving request ``request_id``: the idempotency keys of its writes are derived from it."""
+        self.request_id = request_id
+        self._succeeded = {}
+
+    def _call_identity(self, name: str, args: dict) -> str:
+        """What a call does, within the current request: the tool and its arguments, written out in a fixed
+        order so that equal arguments always give the same text."""
+        return f"{self.request_id}|{name}|{json.dumps(args, sort_keys=True, default=str)}"
 
     def call(self, agent, name: str, args: dict, ctx: dict) -> dict:
         """Run one tool call on behalf of ``agent`` and return what the agent gets back.
@@ -81,13 +94,19 @@ class Dispatcher:
                 return result
 
             # with_retry repeats tries that failed transiently. Write tools get an idempotency key, so that a
-            # retry after a lost acknowledgement does not apply the same change a second time.
+            # retry after a lost acknowledgement does not apply the same change a second time. The key is
+            # derived from what the call does and how often that call has already succeeded in this request.
+            # So the agent making a failed call again (after a lost acknowledgement, say) repeats the same
+            # operation and gets the same key, while the same call made again after it went through is a new
+            # operation with a new key.
+            call_identity = self._call_identity(name, args)
             try:
                 out, attempts, key = with_retry(
                     attempt,
                     retries=int(self.config.get("runtime.retries") or 0),
                     is_write=spec.is_write(),
                     idempotency_enabled=bool(self.config.get("runtime.idempotency_keys")),
+                    operation=f"{call_identity}#{self._succeeded.get(call_identity, 0)}",
                 )
             except ToolError as exc:
                 # An expected refusal from the tool or a service (not found, permission denied, ...), or a
@@ -103,6 +122,9 @@ class Dispatcher:
             status = "error"
         if crashed:
             status = "crash"
+        # A write that went through: making the same call again in this request is a new operation.
+        if key is not None and status == "ok":
+            self._succeeded[call_identity] = self._succeeded.get(call_identity, 0) + 1
         # One trace event per call, whatever happened. The scorers, the selectors and the spec checks all
         # work from these events.
         self.tracer.event(

@@ -1,6 +1,6 @@
 # Spec-driven development: evidence report
 
-5 change requests, 25 pull requests, 136 recorded baseline runs (42,995 tokens of source in 52 files).
+5 change requests, 25 pull requests, 136 recorded baseline runs (43,665 tokens of source in 52 files).
 
 Each request is a spec: prose intent plus machine-checkable clauses. Each PR is a variant of the system. The clauses are checked, the change-affected regression tests are run, and the result is an evidence record with the assurance rung reached per clause (L0 reviewed, L1 example-tested, L2 property-tested, L3 monitored, L4 statically checked, L5 proven).
 
@@ -9,30 +9,30 @@ Each request is a spec: prose intent plus machine-checkable clauses. Each PR is 
 | request | PR | expected | verdict | what failed / gap | rungs reached | clause runs | regression cases (of full) | tokens (of full) | s |
 |---|---|---|---|---|---|---|---|---|---|
 | FS-0101 | pr_correct | accepted | **accepted** | - | L5×1, L4×5, L3×1, L1×4 | 18 | 32 (136) | 212,092 (483,298) | 1.2 |
-| FS-0101 | pr_no_lower_bound | rejected | **rejected** | function_contract:review_age_ok (contract) | L4×5, L3×1, L1×4 | 18 | 32 (136) | 212,092 (483,298) | 0.7 |
+| FS-0101 | pr_no_lower_bound | rejected | **rejected** | function_contract:review_age_ok (contract) | L4×5, L3×1, L1×4 | 18 | 32 (136) | 212,092 (483,298) | 0.9 |
 | FS-0101 | pr_off_by_one | rejected | **rejected** | function_contract:review_age_ok (contract), scenario:PUB-01 (example) | L4×5, L3×1, L1×3 | 18 | 32 (136) | 212,092 (483,298) | 0.7 |
 | FS-0101 | pr_branchy | accepted | **accepted with gaps** | function_contract:review_age_ok (contract, L2 < L5) | L4×5, L3×1, L2×1, L1×4 | 18 | 32 (136) | 212,092 (483,298) | 0.8 |
-| FS-0101 | pr_in_adapter | rejected | **rejected** | function_contract:review_age_ok (contract, L2 < L5), function_in_layer:review_age_ok (placement), function_in_layer:approval_age_days (placement), forbid_import_in:datetime (placement) | L4×2, L3×1, L1×4 | 18 | 50 (136) | 320,024 (483,298) | 0.8 |
-| FS-0101 | pr_unwired | rejected | **rejected** | scenario:please-publish-the-staleapproval (example) | L5×1, L4×5, L3×1, L1×3 | 18 | 32 (136) | 212,092 (483,298) | 0.7 |
-| FS-0102 | current | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:unpublish_page+export_user_data+approve_review (trace), scenario:PUB-06 (example), scenario:take-down-the-old (example), function_in_layer:approver_for (placement) | L4×4, L3×1, L1×2 | 13 | 0 (136) | 60,524 (483,298) | 0.3 |
-| FS-0102 | pr_correct | accepted | **accepted** | - | L4×5, L3×2, L2×1, L1×4 | 13 | 136 (136) | 508,476 (483,298) | 1.7 |
-| FS-0102 | pr_self_approved | rejected | **rejected** | property_over_set:tool (contract), scenario:take-down-the-old (example) | L4×5, L3×2, L1×3 | 13 | 136 (136) | 508,476 (483,298) | 1.7 |
-| FS-0102 | pr_in_dispatcher | rejected | **rejected** | function_in_layer:approver_for (placement), forbid_name_in:users (placement) | L4×3, L3×2, L2×1, L1×4 | 13 | 136 (136) | 508,476 (483,298) | 1.7 |
-| FS-0102 | code_approval_gate_bypass | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:unpublish_page+export_user_data+approve_review (trace), never_on_calls:unpublish_page+export_user_data+approve_review (trace), scenario:take-down-the-old (example), scenario:PUB-07 (example), regression-tests (example) | L4×5, L1×1 | 13 | 136 (136) | 508,476 (483,298) | 1.7 |
-| FS-0103 | pr_correct | accepted | **accepted** | - | L5×1, L4×5, L3×2, L1×4 | 46 | 46 (136) | 300,608 (483,298) | 0.9 |
-| FS-0103 | pr_gate_ignores_version | rejected | **rejected** | function_contract:links_clean (contract) | L4×5, L3×2, L1×4 | 46 | 46 (136) | 300,608 (483,298) | 0.9 |
-| FS-0103 | pr_gate_in_adapter | rejected | **rejected** | function_contract:links_clean (contract, L2 < L5), function_in_layer:links_clean (placement) | L4×4, L3×2, L1×4 | 46 | 46 (136) | 300,608 (483,298) | 0.8 |
-| FS-0103 | pr_validate_after_schedule | rejected | **rejected** | scenario:PUB-09 (example), skill_step_order:publishing-workflow#2 (placement), regression-tests (example) | L5×1, L4×4, L3×2, L1×2 | 46 | 50 (136) | 306,062 (483,298) | 0.9 |
-| FS-0103 | code_links_external_lenient | rejected | **rejected** | always_in_audit:validate_links (trace), scenario:PUB-02 (example), regression-tests (example) | L5×1, L4×5, L3×1, L1×2 | 46 | 46 (136) | 305,263 (483,298) | 0.9 |
-| FS-0104 | pr_config_70 | accepted | **accepted** | - | L4×3, L3×1, L2×1, L1×3 | 79 | 7 (136) | 425,026 (483,298) | 1.3 |
-| FS-0104 | pr_config_20 | rejected | **rejected** | setting_in_range:seo.max_title_length (setting), regression-tests (example) | L4×2, L3×1, L2×1, L1×2 | 79 | 7 (136) | 377,662 (483,298) | 1.2 |
-| FS-0104 | pr_hardcoded_70 | rejected | **rejected** | forbid_literal_in:70 (placement) | L4×2, L3×1, L2×1, L1×3 | 79 | 8 (136) | 422,208 (483,298) | 1.2 |
-| FS-0104 | pr_drop_guard | rejected | **rejected** | property_over_range:n (contract), scenario:SEO-01#2 (example), regression-tests (example) | L4×3, L3×1, L1×1 | 36 | 8 (136) | 217,601 (483,298) | 0.6 |
+| FS-0101 | pr_in_adapter | rejected | **rejected** | function_contract:review_age_ok (contract, L2 < L5), function_in_layer:review_age_ok (placement), function_in_layer:approval_age_days (placement), forbid_import_in:datetime (placement) | L4×2, L3×1, L1×4 | 18 | 50 (136) | 320,024 (483,298) | 0.9 |
+| FS-0101 | pr_unwired | rejected | **rejected** | scenario:please-publish-the-staleapproval (example) | L5×1, L4×5, L3×1, L1×3 | 18 | 32 (136) | 212,092 (483,298) | 0.8 |
+| FS-0102 | current | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:unpublish_page+export_user_data+approve_review (trace), scenario:PUB-06 (example), scenario:take-down-the-old (example), function_in_layer:approver_for (placement) | L4×4, L3×1, L1×2 | 13 | 0 (136) | 60,524 (483,298) | 0.4 |
+| FS-0102 | pr_correct | accepted | **accepted** | - | L4×5, L3×2, L2×1, L1×4 | 13 | 136 (136) | 508,476 (483,298) | 2.2 |
+| FS-0102 | pr_self_approved | rejected | **rejected** | property_over_set:tool (contract), scenario:take-down-the-old (example) | L4×5, L3×2, L1×3 | 13 | 136 (136) | 508,476 (483,298) | 2.2 |
+| FS-0102 | pr_in_dispatcher | rejected | **rejected** | function_in_layer:approver_for (placement), forbid_name_in:users (placement) | L4×3, L3×2, L2×1, L1×4 | 13 | 136 (136) | 508,476 (483,298) | 2.1 |
+| FS-0102 | code_approval_gate_bypass | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:unpublish_page+export_user_data+approve_review (trace), never_on_calls:unpublish_page+export_user_data+approve_review (trace), scenario:take-down-the-old (example), scenario:PUB-07 (example), regression-tests (example) | L4×5, L1×1 | 13 | 136 (136) | 508,476 (483,298) | 1.8 |
+| FS-0103 | pr_correct | accepted | **accepted** | - | L5×1, L4×5, L3×2, L1×4 | 46 | 46 (136) | 300,608 (483,298) | 1.0 |
+| FS-0103 | pr_gate_ignores_version | rejected | **rejected** | function_contract:links_clean (contract) | L4×5, L3×2, L1×4 | 46 | 46 (136) | 300,608 (483,298) | 1.0 |
+| FS-0103 | pr_gate_in_adapter | rejected | **rejected** | function_contract:links_clean (contract, L2 < L5), function_in_layer:links_clean (placement) | L4×4, L3×2, L1×4 | 46 | 46 (136) | 300,608 (483,298) | 0.9 |
+| FS-0103 | pr_validate_after_schedule | rejected | **rejected** | scenario:PUB-09 (example), skill_step_order:publishing-workflow#2 (placement), regression-tests (example) | L5×1, L4×4, L3×2, L1×2 | 46 | 50 (136) | 306,062 (483,298) | 1.0 |
+| FS-0103 | code_links_external_lenient | rejected | **rejected** | always_in_audit:validate_links (trace), scenario:PUB-02 (example), regression-tests (example) | L5×1, L4×5, L3×1, L1×2 | 46 | 46 (136) | 305,263 (483,298) | 1.0 |
+| FS-0104 | pr_config_70 | accepted | **accepted** | - | L4×3, L3×1, L2×1, L1×3 | 79 | 7 (136) | 425,026 (483,298) | 1.2 |
+| FS-0104 | pr_config_20 | rejected | **rejected** | setting_in_range:seo.max_title_length (setting), regression-tests (example) | L4×2, L3×1, L2×1, L1×2 | 79 | 7 (136) | 377,662 (483,298) | 1.3 |
+| FS-0104 | pr_hardcoded_70 | rejected | **rejected** | forbid_literal_in:70 (placement) | L4×2, L3×1, L2×1, L1×3 | 79 | 8 (136) | 422,208 (483,298) | 1.5 |
+| FS-0104 | pr_drop_guard | rejected | **rejected** | property_over_range:n (contract), scenario:SEO-01#2 (example), regression-tests (example) | L4×3, L3×1, L1×1 | 36 | 8 (136) | 217,601 (483,298) | 0.7 |
 | FS-0105 | current | rejected | **rejected** | property_over_set:tool (contract), scenario:PUB-09 (example) | L4×5, L3×1, L1×2 | 31 | 0 (136) | 193,886 (483,298) | 0.6 |
-| FS-0105 | pr_fix | accepted | **accepted** | - | L4×5, L3×1, L2×1, L1×3 | 31 | 8 (136) | 193,886 (483,298) | 0.5 |
-| FS-0105 | pr_partial_fix | rejected | **rejected** | property_over_set:tool (contract) | L4×5, L3×1, L1×3 | 31 | 3 (136) | 193,886 (483,298) | 0.6 |
-| FS-0105 | code_retry_drop_idempotency | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:publish_page+schedule_publish+unpublish_page+request_review (trace), scenario:PUB-12 (example), scenario:PUB-09 (example), regression-tests (example) | L4×5 | 31 | 96 (136) | 485,020 (483,298) | 1.4 |
-| FS-0105 | config_retries_0 | rejected | **rejected** | setting_in_range:runtime.retries (setting), property_over_set:tool (contract), scenario:PUB-12 (example), regression-tests (example) | L4×4, L3×1, L1×1 | 31 | 96 (136) | 475,087 (483,298) | 1.4 |
+| FS-0105 | pr_fix | accepted | **accepted** | - | L4×5, L3×1, L2×1, L1×3 | 31 | 8 (136) | 193,886 (483,298) | 0.9 |
+| FS-0105 | pr_partial_fix | rejected | **rejected** | property_over_set:tool (contract) | L4×5, L3×1, L1×3 | 31 | 3 (136) | 193,886 (483,298) | 0.7 |
+| FS-0105 | code_retry_drop_idempotency | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:publish_page+schedule_publish+unpublish_page+request_review (trace), scenario:PUB-12 (example), scenario:PUB-09 (example), regression-tests (example) | L4×5 | 31 | 96 (136) | 485,020 (483,298) | 1.6 |
+| FS-0105 | config_retries_0 | rejected | **rejected** | setting_in_range:runtime.retries (setting), property_over_set:tool (contract), scenario:PUB-12 (example), regression-tests (example) | L4×4, L3×1, L1×1 | 31 | 96 (136) | 475,087 (483,298) | 1.5 |
 
 ![resources](figures/resources.png)
 
@@ -40,7 +40,7 @@ Each request is a spec: prose intent plus machine-checkable clauses. Each PR is 
 
 | | without a spec (today) | with the spec (this run) |
 |---|---|---|
-| context handed to the coding agent | the repository: 42,995 tokens, 52 files | the brief: 4,260–8,369 tokens (13% of the repo on average) |
+| context handed to the coding agent | the repository: 43,665 tokens, 52 files | the brief: 4,260–8,755 tokens (13% of the repo on average) |
 | checks per PR | full suite: 136 runs, 483,298 agent tokens | clause checks: 13–79 runs; change-selected regression cases: 0–136 of 136 (36% on average; a harness change selects most of the suite, a config change a few cases); 66% of the full-suite tokens in total |
 | what the checks say | pass/fail of example tests (L1) | per clause: 2 at L5, 28 at L4, 8 at L3, 4 at L2, 22 at L1 over the accepted PRs |
 | when a PR is wrong | a test fails, somewhere | the failing clause names the rule, the counterexample or the misplaced code |
@@ -242,7 +242,7 @@ a permissions-service function; the harness never inspects the user table itself
 
 **Agent brief (the locate step)**
 
-Read 9 files, ~8,369 tokens (19% of the repository):
+Read 9 files, ~8,755 tokens (20% of the repository):
 
 - `config/runtime.yaml` — tools.requires_approval
 - `harness/dispatcher.py`
@@ -278,11 +278,11 @@ Verdict: **rejected** (expected rejected). the spec exposes a weakness of the cu
 - enumerated 2 values ['unpublish_page', 'export_user_data']
 - tool='unpublish_page' (case PUB-06, fault healthy): post-condition false
 - 8 runs in scope, 6 matching events checked
-- PUB-06: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-33221464c9'}
-- GOV-01: {'kind': 'tool.call', 'tool': 'export_user_data', 'args': {'subject_id': 's1'}, 'status': 'ok', 'idempotency_key': 'idem-70686e3192'}
-- ORC-02: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-ed70f97719'}
-- DS-INTENTS/i03: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-ba1459b7bd'}
-- DS-INTENTS/i04: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-6922dd430a'}
+- PUB-06: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-9cea4a58ee'}
+- GOV-01: {'kind': 'tool.call', 'tool': 'export_user_data', 'args': {'subject_id': 's1'}, 'status': 'ok', 'idempotency_key': 'idem-cfda60aed2'}
+- ORC-02: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-9cea4a58ee'}
+- DS-INTENTS/i03: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-9cea4a58ee'}
+- DS-INTENTS/i04: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-9cea4a58ee'}
 - case PUB-06: 'Take down the old news page' -> 'Unpublished p7 (/content/site/blog/old-news).'
 - failed check audit:approval_used: expected 1, found 0
 - case inline: 'Take down the old news page' -> 'Unpublished p7 (/content/site/blog/old-news).'
@@ -295,7 +295,7 @@ Verdict: **rejected** (expected rejected). the spec exposes a weakness of the cu
 
 ### FS-0102/pr_correct — Resolve the token against the user table (permissions service) and record the approver (dispatcher)
 
-Verdict: **accepted** (expected accepted). 2 files: the lookup is a permissions-service function, the gate stays in the one place it lives. Change: 2 file(s), 13 diff lines; components: `code:harness/dispatcher.py`, `code:harness/dispatcher.py::Dispatcher.call`, `code:services/permissions.py::approver_for`, `line:harness/dispatcher.py:10`, `line:harness/dispatcher.py:103`, `line:harness/dispatcher.py:104`, `line:harness/dispatcher.py:117`, `line:harness/dispatcher.py:118` ….
+Verdict: **accepted** (expected accepted). 2 files: the lookup is a permissions-service function, the gate stays in the one place it lives. Change: 2 file(s), 13 diff lines; components: `code:harness/dispatcher.py`, `code:harness/dispatcher.py::Dispatcher.call`, `code:services/permissions.py::approver_for`, `line:harness/dispatcher.py:11`, `line:harness/dispatcher.py:122`, `line:harness/dispatcher.py:123`, `line:harness/dispatcher.py:13`, `line:harness/dispatcher.py:139` ….
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
@@ -314,7 +314,7 @@ Verdict: **accepted** (expected accepted). 2 files: the lookup is a permissions-
 
 ### FS-0102/pr_self_approved — Same, but an unknown token falls back to 'approved by the caller'
 
-Verdict: **rejected** (expected rejected). property, monitor and example all catch the made-up token. Change: 2 file(s), 15 diff lines; components: `code:harness/dispatcher.py`, `code:harness/dispatcher.py::Dispatcher.call`, `code:services/permissions.py::approver_for`, `line:harness/dispatcher.py:10`, `line:harness/dispatcher.py:103`, `line:harness/dispatcher.py:104`, `line:harness/dispatcher.py:117`, `line:harness/dispatcher.py:118` ….
+Verdict: **rejected** (expected rejected). property, monitor and example all catch the made-up token. Change: 2 file(s), 15 diff lines; components: `code:harness/dispatcher.py`, `code:harness/dispatcher.py::Dispatcher.call`, `code:services/permissions.py::approver_for`, `line:harness/dispatcher.py:11`, `line:harness/dispatcher.py:122`, `line:harness/dispatcher.py:123`, `line:harness/dispatcher.py:13`, `line:harness/dispatcher.py:139` ….
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
@@ -342,7 +342,7 @@ Verdict: **rejected** (expected rejected). property, monitor and example all cat
 
 ### FS-0102/pr_in_dispatcher — Same behaviour, but the user-table lookup written inside the dispatcher
 
-Verdict: **rejected** (expected rejected). every run-time check passes; the harness must not inspect the user table (placement). Change: 1 file(s), 12 diff lines; components: `code:harness/dispatcher.py`, `code:harness/dispatcher.py::Dispatcher.call`, `line:harness/dispatcher.py:10`, `line:harness/dispatcher.py:103`, `line:harness/dispatcher.py:104`, `line:harness/dispatcher.py:117`, `line:harness/dispatcher.py:118`, `line:harness/dispatcher.py:12` ….
+Verdict: **rejected** (expected rejected). every run-time check passes; the harness must not inspect the user table (placement). Change: 1 file(s), 12 diff lines; components: `code:harness/dispatcher.py`, `code:harness/dispatcher.py::Dispatcher.call`, `line:harness/dispatcher.py:11`, `line:harness/dispatcher.py:122`, `line:harness/dispatcher.py:123`, `line:harness/dispatcher.py:13`, `line:harness/dispatcher.py:139`, `line:harness/dispatcher.py:140` ….
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
@@ -355,18 +355,18 @@ Verdict: **rejected** (expected rejected). every run-time check passes; the harn
 | scenario:PUB-07 | example | L1 | L1 | pass | expected outcome observed |
 | function_in_layer:approver_for | placement | L4 | L4 | FAIL | approver_for is not defined in services/permissions.py |
 | function_in_layer:Dispatcher._needs_approval | placement | L4 | L4 | pass | 1 rules hold |
-| forbid_name_in:users | placement | L4 | L4 | FAIL | harness/dispatcher.py uses users (line 46) |
+| forbid_name_in:users | placement | L4 | L4 | FAIL | harness/dispatcher.py uses users (line 59) |
 | forbid_literal_in:tools.requires_approval | placement | L4 | L4 | pass | 1 rules hold |
 | regression-tests | example | L1 | L1 | pass | 136 of 136 catalog cases selected by observed dependencies; all pass |
 
 - define {'function': 'approver_for', 'in': 'services/permissions.py'}
 - approver_for is not defined in services/permissions.py
 - forbid_name {'name': 'users', 'in': ['harness']}
-- harness/dispatcher.py uses users (line 46)
+- harness/dispatcher.py uses users (line 59)
 
 ### FS-0102/code_approval_gate_bypass — Correct PR plus a later change: the dispatcher stops enforcing the gate
 
-Verdict: **rejected** (expected rejected). monitor: a guarded call succeeded without an approver. Change: 2 file(s), 15 diff lines; components: `code:harness/dispatcher.py`, `code:harness/dispatcher.py::Dispatcher._needs_approval`, `code:harness/dispatcher.py::Dispatcher.call`, `code:services/permissions.py::approver_for`, `line:harness/dispatcher.py:10`, `line:harness/dispatcher.py:103`, `line:harness/dispatcher.py:104`, `line:harness/dispatcher.py:117` ….
+Verdict: **rejected** (expected rejected). monitor: a guarded call succeeded without an approver. Change: 2 file(s), 15 diff lines; components: `code:harness/dispatcher.py`, `code:harness/dispatcher.py::Dispatcher._needs_approval`, `code:harness/dispatcher.py::Dispatcher.call`, `code:services/permissions.py::approver_for`, `line:harness/dispatcher.py:11`, `line:harness/dispatcher.py:122`, `line:harness/dispatcher.py:123`, `line:harness/dispatcher.py:13` ….
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
@@ -386,9 +386,9 @@ Verdict: **rejected** (expected rejected). monitor: a guarded call succeeded wit
 - enumerated 2 values ['unpublish_page', 'export_user_data']
 - tool='unpublish_page' (case PUB-06, fault healthy): post-condition false
 - 8 runs in scope, 7 matching events checked
-- PUB-07: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-aa0ff26a99'}
+- PUB-07: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-9cea4a58ee'}
 - 8 runs in scope, 8 matching events checked
-- PUB-07: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-aa0ff26a99'}
+- PUB-07: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-9cea4a58ee'}
 - case inline: 'Take down the old news page' -> 'Unpublished p7 (/content/site/blog/old-news).'
 - failed check state:pages.p7.status: pages.p7.status == 'published' (actual 'draft')
 - failed check forbidden:unpublish_page: ok tools: ['check_permission', 'get_page', 'unpublish_page']
@@ -695,7 +695,7 @@ place); services honour the key; adapters only pass it through.
 
 **Agent brief (the locate step)**
 
-Read 6 files, ~4,718 tokens (11% of the repository):
+Read 6 files, ~4,813 tokens (11% of the repository):
 
 - `config/runtime.yaml` — runtime.idempotency_keys, runtime.retries
 - `harness/retry.py`
@@ -768,7 +768,7 @@ Verdict: **rejected** (expected rejected). quantifying over the skill's write to
 
 ### FS-0105/code_retry_drop_idempotency — Correct PR plus a later change: retries no longer carry idempotency keys
 
-Verdict: **rejected** (expected rejected). monitor: successful writes without a key; property: the duplicates are back. Change: 3 file(s), 24 diff lines; components: `code:harness/retry.py::with_retry`, `code:services/workflow.py::schedule_publish`, `code:services/workflow.py::unpublish_page`, `code:tools/publish_tools.py::schedule_publish`, `code:tools/publish_tools.py::unpublish_page`, `line:harness/retry.py:26`, `line:services/workflow.py:101`, `line:services/workflow.py:102` ….
+Verdict: **rejected** (expected rejected). monitor: successful writes without a key; property: the duplicates are back. Change: 3 file(s), 24 diff lines; components: `code:harness/retry.py::with_retry`, `code:services/workflow.py::schedule_publish`, `code:services/workflow.py::unpublish_page`, `code:tools/publish_tools.py::schedule_publish`, `code:tools/publish_tools.py::unpublish_page`, `line:harness/retry.py:29`, `line:services/workflow.py:101`, `line:services/workflow.py:102` ….
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|

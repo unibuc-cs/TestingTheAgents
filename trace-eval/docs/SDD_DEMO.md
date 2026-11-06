@@ -48,7 +48,7 @@ expressions in `traceeval/spec/context.py`. L0 (reviewed) is the prose `intent`.
 | FS-0105 retried publishing writes never duplicate | bug fix, 2 files (workflow service, publish adapters), 22 diff lines | the spec, quantified over the write tools the publishing skill uses (from the product model), **finds a latent defect** in the current code; a partial fix is caught by the same quantifier |
 
 (The same FS-0105 clause with `forall: {tool: write_tools}` ranges over the whole platform and finds 6
-of 12 write tools affected; the request was scoped to the publishing workflow to keep the PR small.)
+of its 13 write tools affected (a seventh, `approve_review`, has no recorded run to test it with); the request was scoped to the publishing workflow to keep the PR small.)
 
 ## What the report shows per PR
 
@@ -59,7 +59,7 @@ dependency selection: the Q12 answer), tokens, seconds. Per request it also show
 tool adapters, the services behind them, the skills calling them, the config keys), as a fraction of
 the repository - and which checks will run.
 
-Headline numbers from `runs/sdd`: the brief is 10–19% of the repository (13% on average); all 25
+Headline numbers from `runs/sdd`: the brief is 10–20% of the repository (13% on average); all 25
 verdicts are as expected; every wrong PR is rejected with the clause, the counterexample or the
 misplaced code named; two rules are proven for all inputs (FS-0101, FS-0103); two specs find defects in
 the current code before any PR is written (FS-0102, FS-0105).

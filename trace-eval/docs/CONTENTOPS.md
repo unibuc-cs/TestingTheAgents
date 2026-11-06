@@ -122,7 +122,11 @@ layers below it will not catch the mistake.
 settings have switched it off, when this agent is not allowed to use it, when it is guarded and the request
 has no approval token, or when the arguments do not fit. A call that gets through runs with fault
 injection, and transient failures are retried. Write tools get an idempotency key, so the services that
-honour it do not repeat a change when a retry follows a lost acknowledgement. Every call leaves a
+honour it do not repeat a change when a retry follows a lost acknowledgement. The key comes from what the
+call does: the request, the tool, its arguments, and how often that same call has already gone through in
+this request. So an agent that makes a failed write again gets the same key and cannot duplicate it, the
+same write made deliberately after it went through gets a new key, and every run gets the same keys.
+Every call leaves a
 `tool.call` event in the trace. Around the dispatcher, the agent loop limits how many steps a request may
 take (delegations count too) and how deep delegation may go. The code is in
 [`dispatcher.py`](../traceeval/sut/harness/dispatcher.py) and [`runtime.py`](../traceeval/sut/harness/runtime.py).

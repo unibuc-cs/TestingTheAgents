@@ -1,7 +1,7 @@
 # TRACE-Eval and the SDD layer — a study guide
 
 A road-map for reading the repository in two to three hours, oriented towards the spec-driven
-development (SDD) work. Paths are relative to the repository root (`C:\Work\trace-eval`).
+development (SDD) work. Paths are relative to the repository root (`trace-eval/`).
 The diagrams are images rendered from the Mermaid sources in `docs/diagrams/`.
 
 ## 1. What is in the repository
@@ -47,7 +47,7 @@ place, and an evidence record. The testbed already had the raw material for thre
 | an up-to-date product model | static: files, functions (AST), tool registry, skill procedures, config; dynamic: traces = which runs exercise which tool / function | `spec/product.py` puts both behind queries: `locate(tools)`, `cases_calling(tools)`, `status_setters()`, `skill_write_tools(skill)` |
 | a formal-enough spec | — | `specs/FS-*.yaml`: prose intent + clauses of five kinds; `spec/checks/` = one checker per kind |
 | run only what a change touches (Q12) | the `observed` strategy on a change set | reused as the regression line of every evidence record |
-| generate only the needed code, in the right place, passing tests | the mutation machinery: a PR is a set of file edits applied to a copy of the app | `spec/prs.py` (24 PRs with expected verdicts), `spec/runner.py` (evidence record + agent brief), `spec/report.py` |
+| generate only the needed code, in the right place, passing tests | the mutation machinery: a PR is a set of file edits applied to a copy of the app | `spec/prs.py` (25 PRs with expected verdicts), `spec/runner.py` (evidence record + agent brief), `spec/report.py` |
 
 The central idea is that **a clause is a compiler target**: the spec author writes *what* must hold,
 the clause kind decides *how* it is checked and which assurance rung the result can reach.
@@ -65,7 +65,7 @@ layer" PRs pass every run and fail only placement).
 
 A PR is evaluated against a *variant* of the application (the baseline copied and edited), loaded
 under a fresh module name so several variants can coexist. The checkers never see the expected verdict;
-the report compares and flags any disagreement. All 24 agree.
+the report compares and flags any disagreement. All 25 agree.
 
 ### 2.3 Design decisions you will be asked about
 
@@ -82,11 +82,11 @@ production traces unchanged: they only need the event format.
 
 | request | accepted PR | what it demonstrates |
 |---|---|---|
-| FS-0101 an approval is valid for 30 days | feature: config, workflow service, publish adapters, skill prose (4 files, 55 lines) | the rule `review_age_ok` is **proven** for all inputs; the proof alone catches a future-dated approval; an off-by-one is caught by proof and boundary example; the logic in the adapter fails only placement; the proven-but-unwired function fails only the monitor and the example |
-| FS-0102 a guarded operation needs a *valid* token and records the approver | security fix: permissions service, dispatcher (2 files, 17 lines) | the spec run against the **current** code finds that any made-up token passes; a "self-approved" fallback is caught by property, monitor and example; the lookup written inside the harness is caught only by placement |
-| FS-0103 nothing goes live without a clean link check of its current version | defence in depth: links service, workflow service (2 files, 28 lines) | the rule moves from a skill procedure (a prompt) into the service and `links_clean` is **proven**; the version-ignoring gate is missed by 200 random examples and found by the solver; a `precedes` rule over the audit log with completeness against the product model's status-changing paths; a skill reordering is stopped by the service gate and still rejected |
-| FS-0104 the SEO title limit is a setting, raised to 70 | configuration only (1 file, 2 lines) | a property over **agent behaviour** (titles of every length 1..120); boundary examples computed from config; a hard-coded 70 caught only by placement |
-| FS-0105 a retried publishing write never duplicates | bug fix: workflow service, publish adapters (2 files, 22 lines) | quantified over the write tools of the publishing skill (from the product model), the spec finds that two of them duplicate on a lost acknowledgement **before any PR exists**; a partial fix is caught by the same quantifier |
+| FS-0101 an approval is valid for 30 days | feature: config, workflow service, publish adapters, skill prose (4 files, 45 diff lines) | the rule `review_age_ok` is **proven** for all inputs; the proof alone catches a future-dated approval; an off-by-one is caught by proof and boundary example; the logic in the adapter fails only placement; the proven-but-unwired function fails only the monitor and the example |
+| FS-0102 a guarded operation needs a *valid* token and records the approver | security fix: permissions service, dispatcher (2 files, 13 diff lines) | the spec run against the **current** code finds that any made-up token passes; a "self-approved" fallback is caught by property, monitor and example; the lookup written inside the harness is caught only by placement |
+| FS-0103 nothing goes live without a clean link check of its current version | defence in depth: links service, workflow service (2 files, 22 diff lines) | the rule moves from a skill procedure (a prompt) into the service and `links_clean` is **proven**; the version-ignoring gate is missed by 200 random examples and found by the solver; a `precedes` rule over the audit log with completeness against the product model's status-changing paths; a skill reordering is stopped by the service gate and still rejected |
+| FS-0104 the SEO title limit is a setting, raised to 70 | configuration only (1 file, 2 diff lines) | a property over **agent behaviour** (titles of every length 1..120); boundary examples computed from config; a hard-coded 70 caught only by placement |
+| FS-0105 a retried publishing write never duplicates | bug fix: workflow service, publish adapters (2 files, 22 diff lines) | quantified over the write tools of the publishing skill (from the product model), the spec finds that two of them duplicate on a lost acknowledgement **before any PR exists**; a partial fix is caught by the same quantifier |
 
 ### 3.1 FS-0101 in detail — read this one fully
 
@@ -104,7 +104,7 @@ wrong PR fails a *different kind* of clause (clause ids shortened).
 | boundary-publishes (example, exactly 30 days) | pass | pass | **fail** | pass | pass |
 | fresh-publishes (example PUB-01) | pass | pass | pass | pass | pass |
 | lives-in-service (placement) | pass | pass | pass | **fail** | pass |
-| regression (31 change-selected cases) | pass | pass | pass | pass | pass |
+| regression (32 change-selected cases) | pass | pass | pass | pass | pass |
 
 The sixth PR, `pr_branchy`, writes the same rule with an `if`: every check passes, but the contract only
 reaches L2 (the prover translates straight-line code only) while the clause requires L5, so the verdict is
@@ -120,19 +120,19 @@ not translated — the clause then stays at L2 and the record says so.
 
 | file | lines | role |
 |---|---|---|
-| `traceeval/spec/catalog.yaml` + `model.py` | 110 + 230 | the clause templates; `Spec`, `Clause`, `ClauseResult`; expansion of `use/with` clauses, generated ids and texts; `validate_spec` against the product model |
-| `traceeval/spec/draft.py` | 220 | `traceeval sdd draft`: product-model slice + catalog → prompt → model answer → expanded, validated draft spec and its plain-language rendering |
-| `traceeval/spec/product.py` | 182 | the product model: files and token counts, functions (AST), tool registry (from decorators), skill procedures, config; queries `locate`, `cases_calling`, `status_setters`, `skill_write_tools`, `model_set` |
+| `traceeval/spec/catalog.yaml` + `model.py` | 164 + 257 | the clause templates; `Spec`, `Clause`, `ClauseResult`; expansion of `use/with` clauses, generated ids and texts; `validate_spec` against the product model |
+| `traceeval/spec/draft.py` | 228 | `traceeval sdd draft`: product-model slice + catalog → prompt → model answer → expanded, validated draft spec and its plain-language rendering |
+| `traceeval/spec/product.py` | 195 | the product model: files and token counts, functions (AST), tool registry (from decorators), skill procedures, config; queries `locate`, `cases_calling`, `status_setters`, `skill_write_tools`, `model_set` |
 | `traceeval/spec/context.py` | 181 | `CheckContext`: runs cases on the variant with cost accounting, resolves scopes, builds the expression environment; the helpers usable in clauses (`config`, `approval_age`, `expected_broken`, `audit_count`, `applied`, `token_owner`, `title_of_length`, `first_case_calling`, `baseline_run`) |
 | `traceeval/spec/checks/settings.py` | 47 | schema check |
-| `traceeval/spec/checks/examples.py` | 31 | one run, catalog-format expectations, `=expr` values |
+| `traceeval/spec/checks/examples.py` | 32 | one run, catalog-format expectations, `=expr` values |
 | `traceeval/spec/checks/placement.py` | 120 | the five lint rules |
 | `traceeval/spec/checks/traces.py` | 124 | `always` / `never` / `precedes`, `must_cover` |
-| `traceeval/spec/checks/contracts.py` | 338 | Hypothesis `find`; `_ToZ3` AST rewriter, `_symbolic_call`, `_prove`; behavioural `forall` |
-| `traceeval/spec/runner.py` | 218 | `record_baseline`, `agent_brief`, `evaluate_pr`, `run_demo` |
-| `traceeval/spec/report.py` | 182 | markdown report and the figure |
-| `traceeval/spec/prs.py` | 710 | the PR table; open it only to see how a PR is written (a `Mutation` with literal-anchor edits) |
-| `traceeval/cli.py::cmd_sdd`, `tests/test_sdd.py` | | the command and seven tests that pin the expected verdicts |
+| `traceeval/spec/checks/contracts.py` | 339 | Hypothesis `find`; `_ToZ3` AST rewriter, `_symbolic_call`, `_prove`; behavioural `forall` |
+| `traceeval/spec/runner.py` | 224 | `record_baseline`, `agent_brief`, `evaluate_pr`, `run_demo` |
+| `traceeval/spec/report.py` | 191 | markdown report and the figure |
+| `traceeval/spec/prs.py` | 731 | the PR table; open it only to see how a PR is written (a `Mutation` with literal-anchor edits) |
+| `traceeval/cli.py::cmd_sdd`, `tests/test_sdd.py` | | the command and the tests that pin the expected verdicts |
 
 Where things would be extended: a new clause kind = one checker module + one line in
 `checks/__init__.py`; a new proof backend = another branch in `contracts._prove`; a new product-model

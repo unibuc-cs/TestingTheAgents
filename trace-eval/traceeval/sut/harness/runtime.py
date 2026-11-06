@@ -13,8 +13,8 @@ from .skills import SkillLoader
 # The entry agent (the one the request is addressed to) runs at depth 0
 # - each delegation runs its target one level deeper
 # - an agent may delegate only while its own depth is below this limit.
-# E.g., With the limit at 2, the orchestrator can hand the request to a specialist and that specialist
-# can hand it on once more; at 0, no agent may delegate at all.
+# E.g., with the limit at 3, the orchestrator can hand the request to a specialist, that specialist can
+# hand it on, and the next agent can hand it on once more; at 0, no agent may delegate at all.
 MAX_DELEGATION_DEPTH = 3
 
 
@@ -103,6 +103,8 @@ class Runtime:
         # The trace gets the context without the harness switches.
         public_ctx = {k: v for k, v in ctx.items() if not k.startswith("_")}
         self.tracer.event("run.start", agent=agent_name, request=request, context=public_ctx)
+        # Every write this request makes takes its idempotency key from the request id (see the dispatcher).
+        self.dispatcher.start_request(self.state.next_request_id())
         # The entry agent runs at depth 0; any delegation runs nested inside this call.
         message = self._run_agent(agent_name, request, ctx, depth=0)
         # Close the trace with the totals of the run. The final message the trace reports is the one in

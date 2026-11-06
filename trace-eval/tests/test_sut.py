@@ -16,6 +16,7 @@ from traceeval.sut import SUT_ROOT
 from traceeval.sut.harness.expressions import DotDict, resolve_value, safe_eval
 from traceeval.sut.harness.router import detect_intent, route
 from traceeval.sut.harness.skills import parse_skill
+from traceeval.tracing.recorder import TraceRecorder
 
 
 @pytest.fixture(scope="module")
@@ -71,6 +72,34 @@ def test_guarded_tool_blocked_without_approval(sut, cases):
 def test_retry_with_idempotency_prevents_duplicates(sut, cases):
     rec = run_case(sut, cases["TRN-06"])
     assert rec["passed"]
+
+
+def _edit_p1_three_times(sut):
+    """One request makes the same edit three times, with no retries and the first acknowledgement lost.
+    Returns the agent's three answers, the keys traced for the calls and how many edits the audit log holds."""
+    state = sut.sub("services.state").State.from_fixture(sut.path / "fixtures" / "base.json")
+    config = sut.sub("harness.config").Config.load(
+        sut.path / "config" / "runtime.yaml", overrides={"runtime.retries": 0}
+    )
+    tracer = TraceRecorder(test_id="idem", run_id="idem", variant="baseline", backend="simulated")
+    faults = sut.sub("harness.faults").FaultInjector("ack_timeout_once:update_page_content")
+    dispatcher = sut.sub("harness.dispatcher").Dispatcher(sut.tools, config, state, tracer, faults)
+    dispatcher.start_request(state.next_request_id())
+    agent = SimpleNamespace(name="authoring", tools=["update_page_content"])
+    args = {"page_id": "p1", "body": "New text."}
+    outs = [dispatcher.call(agent, "update_page_content", args, {"user_id": "alice"}) for _ in range(3)]
+    return outs, [e["idempotency_key"] for e in tracer.tool_calls()], state.audit_count("update_page_content")
+
+
+def test_idempotency_keys_follow_the_operation(sut):
+    """A write made again after it failed is the same operation (same key, no duplicate); the same write made
+    again after it went through is a new one (new key); and every run gets the same keys."""
+    outs, keys, edits = _edit_p1_three_times(sut)
+    assert outs[0]["error"] == "transient_error"  # the edit was made, but its acknowledgement was lost
+    assert "error" not in outs[1]  # made again: the service hands back the first answer
+    assert keys[1] != keys[2]  # made again after it went through: a new operation with a new key
+    assert edits == 2  # the lost acknowledgement did not cost a duplicate edit
+    assert _edit_p1_three_times(sut)[1] == keys  # deterministic
 
 
 def test_route_only_items_do_not_execute_specialists(sut, cases):

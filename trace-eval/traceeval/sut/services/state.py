@@ -35,6 +35,7 @@ class State:
         self.data.setdefault("reviews", {})
         self._idem: dict[str, dict] = {}  # idempotency key -> the result of the first call made with that key
         self._clock = 0  # the logical clock behind tick(); every state starts at 0
+        self._requests = 0  # requests started against this state so far, behind next_request_id()
 
     # ---------------------------------------------------------------- loading / snapshots
     @classmethod
@@ -45,7 +46,7 @@ class State:
 
     def snapshot(self) -> dict:
         """A deep copy of the data as it is now, unaffected by later changes (for example the data as it was
-        before a request ran). The idempotency cache and the clock are not part of it."""
+        before a request ran). The idempotency cache, the clock and the request counter are not part of it."""
         return copy.deepcopy(self.data)
 
     def digest(self) -> str:
@@ -63,6 +64,13 @@ class State:
         can be reproduced exactly."""
         self._clock += 1
         return self._clock
+
+    def next_request_id(self) -> str:
+        """The id of a new request: ``req-1``, ``req-2``, ... The idempotency keys of a request's writes are
+        derived from it. Numbering requests here, where the idempotency cache lives, keeps keys unique among
+        all the requests that share the cache, and gives the same ids each time the same requests run."""
+        self._requests += 1
+        return f"req-{self._requests}"
 
     # ---------------------------------------------------------------- audit / idempotency
     def audit(self, action: str, actor: str | None, **fields):

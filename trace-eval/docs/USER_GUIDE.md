@@ -28,7 +28,9 @@ copies (`variants/`), the recordings (`history/*.jsonl`) and the results (`resul
   Comments, docstrings, blank lines and formatting are left out: they add no component and no diff line.
 - **Revealing test**: passes on the baseline, fails on the changed copy (majority over K repetitions).
 - **Budget**: tokens, shown as a fraction of the full-suite cost.
-- **Stop reason** (`adaptive_bayes` only): `clean`, `regression`, `budget`, `uninformative`.
+- **Stop reason** (`adaptive_bayes` only): `clean`, `regression` (after a failure, re-run once when it does not
+  settle the question alone), `budget`, `uninformative` (no test left that could change the verdict),
+  `no_components` (the change set is empty, e.g. a comment-only edit, so there is nothing to test).
 
 ## 3. Where to look in the code (in this order)
 
@@ -38,7 +40,7 @@ copies (`variants/`), the recordings (`history/*.jsonl`) and the results (`resul
 | how a request becomes tool calls | `sut/harness/runtime.py` (`_run_agent`), `dispatcher.py`, `backends/simulated.py` |
 | how a test is run and scored | `experiment/executor.py` (`run_case`), `scoring/scorers.py` |
 | how a change becomes components | `mutation/catalog.py` (data), `mutation/changeset.py` |
-| the baselines | `selection/strategies.py` (140 lines) |
+| the baselines | `selection/strategies.py` (about 140 lines) |
 | the proposed method | `selection/adaptive_bayes.py` — the docstring explains the four ideas |
 | the metrics | `experiment/metrics.py`, `experiment/evaluate.py` |
 

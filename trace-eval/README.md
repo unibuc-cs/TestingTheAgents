@@ -12,7 +12,7 @@ by replaying recorded runs. One of the strategies (`adaptive_bayes`) is the prop
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                                                   # 28 tests, ~60 s
+pytest -q                                                   # ~60 s
 traceeval experiment --workdir runs/exp1 --reps 3 --seeds 10
 # -> runs/exp1/results/report.md  (tables + 3 figures)
 ```
