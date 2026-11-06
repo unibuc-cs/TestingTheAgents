@@ -2,7 +2,7 @@
 
 traceeval catalog                         list eval cases
 traceeval mutations                       list controlled changes
-traceeval run --test PUB-01 [--backend llm]   run one case live and print the trace summary
+traceeval run --test PUB-01 [--backend hf|llm|simulated]   run one case and print the record (hf: local Gemma)
 traceeval baseline --workdir runs/exp1 --reps 3
 traceeval mutants  --workdir runs/exp1 --reps 3 [--only id ...]
 traceeval evaluate --workdir runs/exp1 --seeds 10
@@ -151,7 +151,7 @@ def main(argv=None):
 
     r = sub.add_parser("run")
     r.add_argument("--test", required=True)
-    r.add_argument("--backend", default="simulated", choices=["simulated", "llm"])
+    r.add_argument("--backend", default="hf", choices=["hf", "llm", "simulated"])
     r.add_argument("--sut-dir", default=None)
     r.add_argument("--set", action="append", help="config override key=value (JSON value)")
     r.set_defaults(fn=cmd_run)
@@ -159,7 +159,7 @@ def main(argv=None):
     def common(sp):
         sp.add_argument("--workdir", default="runs/exp1")
         sp.add_argument("--reps", type=int, default=3)
-        sp.add_argument("--backend", default="simulated", choices=["simulated", "llm"])
+        sp.add_argument("--backend", default="hf", choices=["hf", "llm", "simulated"])
         sp.add_argument(
             "--set", action="append", help="config override key=value (JSON value), e.g. simulated.flakiness=0.05"
         )

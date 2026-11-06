@@ -54,6 +54,12 @@ def run_suite(
                 llm_settings=llm_settings,
             )
             records.append(rec)
+            if backend != "simulated":  # model runs are slow: report each case as it finishes
+                failed = ",".join(rec["failed_checks"])
+                _log(
+                    f"[{variant}] rep {rep} {case.id}: {rec['classification']} "
+                    f"{rec['latency_ms'] / 1000:.1f}s {rec['tokens']} tok {failed}"
+                )
     if cov:
         functions = cov.finish()
         for rec in records:
