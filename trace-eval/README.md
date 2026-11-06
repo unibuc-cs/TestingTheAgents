@@ -21,8 +21,8 @@ traceeval experiment --workdir runs/exp1 --reps 3 --seeds 10
 
 1. **Tests** live in [`traceeval/catalog/`](traceeval/catalog/) (YAML). Each has a request, context, and deterministic checks on the
    final state / tool calls / response.
-2. **The app under test** ("ContentOps", described in [docs/CONTENTOPS.md](docs/CONTENTOPS.md)) lives in [`traceeval/sut/`](traceeval/sut/): 8 agents defined in YAML, 10 skills ([example `SKILL.md`](traceeval/sut/skills/publishing-workflow/SKILL.md), each with
-   a machine-readable procedure), 23 tools, a config file. A *simulated* agent follows the skills so runs are
+2. **The app under test** ("ContentOps", described in [docs/CONTENTOPS.md](docs/CONTENTOPS.md)) lives in [`traceeval/sut/`](traceeval/sut/): [agents](traceeval/sut/agents/) defined in YAML, [skills](traceeval/sut/skills/) ([example `SKILL.md`](traceeval/sut/skills/publishing-workflow/SKILL.md), each with
+   a machine-readable procedure), [tools](traceeval/sut/tools/), a [config file](traceeval/sut/config/runtime.yaml). A *simulated* agent follows the skills so runs are
    free; an *LLM* backend can replace it (`--backend llm`, OpenAI-compatible endpoint).
 3. **Changes** are the 37 entries in [`traceeval/mutation/catalog.py`](traceeval/mutation/catalog.py), applied as real file edits. Running the
    full suite on each gives the ground truth: which tests reveal which change.
