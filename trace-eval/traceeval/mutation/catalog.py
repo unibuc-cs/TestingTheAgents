@@ -119,7 +119,7 @@ MUTATIONS: list[Mutation] = [
     Mutation('code_termination_off_by_six', RUNTIME, 'Agent loop stops six tool calls before the configured budget.', True,
              [('replace', 'harness/runtime.py', 'if self.steps >= max_tool_calls:', 'if self.steps >= max_tool_calls - 6:')]),
     Mutation('code_delegation_depth_zero', RUNTIME, 'Delegation depth zero: the orchestrator cannot hand off to specialists.', True,
-             [('replace', 'harness/runtime.py', 'MAX_DELEGATION_DEPTH = 2', 'MAX_DELEGATION_DEPTH = 0')]),
+             [('replace', 'harness/runtime.py', 'MAX_DELEGATION_DEPTH = 3', 'MAX_DELEGATION_DEPTH = 0')]),
     # ---------------------------------------------------------------- skills
     Mutation('skill_publish_drop_link_validation', SKILL, 'Publishing skill no longer validates links before publishing.', True,
              [('delete_line', 'skills/publishing-workflow/SKILL.md', '- include: link-validation')]),

@@ -9,11 +9,13 @@ from .agents import AgentLoader
 from .dispatcher import Dispatcher
 from .skills import SkillLoader
 
-# How deep delegation may nest. The entry agent (the one the request is addressed to) runs at depth 0, and
-# each delegation runs its target one level deeper; an agent may delegate only while its own depth is below
-# this limit. With the limit at 2, the orchestrator can hand the request to a specialist and that specialist
+# How deep delegation may nest.
+# The entry agent (the one the request is addressed to) runs at depth 0
+# - each delegation runs its target one level deeper
+# - an agent may delegate only while its own depth is below this limit.
+# E.g., With the limit at 2, the orchestrator can hand the request to a specialist and that specialist
 # can hand it on once more; at 0, no agent may delegate at all.
-MAX_DELEGATION_DEPTH = 2
+MAX_DELEGATION_DEPTH = 3
 
 
 @dataclass

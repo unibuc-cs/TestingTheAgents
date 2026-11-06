@@ -2,7 +2,7 @@
 runtime:
   max_tool_calls: 12          # hard step budget per request (all agents in the delegation chain)
   retries: 2                  # retries on transient tool failures
-  idempotency_keys: true      # write tools are retried with an idempotency key
+  idempotency_keys: true      # reuse the same key on write retries to prevent duplicate actions
 
 tools:
   disabled: []                # tools removed from every agent (feature flags / incidents)
