@@ -75,7 +75,7 @@ Tokens actually spent on those changes (fraction of the full suite):
 | observed_diverse | 0.018 | 0.047 | 0.088 | 0.157 | 0.215 | 0.307 | 0.458 |
 | cost_aware | 0.019 | 0.049 | 0.099 | 0.199 | 0.298 | 0.496 | 0.969 |
 | history_ml | 0.019 | 0.049 | 0.099 | 0.199 | 0.299 | 0.497 | 0.969 |
-| adaptive_bayes | 0.018 | 0.040 | 0.066 | 0.109 | 0.143 | 0.199 | 0.294 |
+| adaptive_bayes | 0.018 | 0.031 | 0.041 | 0.047 | 0.050 | 0.056 | 0.070 |
 
 ![detection vs cost](figures/detection_vs_cost.png)
 
@@ -114,7 +114,7 @@ Stop reasons of `adaptive_bayes` (rows: is the change a regression?):
 | is_regression | budget | clean | no_components | regression | uninformative |
 |---|---|---|---|---|---|
 | False | 179 | 90 | 140 | 0 | 11 |
-| True | 909 | 320 | 0 | 940 | 71 |
+| True | 420 | 260 | 0 | 1550 | 10 |
 
 ## 4. Prioritization and selection quality
 

@@ -33,7 +33,7 @@ traceeval experiment --workdir runs/exp1 --reps 3 --seeds 10
    waste on harmless changes, and does the adaptive one stop at the right moment.
 
 Headline from `runs/exp1`: hand-written dependencies catch 66% of regressions; trace-based selection catches
-91% for 20% of the full-suite tokens; the adaptive method catches 84% for 11–29% and stops correctly on
+91% for 20% of the full-suite tokens; the adaptive method catches 84% for 5–7% and stops correctly on
 benign changes. ([experiment 1 report](docs/results/exp1/report.md), [flaky-agent condition](docs/results/exp2_flaky/report.md))
 
 ## Spec-driven development on the same testbed

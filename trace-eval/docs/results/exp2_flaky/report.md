@@ -75,7 +75,7 @@ Tokens actually spent on those changes (fraction of the full suite):
 | observed_diverse | 0.018 | 0.047 | 0.088 | 0.157 | 0.215 | 0.307 | 0.458 |
 | cost_aware | 0.019 | 0.049 | 0.099 | 0.199 | 0.299 | 0.496 | 0.967 |
 | history_ml | 0.019 | 0.049 | 0.099 | 0.199 | 0.299 | 0.497 | 0.967 |
-| adaptive_bayes | 0.018 | 0.039 | 0.068 | 0.109 | 0.141 | 0.186 | 0.278 |
+| adaptive_bayes | 0.017 | 0.030 | 0.041 | 0.051 | 0.056 | 0.062 | 0.077 |
 
 ![detection vs cost](figures/detection_vs_cost.png)
 
@@ -105,7 +105,7 @@ Cost until the first true detection (fraction of the full suite, detected cases 
 | observed_diverse | 0.011 | 0.031 | 0.057 | 0.100 | 0.133 | 0.177 | 0.226 |
 | cost_aware | 0.020 | 0.049 | 0.099 | 0.198 | 0.298 | 0.498 | 0.989 |
 | history_ml | 0.019 | 0.049 | 0.099 | 0.199 | 0.299 | 0.499 | 0.989 |
-| adaptive_bayes | 0.012 | 0.033 | 0.066 | 0.117 | 0.151 | 0.218 | 0.360 |
+| adaptive_bayes | 0.012 | 0.033 | 0.066 | 0.117 | 0.151 | 0.218 | 0.372 |
 
 ![benign waste](figures/benign_waste.png)
 
@@ -113,8 +113,8 @@ Stop reasons of `adaptive_bayes` (rows: is the change a regression?):
 
 | is_regression | budget | clean | no_components | regression | uninformative |
 |---|---|---|---|---|---|
-| False | 186 | 85 | 140 | 0 | 9 |
-| True | 939 | 300 | 0 | 993 | 8 |
+| False | 193 | 83 | 140 | 0 | 4 |
+| True | 408 | 190 | 0 | 1640 | 2 |
 
 ## 4. Prioritization and selection quality
 

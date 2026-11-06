@@ -6,7 +6,8 @@ systems. Read `README.md` (5 minutes), then `docs/USER_GUIDE.md` only when you n
 ## Commands
 
 ```
-pip install -e ".[dev,ml]"          # or: uv pip install -e ".[dev,ml]"
+uv venv --python 3.12 .venv         # the project venv (git-ignored); use .venv/Scripts/python on Windows
+pip install -e ".[dev,ml]"          # or: uv pip install --python .venv -e ".[dev,ml]" ruff
 pytest -q                           # ~60 s; must stay green
 ruff check traceeval tests --select E,F,W,I,B --line-length 120
 ruff format traceeval tests --line-length 120   # see "Gotchas" before formatting sut/

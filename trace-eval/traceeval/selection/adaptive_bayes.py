@@ -12,7 +12,10 @@ In plain words
      outcome (taking the test's baseline flakiness into account), and repeat.  After a test passes, tests
      that behave exactly like it (same agents, tools, fault profile, dataset) count for much less.
   4. We stop when P(something is broken) drops below eps_clean ("clean"), when a failure has pushed it
-     above 1 - eps_detect ("regression"), or when the budget is spent.
+     above 1 - eps_detect ("regression"), or when the budget is spent.  A failure that does not push it
+     that far is confirmed first: the same test runs once more before any other.  Flakiness rarely fails
+     a test twice in a row; a broken component does.  Without this, the passes that follow a real failure
+     wear the evidence down and the method runs on to the end of its budget.
 """
 
 import math
@@ -253,6 +256,7 @@ class AdaptiveBayes(Strategy):
         runs_left = np.where(flaky > 0.1, 2, 1)  # flaky tests may be re-run once
         remaining = ctx.budget
         seen_failure = False
+        confirm, confirmed = None, set()  # a failed test to re-run before any other; tests already re-run
         trajectory = []
         while True:
             p_any = 1.0 - post[0]  # hypothesis 0 = nothing broken
@@ -262,17 +266,24 @@ class AdaptiveBayes(Strategy):
             if stopping and seen_failure and p_any > 1.0 - self.eps_detect:
                 log.stop_reason = "regression"
                 break
-            gain, _ = self.info_gain(post, p_fail)
-            score = gain * risk / cost
-            score[(runs_left <= 0) | (cost > remaining) | (gain <= 1e-9)] = -1.0
-            i = int(np.argmax(score))
-            if score[i] <= 0:
-                log.stop_reason = "budget" if remaining < cost.min() else "uninformative"
-                break
+            if confirm is not None and cost[confirm] <= remaining:
+                i = confirm
+            else:
+                gain, _ = self.info_gain(post, p_fail)
+                score = gain * risk / cost
+                score[(runs_left <= 0) | (cost > remaining) | (gain <= 1e-9)] = -1.0
+                i = int(np.argmax(score))
+                if score[i] <= 0:
+                    log.stop_reason = "budget" if remaining < cost.min() else "uninformative"
+                    break
+            confirm = None
             passed, spent = oracle(tests[i])
             runs_left[i] -= 1
             remaining -= spent
             seen_failure = seen_failure or not passed
+            if stopping and not passed and i not in confirmed:
+                confirm = i
+                confirmed.add(i)
             log.steps.append((tests[i], passed, spent))
             post = post * ((1 - p_fail[i]) if passed else p_fail[i])
             post /= post.sum() or 1e-12
