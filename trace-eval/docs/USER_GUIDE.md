@@ -5,11 +5,11 @@ Read the README first. This guide adds the minimum needed to work *inside* the r
 ## 1. Data flow
 
 ```
- catalog (136 tests) ─┐                                 ┌─ strategy picks tests from: the change set +
+ test catalog ────────┐                                 ┌─ strategy picks tests from: the change set +
                       ▼                                 │  baseline traces + costs + flakiness
  baseline app ──► run all tests K× ──► traces, costs ───┤
                                                         ├─► "execute" = look up the recorded outcome
- 37 changes ──► 37 edited copies ──► diff ─► change set ┤   of that test under that change
+ changes ────► edited copies ──────► diff ─► change set ┤   of that test under that change
        │                                                │
        └─────► run all tests K× ──► which tests fail ───┘─► metrics ─► report
 ```

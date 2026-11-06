@@ -1,6 +1,6 @@
 # TRACE-Eval experiment report
 
-`runs/exp2_flaky` · 136 tests · 37 changes · 5 baseline repetitions · full suite = 474,798 tokens · 21 flaky tests at baseline
+`runs/exp2_flaky` · 136 tests · 38 changes · 5 baseline repetitions · full suite = 474,798 tokens · 21 flaky tests at baseline
 
 ## 1. Ground truth — which changes are revealed by how many tests
 
@@ -40,6 +40,7 @@
 | `skill_linkval_ignore_assets` | skill | regression | 2 |
 | `skill_publish_drop_link_validation` | skill | regression | 8 |
 | `skill_publish_drop_permission_check` | skill | regression | 3 |
+| `skill_rollback_drop_permission_check` | skill | regression | 1 |
 | `skill_rollback_restores_latest` | skill | regression | 3 |
 | `skill_seo_drop_length_guard` | skill | regression | 1 |
 | `skill_translation_wrong_default` | skill | regression | 2 |
@@ -52,29 +53,29 @@ Fraction of regression-inducing changes detected, by nominal budget (% of full-s
 
 | strategy | 2% | 5% | 10% | 20% | 30% | 50% | 100% |
 |---|---|---|---|---|---|---|---|
-| full | 0.03 | 0.13 | 0.30 | 0.55 | 0.55 | 0.77 | 1.00 |
-| random | 0.12 | 0.22 | 0.39 | 0.57 | 0.72 | 0.85 | 1.00 |
-| declared | 0.42 | 0.58 | 0.62 | 0.63 | 0.65 | 0.65 | 0.65 |
-| ir_tfidf | 0.62 | 0.84 | 0.94 | 0.97 | 1.00 | 1.00 | 1.00 |
-| observed | 0.45 | 0.65 | 0.74 | 0.92 | 0.94 | 0.97 | 1.00 |
-| observed_diverse | 0.36 | 0.68 | 0.82 | 0.88 | 0.94 | 0.95 | 1.00 |
-| cost_aware | 0.43 | 0.68 | 0.71 | 0.94 | 0.94 | 0.97 | 1.00 |
-| history_ml | 0.32 | 0.55 | 0.74 | 0.90 | 0.94 | 0.97 | 1.00 |
-| adaptive_bayes | 0.42 | 0.71 | 0.84 | 0.84 | 0.87 | 0.87 | 0.87 |
+| full | 0.03 | 0.12 | 0.29 | 0.53 | 0.53 | 0.75 | 1.00 |
+| random | 0.11 | 0.22 | 0.38 | 0.55 | 0.71 | 0.83 | 1.00 |
+| declared | 0.44 | 0.59 | 0.63 | 0.64 | 0.66 | 0.66 | 0.66 |
+| ir_tfidf | 0.63 | 0.84 | 0.94 | 0.97 | 1.00 | 1.00 | 1.00 |
+| observed | 0.47 | 0.66 | 0.75 | 0.92 | 0.94 | 0.97 | 1.00 |
+| observed_diverse | 0.38 | 0.69 | 0.83 | 0.89 | 0.94 | 0.95 | 1.00 |
+| cost_aware | 0.45 | 0.69 | 0.72 | 0.94 | 0.94 | 0.97 | 1.00 |
+| history_ml | 0.34 | 0.57 | 0.75 | 0.91 | 0.94 | 0.97 | 1.00 |
+| adaptive_bayes | 0.44 | 0.72 | 0.84 | 0.84 | 0.88 | 0.88 | 0.88 |
 
 Tokens actually spent on those changes (fraction of the full suite):
 
 | strategy | 2% | 5% | 10% | 20% | 30% | 50% | 100% |
 |---|---|---|---|---|---|---|---|
-| full | 0.019 | 0.050 | 0.099 | 0.199 | 0.300 | 0.497 | 0.969 |
-| random | 0.019 | 0.049 | 0.099 | 0.199 | 0.299 | 0.497 | 0.968 |
-| declared | 0.010 | 0.024 | 0.042 | 0.064 | 0.079 | 0.091 | 0.091 |
-| ir_tfidf | 0.019 | 0.049 | 0.099 | 0.199 | 0.299 | 0.497 | 0.967 |
-| observed | 0.017 | 0.046 | 0.089 | 0.160 | 0.219 | 0.314 | 0.472 |
-| observed_diverse | 0.018 | 0.047 | 0.089 | 0.161 | 0.220 | 0.315 | 0.471 |
-| cost_aware | 0.019 | 0.049 | 0.099 | 0.199 | 0.299 | 0.496 | 0.966 |
-| history_ml | 0.019 | 0.049 | 0.099 | 0.199 | 0.299 | 0.496 | 0.966 |
-| adaptive_bayes | 0.018 | 0.039 | 0.066 | 0.105 | 0.135 | 0.174 | 0.251 |
+| full | 0.019 | 0.050 | 0.099 | 0.199 | 0.300 | 0.497 | 0.970 |
+| random | 0.019 | 0.049 | 0.099 | 0.199 | 0.299 | 0.497 | 0.969 |
+| declared | 0.011 | 0.025 | 0.042 | 0.064 | 0.078 | 0.089 | 0.089 |
+| ir_tfidf | 0.019 | 0.049 | 0.099 | 0.199 | 0.299 | 0.497 | 0.968 |
+| observed | 0.017 | 0.046 | 0.088 | 0.157 | 0.214 | 0.306 | 0.459 |
+| observed_diverse | 0.018 | 0.047 | 0.088 | 0.157 | 0.215 | 0.307 | 0.458 |
+| cost_aware | 0.019 | 0.049 | 0.099 | 0.199 | 0.299 | 0.496 | 0.967 |
+| history_ml | 0.019 | 0.049 | 0.099 | 0.199 | 0.299 | 0.497 | 0.967 |
+| adaptive_bayes | 0.018 | 0.039 | 0.068 | 0.109 | 0.141 | 0.186 | 0.278 |
 
 ![detection vs cost](figures/detection_vs_cost.png)
 
@@ -82,15 +83,15 @@ Cost until the first true detection (fraction of the full suite, detected cases 
 
 | strategy | cost_to_first_detection |
 |---|---|
-| full | 0.165 |
-| random | 0.140 |
-| declared | 0.024 |
-| ir_tfidf | 0.026 |
-| observed | 0.047 |
-| observed_diverse | 0.052 |
-| cost_aware | 0.048 |
-| history_ml | 0.055 |
-| adaptive_bayes | 0.025 |
+| full | 0.170 |
+| random | 0.144 |
+| declared | 0.023 |
+| ir_tfidf | 0.025 |
+| observed | 0.045 |
+| observed_diverse | 0.050 |
+| cost_aware | 0.047 |
+| history_ml | 0.053 |
+| adaptive_bayes | 0.024 |
 
 ## 3. Benign changes — wasted budget and stopping
 
@@ -103,7 +104,7 @@ Cost until the first true detection (fraction of the full suite, detected cases 
 | observed | 0.011 | 0.031 | 0.056 | 0.099 | 0.133 | 0.177 | 0.227 |
 | observed_diverse | 0.011 | 0.031 | 0.057 | 0.100 | 0.133 | 0.177 | 0.226 |
 | cost_aware | 0.020 | 0.049 | 0.099 | 0.198 | 0.298 | 0.498 | 0.989 |
-| history_ml | 0.019 | 0.049 | 0.099 | 0.199 | 0.299 | 0.498 | 0.991 |
+| history_ml | 0.019 | 0.049 | 0.099 | 0.199 | 0.299 | 0.499 | 0.989 |
 | adaptive_bayes | 0.012 | 0.033 | 0.066 | 0.117 | 0.151 | 0.218 | 0.360 |
 
 ![benign waste](figures/benign_waste.png)
@@ -113,7 +114,7 @@ Stop reasons of `adaptive_bayes` (rows: is the change a regression?):
 | is_regression | budget | clean | no_components | regression | uninformative |
 |---|---|---|---|---|---|
 | False | 186 | 85 | 140 | 0 | 9 |
-| True | 868 | 306 | 0 | 993 | 3 |
+| True | 939 | 300 | 0 | 993 | 8 |
 
 ## 4. Prioritization and selection quality
 
@@ -121,15 +122,15 @@ APFD / cost-cognizant APFD of the complete order; selection recall = revealing t
 
 | strategy | apfd | apfdc | selection_recall | selected_cost_fraction |
 |---|---|---|---|---|
-| full | 0.678 | 0.577 | 1.000 | 1.000 |
+| full | 0.673 | 0.569 | 1.000 | 1.000 |
 | random | 0.491 | 0.499 | 1.000 | 1.000 |
-| declared | 0.803 | 0.754 | 0.507 | 0.097 |
-| ir_tfidf | 0.802 | 0.822 | 1.000 | 1.000 |
-| observed | 0.814 | 0.843 | 1.000 | 0.499 |
-| observed_diverse | 0.832 | 0.799 | 1.000 | 0.499 |
-| cost_aware | 0.816 | 0.844 | 1.000 | 1.000 |
-| history_ml | 0.803 | 0.822 | 1.000 | 1.000 |
-| adaptive_bayes | 0.796 | 0.761 | 1.000 | 1.122 |
+| declared | 0.809 | 0.762 | 0.522 | 0.095 |
+| ir_tfidf | 0.808 | 0.827 | 1.000 | 1.000 |
+| observed | 0.820 | 0.848 | 1.000 | 0.485 |
+| observed_diverse | 0.837 | 0.805 | 1.000 | 0.485 |
+| cost_aware | 0.822 | 0.849 | 1.000 | 1.000 |
+| history_ml | 0.809 | 0.828 | 1.000 | 1.000 |
+| adaptive_bayes | 0.802 | 0.769 | 1.000 | 1.125 |
 
 ![apfdc](figures/apfdc.png)
 

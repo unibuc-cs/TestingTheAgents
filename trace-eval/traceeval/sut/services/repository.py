@@ -2,10 +2,12 @@
 
 Each change is written to the audit log. ``create_page``, ``update_page_content`` and ``upload_asset`` accept
 an idempotency key: a retried call with the same key returns the first answer instead of applying the change
-a second time. Permissions are not checked here; the skills check them before they act."""
+a second time. Permissions are checked here only for ``rollback_page``; for the other changes the skills
+check them before they act."""
 
 import re
 
+from . import permissions
 from .errors import NotFound, ValidationError
 
 
@@ -162,8 +164,11 @@ def rollback_page(state, page_id: str, version: int, actor: str) -> dict:
 
     History is never rewritten: the old body is saved again as a new version that records where it came
     from. Unlike an edit, a rollback leaves the page's review as it is. It takes no idempotency key, so a
-    retry after a lost acknowledgement adds one more version. Raises NotFound for an unknown page or
-    version."""
+    retry after a lost acknowledgement adds one more version. Raises PermissionDenied when ``actor`` may not
+    roll pages back, even if the skill forgot to ask, and NotFound for an unknown page or version."""
+    # Restoring an old body overwrites the live text, so the service refuses it itself instead of relying on
+    # the rollback skill's permission check alone.
+    permissions.require(state, actor, "rollback")
     page = get_page(state, page_id)
     # Find the requested version; versions are numbered from 1.
     target = next((v for v in page["versions"] if v["v"] == version), None)

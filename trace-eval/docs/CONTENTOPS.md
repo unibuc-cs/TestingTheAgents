@@ -133,8 +133,9 @@ limit, export nobody's data without their consent. Most services do not check pe
 They trust the skill to have asked first.
 
 **The services and tools.** A few rules are checked again at the bottom. Approving a review and exporting
-personal data need the right role and the user's own approval token. Scheduling is refused when the
-settings switch it off.
+personal data need the right role and the user's own approval token. Rolling a page back needs the right
+role, so a rollback skill that forgot to ask would still be refused: the page stays safe, but the agent
+makes a call it should not have made. Scheduling is refused when the settings switch it off.
 
 Tests can also break things on purpose, to check that the resilience rules hold. A fault profile names the
 tool it hits ([`faults.py`](../traceeval/sut/harness/faults.py)):

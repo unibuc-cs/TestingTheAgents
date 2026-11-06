@@ -129,6 +129,8 @@ MUTATIONS: list[Mutation] = [
              [('delete_block', 'skills/page-authoring/SKILL.md', '- id: meta', '- include: link-validation')]),
     Mutation('skill_translation_wrong_default', SKILL, 'Translation skill hard-codes en-US instead of the configured locales.', True,
              [('replace', 'skills/translation/SKILL.md', "set: {locales: =config('translation.default_locales')}", "set: {locales: ['en-US']}")]),
+    Mutation('skill_rollback_drop_permission_check', SKILL, 'Rollback skill no longer checks the permission (the service still refuses).', True,
+             [('delete_line', 'skills/rollback/SKILL.md', '- include: governance-checks')]),
     Mutation('skill_rollback_restores_latest', SKILL, 'Rollback skill restores the latest version instead of the requested one.', True,
              [('replace', 'skills/rollback/SKILL.md', 'args: {page_id: $page_id, version: $version}', 'args: {page_id: $page_id, version: =len(result.versions.versions)}')]),
     Mutation('skill_linkval_ignore_assets', SKILL, 'Shared link-validation skill tolerates broken asset references.', True,
