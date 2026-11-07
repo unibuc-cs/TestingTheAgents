@@ -14,7 +14,6 @@
             ["pages.p100.metadata.description", "==", "Our prices explained."], ["pages.p100.status", "==", "draft"]]
     tools_required: [create_page, update_page_content, set_page_metadata, validate_links]
     tools_forbidden: [publish_page]
-    response_contains: ["Saved"]
 
 - id: AUT-02
   name: creating a page with a broken external link reports the link
@@ -29,7 +28,7 @@
     route_to: authoring
     state: [["pages.p100.body", "==", "Old content at [[https://old.example.com/gone]]."], ["pages.p100.metadata.description", "==", "Archive."]]
     tools_required: [validate_links]
-    response_contains: ["broken"]
+    response_contains: ["old.example.com/gone"]
 
 - id: AUT-03
   name: creating a page with a missing asset reference reports the link
@@ -43,7 +42,7 @@
   expect:
     route_to: authoring
     state: [["pages.p100.title", "==", "Brochure"]]
-    response_contains: ["broken"]
+    response_contains: ["a9"]
 
 - id: AUT-04
   name: edit the body of an existing page
@@ -59,7 +58,6 @@
             ["pages.p4.review.status", "==", "none"]]
     tools_required: [update_page_content, validate_links]
     tools_forbidden: [create_page, set_page_metadata]
-    response_contains: ["Saved"]
 
 - id: AUT-05
   name: a viewer cannot edit pages
@@ -73,7 +71,6 @@
     route_to: authoring
     state: [["pages.p4.body", "==", "Hello world."]]
     tools_forbidden: [update_page_content]
-    response_contains: ["not allowed"]
 
 - id: AUT-06
   name: create a page and request a review
@@ -101,7 +98,7 @@
   expect:
     route_to: authoring
     state: [["pages.p1.versions", "len", 3]]
-    response_contains: ["broken"]
+    response_contains: ["old.example.com/gone"]
 
 - id: AUT-08
   name: create survives a transient failure of create_page without duplicates
@@ -144,7 +141,6 @@
     route_to: authoring
     state: [["pages.p100", "absent", null]]
     tools_forbidden: [update_page_content, set_page_metadata]
-    response_contains: ["could not complete"]
 
 - id: AUT-11
   name: a lost acknowledgement of an edit must not create two versions
@@ -183,7 +179,6 @@
   expect:
     route_to: authoring
     state: [["pages.p100.links", "len", 4]]
-    response_contains: ["Saved"]
 
 - id: AUT-14
   name: an author may not edit through the publisher's unpublish path (routing sanity)

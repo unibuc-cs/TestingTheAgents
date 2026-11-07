@@ -1,9 +1,10 @@
 """LLM agent backend over any OpenAI-compatible chat-completions endpoint with tool calling
 (vLLM, OpenAI, Ollama, LiteLLM proxies, ...).
 
-The model sees the agent's system prompt, the full text of its skills (prose, and the ``## Procedure`` block
-that the simulated backend executes), the routing triggers and the intents. It then decides every step
-itself, and its tool calls go through the same runtime and dispatcher.
+The model sees the agent's system prompt, its skills (the prose, and the procedure that the simulated backend
+executes written as numbered steps, with included skills written out and settings shown with their values),
+the routing triggers and the intents. It then decides every step itself, and its tool calls go through the
+same runtime and dispatcher.
 
 Environment variables (or explicit ``LLMSettings``):
   TRACEEVAL_LLM_BASE_URL   e.g. http://127.0.0.1:8000/v1
@@ -16,6 +17,10 @@ import os
 from dataclasses import dataclass
 
 from ..runtime import Action
+from ..skills import render_procedure, replace_procedure
+
+# Sent once when the model ends its work without a word, so that the user is told what happened.
+REPLY_NUDGE = "Reply to the user now: say in one or two sentences what you did, or why you stopped."
 
 
 @dataclass
@@ -39,8 +44,8 @@ def build_system_prompt(agent, session, runtime) -> str:
     """The system prompt of ``agent``: its own prompt, followed by everything it works from.
 
     The orchestrator also gets the specialists with their descriptions and routing triggers, an agent with
-    intents gets their keywords, every skill of the session follows in full, and a few operating rules close
-    the prompt. The sections are joined with newlines.
+    intents gets their keywords, every skill of the session follows, and a few operating rules close the
+    prompt. The sections are joined with newlines.
     """
     parts = [agent.system_prompt.strip()]
     # The orchestrator has to pick the specialist itself, so it is shown each one's description and triggers:
@@ -55,9 +60,16 @@ def build_system_prompt(agent, session, runtime) -> str:
     # The keywords of each intent, which the simulated backend matches against the request to pick one.
     if agent.intents:
         parts.append("## Intents\n" + "\n".join(f"- {k}: {', '.join(v)}" for k, v in agent.intents.items()))
-    # Each skill in full (front matter, prose and procedure block) under its own heading.
+    # Each skill under its own heading. The entry skill's procedure is written out as numbered steps (included
+    # skills in place, settings with their current values); a skill it includes points there instead of
+    # repeating its steps.
     for skill in session.skills:
-        parts.append(f"\n---\n# SKILL: {skill.name} (v{skill.version})\n{skill.text}")
+        if skill.name == agent.entry_skill:
+            steps = render_procedure(runtime.skills.expand(skill.name), runtime.config)
+        else:
+            steps = f"Where these steps apply, they are written out in the procedure of `{agent.entry_skill}`."
+        text = replace_procedure(skill.text, steps)
+        parts.append(f"\n---\n# SKILL: {skill.name} (v{skill.version})\n{text}")
     # Rules that hold for every agent, whatever its skills say.
     parts.append(
         "\n## Operating rules\n- Use the tools; never claim an action you did not perform.\n"
@@ -109,6 +121,7 @@ class LLMBackend:
         # dispatcher refuses it when it is called.
         self.tools = [runtime.dispatcher.tools[t].schema() for t in agent.tools if t in runtime.dispatcher.tools]
         self.queue: list[Action] = []  # tool calls of the latest answer not yet handed to the runtime
+        self.nudged = False  # whether the model was already asked once to reply after ending without a word
 
     def next_action(self, session) -> Action:
         """Return the agent's next move: the next tool call still queued, or a fresh answer from the model.
@@ -157,8 +170,12 @@ class LLMBackend:
             if tool_calls
             else {"role": "assistant", "content": msg.content or ""}
         )
-        # No tool call: the text of the answer is the agent's final message.
+        # No tool call: the text of the answer is the agent's final message. An empty one gets a single nudge.
         if not tool_calls:
+            if not (msg.content or "").strip() and not self.nudged:
+                self.nudged = True
+                self.messages.append({"role": "user", "content": REPLY_NUDGE})
+                return self.next_action(session)
             return Action("final", message=msg.content or "")
         # Every kept call becomes an action that carries the call id, so that observe() can answer the right
         # call. Arguments that are not valid JSON are passed on under "_raw": the call is then refused, and the

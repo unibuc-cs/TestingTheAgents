@@ -132,7 +132,7 @@ They cover the design space of the literature: classic RTS/TCP on declared cover
 
 The structure is deliberate, so that selection is hard and defence-in-depth questions can be discussed. Some components are shared and have a wide blast radius: `governance-checks` and `link-validation` are included by several skills, `check_permission` is available to every specialist agent and `get_page` to all but the governance agent, and the retry helper wraps every tool call. Others are narrow: the approval gate matters to one test. Some policies are enforced only in skills (publish permission), others also in tools (approval tokens).
 
-Skills are executable by both backends. A `SKILL.md` has front matter, prose for the LLM, and a `## Procedure` YAML block that the simulated agent executes and the LLM reads verbatim. A mutation of the procedure therefore changes both backends' behaviour at the same place. Prose-only mutations affect only the LLM and are flagged `#prose`.
+Skills are executable by both backends. A `SKILL.md` has front matter, prose for the LLM, and a `## Procedure` YAML block that the simulated agent executes and the LLM reads as numbered steps (included skills written out in place, settings shown with their current values). A mutation of the procedure therefore changes both backends' behaviour at the same place. Prose-only mutations affect only the LLM and are flagged `#prose`.
 
 ### 4.2 Eval catalog
 

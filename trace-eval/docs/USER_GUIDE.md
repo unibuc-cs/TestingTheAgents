@@ -62,7 +62,10 @@ Everything else is plumbing (loaders, tracing, report).
 
 - **Test**: add a YAML entry. `expect` supports `route_to`, `state` (`[path, op, value]` with `==`, `!=`, `len`,
   `contains`, `in`, `>=`, `<=`, `absent`, `exists`), `tools_required`, `tools_forbidden`, `tools_not_attempted`,
-  `tool_attempts`, `audit`, `response_contains`, `response_excludes`, `max_steps`, `termination` and `tool_errors`. A test can also set `fixture_patch`
+  `tool_attempts`, `audit`, `response_contains`, `response_excludes`, `max_steps`, `termination` and `tool_errors`.
+  `response_contains` is for facts the answer must report (a job id, a path, which link is broken), not for
+  wording; an item that is a list is a set of alternatives. A run that ends with an answer must not end with an
+  empty one (check `answered`). A test can also set `fixture_patch`
   and `fault_profile` (`transient_once:<tool>`, `ack_timeout_once:<tool>`, `permanent_down:<tool>`). `pytest`
   checks that the whole catalog passes on the baseline.
 - **Tool errors**: a tool error the test intends (a refusal, a missing page, an injected outage) must be listed,
@@ -78,8 +81,12 @@ Everything else is plumbing (loaders, tracing, report).
   strategies implement `run(ctx, oracle)`. Use only `ctx.change`, `ctx.catalog`, the baseline facts in
   `ctx.history` and the other changes' outcomes (`ctx.train_variants`). Add the name to `CORE` to include it
   in the default comparison.
-- **LLM backend**: `pip install -e ".[llm]"`, set `TRACEEVAL_LLM_BASE_URL`, `TRACEEVAL_LLM_API_KEY` and
-  `TRACEEVAL_LLM_MODEL`, and pass `--backend llm`. Start with `traceeval run --test PUB-01 --backend llm`.
+- **Model backends**: the agents run on Gemma 4 E4B. `--backend hf` (the default; `pip install -e ".[hf]"`) runs
+  it on the local GPU. `--backend vllm` sends it to a vLLM server: `scripts/gpu_remote.sh setup` once, then
+  `scripts/gpu_remote.sh up` starts it on the GPU server and opens an SSH tunnel; cases then run 32 at a time
+  (`--workers`). Both build the same prompts and parse answers the same way (`traceeval/llm/chat.py`).
+  `--backend llm` is any OpenAI-compatible endpoint (`pip install -e ".[llm]"`, `TRACEEVAL_LLM_BASE_URL`,
+  `TRACEEVAL_LLM_API_KEY`, `TRACEEVAL_LLM_MODEL`). `TRACEEVAL_MODEL_LOG=<file>` logs every model call.
 
 ## 6. Gotchas
 

@@ -86,14 +86,15 @@ def run_case(
             # crc32, not hash(): str hashes are salted per process, which made runs differ between processes
             case_key = zlib.crc32(case.id.encode()) % 10007
             factory = sim.make_backend_factory(flakiness=flakiness, seed=seed * 7919 + rep * 104729 + case_key)
-        elif backend in ("llm", "hf"):
+        elif backend in ("llm", "hf", "vllm"):
             llm = sut.sub("harness.backends.llm_openai")
-            if backend == "hf":
-                # The local model is loaded once per process and shared by every case and variant.
+            if backend in ("hf", "vllm"):
+                # The agents' model, local (hf) or on the GPU server (vllm). Its client is created once per
+                # process and shared by every case and variant.
                 if llm_client is None:
-                    from traceeval.llm.hf_client import shared_client
+                    from traceeval.llm.chat import shared_client
 
-                    llm_client = shared_client()
+                    llm_client = shared_client(backend)
                 llm_settings = llm_settings or llm.LLMSettings(model=llm_client.model_id)
             factory = llm.make_backend_factory(settings=llm_settings, client=llm_client)
         else:

@@ -1,1 +1,1 @@
-"""Model clients for the agent backend: a local model run in-process with Hugging Face transformers."""
+"""The agents' model for the LLM backend, run locally with transformers or served by vLLM (``chat.py``)."""

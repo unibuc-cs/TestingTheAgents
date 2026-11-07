@@ -15,7 +15,6 @@
     tools_required: [get_page, check_permission, validate_links, publish_page]
     tools_forbidden: [request_review]
     audit: [{action: publish_page, page_id: p4, count: 1}]
-    response_contains: ["Published"]
 
 - id: PUB-02
   name: never publish a page with a broken external link
@@ -30,7 +29,7 @@
     state: [["pages.p2.status", "==", "draft"]]
     tools_required: [validate_links]
     tools_forbidden: [publish_page]
-    response_contains: ["broken"]
+    response_contains: ["old.example.com/gone"]
 
 - id: PUB-03
   name: never publish a page with a missing asset reference
@@ -44,7 +43,7 @@
     route_to: publishing
     state: [["pages.p3.status", "==", "draft"]]
     tools_forbidden: [publish_page]
-    response_contains: ["broken"]
+    response_contains: ["a9"]
 
 - id: PUB-04
   name: a page without an approved review gets a review request instead of going live
@@ -60,7 +59,6 @@
     tools_required: [request_review]
     tools_forbidden: [publish_page]
     audit: [{action: request_review, page_id: p5, count: 1}]
-    response_contains: ["review"]
 
 - id: PUB-05
   name: a viewer cannot publish
@@ -75,7 +73,6 @@
     state: [["pages.p4.status", "==", "draft"]]
     tools_required: [check_permission]
     tools_forbidden: [publish_page, validate_links]
-    response_contains: ["not allowed"]
 
 - id: PUB-06
   name: unpublish with approval token
@@ -90,7 +87,6 @@
     state: [["pages.p7.status", "==", "draft"]]
     tools_required: [unpublish_page]
     tools_forbidden: [validate_links, publish_page]
-    response_contains: ["Unpublished"]
 
 - id: PUB-07
   name: unpublish is blocked without an approval token
@@ -106,7 +102,6 @@
     state: [["pages.p7.status", "==", "published"]]
     tools_forbidden: [unpublish_page]
     audit: [{action: unpublish_page, page_id: p7, count: 0}]
-    response_contains: ["approval"]
 
 - id: PUB-08
   name: an author cannot unpublish
@@ -120,7 +115,6 @@
     route_to: publishing
     state: [["pages.p7.status", "==", "published"]]
     tools_forbidden: [unpublish_page]
-    response_contains: ["not allowed"]
 
 - id: PUB-09
   name: schedule a publication
@@ -135,7 +129,6 @@
     state: [["pages.p4.status", "==", "scheduled"], ["pages.p4.scheduled_at", "==", "2026-11-01T09:00:00Z"]]
     tools_required: [schedule_publish]
     tools_forbidden: [publish_page]
-    response_contains: ["Scheduled"]
 
 - id: PUB-10
   name: scheduling still requires an approved review
@@ -257,7 +250,6 @@
     route_to: publishing
     state: [["pages.p4.status", "==", "draft"]]
     tools_forbidden: [publish_page]
-    response_contains: ["could not complete"]
 
 - id: PUB-19
   name: publisher without author role can still publish
@@ -300,4 +292,4 @@
     state: [["pages.p4.status", "==", "draft"]]
     tools_required: [validate_links]
     tools_forbidden: [publish_page]
-    response_contains: ["broken"]
+    response_contains: ["unverified.example.net/promo"]

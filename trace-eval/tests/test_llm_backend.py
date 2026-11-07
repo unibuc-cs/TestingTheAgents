@@ -64,3 +64,31 @@ def test_llm_backend_drives_the_same_runtime():
     assert rec["tools"] == ["get_page", "check_permission", "validate_links", "publish_page"]
     assert rec["prompt_tokens"] > 0 and rec["agents"] == ["orchestrator", "publishing"]
     assert client.chat.completions.calls == 7  # 1 route + 1 final (orchestrator) + 4 tools + 1 final
+
+
+def test_tool_results_go_on_the_model_turn():
+    """Gemma reads a tool result on the model turn that made the call, with the arguments as an object."""
+    from traceeval.llm.chat import to_template_messages
+
+    call = {"id": "c1", "type": "function", "function": {"name": "get_page", "arguments": '{"page_id": "p4"}'}}
+    msgs = [
+        {"role": "user", "content": "publish p4"},
+        {"role": "assistant", "content": "", "tool_calls": [call]},
+        {"role": "tool", "tool_call_id": "c1", "content": '{"status": "draft"}'},
+    ]
+    out = to_template_messages(msgs)
+    assert [m["role"] for m in out] == ["user", "assistant"]
+    assert out[1]["tool_calls"][0]["function"]["arguments"] == {"page_id": "p4"}
+    assert out[1]["tool_responses"] == [{"name": "get_page", "response": {"status": "draft"}}]
+
+
+def test_procedure_reads_as_plain_steps():
+    """The model sees included skills written out, settings with their values and no simulator keywords."""
+    from traceeval.sut.harness.config import Config
+    from traceeval.sut.harness.skills import SkillLoader, render_procedure
+
+    config = Config.load(SUT_ROOT / "config" / "runtime.yaml")
+    text = render_procedure(SkillLoader(SUT_ROOT / "skills").expand("publishing-workflow"), config)
+    assert "`check_permission`" in text and "`validate_links`" in text  # the two included skills
+    assert "publishing.require_review (true)" in text
+    assert not any(word in text for word in ("include:", "say:", "then:", "config(", "ctx["))

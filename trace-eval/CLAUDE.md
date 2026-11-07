@@ -14,6 +14,7 @@ ruff format traceeval tests --line-length 120   # see "Gotchas" before formattin
 traceeval experiment --workdir runs/exp1 --reps 3 --seeds 10     # full simulated experiment, ~5 min
 traceeval sdd --workdir runs/sdd                                 # spec-driven development demo, ~30 s
 traceeval sdd draft --request r.md --id FS-0106 [--replay a.json]  # draft a spec with a model
+scripts/gpu_remote.sh up | status | down     # Gemma on the GPU server's H100s (once: setup); then --backend vllm
 ```
 
 ## Layout (one line each)
@@ -60,7 +61,8 @@ traceeval sdd draft --request r.md --id FS-0106 [--replay a.json]  # draft a spe
 
 - Reformatting files under `traceeval/sut/` can move the literal text anchors used in
   `traceeval/mutation/catalog.py` (the table is excluded from the formatter); run `pytest` afterwards and re-anchor failures.
-- Skills' `## Procedure` blocks are executed by the simulated backend and read verbatim by the LLM backend;
+- Skills' `## Procedure` blocks are executed by the simulated backend and shown to a model as numbered steps
+  (`sut/harness/skills.py::render_procedure`: included skills written out, settings with their values);
   the YAML in them must stay parseable and its step keys are documented in `sut/harness/backends/simulated.py`.
 - `runs/*/history/*.jsonl` include line-level coverage and are large; do not commit them.
 - Record experiments on Python 3.12: on 3.15 coverage.py uses its sys.monitoring core, which does not support the

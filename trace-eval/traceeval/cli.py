@@ -2,7 +2,9 @@
 
 traceeval catalog                         list eval cases
 traceeval mutations                       list controlled changes
-traceeval run --test PUB-01 [--backend hf|llm|simulated]   run one case and print the record (hf: local Gemma)
+traceeval run --test PUB-01 [--backend hf|vllm|llm|simulated]   run one case and print the record
+    hf: Gemma on the local GPU; vllm: Gemma on the GPU server (scripts/gpu_remote.sh up); llm: any
+    OpenAI-compatible endpoint (TRACEEVAL_LLM_*); simulated: the procedure-following stand-in
 traceeval baseline --workdir runs/exp1 --reps 3
 traceeval mutants  --workdir runs/exp1 --reps 3 [--only id ...]
 traceeval evaluate --workdir runs/exp1 --seeds 10
@@ -71,6 +73,11 @@ def cmd_baseline(args):
     )
 
 
+def _workers(args) -> int:
+    """Cases run in parallel: as many as asked, or by default 32 for a served model and 1 otherwise."""
+    return args.workers or (32 if args.backend in ("vllm", "llm") else 1)
+
+
 def cmd_mutants(args):
     from traceeval.experiment.runner import record_mutants
 
@@ -81,6 +88,7 @@ def cmd_mutants(args):
         backend=args.backend,
         config_overrides=_parse_overrides(args.set),
         seed=args.seed,
+        workers=_workers(args),
     )
 
 
@@ -151,7 +159,7 @@ def main(argv=None):
 
     r = sub.add_parser("run")
     r.add_argument("--test", required=True)
-    r.add_argument("--backend", default="hf", choices=["hf", "llm", "simulated"])
+    r.add_argument("--backend", default="hf", choices=["hf", "vllm", "llm", "simulated"])
     r.add_argument("--sut-dir", default=None)
     r.add_argument("--set", action="append", help="config override key=value (JSON value)")
     r.set_defaults(fn=cmd_run)
@@ -159,7 +167,8 @@ def main(argv=None):
     def common(sp):
         sp.add_argument("--workdir", default="runs/exp1")
         sp.add_argument("--reps", type=int, default=3)
-        sp.add_argument("--backend", default="hf", choices=["hf", "llm", "simulated"])
+        sp.add_argument("--backend", default="hf", choices=["hf", "vllm", "llm", "simulated"])
+        sp.add_argument("--workers", type=int, default=0, help="cases in parallel (default: 32 for vllm/llm, else 1)")
         sp.add_argument(
             "--set", action="append", help="config override key=value (JSON value), e.g. simulated.flakiness=0.05"
         )

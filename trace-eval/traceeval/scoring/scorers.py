@@ -9,7 +9,10 @@ Result classification follows the TRACE-Eval handoff, extended with the tool bou
 
 Tool errors: a case lists the errors it expects in ``expect.tool_errors`` ({tool: code or [codes]}, or
 ``"*"`` for any). Any other error fails the case (check ``tool_error:<tool>``) unless a later call of the same tool
-succeeded - e.g. an agent that fixes its own arguments. A crash (check ``crash:<tool>``) always fails."""
+succeeded - e.g. an agent that fixes its own arguments. A crash (check ``crash:<tool>``) always fails.
+
+The answer is checked for facts, not wording: ``response_contains`` lists what it must report (an item may be a
+list of alternatives), and a run that ends with an answer must not end with an empty one (check ``answered``)."""
 
 from dataclasses import dataclass, field
 
@@ -110,8 +113,15 @@ def score_case(case, trace: dict, state: dict, run: dict, error: str | None = No
             if e.get("action") == action and all(e.get(k) == v for k, v in spec.items())
         )
         add(f"audit:{action}", n == count, f"expected {count}, found {n}")
+    # A run that ended with the agent's own answer must say something to the user; a run that only routes
+    # (dataset items marked route_only) or was cut off by the step budget has no answer to judge.
+    if run.get("termination") == "final" and not getattr(case, "context", {}).get("_route_only"):
+        add("answered", bool(message.strip()), f"message: {message[:120]!r}")
+    # Facts the answer must report. An item that is a list is a set of alternatives; any one of them will do.
     for needle in exp.get("response_contains", []):
-        add(f"response~{needle[:24]}", needle.lower() in message.lower(), f"message: {message[:120]!r}")
+        options = [needle] if isinstance(needle, str) else list(needle)
+        found = any(o.lower() in message.lower() for o in options)
+        add(f"response~{options[0][:24]}", found, f"message: {message[:120]!r}")
     for needle in exp.get("response_excludes", []):
         add(f"response!~{needle[:24]}", needle.lower() not in message.lower(), f"message: {message[:120]!r}")
     if "max_steps" in exp:

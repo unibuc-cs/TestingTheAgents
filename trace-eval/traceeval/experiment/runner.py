@@ -4,10 +4,14 @@ baseline : run the full suite K times on the unmodified SUT with code-coverage c
            -> history/baseline.jsonl (observed deps, cost, flakiness)
 mutants  : for each mutation, materialise the variant, extract its change set, run the full
            suite K times -> history/variants/<id>.jsonl (ground-truth fault matrix)
+
+With a served model (``workers`` > 1) the cases of a run go to the server in parallel threads; the baseline
+stays sequential, because its coverage contexts are process-wide.
 """
 
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from traceeval.catalog import load_catalog
@@ -34,32 +38,38 @@ def run_suite(
     seed: int,
     llm_settings=None,
     only: set[str] | None = None,
+    workers: int = 1,
 ) -> list[dict]:
-    records: list[dict] = []
     cov = CoverageSession(sut.path) if with_coverage else None
-    for rep in range(reps):
-        for case in cases:
-            if only is not None and case.id not in only:
-                continue
-            if cov:
-                cov.begin(f"{case.id}|{rep}")
-            rec = run_case(
-                sut,
-                case,
-                backend=backend,
-                rep=rep,
-                variant=variant,
-                config_overrides=config_overrides,
-                seed=seed,
-                llm_settings=llm_settings,
+    jobs = [(rep, case) for rep in range(reps) for case in cases if only is None or case.id in only]
+
+    def one(job):  # one case once; with coverage, inside its own coverage context
+        rep, case = job
+        if cov:
+            cov.begin(f"{case.id}|{rep}")
+        rec = run_case(
+            sut,
+            case,
+            backend=backend,
+            rep=rep,
+            variant=variant,
+            config_overrides=config_overrides,
+            seed=seed,
+            llm_settings=llm_settings,
+        )
+        if backend != "simulated":  # model runs are slow: report each case as it finishes
+            failed = ",".join(rec["failed_checks"])
+            _log(
+                f"[{variant}] rep {rep} {case.id}: {rec['classification']} "
+                f"{rec['latency_ms'] / 1000:.1f}s {rec['tokens']} tok {failed}"
             )
-            records.append(rec)
-            if backend != "simulated":  # model runs are slow: report each case as it finishes
-                failed = ",".join(rec["failed_checks"])
-                _log(
-                    f"[{variant}] rep {rep} {case.id}: {rec['classification']} "
-                    f"{rec['latency_ms'] / 1000:.1f}s {rec['tokens']} tok {failed}"
-                )
+        return rec
+
+    if workers > 1 and cov is None:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            records = list(pool.map(one, jobs))  # in job order, whatever order they finish in
+    else:
+        records = [one(job) for job in jobs]
     if cov:
         functions = cov.finish()
         for rec in records:
@@ -108,6 +118,7 @@ def record_mutants(
     config_overrides: dict | None = None,
     seed: int = 0,
     llm_settings=None,
+    workers: int = 1,
 ) -> dict[str, list[dict]]:
     workdir = Path(workdir)
     cases = load_catalog()
@@ -127,6 +138,7 @@ def record_mutants(
             with_coverage=False,
             seed=seed,
             llm_settings=llm_settings,
+            workers=workers,
         )
         write_jsonl(workdir / "history" / "variants" / f"{m.id}.jsonl", records)
         failing = sorted({r["test_id"] for r in records if not r["passed"]})
