@@ -11,7 +11,8 @@ pip install -e ".[dev,ml]"          # or: uv pip install --python .venv -e ".[de
 pytest -q                           # ~60 s; must stay green
 ruff check traceeval tests --select E,F,W,I,B --line-length 120
 ruff format traceeval tests --line-length 120   # see "Gotchas" before formatting sut/
-traceeval experiment --workdir runs/exp1 --reps 3 --seeds 10     # full simulated experiment, ~5 min
+traceeval experiment --backend simulated --workdir runs/exp1 --reps 3 --seeds 10   # full simulated experiment, ~5 min
+traceeval experiment --backend vllm --workdir runs/gemma1 --reps 1    # the same with Gemma (docs/EXPERIMENT.md)
 traceeval sdd --workdir runs/sdd                                 # spec-driven development demo, ~30 s
 traceeval sdd draft --request r.md --id FS-0106 [--replay a.json]  # draft a spec with a model
 scripts/gpu_remote.sh up | status | down     # Gemma on the GPU server's H100s (once: setup); then --backend vllm

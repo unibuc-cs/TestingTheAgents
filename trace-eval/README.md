@@ -13,7 +13,7 @@ compared by replaying recorded runs. One of them, `adaptive_bayes`, is the propo
 ```bash
 pip install -e ".[dev]"
 pytest -q                                                   # ~60 s
-traceeval experiment --workdir runs/exp1 --reps 3 --seeds 10
+traceeval experiment --backend simulated --workdir runs/exp1 --reps 3 --seeds 10
 # -> runs/exp1/results/report.md  (tables + 3 figures)
 ```
 
@@ -51,11 +51,14 @@ it, or with [docs/SDD_DEMO.md](docs/SDD_DEMO.md) for the results. The report is 
 
 ## Further reading
 
+- [docs/EXPERIMENT.md](docs/EXPERIMENT.md): the experiment with a real model (Gemma 4 E4B): where it runs, the GPU server script, what to type.
 - [docs/STUDY_GUIDE.md](docs/STUDY_GUIDE.md): the whole repository in diagrams, with the focus on the SDD layer, and a 2–3 hour reading plan.
 - [docs/USER_GUIDE.md](docs/USER_GUIDE.md): how the pieces fit, how to read the report, how to add a test, a change or a strategy.
 - [docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md): the research framing (RQs, method, results, roadmap, paper plan), opening with a TL;DR.
 - [docs/related_work.md](docs/related_work.md), [docs/tau2_integration.md](docs/tau2_integration.md): literature positioning, and tau2-bench as a second system under test.
 - [CLAUDE.md](CLAUDE.md): conventions for coding agents working in the repo.
 
-Status: prototype v0.1. The simulated backend is fully reproducible. The LLM backend has been tested only
-against a scripted client. The tau2-bench adapter is designed but not implemented.
+Status: prototype v0.1. The results above come from the simulated backend, which is fully reproducible. The
+agents now also run on Gemma 4 E4B, locally or on the GPU server ([docs/EXPERIMENT.md](docs/EXPERIMENT.md)),
+and the ground truth under it is being recorded. The backend for other OpenAI-compatible endpoints (`llm`)
+has been tested only against a scripted client. The tau2-bench adapter is designed but not implemented.
