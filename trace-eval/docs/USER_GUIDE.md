@@ -84,7 +84,8 @@ Everything else is plumbing (loaders, tracing, report).
 - **Model backends**: the agents run on Gemma 4 E4B. `--backend hf` (the default; `pip install -e ".[hf]"`) runs
   it on the local GPU. `--backend vllm` sends it to a vLLM server: `scripts/gpu_remote.sh setup` once, then
   `scripts/gpu_remote.sh up` starts it on the GPU server and opens an SSH tunnel; cases then run 32 at a time
-  (`--workers`). Both build the same prompts and parse answers the same way (`traceeval/llm/chat.py`).
+  (`--workers`). `scripts/gpu_remote.sh up qwen` serves the second model, Qwen3.8-27B, on the other GPU, for
+  `--backend llm` (see [EXPERIMENT.md](EXPERIMENT.md)). Both build the same prompts and parse answers the same way (`traceeval/llm/chat.py`).
   `--backend llm` is any OpenAI-compatible endpoint (`pip install -e ".[llm]"`, `TRACEEVAL_LLM_BASE_URL`,
   `TRACEEVAL_LLM_API_KEY`, `TRACEEVAL_LLM_MODEL`). `TRACEEVAL_MODEL_LOG=<file>` logs every model call.
 

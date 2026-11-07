@@ -1,7 +1,8 @@
 # Running the experiment with a real model
 
-This page explains what the experiment does now that the agents run on a real model (Gemma 4 E4B) instead
-of the simulator. It covers where that model runs, how the GPU server is wired in, and what to type. If you
+This page explains what the experiment does now that the agents run on real models (Gemma 4 E4B, and
+Qwen3.8-27B as a second model) instead of the simulator. It covers where the models run, how the GPU server
+is wired in, and what to type. If you
 feel lost, read sections 1 and 4 first; the rest you can look up when you need it.
 
 The diagrams are Mermaid; GitHub and PyCharm (with the Mermaid plugin) draw them.
@@ -121,90 +122,113 @@ Gemma has its own syntax for tool calls. A real answer from the model log:
 The tokenizer's own parser turns that into `check_permission(action="attach", user_id="alice")`. We don't
 parse it by hand.
 
-## 3. Where the model runs
+## 3. Where the models run
 
-The `--backend` option picks who plays the agents:
+Two models play the agents. **Gemma 4 E4B** (Google, small) is the default. **Qwen3.8-27B** (Alibaba,
+August 2026, about six times bigger) is the second model, so we can check that results hold for more than one
+model. The `--backend` option picks who plays the agents:
 
 | backend | what it is | when to use it |
 |---|---|---|
 | `hf` (default) | Gemma in this Python process, on your local GPU (RTX 4090), one call at a time | a quick look at one case, no server needed |
-| `vllm` | Gemma served by vLLM on the GPU server, reached through an SSH tunnel; many calls at once | recording experiments |
-| `llm` | any OpenAI-compatible endpoint (`TRACEEVAL_LLM_*` variables) | later: OpenAI's `gpt-6-luna` (phase 1) |
+| `vllm` | Gemma served by vLLM on the GPU server (GPU0), reached through an SSH tunnel; many calls at once | recording experiments with Gemma |
+| `llm` | any OpenAI-compatible endpoint, named by `TRACEEVAL_LLM_BASE_URL` and `TRACEEVAL_LLM_MODEL` | Qwen on the GPU server (GPU1); later OpenAI's `gpt-6-luna` (phase 1) |
 | `simulated` | the old procedure-following stand-in | the existing results in `docs/results/`; will be removed (phase 2) |
 
-`hf` and `vllm` share all the code in [`traceeval/llm/chat.py`](../traceeval/llm/chat.py). The prompt is
-built on your machine with Gemma's chat template and sent as token ids, and the answer comes back as raw text
-and is parsed on your machine. The only difference is who does the arithmetic. So a test gets the same prompt
-and the same parsing on either engine.
+The two models are wired in slightly differently:
 
-This is the path of one model call with `--backend vllm`:
+- **Gemma (`hf`, `vllm`):** we build the prompt on your machine with Gemma's chat template and send it as token
+  ids. The answer comes back as raw text and we parse it on your machine
+  ([`traceeval/llm/chat.py`](../traceeval/llm/chat.py)). The only difference between `hf` and `vllm` is who
+  does the arithmetic, so a test gets the same prompt and the same parsing on either engine.
+- **Qwen (`llm`):** the ordinary chat API. vLLM applies Qwen's chat template and turns Qwen's tool-call syntax
+  into structured calls on the server, so there is no Qwen-specific code in the repo. Qwen's "thinking" mode
+  is turned off on the server, so it answers directly, as Gemma does.
+
+This is the path of one model call when both models are running:
 
 ```mermaid
 flowchart LR
     subgraph PC["Your PC"]
-        A["Agent backend<br/>llm_openai.py"] --> C["chat.py<br/>chat template to token ids"]
-        C --> L["localhost:18100<br/>SSH tunnel entrance"]
-        C2["chat.py<br/>parse tool calls"] --> A
+        A["Agent backend<br/>llm_openai.py"]
+        A -->|"--backend vllm"| C["chat.py<br/>Gemma template, then parsing"]
+        A -->|"--backend llm"| Q["OpenAI client<br/>chat API"]
+        C --> L1["localhost:18100"]
+        Q --> L2["localhost:18101"]
     end
     subgraph SRV["GPU server fmi0@10.23.13.53"]
-        E["SSH tunnel exit<br/>127.0.0.1:18100"] --> VS["vLLM server"]
-        VS --> G0["Gemma copy on GPU0"]
-        VS --> G1["Gemma copy on GPU1"]
+        V1["vLLM server: Gemma"] --> G0["GPU0"]
+        V2["vLLM server: Qwen<br/>template and tool parsing"] --> G1["GPU1"]
         GX["GPU2: someone else's job<br/>never touched"]
     end
-    L -->|encrypted SSH| E
-    VS -.->|raw answer text, back through the tunnel| C2
+    L1 -->|SSH tunnel| V1
+    L2 -->|SSH tunnel| V2
 ```
 
-The vLLM server only listens on the server's own localhost, so nobody on the network can reach it. Your PC
-gets in through the SSH tunnel, which uses the same key you use to log in.
+Each vLLM server only listens on the server's own localhost, so nobody on the network can reach it. Your PC
+gets in through an SSH tunnel per model, which uses the same key you use to log in.
 
 **Is it reproducible?** Decoding is greedy (temperature 0), so the same prompt gives the same answer. On vLLM
 this is *nearly* exact rather than bit-exact: the batch a request lands in can change the floating-point
-arithmetic slightly, and once in a while that flips a token. Treat small differences between two recordings
-as noise.
+arithmetic slightly, and once in a while that flips a token, and with it the rest of the run. We saw this
+with Qwen when 32 cases ran at once: a test failed under a change that couldn't have affected it (section 7).
+That's why a ground truth should come from several repetitions (`--reps 3`, majority vote), not one.
 
 ## 4. The GPU server, step by step
 
 Everything goes through one script, [`scripts/gpu_remote.sh`](../scripts/gpu_remote.sh). Run it from the
-repo root in Git Bash (or any bash).
+repo root in Git Bash (or any bash). It knows two models, called presets:
+
+| preset | model | GPU | port | run with |
+|---|---|---|---|---|
+| `gemma` (the default) | `google/gemma-4-E4B-it` | 0 | 18100 | `--backend vllm` |
+| `qwen` | `Qwen/Qwen3.8-27B-FP8` (8-bit weights, about 30 GB) | 1 | 18101 | `--backend llm` plus the two variables below |
+
+Different GPUs and ports mean both can run at the same time, each with its own experiment.
 
 ### What lives where
 
 | where | what |
 |---|---|
 | server `~/traceeval-vllm/.venv` | a Python 3.12 environment with vLLM 0.31.0, kept apart from anything else on the server |
-| server `~/traceeval-vllm/server.log` | the vLLM log: start-up, errors, request counts |
-| server `~/traceeval-vllm/server.pid` | the server's process id, so `down` can stop it |
-| server `~/.cache/huggingface/` | the Gemma weights (already downloaded) |
-| your PC `~/.traceeval-vllm-tunnel-18100.pid` | the tunnel's process id, so `down` can close it |
+| server `~/traceeval-vllm/gemma.log`, `qwen.log` | each server's log: start-up, errors, request counts |
+| server `~/traceeval-vllm/gemma.pid`, `qwen.pid` | each server's process id, so `down` can stop it |
+| server `~/.cache/huggingface/` | the model weights (both already downloaded) |
+| your PC `~/.traceeval-vllm-tunnel-gemma.pid`, `...-qwen.pid` | each tunnel's process id, so `down` can close it |
 
 ### Once (already done)
 
 ```bash
-scripts/gpu_remote.sh setup     # creates ~/traceeval-vllm/.venv on the server and installs vLLM
+scripts/gpu_remote.sh setup     # creates ~/traceeval-vllm/.venv on the server, installs vLLM, checks the models
 ```
 
 ### Every working session
 
 ```bash
-scripts/gpu_remote.sh up        # start vLLM on GPU0+GPU1, open the tunnel, wait until it answers
-scripts/gpu_remote.sh status    # is the server running? GPU memory? does the endpoint answer?
+scripts/gpu_remote.sh up gemma  # start Gemma on GPU0, open its tunnel, wait until it answers
+scripts/gpu_remote.sh up qwen   # the same for Qwen on GPU1
+scripts/gpu_remote.sh status    # GPU memory, and for each model: server, tunnel, endpoint
 
+# Gemma
 traceeval run --test PUB-01 --backend vllm                              # one case, to check
 traceeval experiment --backend vllm --workdir runs/gemma1 --reps 1      # the whole recording
 
-scripts/gpu_remote.sh down      # stop the server and close the tunnel: frees the GPUs
+# Qwen (in another terminal, at the same time if you like)
+export TRACEEVAL_LLM_BASE_URL=http://127.0.0.1:18101/v1 TRACEEVAL_LLM_MODEL=Qwen/Qwen3.8-27B-FP8
+traceeval run --test PUB-01 --backend llm
+traceeval experiment --backend llm --workdir runs/qwen1 --reps 1
+
+scripts/gpu_remote.sh down      # stop both servers and close the tunnels: frees the GPUs
+scripts/gpu_remote.sh down qwen # or just one of them
 ```
 
 `up` does four things:
 
-1. It checks whether the server is already running (via `server.pid`). If not, it starts `vllm serve` on
-   the server, detached from the SSH session, so it keeps running when the script exits. It runs one copy of
-   Gemma per GPU in `TRACEEVAL_GPUS`, and vLLM spreads the requests over the copies.
-2. It opens the SSH tunnel in the background, unless one is already open.
-3. It polls the endpoint until it answers, which takes a few minutes the first time while vLLM loads the
-   model and compiles its kernels.
+1. It checks whether that model's server is already running (via its pid file). If not, it starts
+   `vllm serve` on the server, detached from the SSH session, so it keeps running when the script exits.
+2. It opens that model's SSH tunnel in the background, unless one is already open.
+3. It polls the endpoint until it answers. That takes a few minutes while vLLM loads the model and compiles
+   its kernels.
 4. If the server dies while starting, it prints the last lines of the server log and exits.
 
 You can run `up` as often as you like: it reuses a running server and an open tunnel.
@@ -219,18 +243,23 @@ All optional, as environment variables:
 | variable | default | meaning |
 |---|---|---|
 | `TRACEEVAL_GPU_HOST` | `fmi0@10.23.13.53` | the SSH login (key-based, no password prompt) |
-| `TRACEEVAL_GPUS` | `0,1` | which GPUs; one copy of the model on each |
-| `TRACEEVAL_VLLM_PORT` | `18100` | the port, the same on both ends of the tunnel |
-| `TRACEEVAL_HF_MODEL` | `google/gemma-4-E4B-it` | the model; must be in the server's Hugging Face cache |
-| `TRACEEVAL_VLLM_URL` | `http://127.0.0.1:18100/v1` | read by `--backend vllm`; change it only if you serve the model some other way |
+| `TRACEEVAL_GPUS` | the preset's GPU | which GPUs; one copy of the model on each. `TRACEEVAL_GPUS=0,1 scripts/gpu_remote.sh up gemma` puts Gemma on both GPUs when Qwen isn't needed |
+| `TRACEEVAL_VLLM_PORT` | the preset's port | the port, the same on both ends of the tunnel |
+| `TRACEEVAL_HF_MODEL` | `google/gemma-4-E4B-it` | the `gemma` preset's model; `--backend hf` and `vllm` read it too |
+| `TRACEEVAL_VLLM_URL` | `http://127.0.0.1:18100/v1` | where `--backend vllm` sends Gemma's calls |
+| `TRACEEVAL_LLM_BASE_URL`, `TRACEEVAL_LLM_MODEL` | (none useful) | where `--backend llm` sends its calls, and the model name the server knows |
+
+To add a third model, add a preset to the `case` in `preset()` at the top of the script: model, GPU, port,
+and any vLLM flags it needs.
 
 ### When something goes wrong
 
 | symptom | what to do |
 |---|---|
-| `endpoint ... does not answer` but the server is running (often after the PC slept) | the tunnel died: `scripts/gpu_remote.sh down` then `up` |
-| `up` says "the server stopped" | read the log lines it prints, or `scripts/gpu_remote.sh logs` |
-| log shows `nvcc ... Unknown option '--compress-mode=size'` | FlashInfer tried to compile with the server's old CUDA compiler. The script already turns its sampler off (`VLLM_USE_FLASHINFER_SAMPLER=0`); if it appears for another component, that component needs the same treatment |
+| `endpoint ... does not answer` but the server is running (often after the PC slept) | the tunnel died: `scripts/gpu_remote.sh down NAME` then `up NAME` |
+| `up` says "the server stopped" | read the log lines it prints, or `scripts/gpu_remote.sh logs NAME` |
+| log shows `nvcc ... Unknown option '--compress-mode=size'` or `NVCC version must be at least 12.9` | a vLLM component tried to compile kernels with the server's old CUDA compiler (12.0). The script turns off the two that did (`VLLM_USE_FLASHINFER_SAMPLER=0`, `VLLM_USE_DEEP_GEMM=0`); a new one needs the same treatment |
+| log shows `max_num_seqs ... exceeds available Mamba cache blocks` | the model can't keep state for that many requests at once: lower `--max-num-seqs` in the script |
 | log shows "out of memory" | another job took GPU memory: check `status`, pick other GPUs with `TRACEEVAL_GPUS`, or lower `--gpu-memory-utilization` in the script |
 | the tunnel fails with "address already in use" | something on your PC uses the port: set `TRACEEVAL_VLLM_PORT` to another one (use the same value for `up`, the runs and `down`) |
 | SSH asks for a password | the script needs key login: `ssh-copy-id fmi0@10.23.13.53` once |
@@ -253,8 +282,8 @@ with the same options.
 - **`report`** writes `runs/gemma1/results/report.md`. Its first section is the sanity check: every
   regression must be revealed by at least one test, and no benign change by any.
 
-`--reps 1` is enough because decoding is greedy. The simulator used `--reps 3` to average out its
-simulated flakiness.
+`--reps 1` is good for a first look. For a ground truth you'll rely on, use `--reps 3`: greedy decoding on
+vLLM is not perfectly repeatable (section 3), and the majority vote over the repetitions takes care of that.
 
 What ends up in the work folder (git-ignored; copy `results/` into `docs/results/` to keep a run):
 
@@ -306,6 +335,7 @@ These are the kinds of slips the simulator used to fake on purpose. Now they com
 | 0 | measure Gemma on the original app; make prompts and checks fit a real model | done |
 | — | GPU server: `scripts/gpu_remote.sh`, `--backend vllm`, parallel runs | done |
 | — | first full recording with Gemma (`runs/gemma1`, below) | done |
+| — | second model: Qwen3.8-27B on GPU1, next to Gemma on GPU0 (`runs/qwen1`, below) | done |
 | 1 | an OpenAI backend (`gpt-6-luna`) and a cache of model answers | next |
 | 2 | remove the simulator (scripted slips, flakiness, synthetic tokens and latency) | planned |
 | 3 | pytest replays recorded model answers ("cassettes"), so tests need no GPU | planned |
@@ -340,6 +370,41 @@ On the 20 regressions that are caught, the strategies line up roughly as they di
 
 Treat these numbers as preliminary. They come from one repetition and from a ground truth that phase 4
 still has to fix. The report is `runs/gemma1/results/report.md`.
+
+### The same experiment with Qwen
+
+`traceeval experiment --backend llm --workdir runs/qwen1 --reps 1`, with Qwen on GPU1, took about an hour:
+ten minutes for the baseline and 45 for the changes. Qwen takes about three seconds per case where Gemma
+takes one, and it slows down more when 32 cases run at once.
+
+- **Original app:** 134 of 136 pass. In SEO-05 Qwen counts the 60-character title as 61 and refuses it
+  (models are bad at counting characters). In AST-07, after the attach fails as expected, it looks the
+  missing asset up, and the test doesn't allow that second error. That one is arguably the test being too
+  strict.
+- **Regressions:** 23 of 32 caught, against 20 for Gemma.
+- **Benign changes:** one of them, a rewording of the orchestrator's prompt, fails two tests. One of the two
+  (PUB-07) can't be caused by the change: the failing step is in the publishing agent, whose prompt doesn't
+  include the orchestrator's. It's run-to-run noise (see "Is it reproducible?" in section 3).
+
+The two models miss different regressions:
+
+| | changes | why |
+|---|---|---|
+| **both miss** | the four simulator-only changes; `skill_publish_drop_permission_check`, `skill_governance_drop_consent`, `skill_seo_drop_length_guard` | the router changes don't matter to a model; for the skill changes, both models do the step anyway because the skill's prose still asks for it |
+| **only Gemma misses** | `code_edit_keeps_review`, `config_require_review_false`, `config_seo_title_20`, `skill_linkval_ignore_assets`, `skill_rollback_drop_permission_check` | Gemma's own baseline failures hide some of them, and Gemma ignores some guards whatever their setting; Qwen follows the config values |
+| **only Qwen misses** | `skill_publish_drop_link_validation`, `combined_seo_keyword_limit` | Qwen validates links even when the step is gone. In SEO-07 Qwen reports the new score (70) but adds that it "dropped from 100", which satisfies the fact check "100": that check is too weak and should look at the score itself |
+
+Strategies on the regressions Qwen does catch, at 20% of the full-suite tokens:
+
+- `ir_tfidf` catches 92%, `observed` 83% and `declared` 50%.
+- `adaptive_bayes` catches 88% while spending about 9%.
+
+The ranking is the same as under Gemma and the simulator.
+
+**What this means for phase 4:** the four router changes are benign under any model, and three skill changes
+are masked by the skills' prose under both models. Both groups need relabelling or redesigning. The rest
+depends on the model, which is exactly why a second model is useful. Qwen also needs `--reps 3`, so that a
+majority vote filters out the noise.
 
 ## 8. Where to look in the code
 

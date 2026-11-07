@@ -1,34 +1,55 @@
 #!/usr/bin/env bash
-# Serve the agents' model (Gemma 4 E4B) with vLLM on the GPU server, and reach it through an SSH tunnel.
+# Serve the agents' models with vLLM on the GPU server, and reach them through SSH tunnels.
 #
-#   scripts/gpu_remote.sh setup    once: create the vLLM environment on the server
-#   scripts/gpu_remote.sh up       start the server on the chosen GPUs and open the tunnel (waits until ready)
-#   scripts/gpu_remote.sh status   server process, GPU use, and whether the tunnel answers
-#   scripts/gpu_remote.sh logs     follow the server log
-#   scripts/gpu_remote.sh down     stop the server and close the tunnel
+#   scripts/gpu_remote.sh setup               once: create the vLLM environment on the server
+#   scripts/gpu_remote.sh up [MODEL]          start MODEL on its GPU and open its tunnel (waits until ready)
+#   scripts/gpu_remote.sh status              servers, GPU use, and which endpoints answer
+#   scripts/gpu_remote.sh logs [MODEL]        follow a server's log
+#   scripts/gpu_remote.sh down [MODEL]        stop a server and close its tunnel (default: all of them)
 #
-# Then run, e.g.:  traceeval mutants --backend vllm --workdir runs/x --reps 1
+# MODEL is a preset (default: gemma). The two presets use different GPUs and ports, so both can run at once:
+#   gemma  google/gemma-4-E4B-it  GPU 0  port 18100  then: traceeval ... --backend vllm
+#   qwen   Qwen/Qwen3.8-27B-FP8   GPU 1  port 18101  then: TRACEEVAL_LLM_BASE_URL=http://127.0.0.1:18101/v1 \
+#                                                          TRACEEVAL_LLM_MODEL=Qwen/Qwen3.8-27B-FP8 traceeval ... --backend llm
 #
-# The server listens only on the server's own localhost; this machine reaches it through the tunnel, at
-# http://127.0.0.1:$PORT/v1 (what the vllm backend expects; override with TRACEEVAL_VLLM_URL).
-# Settings, as environment variables [defaults]:
-#   TRACEEVAL_GPU_HOST   [fmi0@10.23.13.53]       SSH login on the server (key-based)
-#   TRACEEVAL_GPUS       [0,1]                     GPUs to use; one copy of the model per GPU
-#   TRACEEVAL_VLLM_PORT  [18100]                   port on both ends of the tunnel
-#   TRACEEVAL_HF_MODEL   [google/gemma-4-E4B-it]   must be in the server's Hugging Face cache
+# A server listens only on the server's own localhost; this machine reaches it through its tunnel, at
+# http://127.0.0.1:PORT/v1. Environment variables override a preset for one call:
+#   TRACEEVAL_GPU_HOST   [fmi0@10.23.13.53]  SSH login on the server (key-based)
+#   TRACEEVAL_GPUS       GPUs to use, one copy of the model per GPU (e.g. TRACEEVAL_GPUS=0,1 for gemma alone)
+#   TRACEEVAL_VLLM_PORT  port on both ends of the tunnel
+#   TRACEEVAL_HF_MODEL   the gemma preset's model (the vllm backend reads the same variable)
 set -euo pipefail
 
 HOST=${TRACEEVAL_GPU_HOST:-fmi0@10.23.13.53}
-GPUS=${TRACEEVAL_GPUS:-0,1}
-PORT=${TRACEEVAL_VLLM_PORT:-18100}
-MODEL=${TRACEEVAL_HF_MODEL:-google/gemma-4-E4B-it}
-VERSION=0.31.0                                     # the vLLM release setup installs
-RDIR=traceeval-vllm                                # folder in the server home: environment, log, pid
-TUNNEL_PID="$HOME/.traceeval-vllm-tunnel-$PORT.pid"  # the local tunnel process, for 'down'
-COPIES=$(awk -F, '{print NF}' <<<"$GPUS")          # one copy of the model per GPU in the list
-URL="http://127.0.0.1:$PORT/v1"
+VERSION=0.31.0  # the vLLM release setup installs
+RDIR=traceeval-vllm  # folder in the server home: environment, and per model its log and pid
+PRESETS="gemma qwen"
+
+# Sets the variables of one preset: model, GPUs, port, extra vLLM flags, and where its pid and log live.
+preset() {
+  NAME=$1
+  case "$NAME" in
+    gemma)  # we build Gemma's prompts and parse its answers ourselves (traceeval/llm/chat.py)
+      MODEL=${TRACEEVAL_HF_MODEL:-google/gemma-4-E4B-it}; GPUS=0; PORT=18100; EXTRA="" ;;
+    qwen)  # vLLM applies Qwen's chat template and parses its tool calls; thinking and images are off
+      MODEL=Qwen/Qwen3.8-27B-FP8; GPUS=1; PORT=18101
+      EXTRA="--enable-auto-tool-choice --tool-call-parser qwen3_coder --reasoning-parser qwen3"
+      EXTRA="$EXTRA --default-chat-template-kwargs '{\"enable_thinking\": false}'"
+      EXTRA="$EXTRA --limit-mm-per-prompt '{\"image\": 0, \"video\": 0}'" ;;
+    *) echo "unknown model '$NAME' (one of: $PRESETS)"; exit 2 ;;
+  esac
+  GPUS=${TRACEEVAL_GPUS:-$GPUS}
+  PORT=${TRACEEVAL_VLLM_PORT:-$PORT}
+  COPIES=$(awk -F, '{print NF}' <<<"$GPUS")  # one copy of the model per GPU in the list
+  URL="http://127.0.0.1:$PORT/v1"
+  PIDF="$RDIR/$NAME.pid"  # on the server, relative to the home folder
+  LOG="$RDIR/$NAME.log"
+  TUNNEL_PID="$HOME/.traceeval-vllm-tunnel-$NAME.pid"  # the local tunnel process, for 'down'
+}
 
 remote() { ssh -o BatchMode=yes -o ConnectTimeout=10 "$HOST" "$@"; }
+
+server_alive() { remote "[ -f ~/$PIDF ] && kill -0 \$(cat ~/$PIDF) 2>/dev/null"; }
 
 tunnel_alive() { [ -f "$TUNNEL_PID" ] && kill -0 "$(cat "$TUNNEL_PID")" 2>/dev/null; }
 
@@ -41,82 +62,98 @@ cmd_setup() {
     UV=\$(command -v uv || echo ~/.local/bin/uv)
     [ -x .venv/bin/python ] || \$UV venv --python 3.12 .venv
     \$UV pip install --python .venv/bin/python 'vllm==$VERSION'
-    .venv/bin/python -c 'import vllm, torch; print(\"vllm\", vllm.__version__, \"torch\", torch.__version__)'
-    if ls ~/.cache/huggingface/hub/models--${MODEL//\//--}/snapshots/*/config.json >/dev/null 2>&1; then
-      echo 'model: $MODEL is in the Hugging Face cache'
+    .venv/bin/python -c 'import vllm, torch; print(\"vllm\", vllm.__version__, \"torch\", torch.__version__)'"
+  for name in $PRESETS; do
+    preset "$name"
+    if remote "ls ~/.cache/huggingface/hub/models--${MODEL//\//--}/snapshots/*/config.json >/dev/null 2>&1"; then
+      echo "$name: $MODEL is in the Hugging Face cache"
     else
-      echo 'model: $MODEL is NOT in the cache; download it once on the server: hf download $MODEL'
-    fi"
+      echo "$name: $MODEL is NOT in the cache; download it once on the server: ~/$RDIR/.venv/bin/hf download $MODEL"
+    fi
+  done
 }
 
 cmd_up() {
-  if remote "[ -f ~/$RDIR/server.pid ] && kill -0 \$(cat ~/$RDIR/server.pid) 2>/dev/null"; then
-    echo "Server already running on $HOST."
+  preset "${1:-gemma}"
+  if server_alive; then
+    echo "$NAME: already running on $HOST."
   else
-    echo "Starting vLLM on $HOST, GPUs $GPUS ($COPIES copies of $MODEL) ..."
+    echo "$NAME: starting $MODEL on $HOST, GPUs $GPUS, port $PORT ..."
     # setsid gives the server its own process group, so that 'down' stops it together with its workers.
-    # The FlashInfer sampler is off: it compiles its kernels at start-up with the system nvcc, which on this
-    # server is too old; vLLM's own sampler needs no compiling.
+    # The FlashInfer sampler and DeepGEMM (FP8 matrix kernels) are off: both compile their kernels at
+    # start-up with the system nvcc, which on this server is too old; vLLM's own sampler and its precompiled
+    # FP8 kernels need no compiling. At most 128 requests at once: a run sends a few dozen, and vLLM's default
+    # (1024) needs more per-request state than a hybrid model such as Qwen3.8 has room for.
     remote "cd ~/$RDIR || exit 1
-      CUDA_VISIBLE_DEVICES=$GPUS HF_HUB_OFFLINE=1 VLLM_USE_FLASHINFER_SAMPLER=0 \
+      CUDA_VISIBLE_DEVICES=$GPUS HF_HUB_OFFLINE=1 VLLM_USE_FLASHINFER_SAMPLER=0 VLLM_USE_DEEP_GEMM=0 \
         setsid nohup .venv/bin/vllm serve $MODEL --host 127.0.0.1 --port $PORT \
-        --data-parallel-size $COPIES --max-model-len 32768 --enable-prefix-caching \
-        --gpu-memory-utilization 0.85 --seed 0 > server.log 2>&1 < /dev/null &
-      echo \$! > server.pid"
+        --data-parallel-size $COPIES --max-model-len 32768 --max-num-seqs 128 --enable-prefix-caching \
+        --gpu-memory-utilization 0.85 --seed 0 $EXTRA > $NAME.log 2>&1 < /dev/null &
+      echo \$! > $NAME.pid"
   fi
   if tunnel_alive; then
-    echo "Tunnel already open (pid $(cat "$TUNNEL_PID"))."
+    echo "$NAME: tunnel already open (pid $(cat "$TUNNEL_PID"))."
   else
     # The tunnel runs in the background with no terminal attached, so it outlives this script.
     ssh -N -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 \
       -L "$PORT:127.0.0.1:$PORT" "$HOST" </dev/null >/dev/null 2>&1 &
     echo $! >"$TUNNEL_PID"
     disown || true
-    echo "Tunnel open: $URL (pid $(cat "$TUNNEL_PID"))."
+    echo "$NAME: tunnel open, $URL (pid $(cat "$TUNNEL_PID"))."
   fi
-  echo -n "Waiting for the server"
+  echo -n "$NAME: waiting for the server"
   for _ in $(seq 1 120); do
     if server_ready; then
       echo " ready."
       return 0
     fi
-    if ! remote "kill -0 \$(cat ~/$RDIR/server.pid) 2>/dev/null"; then
-      echo " the server stopped. Last lines of ~/$RDIR/server.log:"
-      remote "tail -n 30 ~/$RDIR/server.log"
+    if ! server_alive; then
+      echo " the server stopped. Last lines of ~/$LOG:"
+      remote "tail -n 30 ~/$LOG"
       return 1
     fi
     echo -n "."
     sleep 5
   done
-  echo " not ready after 10 minutes; see: scripts/gpu_remote.sh logs"
+  echo " not ready after 10 minutes; see: scripts/gpu_remote.sh logs $NAME"
   return 1
 }
 
 cmd_status() {
-  remote "if [ -f ~/$RDIR/server.pid ] && kill -0 \$(cat ~/$RDIR/server.pid) 2>/dev/null; then
-      echo \"server: running (pid \$(cat ~/$RDIR/server.pid))\"; else echo 'server: stopped'; fi
-    nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu --format=csv,noheader"
-  if tunnel_alive; then echo "tunnel: open (pid $(cat "$TUNNEL_PID"))"; else echo "tunnel: closed"; fi
-  if server_ready; then echo "endpoint: $URL answers"; else echo "endpoint: $URL does not answer"; fi
+  remote "nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu --format=csv,noheader"
+  for name in $PRESETS; do
+    preset "$name"
+    local server tunnel endpoint
+    if server_alive; then server="running"; else server="stopped"; fi
+    if tunnel_alive; then tunnel="open"; else tunnel="closed"; fi
+    if server_ready; then endpoint="answers"; else endpoint="does not answer"; fi
+    echo "$name ($MODEL): server $server, tunnel $tunnel, $URL $endpoint"
+  done
 }
 
-cmd_logs() { remote "tail -n 50 -f ~/$RDIR/server.log"; }
+cmd_logs() {
+  preset "${1:-gemma}"
+  remote "tail -n 50 -f ~/$LOG"
+}
 
 cmd_down() {
-  remote "if [ -f ~/$RDIR/server.pid ]; then kill -TERM -- -\$(cat ~/$RDIR/server.pid) 2>/dev/null || true;
-    rm -f ~/$RDIR/server.pid; echo 'server: stopped'; else echo 'server: not running'; fi"
-  if [ -f "$TUNNEL_PID" ]; then
-    kill "$(cat "$TUNNEL_PID")" 2>/dev/null || true
-    rm -f "$TUNNEL_PID"
-    echo "tunnel: closed"
-  fi
+  for name in ${1:-$PRESETS}; do
+    preset "$name"
+    remote "if [ -f ~/$PIDF ]; then kill -TERM -- -\$(cat ~/$PIDF) 2>/dev/null || true;
+      rm -f ~/$PIDF; echo '$NAME: server stopped'; fi"
+    if [ -f "$TUNNEL_PID" ]; then
+      kill "$(cat "$TUNNEL_PID")" 2>/dev/null || true
+      rm -f "$TUNNEL_PID"
+      echo "$NAME: tunnel closed"
+    fi
+  done
 }
 
 case "${1:-}" in
   setup) cmd_setup ;;
-  up) cmd_up ;;
+  up) cmd_up "${2:-}" ;;
   status) cmd_status ;;
-  logs) cmd_logs ;;
-  down) cmd_down ;;
-  *) sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  logs) cmd_logs "${2:-}" ;;
+  down) cmd_down "${2:-}" ;;
+  *) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
