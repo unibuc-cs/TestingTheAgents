@@ -19,8 +19,12 @@ from dataclasses import dataclass
 from ..runtime import Action
 from ..skills import render_procedure, replace_procedure
 
-# Sent once when the model ends its work without a word, so that the user is told what happened.
-REPLY_NUDGE = "Reply to the user now: say in one or two sentences what you did, or why you stopped."
+# Sent once when the model ends its work without a word, so that the user is told what happened. A step that
+# stops the agent says what to answer; that answer carries the facts the user needs (which link, which job).
+REPLY_NUDGE = (
+    "Reply to the user now. If you stopped at a step that says what to answer, give that answer with its values "
+    "filled in; otherwise say in one or two sentences what you did."
+)
 
 
 @dataclass
@@ -43,19 +47,23 @@ class LLMSettings:
 def build_system_prompt(agent, session, runtime) -> str:
     """The system prompt of ``agent``: its own prompt, followed by everything it works from.
 
-    The orchestrator also gets the specialists with their descriptions and routing triggers, an agent with
-    intents gets their keywords, every skill of the session follows, and a few operating rules close the
-    prompt. The sections are joined with newlines.
+    The orchestrator also gets the specialists with their descriptions and routing triggers and the default
+    agent, an agent with intents gets their keywords, every skill of the session follows, and a few operating
+    rules close the prompt. The sections are joined with newlines.
     """
     parts = [agent.system_prompt.strip()]
-    # The orchestrator has to pick the specialist itself, so it is shown each one's description and triggers:
-    # the same triggers that the simulated backend's keyword router scores.
+    # The orchestrator has to pick the specialist itself, so it is shown each one's description and triggers
+    # (the same triggers that the simulated backend's keyword router scores), and where a request goes that no
+    # specialist owns (the router's fallback, routing.default_agent).
     if agent.is_orchestrator:
         lines = ["", "## Specialist agents", "Delegate exactly once with `route_to_agent`. Available agents:"]
         for name, other in runtime.agents.load_all().items():
             if other.is_orchestrator:
                 continue
             lines.append(f"- `{name}`: {other.description} Triggers: {', '.join(other.triggers)}")
+        lines.append(
+            f"If no specialist owns the request, delegate it to `{runtime.config.get('routing.default_agent')}`."
+        )
         parts.append("\n".join(lines))
     # The keywords of each intent, which the simulated backend matches against the request to pick one.
     if agent.intents:

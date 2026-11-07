@@ -142,13 +142,17 @@ Skills are executable by both backends. A `SKILL.md` has front matter, prose for
 
 | Category | Count | Examples |
 |---|---|---|
-| code (tool adapters, services, harness) | 10 | argument-mapping bug in `set_page_metadata`; retry drops idempotency keys; retry disabled; approval gate bypass; external links treated as reachable; phrase triggers lose weight; shared `get_page` reports the wrong review flag; edits keep approvals; `set_page_metadata` crashes when no keywords are given; link validation crashes on an unknown external URL |
-| runtime | 2 | termination six steps early; delegation depth zero (breaks most of the suite) |
+| code (tool adapters, services, harness) | 9 | argument-mapping bug in `set_page_metadata`; retry drops idempotency keys; retry disabled; approval gate bypass; external links treated as reachable; shared `get_page` reports the wrong review flag; edits keep approvals; `set_page_metadata` crashes when no keywords are given; link validation crashes on an unknown external URL |
+| runtime | 3 | termination six steps early; delegation depth zero (breaks most of the suite); the delegated answer cut to 40 characters |
 | skill | 9 | publishing skill drops link validation / permission check; authoring drops metadata; translation hard-codes en-US; rollback drops its permission check (the service still refuses); rollback restores the latest version; shared link-validation tolerates broken assets; governance drops the consent check; SEO drops the title-length guard |
-| prompt / agent definition | 3 | publishing loses its "take down" triggers; SEO loses a tool; translation intents re-ordered (order-sensitive YAML) |
+| prompt / agent definition | 2 | SEO loses a tool; governance loses `check_consent` |
 | configuration | 7 | validate_links disabled; review not required; step budget 5; retries 0; title limit 20; default agent changed; unpublish removed from the approval list |
 | combined | 1 | keyword-count rule in code + very low limit in config (each alone harmless) |
-| benign | 6 | prose reflow; comment/docstring edit (AST-equivalent); local-variable renames; config comments/ordering; new unused tool; orchestrator prompt wording |
+| benign | 7 | prose reflow; comment/docstring edit (AST-equivalent); local-variable renames; config comments/ordering; new unused tool; orchestrator prompt wording; translation intents re-ordered |
+
+This is the set as revised for real models (phase 4 in `docs/EXPERIMENT.md`): two changes that only the
+simulator could see were replaced, one became benign, and the skill changes also edit the prose that
+repeated the removed step. The simulated results in §5 used the earlier set.
 
 The report checks a sanity property of the testbed: every regression-inducing change is revealed by ≥ 1 test, and no benign change is revealed by any test. Revealing-set sizes range from 1 to 109 tests.
 

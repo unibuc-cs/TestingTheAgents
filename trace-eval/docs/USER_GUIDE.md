@@ -62,7 +62,8 @@ Everything else is plumbing (loaders, tracing, report).
 
 - **Test**: add a YAML entry. `expect` supports `route_to`, `state` (`[path, op, value]` with `==`, `!=`, `len`,
   `contains`, `in`, `>=`, `<=`, `absent`, `exists`), `tools_required`, `tools_forbidden`, `tools_not_attempted`,
-  `tool_attempts`, `audit`, `response_contains`, `response_excludes`, `max_steps`, `termination` and `tool_errors`.
+  `tool_attempts`, `tool_results`, `audit`, `response_contains`, `response_excludes`, `max_steps`, `termination` and
+  `tool_errors`. `tool_results` checks the last successful result of a tool like the state (`[tool, path, op, value]`).
   `response_contains` is for facts the answer must report (a job id, a path, which link is broken), not for
   wording; an item that is a list is a set of alternatives. A run that ends with an answer must not end with an
   empty one (check `answered`). A test can also set `fixture_patch`

@@ -12,7 +12,8 @@ Tool errors: a case lists the errors it expects in ``expect.tool_errors`` ({tool
 succeeded - e.g. an agent that fixes its own arguments. A crash (check ``crash:<tool>``) always fails.
 
 The answer is checked for facts, not wording: ``response_contains`` lists what it must report (an item may be a
-list of alternatives), and a run that ends with an answer must not end with an empty one (check ``answered``)."""
+list of alternatives), and a run that ends with an answer must not end with an empty one (check ``answered``).
+``tool_results`` checks what a tool returned (its last successful call), like the state."""
 
 from dataclasses import dataclass, field
 
@@ -104,6 +105,11 @@ def score_case(case, trace: dict, state: dict, run: dict, error: str | None = No
     for spec in exp.get("tool_attempts", []):
         mx = max([c.get("attempts", 0) for c in calls if c["tool"] == spec["tool"]] or [0])
         add(f"attempts:{spec['tool']}", mx >= spec.get("min", 1), f"max attempts {mx}")
+    # The last successful result of a tool, checked like the state: [tool, path, op, value].
+    for tool, *assertion in exp.get("tool_results", []):
+        last = next((c.get("result") for c in reversed(calls) if c["tool"] == tool and c.get("status") == "ok"), None)
+        ok, detail = _state_check(last, assertion) if last is not None else (False, f"no successful {tool} call")
+        add(f"result:{tool}.{assertion[0]}", ok, detail)
     for spec in exp.get("audit", []):
         spec = dict(spec)
         action, count = spec.pop("action"), spec.pop("count")

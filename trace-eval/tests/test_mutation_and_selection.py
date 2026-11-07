@@ -65,7 +65,7 @@ def test_yaml_comments_are_cut_but_a_hash_inside_a_scalar_stays():
 
 
 def test_changeset_is_order_sensitive_for_intents(tmp_path):
-    _, cs = materialize_variant(get_mutation("prompt_translation_intents_reordered"), tmp_path / "v")
+    _, cs = materialize_variant(get_mutation("benign_translation_intents_reordered"), tmp_path / "v")
     assert "agent:translation.intents" in cs.ids()
 
 

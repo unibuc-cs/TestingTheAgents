@@ -89,7 +89,7 @@
   properties: [task_completion]
   declared: {agents: [assets], skills: [asset-management], tools: [attach_asset]}
   expect:
-    tool_errors: {attach_asset: not_found}
+    tool_errors: {attach_asset: not_found, get_asset: not_found}  # looking the asset up is fine
     route_to: assets
     state: [["pages.p4.assets", "len", 0]]
 
@@ -192,7 +192,8 @@
   expect:
     route_to: seo
     state: [["pages.p1.metadata.keywords", "==", [example, home, welcome]]]
-    response_contains: ["100"]  # the score the review found
+    tool_results: [[get_seo_report, score, "==", 100]]  # the report after the keywords are applied
+    response_contains: ["100"]  # the answer quotes that score
 
 - id: SEO-08
   name: set only the SEO title, keeping description and keywords

@@ -12,7 +12,7 @@ pytest -q                           # ~60 s; must stay green
 ruff check traceeval tests --select E,F,W,I,B --line-length 120
 ruff format traceeval tests --line-length 120   # see "Gotchas" before formatting sut/
 traceeval experiment --backend simulated --workdir runs/exp1 --reps 3 --seeds 10   # full simulated experiment, ~5 min
-traceeval experiment --backend vllm --workdir runs/gemma1 --reps 1    # the same with Gemma (docs/EXPERIMENT.md)
+traceeval experiment --backend vllm --workdir runs/gemma2 --reps 3    # the same with Gemma (docs/EXPERIMENT.md)
 traceeval sdd --workdir runs/sdd                                 # spec-driven development demo, ~30 s
 traceeval sdd draft --request r.md --id FS-0106 [--replay a.json]  # draft a spec with a model
 scripts/gpu_remote.sh up [gemma|qwen] | status | down   # models on the GPU server; see docs/EXPERIMENT.md

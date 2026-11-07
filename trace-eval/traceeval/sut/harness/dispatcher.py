@@ -138,6 +138,7 @@ class Dispatcher:
             status=status,
             error=out.get("error"),
             message=out.get("message") if status != "ok" else None,
+            result=out if status == "ok" else None,  # what the agent got back (tests may check it: tool_results)
             attempts=attempts,  # 0 when a gate refused the call, otherwise how many tries it took, failed ones too
             idempotency_key=key,
             tool_kind=spec.kind if spec else None,

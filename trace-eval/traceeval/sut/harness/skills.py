@@ -111,7 +111,8 @@ def _plain(expr, config, template: bool = False) -> str:
     """An expression of a procedure, written for a reader: settings with their current value, context slots
     as <name> (bare names inside a message template), ``result.x`` as ``x``, ``last.`` (the result of the
     step's own call) dropped, and ``intent == 'x'`` as "the intent is `x`" (the agent's intents are listed
-    in its prompt)."""
+    in its prompt). Conditions are spelled out: a slot alone as "<name> is given and true", ``not x`` as "x is false"
+    and ``len(x) > n`` as "x has more than n characters"."""
     text = str(expr)
 
     def setting(m):  # config('key') -> "key (value)", or just the value inside a message
@@ -119,6 +120,8 @@ def _plain(expr, config, template: bool = False) -> str:
         return value if template else f"{m.group(1)} ({value})"
 
     text = _CONFIG.sub(setting, text)
+    if not template:  # a bare "If <request_review>:" reads as an order to request one
+        text = re.sub(r"^ctx\.get\('(\w+)'\)$", r"<\1> is given and true", text)
     text = re.sub(r"ctx\.get\('(\w+)'\) is not None", r"<\1> is given", text)
     text = re.sub(r"ctx\.get\('(\w+)'\) is None", r"<\1> is not given", text)
     slot = (lambda m: m.group(1) or m.group(2)) if template else (lambda m: f"<{m.group(1) or m.group(2)}>")
@@ -127,7 +130,11 @@ def _plain(expr, config, template: bool = False) -> str:
     # [b['link'] for b in last.broken] -> "the link of each entry in broken"
     text = re.sub(r"\[(\w+)\['(\w+)'\] for \1 in ([\w.]+)\]", r"the \2 of each entry in \3", text)
     text = re.sub(r"\bresult\.", "", text)
-    return re.sub(r"\blast\.", "", text)
+    text = re.sub(r"\blast\.", "", text)
+    if not template:
+        text = re.sub(r"(?<!is )\bnot ([\w.]+)", r"\1 is false", text)
+        text = re.sub(r"len\((<\w+>)\) > ([\w.]+(?: \([^()]*\))?)", r"\1 has more than \2 characters", text)
+    return text
 
 
 def _template(message: str, config) -> str:
