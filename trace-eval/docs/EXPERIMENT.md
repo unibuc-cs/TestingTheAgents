@@ -214,13 +214,13 @@ scripts/gpu_remote.sh status    # GPU memory, and for each model: server, tunnel
 
 # Gemma
 traceeval run --test PUB-01 --backend vllm                              # one case, to check
-traceeval experiment --backend vllm --workdir runs/gemma2 --reps 3      # the whole recording
-traceeval check code_retry_drop_idempotency --history runs/gemma3       # one change, live (section 5)
+traceeval experiment --backend vllm --workdir runs/gemma4 --reps 3      # the whole recording
+traceeval check code_retry_drop_idempotency --history runs/gemma4       # one change, live (section 5)
 
 # Qwen (in another terminal, at the same time if you like)
 traceeval run --test PUB-01 --backend llm
-traceeval experiment --backend llm --workdir runs/qwen2 --reps 3
-traceeval check code_retry_drop_idempotency --history runs/qwen3 --backend llm
+traceeval experiment --backend llm --workdir runs/qwen4 --reps 3
+traceeval check code_retry_drop_idempotency --history runs/qwen4 --backend llm
 
 scripts/gpu_remote.sh down      # stop both servers and close the tunnels: frees the GPUs
 scripts/gpu_remote.sh down qwen # or just one of them
@@ -263,11 +263,12 @@ their GPUs anyway. That happened on the first try, so check `TRACEEVAL_SITE=hpc 
 and, if needed, ask the cluster's admin which GPUs are free.
 
 To use both sites in one run, list both servers, separated by commas. Each request goes to the next server in
-turn (`traceeval/llm/chat.py::Servers`); decoding is greedy, so which server answers doesn't matter:
+turn (`traceeval/llm/chat.py::Servers`). Decoding is greedy, so the servers give the same answers up to rare
+one-off differences, which a split run makes somewhat more frequent (see "Re-recorded on the current app"):
 
 ```bash
 export TRACEEVAL_LLM_BASE_URL=http://127.0.0.1:18101/v1,http://127.0.0.1:18111/v1   # Qwen on fmi0 and on the cluster
-traceeval experiment --backend llm --workdir runs/qwen3 --reps 3 --workers 64
+traceeval experiment --backend llm --workdir runs/qwen4 --reps 3 --workers 64
 ```
 
 For Gemma the variable is `TRACEEVAL_VLLM_URL` (ports 18100 and 18110).
@@ -305,7 +306,7 @@ and any vLLM flags it needs.
 ## 5. Running an experiment
 
 ```bash
-traceeval experiment --backend vllm --workdir runs/gemma2 --reps 3
+traceeval experiment --backend vllm --workdir runs/gemma4 --reps 3
 ```
 
 This runs four steps: `baseline`, `mutants`, `evaluate` and `report`. You can also run them one at a time
@@ -313,11 +314,11 @@ with the same options.
 
 - **`baseline`** runs every test on the original app, one test at a time. It records code coverage per test,
   and coverage can only follow one test at a time in a process.
-- **`mutants`** makes a changed copy of the app for each change (in `runs/gemma2/variants/`) and runs every
+- **`mutants`** makes a changed copy of the app for each change (in `runs/gemma4/variants/`) and runs every
   test on it, 32 tests at a time (`--workers`), because the vLLM server handles many requests at once.
   With the local `hf` engine it stays at 1.
 - **`evaluate`** replays the strategies on the recordings; it makes no model calls.
-- **`report`** writes `runs/gemma2/results/report.md`. Its first section is the sanity check: every
+- **`report`** writes `runs/gemma4/results/report.md`. Its first section is the sanity check: every
   regression must be revealed by at least one test, and no benign change by any.
 
 `--reps 1` is good for a first look. For a ground truth you'll rely on, use `--reps 3`: greedy decoding on
@@ -335,7 +336,7 @@ What ends up in the work folder (git-ignored; copy `results/` into `docs/results
 one JSON line: which agent, the last message it got, Gemma's raw answer, tokens and seconds.
 
 ```bash
-TRACEEVAL_MODEL_LOG=runs/gemma2/model_calls.jsonl traceeval run --test PUB-02 --backend vllm
+TRACEEVAL_MODEL_LOG=runs/gemma4/model_calls.jsonl traceeval run --test PUB-02 --backend vllm
 ```
 
 ### Checking one change live (the prototype)
@@ -345,8 +346,8 @@ tests run live by the model instead of looked up in a recording
 ([`traceeval/experiment/check.py`](../traceeval/experiment/check.py)).
 
 ```bash
-traceeval check code_retry_drop_idempotency --history runs/gemma3 --budget 0.2    # a change from the catalog
-traceeval check my-sut-copy --history runs/qwen3 --backend llm                    # a changed copy of traceeval/sut
+traceeval check code_retry_drop_idempotency --history runs/gemma4 --budget 0.2    # a change from the catalog
+traceeval check my-sut-copy --history runs/qwen4 --backend llm                    # a changed copy of traceeval/sut
 ```
 
 The method picks the most informative test for its cost, the test runs on the changed app, and its outcome
@@ -439,8 +440,9 @@ it has to work out for itself (a review flag, a length).
 | 2 | tokens and latency from the model servers' own counts | done |
 | 3 | pytest replays recorded model answers ("cassettes", `tests/cassettes/`), so tests need no GPU | done |
 | 4 | re-derive the ground truth under both models, with three repetitions (`runs/gemma2`, `runs/qwen2`, below) | done |
-| 5 | the SDD demo on Gemma ([SDD_DEMO.md](SDD_DEMO.md)); the experiment's results are `runs/gemma2` and `runs/qwen2` (`docs/results/`) | done |
+| 5 | the SDD demo on Gemma ([SDD_DEMO.md](SDD_DEMO.md)); the experiment's results are `runs/gemma4` and `runs/qwen4` (`docs/results/`) | done |
 | 6 | real models only: the rubric cases judged by Gemma or Qwen instead of a word match; the prototype `traceeval check` (section 5) | done |
+| 7 | re-recorded on the current app with the model judge (`runs/gemma4`, `runs/qwen4`, below) | done |
 
 The next two subsections are the first recordings, from before phase 4 (old changes, one repetition). The
 phase 4 recordings come after them.
@@ -581,6 +583,31 @@ changes and a handful of tests flip once. The majority vote absorbs all of it.
   changes that no test reveals, `full` sees such a failure in 71% of replays and `ir_tfidf` in 58% under Gemma
   (56% and 16% under Qwen). `adaptive_bayes` discounts a test by its failures on the original app and gives no
   "regression" verdict on any of these changes.
+
+### Re-recorded on the current app (`runs/gemma4`, `runs/qwen4`)
+
+After the changes since phase 4 (the model judge, 33 changes, the new stopping rule), both models were recorded
+again with three repetitions, each on one GPU through SLURM (`TRACEEVAL_SITE=hpc`). Qwen's changes also ran on a
+second Qwen server on fmi0's GPU0, with the requests alternating between the two. Gemma took about 40 minutes,
+Qwen about two hours. These are the results in `docs/results/`.
+
+| | Gemma 4 E4B | Qwen3.8-27B |
+|---|---|---|
+| original app | 133 of 136 pass | 134 of 136 pass (SEO-05, and SEO-07 failed by Qwen's own judge) |
+| regressions caught | 21 of 26 | 24 of 26 |
+| benign changes that fail a test | none | none |
+
+- **Gemma** gives the same ground truth as before: two changes differ by one test each.
+- **Qwen** misses two regressions. `combined_seo_keyword_limit` has a single test, SEO-07, which Qwen's strict
+  judge already fails on the original app. Under `skill_publish_drop_link_validation`, Qwen validates the links
+  even though the step is gone.
+- **Qwen's runs disagree more often.** 34 (change, test) pairs got different outcomes in their three runs, against
+  15 in `runs/qwen2` and 1–2 under Gemma. Both servers run the same vLLM and torch versions: Qwen is sensitive to
+  how requests are batched together, and splitting them over two servers doubled the effect. The majority vote
+  keeps the ground truth clean, but the adaptive method stops at the first failure of a test that passed on the
+  original app, so a one-off failure under a benign change gives a false "regression" verdict (20 of 245 replays
+  of benign changes). vLLM 0.31 has a batch-invariant mode that makes greedy decoding exactly repeatable; the next
+  Qwen recording should use it.
 
 ## 8. Where to look in the code
 

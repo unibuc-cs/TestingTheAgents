@@ -67,7 +67,7 @@ estimates a **sensitivity**: the probability that the test fails if that part is
 tells it the most per token (high sensitivity, low cost), and a passing sensitive test is strong evidence that
 nothing broke. The sensitivity is the product of four factors (`selection/adaptive_bayes.py::sensitivity`). The
 examples are for `code_retry_drop_idempotency` (retried writes lose their idempotency key, §6), with the numbers
-of `runs/gemma3`:
+of `runs/gemma4`:
 
 | factor | what it is | example |
 |---|---|---|
@@ -98,7 +98,7 @@ The experiment plants 33 known changes in copies of the app (`mutation/catalog.p
 strategy finds them: 26 regressions, which at least one test should reveal, and 7 benign changes, which no test
 should. Each one is in the set for a reason: a kind of change (code, skill, prompt, config), a reach (one test or
 dozens), or a trap for selection. "Revealing tests" counts the tests that pass on the original app and fail on the
-changed copy, in the recordings `runs/gemma2` / `runs/qwen2`.
+changed copy, in the recordings `runs/gemma4` / `runs/qwen4` (the current app, three repetitions).
 
 | change | what it does | why it is in the set | revealing tests (Gemma / Qwen) |
 |---|---|---|---|
@@ -107,33 +107,33 @@ changed copy, in the recordings `runs/gemma2` / `runs/qwen2`.
 | `code_retry_drop_idempotency` | retried writes lose their idempotency key, so a write retried after a lost acknowledgement happens twice | a harness bug that shows only under one kind of fault; reused by the SDD demo (FS-0105) | 5 / 5 |
 | `code_approval_gate_bypass` | the dispatcher stops asking for approval tokens on guarded tools | a narrow safety guard that a single test depends on; reused by the SDD demo (FS-0102) | 1 / 1 |
 | `code_links_external_lenient` | link validation treats every external URL as reachable | a bug in a service that several skills share; reused by the SDD demo (FS-0103) | 6 / 6 |
-| `code_get_page_review_flag` | the shared `get_page` tool reports a requested review as approved | a shared tool with a wide reach, and the clearest case of model dependence | 1 / 15 |
+| `code_get_page_review_flag` | the shared `get_page` tool reports a requested review as approved | a shared tool with a wide reach, and the clearest case of model dependence | 2 / 15 |
 | `code_edit_keeps_review` | editing a page no longer cancels its approved review | a service bug a model can hide: Gemma requests a review after every edit anyway | 0 / 1 |
 | **Code: agent loop** | | | |
 | `code_termination_off_by_six` | the agent loop stops six tool calls before the configured budget | every test runs the changed line, but only long tasks fail: covering code is not catching the bug | 2 / 2 |
-| `code_delegation_truncates_answer` | the orchestrator receives only the first 40 characters of the specialist's answer | a delegation bug that shows only when the answer must carry a fact past 40 characters | 8 / 6 |
+| `code_delegation_truncates_answer` | the orchestrator receives only the first 40 characters of the specialist's answer | a delegation bug that shows only when the answer must carry a fact past 40 characters | 8 / 5 |
 | **Skills** | | | |
-| `skill_publish_drop_link_validation` | publishing no longer validates links | a change to a skill's procedure, not to code; the link check is a skill no test declares | 6 / 1 |
+| `skill_publish_drop_link_validation` | publishing no longer validates links | a change to a skill's procedure, not to code; the link check is a skill no test declares; Qwen checks links anyway | 6 / 0 |
 | `skill_publish_drop_permission_check` | publishing no longer checks the user's permission | a safety rule enforced only in a skill: nothing below it stops the write | 3 / 3 |
 | `skill_authoring_drop_metadata` | new pages no longer get SEO metadata | a removed step that one test notices | 1 / 1 |
 | `skill_translation_wrong_default` | translation uses en-US instead of the configured languages | a skill that ignores a configuration value | 2 / 2 |
 | `skill_rollback_drop_permission_check` | rollback no longer checks the permission; the service still refuses | defence in depth: the data stays safe and only the behaviour shows the mistake | 1 / 1 |
 | `skill_rollback_restores_latest` | rollback restores the latest version instead of the requested one | a wrong argument in a procedure step | 3 / 2 |
 | `skill_linkval_ignore_assets` | the shared link-validation skill lets broken asset references through | a change to a skill included by others, reaching tests that never name it | 0 / 1 |
-| `skill_governance_drop_consent` | user data is exported without checking consent | a privacy rule enforced in a skill | 5 / 5 |
+| `skill_governance_drop_consent` | user data is exported without checking consent | a privacy rule enforced in a skill | 4 / 5 |
 | `skill_seo_drop_length_guard` | SEO no longer refuses over-long titles; reused by the SDD demo (FS-0104) | a guard the model must apply itself; Gemma ignores the limit anyway | 0 / 1 |
 | **Agent definitions** | | | |
-| `prompt_governance_consent_tool_removed` | the governance agent loses the `check_consent` tool | a change to an agent's tool list | 6 / 4 |
-| `prompt_seo_tool_removed` | the SEO agent loses `set_page_metadata` | the same for a tool that writes | 6 / 5 |
+| `prompt_governance_consent_tool_removed` | the governance agent loses the `check_consent` tool | a change to an agent's tool list | 6 / 3 |
+| `prompt_seo_tool_removed` | the SEO agent loses `set_page_metadata` | the same for a tool that writes | 6 / 4 |
 | **Configuration** | | | |
 | `config_disable_validate_links` | a feature flag turns link validation off everywhere | one key with a wide reach: the broad change in the set | 40 / 43 |
 | `config_require_review_false` | pages no longer need an approved review before publishing | a policy switch in configuration; Gemma's own mistake hides it | 0 / 3 |
-| `config_max_tool_calls_5` | the step budget drops from 12 to 5 tool calls | a value that limits every agent; long tasks fail | 8 / 8 |
-| `config_retries_0` | temporary tool failures are no longer retried; reused by the SDD demo (FS-0105) | a change only the tests with an injected fault notice | 8 / 5 |
+| `config_max_tool_calls_5` | the step budget drops from 12 to 5 tool calls | a value that limits every agent; long tasks fail | 8 / 7 |
+| `config_retries_0` | temporary tool failures are no longer retried; reused by the SDD demo (FS-0105) | a change only the tests with an injected fault notice | 8 / 4 |
 | `config_seo_title_20` | the maximum SEO title length drops from 60 to 20 | a boundary value; Gemma ignores the limit anyway | 0 / 1 |
 | `config_default_agent_publishing` | requests no specialist owns go to publishing instead of authoring | a routing setting the orchestrator reads | 3 / 3 |
 | **Code and configuration together** | | | |
-| `combined_seo_keyword_limit` | a keyword-count rule in code plus a very low limit in config | a regression that needs both edits; each alone is harmless | 1 / 1 |
+| `combined_seo_keyword_limit` | a keyword-count rule in code plus a very low limit in config | a regression that needs both edits; each alone is harmless. Its one test, SEO-07, fails on the original app under Qwen's strict judge | 1 / 0 |
 | **Benign: no test should fail** | | | |
 | `benign_skill_prose_reflow` | the publishing skill's prose is reworded, its procedure untouched | a wording change: a strategy should spend little on it | 0 / 0 |
 | `benign_code_comment_docstring` | comments and docstrings change in the links service | leaves an empty change set (code only), so there is nothing to test | 0 / 0 |

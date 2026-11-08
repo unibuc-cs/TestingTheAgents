@@ -170,7 +170,9 @@ class HFChatClient(GemmaChat):
 class Servers:
     """Several OpenAI-compatible servers of one model behind a single client. ``urls`` is a comma-separated list,
     and each call goes to the next server in turn, so one run can use the GPUs of several machines (fmi0 and the
-    SLURM cluster, ``scripts/gpu_remote.sh``). Decoding is greedy, so which server answers does not matter."""
+    SLURM cluster, ``scripts/gpu_remote.sh``). Decoding is greedy, so the servers give the same answers up to the
+    rare one-off difference that batching causes; spreading a run over servers makes those somewhat more frequent
+    (Qwen: docs/EXPERIMENT.md, "Re-recorded on the current app")."""
 
     def __init__(self, urls: str, model_id: str, api_key: str = "EMPTY"):
         from openai import OpenAI

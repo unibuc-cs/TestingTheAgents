@@ -8,12 +8,12 @@ traceeval run --test PUB-01 [--backend hf|vllm|llm|replay]   run one case and pr
     replay: Gemma's recorded answers, no model
     (TRACEEVAL_CACHE names the file of recorded answers; with hf or vllm, new answers are added to it)
     TRACEEVAL_JUDGE=gemma|qwen picks the model that judges the cases with a rubric (default: the agents' model)
-traceeval baseline --workdir runs/gemma3 --reps 3
-traceeval mutants  --workdir runs/gemma3 --reps 3 [--only id ...]
-traceeval evaluate --workdir runs/gemma3 --seeds 10
-traceeval report   --workdir runs/gemma3
-traceeval experiment --workdir runs/gemma3   (baseline + mutants + evaluate + report)
-traceeval check <mutation id | changed copy of traceeval/sut> --history runs/gemma3 [--budget 0.2] [--backend vllm]
+traceeval baseline --workdir runs/gemma4 --reps 3
+traceeval mutants  --workdir runs/gemma4 --reps 3 [--only id ...]
+traceeval evaluate --workdir runs/gemma4 --seeds 10
+traceeval report   --workdir runs/gemma4
+traceeval experiment --workdir runs/gemma4   (baseline + mutants + evaluate + report)
+traceeval check <mutation id | changed copy of traceeval/sut> --history runs/gemma4 [--budget 0.2] [--backend vllm]
     check one change live with the proposed method; --history is an experiment recorded with the same model
 traceeval sdd --workdir runs/sdd [--specs FS-0101 ...] [--out docs/sdd] [--backend replay]   spec-driven demo
 traceeval sdd draft --request request.md --id FS-0106 [--replay answer.json]   draft a spec with an LLM
@@ -209,7 +209,7 @@ def main(argv=None):
 
     ck = sub.add_parser("check")
     ck.add_argument("change", help="a mutation id (see traceeval mutations) or a changed copy of traceeval/sut")
-    ck.add_argument("--history", required=True, help="an experiment recorded with the same model, e.g. runs/gemma3")
+    ck.add_argument("--history", required=True, help="an experiment recorded with the same model, e.g. runs/gemma4")
     ck.add_argument("--budget", type=float, default=0.2, help="at most this fraction of the full suite's tokens")
     ck.add_argument("--backend", default="vllm", choices=BACKENDS, help="who plays the agents (default: vllm, Gemma)")
     ck.set_defaults(fn=cmd_check)

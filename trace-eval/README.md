@@ -25,8 +25,8 @@ on a local GPU with `--backend hf`. `--backend vllm` is Gemma, `--backend llm` i
 
 ```bash
 scripts/gpu_remote.sh up gemma
-traceeval experiment --backend vllm --workdir runs/gemma3 --reps 3    # ~30 min
-# -> runs/gemma3/results/report.md  (tables + 3 figures)
+traceeval experiment --backend vllm --workdir runs/gemma4 --reps 3    # ~30 min
+# -> runs/gemma4/results/report.md  (tables + 3 figures)
 scripts/gpu_remote.sh down
 ```
 
@@ -34,8 +34,8 @@ scripts/gpu_remote.sh down
 the changed app with the real model, the outcome decides what runs next, and it stops with a verdict:
 
 ```bash
-traceeval check code_retry_drop_idempotency --history runs/gemma3 --budget 0.2      # a change from the catalog
-traceeval check path/to/my-copy-of-sut --history runs/qwen3 --backend llm           # your own edit, with Qwen
+traceeval check code_retry_drop_idempotency --history runs/gemma4 --budget 0.2      # a change from the catalog
+traceeval check path/to/my-copy-of-sut --history runs/qwen4 --backend llm           # your own edit, with Qwen
 ```
 
 `--history` is an experiment recorded with the same model and the same version of the app; it tells the method
@@ -60,11 +60,13 @@ what each test costs and which code it runs.
    harmless changes, and whether the adaptive one stops at the right moment.
 
 Main results, with Gemma and with Qwen3.8-27B playing the agents (three repetitions per test): hand-written
-dependencies catch 65–71% of regressions. Trace-based selection catches 85–90% within a budget of 20% of the
-full-suite tokens. The adaptive method catches 73–81% while spending 5–6% of those tokens, and never calls a
-change that breaks nothing a regression. Gemma misses five of the 26 regressions, because it ignores the guards
-they touch either way; Qwen reveals all 26. See the [Gemma](docs/results/gemma2/report.md) and
-[Qwen](docs/results/qwen2/report.md) reports and [docs/EXPERIMENT.md](docs/EXPERIMENT.md).
+dependencies catch 62–71% of regressions. Trace-based selection catches 88–90% within a budget of 20% of the
+full-suite tokens. The adaptive method catches 81–83% while spending 5% of those tokens. Under Gemma it never calls a change that breaks nothing a regression; under Qwen it does in 8% of the replays
+of benign changes, when a test that passed all three times on the original app failed once in three runs
+on the changed copy (Qwen's answers are not perfectly repeatable on a busy server).
+Gemma misses five of the 26 regressions, because it ignores the guards they touch either way; Qwen misses two.
+See the [Gemma](docs/results/gemma4/report.md) and [Qwen](docs/results/qwen4/report.md) reports and
+[docs/EXPERIMENT.md](docs/EXPERIMENT.md).
 
 ## Spec-driven development on the same testbed
 

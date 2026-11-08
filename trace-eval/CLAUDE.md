@@ -11,9 +11,9 @@ pip install -e ".[dev,ml]"          # or: uv pip install --python .venv -e ".[de
 pytest -q                           # ~60 s; must stay green; replays Gemma's recorded answers (tests/cassettes/)
 ruff check traceeval tests --select E,F,W,I,B --line-length 120
 ruff format traceeval tests --line-length 120   # see "Gotchas" before formatting sut/
-traceeval experiment --backend vllm --workdir runs/gemma2 --reps 3   # full experiment, Gemma on the GPU server, ~30 min
-traceeval experiment --backend llm --workdir runs/qwen2 --reps 3     # the same with Qwen (scripts/gpu_remote.sh up qwen)
-traceeval check code_retry_drop_idempotency --history runs/gemma3   # the prototype: one change, live
+traceeval experiment --backend vllm --workdir runs/gemma4 --reps 3   # full experiment, Gemma on the GPU server, ~30 min
+traceeval experiment --backend llm --workdir runs/qwen4 --reps 3     # the same with Qwen (scripts/gpu_remote.sh up qwen)
+traceeval check code_retry_drop_idempotency --history runs/gemma4   # the prototype: one change, live
 traceeval sdd --workdir runs/sdd                                 # spec-driven development demo, replayed
 TRACEEVAL_BACKEND=vllm pytest -q    # record the answers the cassette lacks (Gemma up on the GPU server)
 traceeval sdd draft --request r.md --id FS-0106 [--replay a.json]  # draft a spec with a model
