@@ -10,9 +10,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from traceeval.catalog import load_catalog
+from traceeval.catalog import load_catalog, load_properties
 from traceeval.selection import CORE, STRATEGIES, SelectionContext, get_strategy
 
+from .coverage import affected_properties
 from .history import History
 from .metrics import apfd, apfdc, evaluate_log
 
@@ -51,12 +52,14 @@ def evaluate(
     workdir = Path(workdir)
     history = History.load(workdir)
     catalog = {c.id: c for c in load_catalog()}
+    props = load_properties()
     strategies = _resolve(strategies)
     variants = variants or sorted(history.variants)
     rows = []
     shared = {"order_cache": {}}
     for variant in variants:
         change = history.changesets[variant]
+        affected = affected_properties(change, history, catalog, props)  # for the change coverage columns
         train = [v for v in variants if v != variant]  # learning may use every change but this one
         for name in strategies:
             strat = get_strategy(name)
@@ -68,7 +71,7 @@ def evaluate(
                     opts = dict(shared, seed=seed)
                     ctx = SelectionContext(change, catalog, history, budget, rng, train_variants=train, options=opts)
                     log = strat.run(ctx, make_oracle(history, variant, rng))
-                    row = evaluate_log(log, variant, history, catalog, budget)
+                    row = evaluate_log(log, variant, history, catalog, budget, props, affected)
                     row.update(
                         {
                             "seed": seed,

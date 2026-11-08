@@ -55,9 +55,10 @@ what each test costs and which code it runs.
 4. **Strategies** in `traceeval/selection/` pick tests under a token budget. They see the diff of the code (without comments),
    the baseline traces (which agents, skills, tools, config keys and code lines each test touched), the test
    catalog and the outcomes of the other changes, but never the outcome of the change being evaluated.
-   [`strategies.py`](traceeval/selection/strategies.py) holds the baselines, [`adaptive_bayes.py`](traceeval/selection/adaptive_bayes.py) the method (with two variants that compare text measures, `adaptive_bayes_tfidf` and `adaptive_bayes_notext`).
+   [`strategies.py`](traceeval/selection/strategies.py) holds the baselines, [`adaptive_bayes.py`](traceeval/selection/adaptive_bayes.py) the method (with two variants that compare text measures, `adaptive_bayes_tfidf` and `adaptive_bayes_notext`, and one without its mandatory-coverage rule, `adaptive_bayes_nomandatory`).
 5. **The report** shows how many changes each strategy catches for how many tokens, how much it spends on
-   harmless changes, and whether the adaptive one stops at the right moment.
+   harmless changes, whether the adaptive one stops at the right moment, and the coverage of the suite and of each
+   change.
 
 Main results, with Gemma and with Qwen3.8-27B playing the agents (three repetitions per test): hand-written
 dependencies catch 62–71% of regressions. Trace-based selection catches 88–90% within a budget of 20% of the
@@ -77,7 +78,8 @@ up in [docs/AEM_ALIGNMENT.md](docs/AEM_ALIGNMENT.md) with the plan and status):
 |---|---|
 | **Catalog of properties** with categories, how each is checked, mandatory flags and thresholds ([`properties.yaml`](traceeval/catalog/properties.yaml)); reports give pass rates against thresholds and the share of affected properties each strategy covered | done |
 | **Drafting the catalog with a model** from the requirements only (skills' rules, agents, config guards, specs), within fixed limits, for people to edit (`traceeval properties draft`, then `apply`) | done; the Qwen run comes with the GPU work |
-| **Coverage** from several angles (agents, skills, tools, config, properties, workflows, paths, risk; declared, observed, required), per suite and per change | property coverage done; the rest planned |
+| **Coverage** from several angles: of the suite per dimension (agents, skills, tools, config, properties, execution paths, risk; declared and observed, with what no test covers), and of each change (changed components exercised, affected properties checked), in the report and in `traceeval check` | done; workflows join with them |
+| **Mandatory properties in the method**: a check that found no regression does not end before every mandatory property the change may affect has a test | done (step 5 of `adaptive_bayes`) |
 | Test selection, prioritization and stopping under a token budget | done (`adaptive_bayes`, `traceeval check`) |
 | Per-test metadata: agents, skills, tools, config, risk, cost, history (declared and observed) | done |
 | Trace assertions: final state, required and forbidden tools, attempts, audit, step limit | done; agent order and tool order planned |

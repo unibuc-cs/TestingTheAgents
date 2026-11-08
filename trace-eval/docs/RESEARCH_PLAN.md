@@ -22,9 +22,11 @@ Ciprian Păduraru · University of Bucharest · working document, 6 October 2026
   those tokens. Unlike the other strategies it does not take the tests a model already fails for regressions;
   under Qwen it still gives a false "regression" verdict in 8% of the replays of benign changes, where a test
   failed once in three runs. TF-IDF over the diff is a strong baseline (75–81% at 5%). Change sets hold code only, so the results are the same whether or not the code is
-  commented.
-- **Next.** Make Qwen's answers exactly repeatable (vLLM's batch-invariant mode), so that one run is proof again,
-  add the mandatory-safety wrapper, then move to tau2-bench as the external system under test. Real models only, decoded greedily. Paper: ASE/ISSTA/ICST framing.
+  commented. A mandatory-coverage rule (§5.3) makes the method test every mandatory property a change may affect
+  before it calls the change clean, for 0.06 extra tests per change.
+- **Next.** The AEM alignment steps (`docs/AEM_ALIGNMENT.md`: multi-agent workflows, new agents, OpenTelemetry);
+  make Qwen's answers exactly repeatable (vLLM's batch-invariant mode), so that one run is proof again; then move
+  to tau2-bench as the external system under test. Real models only, decoded greedily. Paper: ASE/ISSTA/ICST framing.
 
 ---
 
@@ -79,7 +81,7 @@ The extractor (`traceeval/mutation/changeset.py`) turns a diff into *components*
 
 - **Declared**: the metadata a test author wrote (`declared:` block in the catalog). It is incomplete on purpose, as in practice: shared skills reached through `include`, harness code and most configuration keys are not declared.
 - **Observed**: from baseline traces: agents started, agent-definition fields consulted by the orchestrator, skills loaded (with version/digest), tools called (with status and attempts), configuration keys read, executed code functions and lines (coverage.py dynamic contexts, one context per test and repetition).
-- **Required**: properties/risk that must always be evaluated (safety tests are marked by `safety_*` properties; a mandatory-set policy is a one-line addition to any strategy).
+- **Required**: properties/risk that must always be evaluated: the mandatory properties of the catalog of properties (the safety ones). The adaptive method tests every mandatory property a change may affect before ending without a regression (step 5, §5.3).
 
 ### 2.3 Cost model
 
@@ -123,7 +125,7 @@ s_tc = r_kind(c) · lift_t,kind(c) · freq_t(c) · tilt_t, where
 
 *Policy.* The next test is the argmax over t of (expected information gain about B, tilted by risk) / c(t). After a pass, the sensitivities of tests with the same behaviour signature (agents, tools, fault profile, dataset) are discounted (×0.35), because near-duplicate tests are correlated evidence, not independent draws. Each test runs at most once: the models decode greedily, so a rerun gives the same answer.
 
-*Stopping.* The method stops "regression" at the first failure of a test that passed on the original app: the models decode greedily, so that failure shows a changed behaviour, which is what the ground truth calls revealing. It stops "clean" when P(any component broken | evidence) < ε_clean (0.05). Otherwise it runs until the budget is exhausted or no test is informative. Selection, prioritization and stopping all come from the same model.
+*Stopping.* The method stops "regression" at the first failure of a test that passed on the original app: the models decode greedily, so that failure shows a changed behaviour, which is what the ground truth calls revealing. It stops "clean" when P(any component broken | evidence) < ε_clean (0.05). Otherwise it runs until the budget is exhausted or no test is informative. Selection, prioritization and stopping all come from the same model. A run that found no regression then tests every mandatory property the change may affect that is still untested, with the cheapest test that checks it, while the budget allows (step 5, §5.3).
 
 ### 3.2 Why these baselines
 
@@ -143,7 +145,7 @@ A `SKILL.md` has front matter, prose, and a `## Procedure` YAML block that the m
 
 ### 4.2 Eval catalog
 
-72 scenario tests (publishing 21, authoring 14, assets/SEO 16, translation/governance/maintenance/orchestration 21) and two dataset-style evals (40 routing items, prompt → expected delegation, run in route-only mode; 24 intent items, prompt → expected tool invocation). Each case defines an agent entry point, request, context slots, fixture (+ optional patch), fault profile (`healthy`, `transient_once:<tool>`, `ack_timeout_once:<tool>`, `permanent_down:<tool>`), risk (critical/high/medium/low → severity 4/3/2/1), properties (functional, routing, trajectory, safety_*, resilience_*, efficiency, answer_quality), declared dependencies, expectations (state assertions, required/forbidden tools, attempt counts, audit counts, response substrings, step limits, termination) and, for two cases, a judge rubric. The properties come from a catalog of properties (`traceeval/catalog/properties.yaml`, a feature the AEM team asked for): each has a category (correctness, safety, resilience, orchestration, efficiency, quality), the ways it is checked (state, trace, judge, dataset), a mandatory flag (safety properties are release blockers) and a threshold, the share of its tests that must pass. A model can draft it from the requirements alone (skills' rules, agents, config guards, specs), within fixed limits, with each property citing the components it comes from; people edit the draft (`traceeval properties draft`, `docs/AEM_ALIGNMENT.md` §3.4). Coverage over the requirements' nine dimensions, declared, observed and required, is planned as a suite report and a per-change metric (§3.5 there).
+72 scenario tests (publishing 21, authoring 14, assets/SEO 16, translation/governance/maintenance/orchestration 21) and two dataset-style evals (40 routing items, prompt → expected delegation, run in route-only mode; 24 intent items, prompt → expected tool invocation). Each case defines an agent entry point, request, context slots, fixture (+ optional patch), fault profile (`healthy`, `transient_once:<tool>`, `ack_timeout_once:<tool>`, `permanent_down:<tool>`), risk (critical/high/medium/low → severity 4/3/2/1), properties (functional, routing, trajectory, safety_*, resilience_*, efficiency, answer_quality), declared dependencies, expectations (state assertions, required/forbidden tools, attempt counts, audit counts, response substrings, step limits, termination) and, for two cases, a judge rubric. The properties come from a catalog of properties (`traceeval/catalog/properties.yaml`, a feature the AEM team asked for): each has a category (correctness, safety, resilience, orchestration, efficiency, quality), the ways it is checked (state, trace, judge, dataset), a mandatory flag (safety properties are release blockers) and a threshold, the share of its tests that must pass. A model can draft it from the requirements alone (skills' rules, agents, config guards, specs), within fixed limits, with each property citing the components it comes from; people edit the draft (`traceeval properties draft`, `docs/AEM_ALIGNMENT.md` §3.4). Coverage over the requirements' dimensions, declared and observed, is reported for the suite (what no test covers) and for each change (§4.4, §5.3; §3.5 there).
 
 ### 4.3 Controlled changes (33)
 
@@ -171,7 +173,7 @@ The report checks a sanity property of the testbed: every regression-inducing ch
 1. `baseline`: full suite × K with coverage contexts, giving observed dependencies, cost and pass rates.
 2. `mutants`: for each change, copy the SUT, apply the edit, extract the change set and run the full suite × K, giving the fault matrix.
 3. `evaluate`: for every (change, strategy, budget ∈ {2,5,10,20,30,50,100}% of full-suite tokens, seed), the strategy selects from the baseline facts and the change set only. Each execution is answered from the recorded runs of that variant (a random repetition supplies the outcome and cost). Adaptive strategies interact sequentially.
-4. Metrics: property coverage (of the properties a change breaks, those its selected tests exercise), detection (≥ 1 revealing test executed and failed), recall of revealing tests, tokens actually spent, cost to first detection, false alarms, safety recall, stop reason and stop correctness; APFD and APFD_c of the complete prioritized order; selection recall and selected-subset cost.
+4. Metrics: change coverage without the ground truth (the share of the changed components the executed tests exercised, the share of the properties the change may affect that they checked, whether every affected mandatory property got a test; `experiment/coverage.py`), property coverage (of the properties a change breaks, those its selected tests exercise), detection (≥ 1 revealing test executed and failed), recall of revealing tests, tokens actually spent, cost to first detection, false alarms, safety recall, stop reason and stop correctness; APFD and APFD_c of the complete prioritized order; selection recall and selected-subset cost.
 
 ---
 
@@ -261,6 +263,32 @@ testbed is textual: tests, skills and config keys share vocabulary, which favour
 in §8). Whether TF-IDF helps as much where tests and changes are worded differently is a question for tau2-bench,
 so the default stays word overlap and TF-IDF stays an option.
 
+### 5.3 Coverage, and mandatory properties in the method
+
+Coverage is a metric the AEM team asked for (`docs/AEM_ALIGNMENT.md` §3.5); the report's section 6 gives it for the
+suite and for each change. On the current app every agent, skill, setting and property has a test, and two or
+three tools have none. The declared metadata misses two skills and two settings that the traces show in use.
+
+Change coverage needs no ground truth. Observed, cost-aware and TF-IDF selection exercise 96% of the changed
+components at any budget (one change touches code no test runs). The adaptive method reaches the same 96% but
+checks about half of the properties a change may affect (0.52–0.58, against 0.83–0.85 for `observed` at a 20%
+budget), because it stops at the first real failure or as soon as it is confident. That is the point of stopping,
+but it would also let the method call a change clean with a mandatory property untested.
+
+Step 5 of the method (on by default; `adaptive_bayes_nomandatory` is the ablation) closes that hole. A run that
+found no regression does not end before every mandatory property the change may affect has a test, the cheapest
+that checks it and passes on the original app, while the budget allows. At a 20% budget, among the runs without a
+regression:
+
+| recording | all affected mandatory properties tested, without / with the rule | extra tests per change | detection, verdicts |
+|---|---|---|---|
+| gemma4 | 0.81 / 0.94 | 0.06 | unchanged |
+| qwen4 | 0.82 / 1.00 | 0.06 | unchanged |
+
+The rule never found a regression the method had missed and never caused a false verdict. On this testbed it is a
+guarantee rather than a detector: the method's own choice of tests already covered most mandatory properties.
+Below a 10% budget it often cannot afford the extra test.
+
 ---
 
 ## 6. Models, the prototype, and a second system under test
@@ -284,7 +312,7 @@ so the default stays word overlap and TF-IDF stays an option.
 | Phase | Deliverable | Status |
 |---|---|---|
 | 1. Testbed | SUT, catalog, tracing, mutations, change sets, record/replay, metrics, report, CLI, tests | done (v0.1) |
-| 2. Methods | baselines + cost-aware + predictive + adaptive Bayesian selector with stopping | done (v0.1); tune ε, priors, discount; add a mandatory-safety policy wrapper |
+| 2. Methods | baselines + cost-aware + predictive + adaptive Bayesian selector with stopping | done (v0.1), with the mandatory-coverage rule (§5.3); tune ε, priors, discount |
 | 3. Method improvements | (a) test-level learned sensitivities (per test × component-kind reveal history) instead of kind-level; (b) IR relevance inside the Bayesian likelihood; (c) CASPER-style slices and the Risk-Aware Adaptive Evaluation bandit as reproduced baselines | (a) done; (b) done as an option (§5.2); (c) next |
 | 4. Real LLM | ContentOps on real models (local vLLM): all variants × 3 reps under two models | done: Gemma and Qwen (`docs/EXPERIMENT.md`) |
 | 5. External SUT | tau2-bench airline adapter; 12 mutations (6 policy, 4 tool-code, 2 benign); same evaluation | after 3(b) |
@@ -299,9 +327,9 @@ Calibration fixes after 3(b): on the two agent-definition changes, every test of
 
 The ground truth was then re-recorded on the current app with the model judge and three repetitions (`runs/gemma4`, `runs/qwen4`, §5.1): Gemma's matches the first recording, Qwen's loses two regressions (its strict judge, and links it checks anyway), and Qwen's runs disagree more often.
 
-The AEM team's wish list (`docs/AEM_ALIGNMENT.md`) is now being implemented step by step: the catalog of properties first (done), then multi-agent workflows with planning, new agents modelled on AEM's, trace assertions on agent and tool order, and an OpenTelemetry export.
+The AEM team's wish list (`docs/AEM_ALIGNMENT.md`) is now being implemented step by step. Done: the catalog of properties, drafted by a model from the requirements, and coverage reports with the mandatory-coverage rule (§5.3). Next: multi-agent workflows with planning, new agents modelled on AEM's, trace assertions on agent and tool order, and an OpenTelemetry export.
 
-Immediate next steps, in order: the AEM alignment steps; exactly repeatable decoding for Qwen (vLLM's batch-invariant mode), so that a one-off difference cannot pass for a regression; the mandatory-safety wrapper; the OpenAI backend once API tokens are available; tau2-bench.
+Immediate next steps, in order: the AEM alignment steps; exactly repeatable decoding for Qwen (vLLM's batch-invariant mode), so that a one-off difference cannot pass for a regression; the OpenAI backend once API tokens are available; tau2-bench.
 
 ---
 

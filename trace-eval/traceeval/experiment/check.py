@@ -7,17 +7,23 @@ either way or the budget is spent, and prints a verdict with the method's probab
 What the method knows beforehand comes from a recorded experiment (``--history``): each test's cost and the code
 it exercises on the original app, and how earlier changes of each kind showed up in the tests. Record it with the
 same model and the same version of the app (``traceeval experiment``), since code is matched by line number.
+
+After the verdict it prints the change coverage (``coverage.change_coverage``): the share of the changed components
+the tests exercised, the share of the properties the change may affect that they checked, and the affected
+properties left unchecked. A check that found no regression has tested every affected mandatory property the
+budget allowed (the method's step 5).
 """
 
 import random
 import tempfile
 from pathlib import Path
 
-from traceeval.catalog import load_catalog
+from traceeval.catalog import load_catalog, load_properties
 from traceeval.mutation import compute_changeset, get_mutation, materialize_variant
 from traceeval.selection import SelectionContext, get_strategy
 from traceeval.sut import SUT_ROOT
 
+from .coverage import affected_properties, change_coverage
 from .executor import run_case
 from .history import History
 from .sutloader import load_sut
@@ -25,8 +31,8 @@ from .sutloader import load_sut
 
 def check(change: str, history_dir: Path, budget: float, backend: str):
     """Check ``change``, a mutation id or the folder of a changed copy of ``traceeval/sut``, spending at most
-    ``budget`` (a fraction of the full suite's tokens). Prints each test as it runs, then the verdict; returns
-    the execution log."""
+    ``budget`` (a fraction of the full suite's tokens). Prints each test as it runs, then the verdict and the
+    change coverage; returns the execution log."""
     history = History.load(history_dir)
     catalog = {c.id: c for c in load_catalog()}
     # A mutation is applied to a fresh copy of the app in a temporary folder, removed at the end.
@@ -71,4 +77,23 @@ def check(change: str, history_dir: Path, budget: float, backend: str):
         verdict = "no failure within the budget"
     p = f"; P(something broke) = {log.p_broken:.2f}" if log.p_broken is not None else ""
     print(f"{verdict}\n{spent}{p}")
+    _print_coverage(cs, log.executed, history, catalog)
     return log
+
+
+def _print_coverage(cs, executed, history, catalog):
+    """The change coverage of the executed tests, and the affected properties no executed test checks."""
+    props = load_properties()
+    affected = affected_properties(cs, history, catalog, props)
+    cov = change_coverage(cs, executed, history, catalog, props, affected)
+    parts = []
+    if cov["component_coverage"] is not None:
+        parts.append(f"{cov['component_coverage']:.0%} of the changed components exercised")
+    if cov["affected_property_coverage"] is not None:
+        parts.append(f"{cov['affected_property_coverage']:.0%} of the {len(affected)} affected properties checked")
+    if parts:
+        print("coverage: " + ", ".join(parts))
+    checked = {p for t in executed for p in catalog[t].properties}
+    missing = [p + (" (mandatory)" if props[p].mandatory else "") for p in sorted(affected - checked)]
+    if missing:
+        print("not checked: " + ", ".join(missing))

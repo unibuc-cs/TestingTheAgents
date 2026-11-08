@@ -1,5 +1,5 @@
 """Markdown report (+ three figures) from the replay results: ground truth, detection vs. cost,
-waste on benign changes, stopping accuracy, APFD."""
+waste on benign changes, stopping accuracy, APFD, properties, and coverage (of the suite and of each change)."""
 
 from pathlib import Path
 
@@ -23,6 +23,9 @@ ORDER = [
     "cost_aware",
     "history_ml",
     "adaptive_bayes",
+    "adaptive_bayes_tfidf",  # the method's variants, shown when a replay included them
+    "adaptive_bayes_notext",
+    "adaptive_bayes_nomandatory",
 ]
 COLOR = {
     "full": "#9e9e9e",
@@ -34,6 +37,9 @@ COLOR = {
     "cost_aware": "#2ca02c",
     "history_ml": "#d62728",
     "adaptive_bayes": "#111111",
+    "adaptive_bayes_tfidf": "#555555",
+    "adaptive_bayes_notext": "#888888",
+    "adaptive_bayes_nomandatory": "#8c564b",
 }
 BUDGET_TICKS = [2, 5, 10, 20, 30, 50, 100]
 
@@ -179,6 +185,56 @@ def _properties_section(history, reg) -> list[str]:
     return out
 
 
+def _coverage_section(workdir, history, df) -> list[str]:
+    """Section 6: coverage of the test suite by dimension, and change coverage per strategy over every change (it
+    needs no ground truth)."""
+    from traceeval.sut import SUT_ROOT
+
+    from .coverage import suite_coverage
+
+    sut_dir = workdir / "variants" / "baseline" / "sut"
+    cases = {c.id: c for c in load_catalog()}
+    rows = suite_coverage(history, cases, load_properties(), sut_dir if sut_dir.exists() else SUT_ROOT)
+    table = ["| dimension | components | declared | observed | not covered |", "|---|---|---|---|---|"]
+    for r in rows:
+        gaps = ", ".join(r["not covered"][:8]) + (" ..." if len(r["not covered"]) > 8 else "")
+        table.append(
+            f"| {r['dimension']} | {r['components']} | {'' if r['declared'] is None else r['declared']} | "
+            f"{r['observed']} | {gaps or r.get('detail', '')} |"
+        )
+    out = [
+        "## 6. Coverage",
+        "",
+        "Coverage of the test suite: per dimension, how many components the tests declare and the traces show, and "
+        "what no test covers (execution paths are the distinct agent and tool sequences; risk lists tests per level):",
+        "",
+        *table,
+        "",
+    ]
+    if "component_coverage" in df:
+        # a run that found a regression is over whatever it left untested; the mandatory rule concerns the others
+        open_runs = df[df.stop_reason != "regression"].astype({"mandatory_covered": float})
+        out += [
+            "Change coverage over every change, without the ground truth: the share of the changed components the "
+            "executed tests exercised, and the share of the properties the change may affect (`coverage.py`) that "
+            "they checked.",
+            "",
+            "Changed components exercised:",
+            "",
+            _by_budget(df, "component_coverage"),
+            "",
+            "Affected properties checked:",
+            "",
+            _by_budget(df, "affected_property_coverage"),
+            "",
+            "Runs that found no regression and tested every affected mandatory property (the method's step 5):",
+            "",
+            _by_budget(open_runs, "mandatory_covered"),
+            "",
+        ]
+    return out
+
+
 def write_report(workdir: Path) -> Path:
     workdir = Path(workdir)
     res, figs = workdir / "results", workdir / "results" / "figures"
@@ -263,6 +319,7 @@ def write_report(workdir: Path) -> Path:
             "",
         ]
     parts += _properties_section(history, reg)
+    parts += _coverage_section(workdir, history, df)
     parts += [
         "## How to read this",
         "",

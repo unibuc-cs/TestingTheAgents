@@ -47,8 +47,9 @@ holds the edited copies (`variants/`), the recordings (`history/*.jsonl`) and th
 | how a test is run and scored | `experiment/executor.py` (`run_case`), `scoring/scorers.py` |
 | how a change becomes components | `mutation/catalog.py` (data), `mutation/changeset.py` |
 | the baselines | `selection/strategies.py` (about 140 lines) |
-| the proposed method | `selection/adaptive_bayes.py` (its docstring explains the four ideas) |
+| the proposed method | `selection/adaptive_bayes.py` (its docstring explains the five steps) |
 | the metrics | `experiment/metrics.py`, `experiment/evaluate.py` |
+| coverage (of the suite, of a change) | `experiment/coverage.py` |
 | the prototype (one change, live) | `experiment/check.py` |
 
 Everything else is plumbing (loaders, tracing, report).
@@ -61,9 +62,16 @@ Everything else is plumbing (loaders, tracing, report).
   strategies run out of tests, the adaptive one stops early, and the rest always spend the whole budget.
 - **Section 3**: tokens spent on changes that break nothing. The stop-reason table shows whether the
   adaptive strategy said `clean` on benign changes and `regression` on regressions.
+- **Section 4**: APFD / APFD_c of the complete order (prioritization quality) and selection recall.
 - **Section 5**: the catalog of properties: each property's pass rate on the original app against its threshold,
   and, per strategy, the share of the properties a change breaks that its tests exercised.
-- **Section 4**: APFD / APFD_c of the complete order (prioritization quality) and selection recall.
+- **Section 6**: coverage, a feature the AEM team asked for ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5). First the
+  suite: per dimension (agent, skill, tool, configuration, property, execution path, risk), how many components
+  the tests declare and the traces show, and what no test covers. Then each change, without the ground truth
+  (`experiment/coverage.py`): the share of the changed components the executed tests exercised, the share of the
+  properties the change may affect that they checked, and how often a run that found no regression tested every
+  affected mandatory property. The properties a change may affect are those whose `sources` it touches and those
+  of the tests that ran a changed component on the original app; `traceeval check` prints the same figures.
 - `replay.csv` has one row per (change, strategy, budget, seed) if you want to slice it yourself.
 
 ## 5. How the adaptive method weighs a test
@@ -83,6 +91,12 @@ of `runs/gemma4`:
 | tilt | text similarity between the test and the diff (0.5 to 1.5), plus 0.5 if the test's author declared the dependency. The similarity is word overlap by default; `adaptive_bayes_tfidf` uses TF-IDF instead and `adaptive_bayes_notext` no text at all (`--strategies adaptive_bayes adaptive_bayes_tfidf adaptive_bayes_notext` compares them; RESEARCH_PLAN §5.2) | a test whose request mentions publishing gets more weight for a change to the publishing skill |
 
 A test with no known link to the changed part gets a small fixed sensitivity (`indirect`, 0.02).
+
+**Mandatory properties (step 5).** A run that found no regression does not end before every mandatory property
+the change may affect has a test: for each one not yet checked, the method runs the cheapest test that checks it
+and passes on the original app, while the budget allows. A failure is a regression, as usual. The rule turns the
+catalog's mandatory flag into a guarantee, at almost no cost (RESEARCH_PLAN §4.4); `adaptive_bayes_nomandatory`
+is the method without it, an ablation.
 
 **Weights.** Each factor has its own knob: `prior_strength` sets how far a short record can move a test (larger
 means the record counts less), the tilt has a fixed range, and `indirect` sets the floor. The factors are not

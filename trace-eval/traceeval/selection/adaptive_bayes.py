@@ -23,6 +23,9 @@ In plain words
      greedily, so that failure shows a changed behaviour (it is what the ground truth calls revealing).  We
      stop with "clean" when P(something is broken) drops below eps_clean, and otherwise when the budget is
      spent or no test could change the verdict.
+  5. A run that found no regression does not end before every mandatory property the change may affect (the
+     catalog of properties, ``experiment/coverage.py``) has a test, the cheapest that checks it, while the budget
+     allows (``cover_mandatory``; switched off in the ablation ``adaptive_bayes_nomandatory``).
 """
 
 import math
@@ -89,6 +92,7 @@ class AdaptiveBayes(Strategy):
         duplicate_discount=0.35,
         prior_strength=2.0,
         text="overlap",
+        cover_mandatory=True,
     ):
         self.eps_clean = eps_clean  # "clean" below this P(something is broken) (step 4)
         self.max_components = max_components  # 2^k hypotheses, so k stays small
@@ -97,6 +101,7 @@ class AdaptiveBayes(Strategy):
         self.duplicate_discount = duplicate_discount  # factor on a near-duplicate's sensitivity after a pass
         self.prior_strength = prior_strength  # padding of a test's record (step 2): a short record moves little
         self.text = text  # how a test's text is compared with the change (step 2): "overlap", "tfidf" or "none"
+        self.cover_mandatory = cover_mandatory  # test every mandatory property the change may affect (step 5)
 
     # ------------------------------------------------------------------ step 1: hypotheses
     def components(self, ctx):
@@ -301,7 +306,7 @@ class AdaptiveBayes(Strategy):
         gain = self._entropy(post) - (pf * self._entropy(post_if_fail) + (1 - pf) * self._entropy(post_if_pass))
         return np.maximum(gain, 0.0)
 
-    # ------------------------------------------------------------------ steps 3 and 4: run and stop
+    # ------------------------------------------------------------------ steps 3 to 5: run and stop
     def run(self, ctx: SelectionContext, oracle, stopping: bool = True) -> ExecutionLog:
         """Run tests one by one through ``oracle``. ``stopping=False`` (used by ``order``) disables the early
         stops."""
@@ -347,8 +352,47 @@ class AdaptiveBayes(Strategy):
             if remaining <= 0:
                 log.stop_reason = "budget"
                 break
+        if stopping and self.cover_mandatory and log.stop_reason != "regression":
+            post = self._cover_mandatory(ctx, oracle, log, m, ran, remaining, post, p_fail, fails_anyway)
         log.p_broken = float(1.0 - post[0])
         return log
+
+    @staticmethod
+    def _cover_mandatory(ctx, oracle, log, m, ran, remaining, post, p_fail, fails_anyway):
+        """Step 5, the mandatory-coverage rule: a run that found no regression does not end before every mandatory
+        property the change may affect (``coverage.affected_properties``) has a test, the cheapest that checks it,
+        while the budget allows. Only tests that pass on the original app count: one that fails there checks
+        nothing. A failure is a regression, as in step 4, and ends the run. Returns the posterior."""
+        from traceeval.catalog import load_properties
+        from traceeval.experiment.coverage import affected_properties
+
+        tests, cost, props = m["tests"], m["cost"], load_properties()
+        checked = {p for i in np.flatnonzero(ran) for p in ctx.catalog[tests[i]].properties}
+        affected = affected_properties(ctx.change, ctx.history, ctx.catalog, props)
+        for pid in sorted(p for p in affected if props[p].mandatory):
+            options = [
+                i
+                for i in range(len(tests))
+                if not ran[i]
+                and cost[i] <= remaining
+                and fails_anyway[i] < 0.5
+                and pid in ctx.catalog[tests[i]].properties
+            ]
+            if pid in checked or not options:
+                continue
+            i = min(options, key=lambda j: cost[j])
+            passed, spent = oracle(tests[i])
+            ran[i] = True
+            remaining -= spent
+            log.steps.append((tests[i], passed, spent))
+            checked |= set(ctx.catalog[tests[i]].properties)
+            post = post * ((1 - p_fail[i]) if passed else p_fail[i])
+            post /= post.sum() or 1e-12
+            if not passed:
+                post[0] = 0.0
+                log.stop_reason = "regression"
+                break
+        return post
 
     def order(self, ctx):
         """Non-adaptive view for APFD metrics: the greedy order assuming every test passes, no stopping,
@@ -359,8 +403,8 @@ class AdaptiveBayes(Strategy):
         return executed + [t for t in CostAware().order(ctx) if t not in seen]
 
 
-# The same method with another text measure (step 2), registered under their own names so that a replay can
-# compare them with --strategies; neither is in the default comparison.
+# The same method with another text measure (step 2) or without step 5, registered under their own names so that
+# a replay can compare them with --strategies; none is in the default comparison.
 @register
 class AdaptiveBayesTfidf(AdaptiveBayes):
     """Text compared by the TF-IDF similarity of the ir_tfidf strategy instead of word overlap."""
@@ -379,3 +423,13 @@ class AdaptiveBayesNoText(AdaptiveBayes):
 
     def __init__(self):
         super().__init__(text="none")
+
+
+@register
+class AdaptiveBayesNoMandatory(AdaptiveBayes):
+    """Without the mandatory-coverage rule (step 5): an ablation, to measure what the rule costs and adds."""
+
+    name = "adaptive_bayes_nomandatory"
+
+    def __init__(self):
+        super().__init__(cover_mandatory=False)

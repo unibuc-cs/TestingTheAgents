@@ -14,7 +14,8 @@ traceeval evaluate --workdir runs/gemma4 --seeds 10
 traceeval report   --workdir runs/gemma4
 traceeval experiment --workdir runs/gemma4   (baseline + mutants + evaluate + report)
 traceeval check <mutation id | changed copy of traceeval/sut> --history runs/gemma4 [--budget 0.2] [--backend vllm]
-    check one change live with the proposed method; --history is an experiment recorded with the same model
+    check one change live with the proposed method; --history is an experiment recorded with the same model;
+    prints the verdict and the change coverage
 traceeval properties draft [--max 15] [--per-test 5] [--fresh] [--replay a.json] [--save-response a.json]
     a model (Qwen, the llm backend) drafts the catalog of properties from the requirements and tags the tests
 traceeval properties apply   write properties.yaml and the tests' tags from the reviewed draft

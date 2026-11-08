@@ -92,7 +92,7 @@ Cost until the first true detection (fraction of the full suite, detected cases 
 | ir_tfidf | 0.019 | 0.049 | 0.099 | 0.199 | 0.298 | 0.499 | 0.994 |
 | observed | 0.013 | 0.036 | 0.062 | 0.101 | 0.133 | 0.164 | 0.198 |
 | cost_aware | 0.019 | 0.049 | 0.099 | 0.199 | 0.298 | 0.498 | 0.989 |
-| adaptive_bayes | 0.014 | 0.031 | 0.053 | 0.090 | 0.119 | 0.172 | 0.282 |
+| adaptive_bayes | 0.014 | 0.032 | 0.054 | 0.091 | 0.120 | 0.173 | 0.283 |
 
 ![benign waste](figures/benign_waste.png)
 
@@ -149,6 +149,58 @@ Coverage of the affected properties (those of a change's revealing tests) by the
 | observed | 0.46 | 0.66 | 0.79 | 0.91 | 0.93 | 0.95 | 1.00 |
 | cost_aware | 0.50 | 0.68 | 0.80 | 0.91 | 0.93 | 0.96 | 1.00 |
 | adaptive_bayes | 0.56 | 0.66 | 0.72 | 0.76 | 0.76 | 0.76 | 0.76 |
+
+## 6. Coverage
+
+Coverage of the test suite: per dimension, how many components the tests declare and the traces show, and what no test covers (execution paths are the distinct agent and tool sequences; risk lists tests per level):
+
+| dimension | components | declared | observed | not covered |
+|---|---|---|---|---|
+| agent | 8 | 8 | 8 |  |
+| skill | 10 | 8 | 10 |  |
+| tool | 24 | 20 | 22 | approve_review, search_pages |
+| configuration | 11 | 9 | 11 |  |
+| property | 12 | 12 | 12 |  |
+| execution path | 49 |  | 49 |  |
+| risk | 4 | 4 | 4 | critical 14, high 60, low 18, medium 44 |
+
+Change coverage over every change, without the ground truth: the share of the changed components the executed tests exercised, and the share of the properties the change may affect (`coverage.py`) that they checked.
+
+Changed components exercised:
+
+| strategy | 2% | 5% | 10% | 20% | 30% | 50% | 100% |
+|---|---|---|---|---|---|---|---|
+| full | 0.39 | 0.39 | 0.49 | 0.64 | 0.66 | 0.77 | 0.96 |
+| random | 0.51 | 0.70 | 0.82 | 0.90 | 0.94 | 0.96 | 0.96 |
+| declared | 0.63 | 0.67 | 0.67 | 0.67 | 0.67 | 0.67 | 0.67 |
+| ir_tfidf | 0.96 | 0.96 | 0.96 | 0.96 | 0.96 | 0.96 | 0.96 |
+| observed | 0.96 | 0.96 | 0.96 | 0.96 | 0.96 | 0.96 | 0.96 |
+| cost_aware | 0.96 | 0.96 | 0.96 | 0.96 | 0.96 | 0.96 | 0.96 |
+| adaptive_bayes | 0.96 | 0.96 | 0.96 | 0.96 | 0.96 | 0.96 | 0.96 |
+
+Affected properties checked:
+
+| strategy | 2% | 5% | 10% | 20% | 30% | 50% | 100% |
+|---|---|---|---|---|---|---|---|
+| full | 0.44 | 0.62 | 0.62 | 0.71 | 0.77 | 0.88 | 1.00 |
+| random | 0.35 | 0.52 | 0.60 | 0.72 | 0.79 | 0.89 | 1.00 |
+| declared | 0.25 | 0.38 | 0.44 | 0.46 | 0.46 | 0.48 | 0.48 |
+| ir_tfidf | 0.41 | 0.60 | 0.66 | 0.78 | 0.85 | 0.93 | 1.00 |
+| observed | 0.33 | 0.53 | 0.68 | 0.85 | 0.89 | 0.94 | 1.00 |
+| cost_aware | 0.38 | 0.57 | 0.71 | 0.84 | 0.89 | 0.95 | 1.00 |
+| adaptive_bayes | 0.37 | 0.47 | 0.51 | 0.52 | 0.52 | 0.52 | 0.53 |
+
+Runs that found no regression and tested every affected mandatory property (the method's step 5):
+
+| strategy | 2% | 5% | 10% | 20% | 30% | 50% | 100% |
+|---|---|---|---|---|---|---|---|
+| full | 0.21 | 0.45 | 0.45 | 0.45 | 0.45 | 0.67 | 1.00 |
+| random | 0.27 | 0.30 | 0.36 | 0.45 | 0.53 | 0.70 | 1.00 |
+| declared | 0.48 | 0.48 | 0.58 | 0.58 | 0.58 | 0.58 | 0.58 |
+| ir_tfidf | 0.30 | 0.50 | 0.55 | 0.55 | 0.64 | 0.79 | 1.00 |
+| observed | 0.48 | 0.55 | 0.73 | 0.94 | 1.00 | 1.00 | 1.00 |
+| cost_aware | 0.48 | 0.55 | 0.73 | 0.85 | 1.00 | 1.00 | 1.00 |
+| adaptive_bayes | 0.49 | 0.57 | 0.73 | 1.00 | 1.00 | 1.00 | 1.00 |
 
 ## How to read this
 

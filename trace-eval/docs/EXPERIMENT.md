@@ -352,9 +352,12 @@ traceeval check my-sut-copy --history runs/qwen4 --backend llm                  
 
 The method picks the most informative test for its cost, the test runs on the changed app, and its outcome
 decides what runs next. The check stops at the first test that passed on the original app and fails now (a
-regression), when the method is sure nothing broke, or when the budget is spent. It prints each test as
+regression), when the method is sure nothing broke, or when the budget is spent. Before it ends without a
+regression, every mandatory property the change may affect gets a test while the budget allows. It prints each test as
 it runs, then the verdict (`REGRESSION`, `no regression`, `no regression found within the budget`, or `no failure within the budget`), the
-tokens spent and the method's probability that the change broke something.
+tokens spent, the method's probability that the change broke something, and the change coverage: the share of
+the changed components the tests exercised, the share of the properties the change may affect that they checked,
+and the affected properties left unchecked (marked when mandatory).
 
 `--history` gives the method what it knows beforehand: each test's cost and the code it runs on the original
 app, and how the other changes showed up in the tests. Record it with the same model, and again whenever the

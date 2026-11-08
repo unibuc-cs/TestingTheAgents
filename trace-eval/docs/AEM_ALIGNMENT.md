@@ -40,7 +40,7 @@ public documentation:
 | plans, data passed between agents, approvals, re-planning | no: a delegated agent gets the user's whole request, and the orchestrator delegates once | |
 | workflows as a coverage dimension | no | follows from multi-agent tests |
 | a catalog of properties with categories and thresholds | **done (step 1)**: `traceeval/catalog/properties.yaml`, pass rates against thresholds and property coverage in the report; drafted by a model from the requirements and edited by people (`traceeval properties draft`, step 1b) | the Qwen run (with the GPU work) |
-| coverage over agents, skills, tools, config, properties, workflows, paths, risk (declared, observed, required) | partly: property coverage per strategy | suite and change coverage reports, mandatory coverage in the method (step 1c, §3.5) |
+| coverage over agents, skills, tools, config, properties, workflows, paths, risk (declared, observed, required) | **done (step 1c)**: suite coverage per dimension and change coverage per strategy in the report and in `traceeval check`; the method tests every mandatory property a change may affect (§3.5) | workflows (step 2), tool error paths and non-default settings as their own components |
 | per-test metadata (agents, skills, tools, risk, cost, history) | yes (declared + observed + history) | workflows missing |
 | trace assertions | partly: final state, required and forbidden tools, attempts, audit, step limit, termination | agent order, tool order |
 | budgets and early stopping | yes (`adaptive_bayes`, `traceeval check`) | — |
@@ -145,46 +145,60 @@ requirements no test checks, the tests whose tags would change). A person edits 
 `traceeval properties apply` writes `properties.yaml` and the tags in the test files. The model's answers can be
 saved and replayed (`--save-response`, `--replay`).
 
-### 3.5 Coverage from several angles (planned, step 1c)
+### 3.5 Coverage from several angles (done, step 1c)
 
 The AEM team has no formal definition of coverage and named it as one of the metrics they want. Adobe's
 requirements (section 6) define it over nine dimensions (agent, feature, skill, tool, configuration, workflow,
 execution path, property, risk) and three kinds: declared (test metadata), observed (traces) and required
-(mandatory properties and risks). The testbed already holds the pieces (declared dependencies, observed traces, the
-catalog of properties with sources); the plan is to report coverage at two levels and to use it in the method.
+(mandatory properties and risks). The testbed reports coverage at two levels and uses it in the method
+(`traceeval/experiment/coverage.py`; report section 6; `traceeval check`).
 
-**1. Suite coverage: how well the tests cover the application, before any change.** For each dimension, the share
-of its components that at least one test covers, declared and observed, and the list of what no test covers:
+**1. Suite coverage: how well the tests cover the application, before any change.** For each dimension, how many
+of its components at least one test covers, declared and observed, and the list of what no test covers:
 
 | dimension | covered when | gap it shows |
 |---|---|---|
 | agent | a test runs it | an agent no test reaches |
-| skill (procedure, prose) | a test loads it | instructions no test exercises |
-| tool | a test calls it; a test sees it fail | an untested tool, an untested error path |
-| configuration | a test reads the key; a test runs with a non-default value | a setting whose effect nothing checks |
+| skill | a test loads it | instructions no test exercises |
+| tool | a test calls it (every tool the app registers counts, called or not) | an untested tool |
+| configuration | a test reads the key | a setting whose effect nothing checks |
 | property | a test checks it | an untested requirement; an untested mandatory one is a release risk |
 | workflow (step 2) | a test runs it end to end | a workflow no test crosses |
 | execution path | the distinct agent and tool sequences the traces show | counted, not a share |
-| risk | the critical and high-risk features have tests | an unprotected critical feature |
+| risk | the tests per risk level | an unprotected critical feature |
 
-Required coverage is the mandatory properties, the workflows and the critical features; the report lists its gaps.
+On the current app every agent, skill, setting and property has a test. Three tools have none under Gemma and two
+under Qwen (`approve_review` and `search_pages` under both, plus `get_asset`, which only Qwen's runs call). The
+declared metadata misses two skills and two settings that the traces show the tests use, which is why declared
+selection misses regressions. Two refinements of the plan wait: a tool's error path and a setting's non-default
+value as components of their own; workflows join with step 2.
 
-**2. Change coverage: for one change and one strategy, how much of what the change touches the selected tests
-cover.** Computed without the ground truth, so `traceeval check` can report it too:
+**2. Change coverage: for one change and one strategy, how much of what the change touches the executed tests
+cover.** Computed without the ground truth, at the moment the strategy stops ("coverage achieved before stopping",
+requirements section 8.1), so `traceeval check` prints it after its verdict:
 
-- the changed components the selected tests exercised (observed);
-- the affected properties (those whose sources the change touches, and those of the tests that cover the changed
-  components) that the selected tests check;
-- the affected workflows and critical-risk tests that ran;
-- the coverage reached when the method stops ("coverage achieved before stopping", requirements section 8.1).
+- the share of the changed components the executed tests exercised (observed);
+- the share of the affected properties they check. A change may affect the properties whose `sources` (in the
+  catalog of properties) it touches and the properties of the tests that ran a changed component on the original
+  app;
+- whether every affected mandatory property got a test;
+- affected workflows and critical-risk tests join with step 2.
 
-In the replay it is also measured against the ground truth: the properties of the revealing tests (the
-`property_coverage` column the report already has).
+The replay also measures it against the ground truth: the properties of the revealing tests (`property_coverage`,
+report section 5).
 
-**3. Coverage in the method.** The method should not stop before the mandatory properties a change touches have at
-least one test run: the mandatory-safety wrapper of the roadmap, which turns coverage from a report into a stopping
-rule. The first measurement shows why: at a 20% budget the adaptive method covers 68% of the properties a change
-breaks under Gemma, against 89–90% for `ir_tfidf` and `observed`, because it stops at the first real failure.
+**3. Coverage in the method.** The adaptive method stops at the first real failure, or as soon as it is confident
+that nothing broke. So at a 20% budget it covers 68% (Gemma) and 76% (Qwen) of the properties a change breaks,
+against 89–92% for `ir_tfidf` and `observed`, and about half of the properties a change may affect. Coverage
+therefore became a stopping rule, step 5 of the method and on by default. A run that found no regression does not
+end before every mandatory property the change may affect has a test, the cheapest that checks it and passes on
+the original app, while the budget allows.
+
+At a 20% budget, on both recordings: the share of the runs without a regression that tested every affected
+mandatory property rises from 0.81–0.82 to 0.94–1.00. The rule costs 0.06 extra tests per change and at most 0.1
+points of the suite's tokens. Detection and verdicts are unchanged: the extra tests found no regression the method
+had missed, and gave no false verdict. `observed` reaches 0.85–0.94 for three times the tokens, `ir_tfidf` 0.55–0.58.
+The method without the rule stays registered as an ablation (`adaptive_bayes_nomandatory`).
 
 ### 3.6 OpenTelemetry
 
@@ -213,7 +227,7 @@ wording, a reordered plan template).
   before, and is kept in the ground truth.
 
 Order: (1) the catalog of properties (done), (1b) drafting it with a model from the requirements (code done),
-(1c) coverage reports and the mandatory-coverage rule, (2) the planning mode and the three new agents with W1 and
+(1c) coverage reports and the mandatory-coverage rule (done), (2) the planning mode and the three new agents with W1 and
 W3, (3) the remaining workflows and changes, (4) recording, with Gemma first and Qwen last, (5) OpenTelemetry
 export.
 

@@ -4,8 +4,9 @@ import random
 
 import pytest
 
-from traceeval.catalog import load_catalog
+from traceeval.catalog import load_catalog, load_properties
 from traceeval.experiment.check import check
+from traceeval.experiment.coverage import affected_properties, suite_coverage
 from traceeval.experiment.evaluate import evaluate, make_oracle
 from traceeval.experiment.history import History
 from traceeval.experiment.metrics import apfd, apfdc
@@ -87,7 +88,7 @@ def test_apfd_metrics():
 
 
 @pytest.mark.slow
-def test_small_end_to_end_experiment(tmp_path):
+def test_small_end_to_end_experiment(tmp_path, capsys):
     work = tmp_path / "exp"
     record_baseline(work, reps=1)
     record_mutants(work, mutation_ids=["skill_publish_drop_link_validation", "benign_skill_prose_reflow"], reps=1)
@@ -111,6 +112,18 @@ def test_small_end_to_end_experiment(tmp_path):
             assert len(set(log.executed)) == len(log.executed)  # no test runs twice
     df = evaluate(work, strategies=["observed", "adaptive_bayes"], budgets=(0.2, 1.0), seeds=1)
     assert set(df.strategy) == {"observed", "adaptive_bayes"}
+    # coverage: the suite by dimension, and each run's change coverage (no ground truth needed)
+    props = load_properties()
+    rows = {r["dimension"]: r for r in suite_coverage(h, catalog, props, SUT_ROOT)}
+    assert {"agent", "skill", "tool", "configuration", "property", "execution path", "risk"} <= set(rows)
+    assert rows["property"]["not covered"] == [] and rows["skill"]["observed"] > 0
+    assert {"component_coverage", "affected_property_coverage", "mandatory_covered"} <= set(df.columns)
+    benign = h.changesets["benign_skill_prose_reflow"]
+    assert any(props[p].mandatory for p in affected_properties(benign, h, catalog, props))
+    # step 5: with the whole suite affordable, a run without a regression tests every affected mandatory property
+    full = df[(df.variant == "benign_skill_prose_reflow") & (df.strategy == "adaptive_bayes") & (df.budget == 1.0)]
+    assert (full.stop_reason != "regression").all() and full.mandatory_covered.all()
     # the prototype: the same change checked live (here on recorded answers), from this history
     log = check("skill_publish_drop_link_validation", work, 0.3, "replay")
     assert log.stop_reason == "regression" and log.p_broken > 0.9
+    assert "coverage: " in capsys.readouterr().out

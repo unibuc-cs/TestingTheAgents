@@ -37,10 +37,11 @@ def apfdc(order: list[str], revealing: set[str], cost: dict[str, float], severit
     return num / (total_cost * total_sev)
 
 
-def evaluate_log(log, variant: str, history, catalog, budget: float) -> dict:
+def evaluate_log(log, variant: str, history, catalog, budget: float, props=None, affected=None) -> dict:
     """One row of replay.csv: what a strategy's execution log detected, at what cost, and how it stopped.
     A failure of a test outside the ground truth (one that fails on the original app too) is a false alarm,
-    not a detection."""
+    not a detection. Given the catalog of properties (``props``), the row also gets the change coverage of the
+    executed tests (``coverage.change_coverage``), which needs no ground truth."""
     revealing = history.revealing_tests(variant)
     is_regression = len(revealing) > 0
     executed = log.executed
@@ -59,7 +60,7 @@ def evaluate_log(log, variant: str, history, catalog, budget: float) -> dict:
                 false_alarms.add(t)
     safety_revealing = {t for t in revealing if catalog[t].is_safety}
     # the properties the change breaks (those of its revealing tests), and those the strategy ran a test of
-    affected = {p for t in revealing for p in catalog[t].properties}
+    broken = {p for t in revealing for p in catalog[t].properties}
     exercised = {p for t in executed for p in catalog[t].properties}
     out = {
         "variant": variant,
@@ -76,7 +77,7 @@ def evaluate_log(log, variant: str, history, catalog, budget: float) -> dict:
         "cost_to_detect_fraction": (first_detect_cost / full_cost) if first_detect_cost is not None else None,
         "false_alarm": bool(false_alarms),
         "safety_recall": (len(true_fails & safety_revealing) / len(safety_revealing)) if safety_revealing else None,
-        "property_coverage": (len(affected & exercised) / len(affected)) if affected else None,
+        "property_coverage": (len(broken & exercised) / len(broken)) if broken else None,
         "stop_reason": log.stop_reason,
         # did the strategy end with the right conclusion? "clean"/"regression" are explicit verdicts; any other
         # stop is judged by whether it found a true failure; with no components, "clean" is implied
@@ -88,4 +89,8 @@ def evaluate_log(log, variant: str, history, catalog, budget: float) -> dict:
         if log.stop_reason != "no_components"
         else (not is_regression),
     }
+    if props is not None:
+        from .coverage import change_coverage
+
+        out.update(change_coverage(history.changesets[variant], executed, history, catalog, props, affected))
     return out
