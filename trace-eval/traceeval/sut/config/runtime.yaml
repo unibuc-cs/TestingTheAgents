@@ -1,7 +1,8 @@
 # Runtime configuration of the ContentOps agent platform.
 runtime:
-  max_tool_calls: 12          # hard step budget per request (all agents in the delegation chain)
-  retries: 2                  # retries on transient tool failures
+  max_tool_calls: 12          # step budget of each agent (its own tool calls and delegations)
+  max_run_tool_calls: 40      # step budget of the whole request (all agents together)
+  retries: 2                 # retries on transient tool failures
   idempotency_keys: true      # reuse the same key on write retries to prevent duplicate actions
 
 tools:
@@ -21,3 +22,6 @@ seo:
 
 translation:
   default_locales: [de-DE, fr-FR]
+
+optimizer:
+  max_load_ms: 3000           # a page that loads slower than this is reported as slow

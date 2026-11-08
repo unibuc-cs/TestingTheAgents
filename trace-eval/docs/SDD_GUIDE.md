@@ -93,7 +93,8 @@ case id or an inline case with `agent`, `request`, `context`), `dirs`, `module`,
 
 Expressions (`where`, `ensures`) are Python expressions over a small vocabulary: `config('key')`,
 `approval_age(run, page_id)`, `expected_broken(run, page_id)`, `audit_count(run, action, ...)`,
-`applied(run, tool)`, `token_owner(run, token)`, `title_of_length(n)`, `first_case_calling(tool)`,
+`applied(run, tool)`, `token_owner(run, token)`, `call_token(run, event)` (the token a call was made with,
+also when a step of a plan received it), `title_of_length(n)`, `first_case_calling(tool)`,
 `baseline_run(test_id)`; `event.<field>` for the call or audit entry being checked and `run.<field>` for
 the run (all in `traceeval/spec/context.py`). A new template takes ten lines in the catalog. A new
 helper is a function in `context.py`.

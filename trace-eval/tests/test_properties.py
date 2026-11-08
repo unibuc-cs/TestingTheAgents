@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import yaml
 
-from traceeval.catalog import CATALOG_ROOT, extract, load_catalog
+from traceeval.catalog import CATALOG_ROOT, extract, load_catalog, load_properties
 
 CATALOG_ANSWER = {
     "properties": [
@@ -56,10 +56,11 @@ def test_draft_keeps_limits_lists_and_edits_then_applies(tmp_path):
     root = tmp_path / "catalog"
     shutil.copytree(CATALOG_ROOT, root, ignore=shutil.ignore_patterns("__pycache__"))
     saved = tmp_path / "answers.json"
-    result = extract.draft(root, max_properties=13, per_test=2, save_response=saved, client=ScriptedModel())
+    limit = len(load_properties(root)) + 1  # room for one new property
+    result = extract.draft(root, max_properties=limit, per_test=2, save_response=saved, client=ScriptedModel())
     props = result["properties"]
-    # the fixed category list and the limit (12 existing + room for one new) are enforced by the code
-    assert "fast" not in props and "plan_order" in props and "brand_ok" not in props and len(props) == 13
+    # the fixed category list and the limit (the existing ones + room for one new) are enforced by the code
+    assert "fast" not in props and "plan_order" in props and "brand_ok" not in props and len(props) == limit
     # the person's entry keeps its wording and threshold, and gains only the known sources
     assert props["safety_no_broken_publish"]["description"].startswith("a page with broken links")
     assert props["safety_no_broken_publish"]["sources"] == ["skill:link-validation#prose"]
@@ -68,7 +69,7 @@ def test_draft_keeps_limits_lists_and_edits_then_applies(tmp_path):
     assert result["tags"] == {"PUB-01": ["task_completion", "plan_order"]}
     assert any("NOPE" in n for n in result["notes"]) and "plan_order" in result["report"].read_text()
     # the saved answers give the same draft with no model
-    again = extract.draft(root, max_properties=13, per_test=2, replay=saved)
+    again = extract.draft(root, max_properties=limit, per_test=2, replay=saved)
     assert again["properties"] == props and again["tags"] == result["tags"]
     # apply writes the catalog (keeping its comments) and the tests' properties lines
     extract.apply(root)

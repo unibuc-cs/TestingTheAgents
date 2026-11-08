@@ -106,6 +106,7 @@ class CheckContext:
             "audit_count": audit_count,
             "applied": applied,
             "token_owner": token_owner,
+            "call_token": call_token,
             "title_of_length": title_of_length,
             "first_case_calling": lambda tool: next(iter(self.model.cases_calling([tool], ok_only=True)), None),
             "baseline_run": lambda test_id: wrap(with_context(self.model.baseline_runs[test_id])),
@@ -124,7 +125,16 @@ def with_context(run: dict) -> dict:
 
 # -------------------------------------------------------------------- helpers usable in clause expressions
 def approval_age(run, page_id: str) -> int:
-    """Days between the page's recorded approval and the fixture's ``today`` (state before the run)."""
+    """Days between the page's approval and the fixture's ``today``: 0 when the run itself approved the page (a
+    successful ``approve_review``), otherwise from the approval recorded in the state before the run."""
+    if any(
+        e["kind"] == "tool.call"
+        and e["tool"] == "approve_review"
+        and e["status"] == "ok"
+        and e["args"].get("page_id") == page_id
+        for e in run["events"]
+    ):
+        return 0
     state = run["initial_state"]
     page = state["pages"].get(page_id)
     if page is None:
@@ -168,6 +178,20 @@ def token_owner(run, token) -> str | None:
         return None
     users = run["initial_state"]["users"]
     return next((uid for uid, u in users.items() if u.get("approval_token") == token), None)
+
+
+def call_token(run, event) -> str | None:
+    """The approval token a tool call was made with: the request's own, replaced by a person's approval granted
+    earlier in the run (the steps after it carry its token) or by a token a delegation passed on."""
+    token = run["context"].get("approval_token")
+    for e in run["events"]:
+        if e == event:
+            break
+        if e.get("kind") == "tool.call" and e.get("tool") == "request_approval" and e.get("status") == "ok":
+            token = ((e.get("result") or {}).get("pass_on") or {}).get("approval_token", token)
+        elif e.get("kind") == "agent.route" and e.get("status") == "ok" and e.get("target") == event.get("agent"):
+            token = (e.get("context") or {}).get("approval_token", token)
+    return token
 
 
 def applied(run, tool: str) -> bool:

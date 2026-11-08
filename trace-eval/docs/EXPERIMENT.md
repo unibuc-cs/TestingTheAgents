@@ -15,11 +15,11 @@ change if it broke something, without paying for the whole test suite every time
 To study that, the repo has four things:
 
 - **An app with agents.** "ContentOps" is a small content platform with an orchestrator and specialist
-  agents (publishing, authoring, SEO, assets, ...). Each agent follows a skill (a `SKILL.md` with a
-  step-by-step procedure) and calls tools. The app's data (pages, users, reviews) lives in memory, so a test
+  agents (publishing, authoring, SEO, assets, ...); a request that needs several of them gets a plan, run one
+  specialist at a time. Each agent follows a skill (a `SKILL.md` with a step-by-step procedure) and calls tools. The app's data (pages, users, reviews) lives in memory, so a test
   can't damage anything, and the harness can inject faults such as a tool that fails once.
   See [CONTENTOPS.md](CONTENTOPS.md).
-- **Tests.** 136 cases in [`traceeval/catalog/tests/`](../traceeval/catalog/tests/). Each gives a request
+- **Tests.** 168 cases in [`traceeval/catalog/tests/`](../traceeval/catalog/tests/). Each gives a request
   ("Please publish the welcome page") and checks the outcome: was the page published, which tools were
   called, which facts the answer reports.
 - **Changes.** 33 controlled edits in [`traceeval/mutation/catalog.py`](../traceeval/mutation/catalog.py),

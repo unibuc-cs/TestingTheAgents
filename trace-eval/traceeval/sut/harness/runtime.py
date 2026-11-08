@@ -1,6 +1,6 @@
 """The agent loop. Backend-agnostic: a backend proposes the next action (tool call or final answer);
-the runtime enforces the step budget, dispatches tools, handles delegation between agents and records
-agent transitions."""
+the runtime enforces the step budgets, dispatches tools, handles delegation between agents (the whole request,
+or one step of an orchestrator's plan) and records agent transitions."""
 
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -45,7 +45,9 @@ class Runtime:
 
     A backend decides what an agent does next, and the runtime carries the decision
     out: it sends tool calls to the dispatcher, handles ``route_to_agent`` itself by running the target
-    agent, and stops an agent that would go over the step budget. The budget, the token totals and the
+    agent, and stops an agent that would go over a step budget. Each agent has a budget of its own
+    (``runtime.max_tool_calls``) and the run has one in total (``runtime.max_run_tool_calls``), so that a plan
+    over several agents fits while no single agent loops for long. The total, the token totals and the
     termination reason belong to the whole run, so all agents of a delegation chain share them, and a
     Runtime serves a single request.
 
@@ -64,7 +66,7 @@ class Runtime:
         self.skills = SkillLoader(sut_dir / "skills", tracer=tracer)  # every skill load is traced
         self.dispatcher = Dispatcher(tools, config, state, tracer, faults)  # every tool call except delegation
         # State of the whole run, shared by all agents of the delegation chain.
-        self.steps = 0  # tool calls and delegations made so far; the step budget limits this number
+        self.steps = 0  # tool calls and delegations made so far by all agents; the run's budget limits it
         self.prompt_tokens = 0
         self.completion_tokens = 0
         self.termination_reason = "final"  # becomes "max_tool_calls" when an agent is stopped by the budget
@@ -134,54 +136,71 @@ class Runtime:
             for other in self.agents.load_all().values():
                 if not other.is_orchestrator:
                     self.tracer.event("agent.consult", agent=other.name, fields=["triggers", "description"])
-        # A fresh session and backend for this turn. The context dict is the same one the other agents of
-        # the run use, so slots that one agent sets are visible to the agents that run after it.
+        # A fresh session and backend for this turn. A delegated agent gets a copy of the delegating agent's
+        # context with the values the delegation passed (see _delegate).
         session = Session(agent=agent, skills=skills, ctx=ctx, request=request)
         backend = self.backend_factory(agent, self, session)
-        # The budget counts the tool calls of the whole run, delegations included, not of this agent alone.
+        # Two budgets, both counting tool calls with delegations included: this agent's own steps, and the steps
+        # of the whole run.
         max_tool_calls = int(self.config.get("runtime.max_tool_calls"))
+        max_run_tool_calls = int(self.config.get("runtime.max_run_tool_calls"))
+        steps = 0  # this agent's own steps so far
         while True:
             # Ask the backend for the next move. A final answer ends the turn, even when the budget is spent.
             action = backend.next_action()
             if action.type == "final":
                 self.tracer.event("agent.end", agent=agent.name, message=action.message)
                 return action.message
-            # The budget is used up: the call is not made, the agent stops with a fixed message (which the
+            # A budget is used up: the call is not made, the agent stops with a fixed message (which the
             # agent that delegated to it receives as its answer), and the run is marked as cut short.
-            if self.steps >= max_tool_calls:
+            if steps >= max_tool_calls or self.steps >= max_run_tool_calls:
                 self.termination_reason = "max_tool_calls"
                 self.tracer.event("agent.end", agent=agent.name, message="step limit reached")
                 return "I stopped because the tool-call limit was reached before the task completed."
             # Count the step, then carry it out. A delegation is handled here, by running the target agent;
             # every other call goes through the dispatcher and its gates.
+            steps += 1
             self.steps += 1
             if action.name == "route_to_agent":
                 result = self._delegate(agent, action, request, ctx, depth)
             else:
                 result = self.dispatcher.call(agent, action.name, action.args, ctx)
+                # A person's approval holds for the rest of the request: the steps delegated after it carry it.
+                if action.name == "request_approval" and result.get("approved"):
+                    ctx.update(result.get("pass_on") or {})
             # Let the backend see the result before it plans its next move.
             backend.observe(action, result)
 
     def _delegate(self, agent, action: Action, request: str, ctx: dict, depth: int) -> dict:
-        """Carry out a ``route_to_agent`` call. The target agent runs on the same request and context, one
-        level deeper, and its final message comes back as the result of the call. An unknown target, or a
-        chain that is already at the depth limit, gets an error result instead, which the delegating agent
-        sees like any other refused call."""
+        """Carry out a ``route_to_agent`` call. The target agent runs one level deeper, on its own instruction
+        (``task``; the request itself when there is none) and on the request context plus the values the call
+        passes (``context``: the ids earlier steps of a plan reported). Its final message comes back as
+        the result of the call. An unknown target, a context that is not an object, or a chain that is
+        already at the depth limit gets an error result instead, which the delegating agent sees like any
+        other refused call."""
         target = action.args.get("agent")
         reason = action.args.get("reason", "")
+        task = action.args.get("task") or request
+        slots = action.args.get("context") or {}
         # Refuse a target that has no definition: a model can invent an agent name.
         if target not in self.agents.available():
             self.tracer.event("agent.route", source=agent.name, target=target, status="error", reason=reason)
             return {"error": "unknown_agent", "message": f"no agent named '{target}'"}
+        if not isinstance(slots, dict):
+            self.tracer.event("agent.route", source=agent.name, target=target, status="error", reason="bad_context")
+            return {"error": "invalid_arguments", "message": "context must be an object of named values"}
         # Refuse to nest deeper than the limit, which also ends any chain of agents handing the request on.
         if depth >= MAX_DELEGATION_DEPTH:
             self.tracer.event("agent.route", source=agent.name, target=target, status="error", reason="max_depth")
             return {"error": "max_delegation_depth", "message": "delegation depth exceeded"}
-        # The delegation is accepted and recorded as a route.
-        self.tracer.event("agent.route", source=agent.name, target=target, status="ok", reason=reason)
+        # The delegation is accepted and recorded as a route, with the instruction and the values passed on.
+        self.tracer.event(
+            "agent.route", source=agent.name, target=target, status="ok", reason=reason, task=task, context=slots
+        )
         if ctx.get("_route_only"):
             # routing-dataset evaluation: score the delegation decision without executing the specialist
             return {"agent": target, "delegated_response": f"(route-only evaluation: delegated to {target})"}
-        # Run the target agent; its final answer is what the delegating agent observes.
-        message = self._run_agent(target, request, ctx, depth + 1)
+        # Run the target agent on a context of its own, so that values passed to one step do not leak into the
+        # next; its final answer is what the delegating agent observes.
+        message = self._run_agent(target, task, {**ctx, **slots, "request": task}, depth + 1)
         return {"agent": target, "delegated_response": message}

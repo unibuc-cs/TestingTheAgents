@@ -45,11 +45,11 @@ in expressions are in `traceeval/spec/context.py`. L0 (reviewed) is the prose `i
 | FS-0102 guarded operations need a *valid* token and record the approver | security fix, 2 files (permissions service, dispatcher), 13 diff lines | the spec first **exposes a weakness of the current code** (any made-up token passes); the property and an example catch a "self-approved" variant; a lookup written inside the harness is caught only by placement |
 | FS-0103 nothing goes live without a clean link check of its current version | defence in depth, 2 files (links service, workflow service), 22 diff lines | the rule moves from a skill procedure (a prompt) into the service and is **proven**; a gate that ignores the check's version is missed by 200 random examples and found by the solver; a **temporal** rule (`precedes`) with completeness against the product model; a skill reordering is stopped by the service gate and still rejected |
 | FS-0104 SEO title limit raised to 70 | configuration only, 1 file, 2 diff lines | a property over **agent behaviour** (titles of every length); boundary examples computed from config; a hard-coded constant caught only by placement |
-| FS-0105 retried publishing writes never duplicate | bug fix, 2 files (workflow service, publish adapters), 22 diff lines | the spec, quantified over the write tools the publishing skill uses (from the product model), **finds a latent defect** in the current code; a partial fix is caught by the same quantifier |
+| FS-0105 retried publishing writes never duplicate | bug fix, 2 files (workflow service, publish adapters), 33 diff lines | the spec, quantified over the write tools the publishing skill uses (from the product model), **finds a latent defect** in the current code; a partial fix is caught by the same quantifier |
 
-Written with `forall: {tool: write_tools}`, the same FS-0105 clause ranges over the whole platform and
-finds 6 of its 13 write tools affected. A seventh, `approve_review`, has no recorded run to test it with.
-The request was scoped to the publishing workflow to keep the PR small.
+The FS-0105 clause ranges over the write tools the publishing skill calls, taken from the product model, so
+it followed the skill when the approver's sign-off added `approve_review` to it: the correct PR threads the key
+through that tool too, and the partial fix that forgets one tool is caught.
 
 ## What the report shows per PR
 
@@ -60,7 +60,7 @@ will run and the **agent brief**. The brief is the locate step: the files and fu
 needs to read, as a fraction of the repository. It comes from the product model: the tool adapters, the
 services behind them, the skills that call them, and the config keys.
 
-Headline numbers from `runs/sdd`: the brief is 11–23% of the repository (14% on average), and all 25
+Headline numbers from `runs/sdd`: the brief is 9–20% of the repository (12% on average), and all 25
 verdicts are as expected. Every wrong PR is rejected, with the clause, the counterexample or the
 misplaced code named. Two rules are proven for all inputs (FS-0101, FS-0103). Two specs find defects in
 the current code before any PR is written (FS-0102, FS-0105).
@@ -70,21 +70,21 @@ the current code before any PR is written (FS-0102, FS-0105).
 The agents are played by Gemma 4 E4B. Its answers are recorded (`tests/cassettes/`), so `traceeval sdd` replays them without
 a GPU. Three things follow from playing the agents with a real model:
 
-- **The regression line counts only cases that pass on the original app.** Gemma gets three catalog cases
-  wrong on the original app (AUT-04, PUB-10, SEO-02). They would fail under every PR and say nothing about it.
-- **Four correct PRs are now rejected, and the evidence says why.**
-  - FS-0101 `pr_correct` and `pr_branchy`: the code is right and the rule is still proven, but the
-    stale-approval scenario fails. The agent requests the new review itself (the PR's skill prose says "ask
-    for a new review"), which the spec leaves to the author.
-  - FS-0103 `pr_correct`: the service now refuses a schedule without a fresh link check, and in
-    DS-INTENTS/i05 Gemma schedules without one, so that regression case fails.
+- **The regression line counts only cases that pass on the original app.** Gemma gets four catalog cases
+  wrong on the original app (AUT-04, PUB-10, SEO-02, WF1-01). They would fail under every PR and say nothing
+  about it.
+- **Two correct PRs are rejected, and the evidence says why.**
+  - FS-0103 `pr_correct`: the service now refuses to publish or schedule without a fresh link check, and in
+    DS-INTENTS/i02 and i05 Gemma does so without one, so those regression cases fail.
   - FS-0104 `pr_config_70`: Gemma applies an over-long title whatever the limit (as in SEO-02), and the
     property over title lengths finds one.
 - **Two wrong PRs are caught in more ways.** FS-0101 `pr_in_adapter` lets Gemma's schedule of an unapproved
   page (PUB-10) through, which the service version refuses: the monitor catches it. FS-0103
-  `pr_gate_ignores_version` lets the unchecked schedule of i05 through, and the `precedes` rule catches it.
+  `pr_gate_ignores_version` lets the unchecked publish and schedule of i02 and i05 through, and the `precedes`
+  rule catches it.
 
-So the accepted PRs are now FS-0102 `pr_correct` and FS-0105 `pr_fix`. A spec checks the whole system, model
+So the accepted PRs are FS-0101 `pr_correct` (and `pr_branchy`, with its gap), FS-0102 `pr_correct` and
+FS-0105 `pr_fix`. A spec checks the whole system, model
 included: a correct code change can still be rejected when the model doesn't do what the skill or the spec
 asks, and the evidence names the run where it didn't.
 

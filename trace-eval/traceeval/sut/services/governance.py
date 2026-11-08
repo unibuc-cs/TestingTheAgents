@@ -1,7 +1,8 @@
-"""Consent, data export and audit access (privacy / governance).
+"""Consent, data export, audit access and human approvals (privacy / governance).
 
 The consent records and the personal data held about each data subject live in the state, under
-``consents``, ``consent_purposes`` and ``data_subjects``."""
+``consents``, ``consent_purposes`` and ``data_subjects``; who approves the steps of a plan, and how they
+decide, under ``approvals``."""
 
 from . import permissions
 from .errors import ApprovalRequired, NotFound, PermissionDenied
@@ -74,3 +75,21 @@ def check_permission(state, user_id: str, action: str) -> dict:
     except NotFound as exc:
         raise PermissionDenied(str(exc)) from exc
     return {"user_id": user_id, "action": action, "allowed": allowed}
+
+
+def request_approval(state, summary: str, actor: str) -> dict:
+    """Ask the platform's approver to sign off a step of a plan, and return the answer.
+
+    The answer is part of the platform data, under ``approvals`` (who approves, and whether they approve), the
+    way a person's answer is part of a test, so that a run can be repeated. An approval returns ``approved``
+    True, the ``approver``, and under ``pass_on`` what the steps after it carry (the runtime adds it to the
+    request context): the approver and their ``approval_token``, which guarded tools need. A refusal returns
+    ``approved`` False and the approver. Every request is written to the audit log with the decision."""
+    policy = state.data.get("approvals", {})
+    approver = policy.get("approver", "carol")
+    approved = policy.get("decision", "approve") == "approve"
+    state.audit("request_approval", actor, summary=summary, approver=approver, approved=approved)
+    if not approved:
+        return {"approved": False, "approver": approver, "message": f"{approver} did not approve: {summary}"}
+    token = state.users.get(approver, {}).get("approval_token")
+    return {"approved": True, "approver": approver, "pass_on": {"approver": approver, "approval_token": token}}

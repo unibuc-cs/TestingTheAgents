@@ -8,11 +8,13 @@ agent. The modules:
     state        the platform data (users, pages, assets, ...), the audit log, the logical clock and the
                  idempotency cache
     errors       the refusals a service can raise
-    repository   pages, versions, SEO metadata, assets and search
+    repository   pages, versions, SEO metadata, assets (with alt texts) and search
     workflow     review requests and approvals, publishing, scheduling and taking pages down
     links        link validation of a page
     seo          the SEO report of a page
     permissions  roles and the actions they allow
-    governance   permission checks, consent, personal-data export and the audit log
+    governance   permission checks, consent, personal-data export, the audit log and human approvals
     translation  translation jobs
+    brand        the brand guidelines and the check of a page against them
+    site         page analytics and the site audit
 """

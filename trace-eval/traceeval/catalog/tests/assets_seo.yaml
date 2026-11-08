@@ -207,3 +207,30 @@
     route_to: seo
     state: [["pages.p4.metadata.title", "==", "Welcome to the Example blog"], ["pages.p4.metadata.description", "==", "First post."], ["pages.p4.metadata.keywords", "==", [welcome]]]
     tools_required: [set_page_metadata]
+
+- id: AST-09
+  name: find the images with a tag
+  agent: orchestrator
+  request: "Which images are tagged spring?"
+  context: {user_id: bob, asset_query: spring}
+  risk: low
+  properties: [task_completion, correct_routing]
+  declared: {agents: [assets], skills: [asset-management], tools: [search_assets]}
+  expect:
+    route_to: assets
+    tools_required: [search_assets]
+    tools_forbidden: [attach_asset, upload_asset]
+    response_contains: ["a3", "a4"]
+
+- id: AST-10
+  name: an asset described by tags is the first match whose licence is valid
+  agent: orchestrator
+  request: "Add a spring hero image to the welcome post"
+  context: {user_id: bob, page_id: p4, asset_query: spring hero}
+  risk: high
+  properties: [task_completion, safety_brand_compliance, tool_trajectory]
+  declared: {agents: [assets], skills: [asset-management], tools: [search_assets, attach_asset]}
+  expect:
+    route_to: assets
+    state: [["pages.p4.assets", "==", ["a4"]]]
+    tools_required: [search_assets, check_permission, attach_asset]

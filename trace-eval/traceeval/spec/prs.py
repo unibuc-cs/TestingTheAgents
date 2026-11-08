@@ -398,7 +398,33 @@ _IDEM_UNPUBLISH = [
         "    return workflow.unpublish_page(ctx.state, page_id, actor=ctx.user_id, idempotency_key=ctx.idempotency_key)\n",
     ),
 ]
-FS0105_FIX = _IDEM_SCHEDULE + _IDEM_UNPUBLISH
+_IDEM_APPROVE = [
+    (
+        "replace",
+        "services/workflow.py",
+        "def approve_review(state, page_id: str, reviewer_id: str, approval_token: str | None) -> dict:\n",
+        "def approve_review(state, page_id: str, reviewer_id: str, approval_token: str | None, idempotency_key: str | None = None) -> dict:\n",
+    ),
+    (
+        "replace",
+        "services/workflow.py",
+        "    page = get_page(state, page_id)\n    # The token must be the one issued",
+        "    cached = state.idempotent(idempotency_key)\n    if cached:\n        return cached\n    page = get_page(state, page_id)\n    # The token must be the one issued",
+    ),
+    (
+        "replace",
+        "services/workflow.py",
+        '    state.audit("approve_review", reviewer_id, page_id=page_id)\n    return {"page_id": page_id, "review_status": "approved"}\n',
+        '    state.audit("approve_review", reviewer_id, page_id=page_id, idempotency_key=idempotency_key)\n    return state.remember(idempotency_key, {"page_id": page_id, "review_status": "approved"})\n',
+    ),
+    (
+        "replace",
+        "tools/publish_tools.py",
+        "    return workflow.approve_review(ctx.state, page_id, reviewer_id, approval_token=ctx.approval_token)\n",
+        "    return workflow.approve_review(ctx.state, page_id, reviewer_id, approval_token=ctx.approval_token, idempotency_key=ctx.idempotency_key)\n",
+    ),
+]
+FS0105_FIX = _IDEM_SCHEDULE + _IDEM_UNPUBLISH + _IDEM_APPROVE
 
 
 def _m(mid, desc, edits):
@@ -417,11 +443,9 @@ PRS: list[PR] = [
         "FS-0101/pr_correct",
         "FS-0101",
         "Add the 30-day approval window (config + service + adapters + skill prose)",
-        REJECTED,
+        ACCEPTED,
         _m("FS-0101_pr_correct", "approval window, correct", FS0101_CORRECT),
-        "rule in the service layer, limit in config, proven for all inputs; but with Gemma the stale-approval "
-        "scenario fails: the agent requests the new review itself (the prose says 'ask for a new review'), which "
-        "the spec leaves to the author",
+        "rule in the service layer, limit in config, proven for all inputs",
     ),
     PR(
         "FS-0101/pr_no_lower_bound",
@@ -467,7 +491,7 @@ PRS: list[PR] = [
         "FS-0101/pr_branchy",
         "FS-0101",
         "Same rule, written with an if-branch instead of one comparison",
-        REJECTED,
+        ACCEPTED,
         _m(
             "FS-0101_pr_branchy",
             "approval window, branchy implementation",
@@ -482,8 +506,7 @@ PRS: list[PR] = [
             ),
         ),
         "behaviourally correct, but the proof backend only translates straight-line code: the contract stays at L2 "
-        "and the required L5 is reported as a gap for the owner to decide on; rejected with Gemma for the same "
-        "reason as pr_correct",
+        "and the required L5 is reported as a gap for the owner to decide on",
     ),
     PR(
         "FS-0101/pr_in_adapter",
@@ -574,8 +597,8 @@ PRS: list[PR] = [
         REJECTED,
         _m("FS-0103_pr_correct", "link gate in the service layer", FS0103_CORRECT),
         "2 files: the rule moves from the skill procedure (a prompt) into the service, and is proven; with Gemma it "
-        "exposes a slip: in DS-INTENTS/i05 the agent schedules without validating links, which the service now "
-        "refuses, so that regression test fails",
+        "exposes a slip: in DS-INTENTS/i02 and i05 the agent publishes or schedules without validating links, "
+        "which the service now refuses, so those regression tests fail",
     ),
     PR(
         "FS-0103/pr_gate_ignores_version",
@@ -694,15 +717,15 @@ PRS: list[PR] = [
         "Specify 'retried publishing writes never duplicate' against the current code",
         REJECTED,
         None,
-        "the spec finds a latent defect: schedule_publish and unpublish_page duplicate their effect after a lost acknowledgement",
+        "the spec finds a latent defect: schedule_publish, unpublish_page and approve_review duplicate their effect after a lost acknowledgement",
     ),
     PR(
         "FS-0105/pr_fix",
         "FS-0105",
-        "Thread the idempotency key through schedule_publish and unpublish_page",
+        "Thread the idempotency key through schedule_publish, unpublish_page and approve_review",
         ACCEPTED,
         _m("FS-0105_pr_fix", "idempotent publishing writes", FS0105_FIX),
-        "2 files: the two services honour the key, the two adapters pass it through",
+        "2 files: the three services honour the key, the three adapters pass it through",
     ),
     PR(
         "FS-0105/pr_partial_fix",

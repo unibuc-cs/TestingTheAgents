@@ -28,7 +28,7 @@ and `traceeval/sut/harness/dispatcher.py` (where every tool call is governed and
 
 ### 1.2 The earlier work in one paragraph
 
-After a change (a skill, a prompt, harness code, a config key), which of the 136 cases should run and
+After a change (a skill, a prompt, harness code, a config key), which of the cases should run and
 when can we stop? The 33 mutations give the ground truth (which change breaks which case), and the
 baseline traces give observed dependencies. The strategies in `traceeval/selection/` rank cases under a
 token budget and are compared by replaying recorded outcomes (`docs/results/gemma4/report.md`). The SDD
@@ -123,9 +123,9 @@ clause stays at L2 and the record says so.
 | file | lines | role |
 |---|---|---|
 | `traceeval/spec/catalog.yaml` + `model.py` | 164 + 261 | the clause templates; `Spec`, `Clause`, `ClauseResult`; expansion of `use/with` clauses, generated ids and texts; `validate_spec` against the product model |
-| `traceeval/spec/draft.py` | 228 | `traceeval sdd draft`: product-model slice + catalog → prompt → model answer → expanded, validated draft spec and its plain-language rendering |
+| `traceeval/spec/draft.py` | 229 | `traceeval sdd draft`: product-model slice + catalog → prompt → model answer → expanded, validated draft spec and its plain-language rendering |
 | `traceeval/spec/product.py` | 187 | the product model: files and token counts, functions (AST), tool registry (from decorators), skill procedures, config; queries `locate`, `cases_calling`, `status_setters`, `skill_write_tools`, `model_set` |
-| `traceeval/spec/context.py` | 182 | `CheckContext`: runs cases on the variant with cost accounting (in parallel when asked), builds the expression environment; the helpers usable in clauses (`config`, `approval_age`, `expected_broken`, `audit_count`, `applied`, `token_owner`, `title_of_length`, `first_case_calling`, `baseline_run`) |
+| `traceeval/spec/context.py` | 206 | `CheckContext`: runs cases on the variant with cost accounting (in parallel when asked), builds the expression environment; the helpers usable in clauses (`config`, `approval_age`, `expected_broken`, `audit_count`, `applied`, `token_owner`, `title_of_length`, `first_case_calling`, `baseline_run`) |
 | `traceeval/spec/checks/settings.py` | 48 | schema check |
 | `traceeval/spec/checks/examples.py` | 32 | one run, catalog-format expectations, `=expr` values |
 | `traceeval/spec/checks/placement.py` | 117 | the five lint rules |
@@ -133,7 +133,7 @@ clause stays at L2 and the record says so.
 | `traceeval/spec/checks/contracts.py` | 329 | Hypothesis `find`; `_ToZ3` AST rewriter, `_symbolic_call`, `_prove`; behavioural `forall` |
 | `traceeval/spec/runner.py` | 241 | `record_baseline`, `agent_brief`, `evaluate_pr`, `run_demo` |
 | `traceeval/spec/report.py` | 195 | markdown report and the figure |
-| `traceeval/spec/prs.py` | 739 | the PR table; open it only to see how a PR is written (a `Mutation` with literal-anchor edits) |
+| `traceeval/spec/prs.py` | 765 | the PR table; open it only to see how a PR is written (a `Mutation` with literal-anchor edits) |
 | `traceeval/cli.py::cmd_sdd`, `tests/test_sdd.py` | | the command and the tests that pin the expected verdicts |
 
 Where to extend: a new clause kind is one checker module, one line in `checks/__init__.py`, its name in `KINDS` in

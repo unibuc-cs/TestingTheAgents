@@ -101,7 +101,7 @@ def test_small_end_to_end_experiment(tmp_path, capsys):
             h.changesets["skill_publish_drop_link_validation"],
             catalog,
             h,
-            h.total_cost() * 0.3,
+            h.total_cost() * 0.5,
             random.Random(0),
             train_variants=["benign_skill_prose_reflow"],
         )

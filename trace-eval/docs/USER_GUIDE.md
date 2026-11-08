@@ -27,6 +27,11 @@ holds the edited copies (`variants/`), the recordings (`history/*.jsonl`) and th
   property is defined in the catalog of properties, `catalog/properties.yaml`, with its category, how the tests
   check it, whether it is mandatory and its threshold; a test lists the ids of the properties it checks. This
   catalog is a feature the AEM team asked for ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md)).
+- **Plan / workflow**: a request that needs several specialists. The orchestrator writes a plan (`make_plan`),
+  delegates its steps one at a time with their own instruction and the ids of earlier steps
+  (`route_to_agent(agent, task, context)`), and asks a person before publishing, scheduling or taking pages down
+  (`request_approval`). The workflow tests are in `catalog/tests/workflows.yaml`; workflows are a feature the AEM
+  team asked for ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.2-3.3).
 - **Declared dependencies**: the `declared:` block a test author writes. It is deliberately incomplete.
 - **Observed dependencies**: the components the trace shows the run touched (`agent:x`, `skill:x`, `tool:x`,
   `config:key`, `code:file::function`, `line:file:n`).
@@ -44,6 +49,7 @@ holds the edited copies (`variants/`), the recordings (`history/*.jsonl`) and th
 |---|---|
 | what the agents do | `sut/skills/publishing-workflow/SKILL.md`, `sut/agents/publishing.yaml`, `sut/config/runtime.yaml` |
 | how a request becomes tool calls | `sut/harness/runtime.py` (`_run_agent`), `dispatcher.py`, `backends/llm_openai.py` |
+| how the orchestrator plans | `sut/skills/routing/SKILL.md`, `sut/tools/control_tools.py`, `runtime.py` (`_delegate`) |
 | how a test is run and scored | `experiment/executor.py` (`run_case`), `scoring/scorers.py` |
 | how a change becomes components | `mutation/catalog.py` (data), `mutation/changeset.py` |
 | the baselines | `selection/strategies.py` (about 140 lines) |
@@ -130,7 +136,7 @@ changed copy, in the recordings `runs/gemma4` / `runs/qwen4` (the current app, t
 | `code_get_page_review_flag` | the shared `get_page` tool reports a requested review as approved | a shared tool with a wide reach, and the clearest case of model dependence | 2 / 15 |
 | `code_edit_keeps_review` | editing a page no longer cancels its approved review | a service bug a model can hide: Gemma requests a review after every edit anyway | 0 / 1 |
 | **Code: agent loop** | | | |
-| `code_termination_off_by_six` | the agent loop stops six tool calls before the configured budget | every test runs the changed line, but only long tasks fail: covering code is not catching the bug | 2 / 2 |
+| `code_termination_off_by_six` | the agent loop stops each agent six tool calls before its configured budget | every test runs the changed line, but only long tasks fail: covering code is not catching the bug | 2 / 2 |
 | `code_delegation_truncates_answer` | the orchestrator receives only the first 40 characters of the specialist's answer | a delegation bug that shows only when the answer must carry a fact past 40 characters | 8 / 5 |
 | **Skills** | | | |
 | `skill_publish_drop_link_validation` | publishing no longer validates links | a change to a skill's procedure, not to code; the link check is a skill no test declares; Qwen checks links anyway | 6 / 0 |
@@ -148,7 +154,7 @@ changed copy, in the recordings `runs/gemma4` / `runs/qwen4` (the current app, t
 | **Configuration** | | | |
 | `config_disable_validate_links` | a feature flag turns link validation off everywhere | one key with a wide reach: the broad change in the set | 40 / 43 |
 | `config_require_review_false` | pages no longer need an approved review before publishing | a policy switch in configuration; Gemma's own mistake hides it | 0 / 3 |
-| `config_max_tool_calls_5` | the step budget drops from 12 to 5 tool calls | a value that limits every agent; long tasks fail | 8 / 7 |
+| `config_max_tool_calls_5` | each agent's step budget drops from 12 to 5 tool calls | a value that limits every agent; long tasks fail | 8 / 7 |
 | `config_retries_0` | temporary tool failures are no longer retried; reused by the SDD demo (FS-0105) | a change only the tests with an injected fault notice | 8 / 4 |
 | `config_seo_title_20` | the maximum SEO title length drops from 60 to 20 | a boundary value; Gemma ignores the limit anyway | 0 / 1 |
 | `config_default_agent_publishing` | requests no specialist owns go to publishing instead of authoring | a routing setting the orchestrator reads | 3 / 3 |
@@ -183,8 +189,11 @@ classification (unit tests cover it), and one that broke four tests in five and 
   asked for ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md)).
 - **Test**: add a YAML entry. `expect` supports `route_to`, `state` (`[path, op, value]` with `==`, `!=`, `len`,
   `contains`, `in`, `>=`, `<=`, `absent`, `exists`), `tools_required`, `tools_forbidden`, `tools_not_attempted`,
-  `tool_attempts`, `tool_results`, `audit`, `response_contains`, `response_excludes`, `max_steps`, `termination` and
-  `tool_errors`. `tool_results` checks the last successful result of a tool like the state (`[tool, path, op, value]`).
+  `tool_attempts`, `tool_results`, `audit`, `response_contains`, `response_excludes`, `max_steps`, `termination`,
+  `tool_errors`, `agents_in_order` and `tools_in_order`. `tool_results` checks the last successful result of a tool
+  like the state (`[tool, path, op, value]`). For a workflow, `agents_in_order` lists agents the delegations must
+  reach in that order and `tools_in_order` tools whose successful calls must come in that order; anything may come
+  in between. The approver's answer is fixture data: `fixture_patch: {approvals.decision: refuse}` refuses.
   `response_contains` is for facts the answer must report (a job id, a path, which link is broken), not for
   wording; an item that is a list is a set of alternatives. A run that ends with an answer must not end with an
   empty one (check `answered`). A test can also set `fixture_patch`

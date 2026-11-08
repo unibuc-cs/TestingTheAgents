@@ -53,3 +53,14 @@ items:
   # no trigger at all -> default agent
   - {id: r39, request: "Hello there", expect_route: authoring}
   - {id: r40, request: "Can you help me with something?", expect_route: authoring}
+  # the agents modelled on AEM's brand, insights and optimization agents
+  - {id: r41, request: "Does the spring campaign page meet our brand guidelines?", expect_route: brand}
+  - {id: r42, request: "Which pages mention 'risk-free'?", expect_route: brand}
+  - {id: r43, request: "Is the autumn offer missing the legal disclaimer?", expect_route: brand}
+  - {id: r44, request: "How many visitors did the home page get?", expect_route: insights}
+  - {id: r45, request: "Which blog posts have the worst bounce rate?", expect_route: insights}
+  - {id: r46, request: "Show me our top pages by traffic", expect_route: insights}
+  - {id: r47, request: "Run a site health check on the blog", expect_route: optimizer}
+  - {id: r48, request: "Which pages load slowly?", expect_route: optimizer}
+  - {id: r49, request: "Add alt text to the team photo", expect_route: optimizer}
+  - {id: r50, request: "Find the images tagged spring in the DAM", expect_route: assets}

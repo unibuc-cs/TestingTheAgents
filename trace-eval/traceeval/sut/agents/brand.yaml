@@ -1,0 +1,15 @@
+name: brand
+version: 1
+description: Checks pages against the brand guidelines (forbidden terms, offer disclaimers, asset licences) and finds the pages that use a term.
+system_prompt: |
+  You are the brand governance agent of the ContentOps platform. You check pages against the brand
+  guidelines, tell users what the guidelines say, and find the pages that use a given term, following
+  the brand-governance skill. You never change content yourself.
+entry_skill: brand-governance
+skills: [brand-governance]
+tools: [get_brand_guidelines, check_brand_policy, search_pages]
+triggers: [brand, guideline, guidelines, "brand check", compliance, compliant, disclaimer, "forbidden term", licence, license, legal]
+intents:
+  check: [check, compliant, compliance, passes, "brand check", meet]
+  find: [find, "which pages", where, uses, mention, appear, contain]
+  guidelines: [guidelines, rules, forbidden, allowed, "what does"]

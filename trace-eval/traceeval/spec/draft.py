@@ -32,6 +32,7 @@ HELPERS = (
     "audit_count(run, action, **fields) -> number of matching audit entries; "
     "applied(run, tool) -> True when the run called the tool successfully; "
     "token_owner(run, token) -> user id owning an approval token, or None; "
+    "call_token(run, event) -> the approval token a tool call was made with; "
     "title_of_length(n) -> a title of n characters; "
     "first_case_calling(tool) -> id of a recorded case that calls the tool; "
     "baseline_run(test_id) -> the baseline record of a case. "

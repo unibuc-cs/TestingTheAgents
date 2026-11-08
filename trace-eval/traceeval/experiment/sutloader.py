@@ -5,6 +5,7 @@ import importlib
 import importlib.util
 import itertools
 import shutil
+import stat
 import sys
 from pathlib import Path
 
@@ -17,6 +18,10 @@ def copy_sut(dest: Path, source: Path = SUT_ROOT) -> Path:
     """Copy the SUT tree to ``dest`` (replacing what is there), without bytecode caches."""
     dest = Path(dest)
     if dest.exists():
+        # The copy keeps the attributes of the source folders, and on Windows a read-only folder (OneDrive
+        # marks new ones so) cannot be removed: make everything writable first.
+        for p in [dest, *dest.rglob("*")]:
+            p.chmod(p.stat().st_mode | stat.S_IWRITE)
         shutil.rmtree(dest)
     shutil.copytree(source, dest, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     return dest

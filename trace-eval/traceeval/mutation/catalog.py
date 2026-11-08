@@ -108,8 +108,8 @@ MUTATIONS: list[Mutation] = [
     Mutation('code_edit_keeps_review', CODE, 'Editing a page no longer invalidates its approved review.', True,
              [('delete_line', 'services/repository.py', 'page["review"] = {"status": "none", "reviewer": None}  # edits invalidate')]),
     # ---------------------------------------------------------------- runtime (agent loop)
-    Mutation('code_termination_off_by_six', RUNTIME, 'Agent loop stops six tool calls before the configured budget.', True,
-             [('replace', 'harness/runtime.py', 'if self.steps >= max_tool_calls:', 'if self.steps >= max_tool_calls - 6:')]),
+    Mutation('code_termination_off_by_six', RUNTIME, "Agent loop stops each agent six tool calls before its configured budget.", True,
+             [('replace', 'harness/runtime.py', 'if steps >= max_tool_calls or', 'if steps >= max_tool_calls - 6 or')]),
     Mutation('code_delegation_truncates_answer', RUNTIME, "Delegation passes on only the first 40 characters of the specialist's answer.", True,
              [('replace', 'harness/runtime.py', 'return {"agent": target, "delegated_response": message}', 'return {"agent": target, "delegated_response": message[:40]}')]),
     # ---------------------------------------------------------------- skills
@@ -150,7 +150,7 @@ MUTATIONS: list[Mutation] = [
              [('replace', 'config/runtime.yaml', 'disabled: []', 'disabled: [validate_links]')]),
     Mutation('config_require_review_false', CONFIG, 'Pages no longer need an approved review before publishing.', True,
              [('replace', 'config/runtime.yaml', 'require_review: true', 'require_review: false')]),
-    Mutation('config_max_tool_calls_5', CONFIG, 'Step budget reduced from 12 to 5 tool calls.', True,
+    Mutation('config_max_tool_calls_5', CONFIG, "Each agent's step budget reduced from 12 to 5 tool calls.", True,
              [('replace', 'config/runtime.yaml', 'max_tool_calls: 12', 'max_tool_calls: 5')]),
     Mutation('config_retries_0', CONFIG, 'Transient failures are no longer retried.', True,
              [('replace', 'config/runtime.yaml', 'retries: 2 ', 'retries: 0 ')]),

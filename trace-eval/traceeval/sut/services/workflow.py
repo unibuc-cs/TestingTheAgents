@@ -103,12 +103,15 @@ def schedule_publish(state, page_id: str, at: str, actor: str) -> dict:
 
 
 # Take a page off the live site: it goes back to draft and loses its publication time. Returns page_id and
-# status "draft"; raises NotFound for an unknown page. The tool is guarded (the configuration requires an
-# approval token for it), but the only token check is the dispatcher's, which makes sure that some token
-# was sent: this service does not compare the token with anyone's. A planned publication time
-# (scheduled_at) is left as it is.
+# status "draft"; raises NotFound for an unknown page and ValidationError for a protected one. The tool is
+# guarded (the configuration requires an approval token for it), but the only token check is the
+# dispatcher's, which makes sure that some token was sent: this service does not compare the token with
+# anyone's. A planned publication time (scheduled_at) is left as it is.
 def unpublish_page(state, page_id: str, actor: str) -> dict:
     page = get_page(state, page_id)
+    # A protected page (under a legal hold, say) is never taken down through the platform's agents.
+    if page.get("protected"):
+        raise ValidationError(f"page '{page_id}' is protected and cannot be taken down")
     # Back to draft, with no publication time: the page is no longer live.
     page["status"] = "draft"
     page["published_at"] = None

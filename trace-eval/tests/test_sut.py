@@ -43,14 +43,17 @@ def test_skill_parsing_exposes_procedure():
 
 
 # Gemma's own mistakes on the original app (docs/EXPERIMENT.md, section 6): it ignores guards it has to work
-# out for itself. Every other case must pass.
-KNOWN_MODEL_MISTAKES = ["AUT-04", "PUB-10", "SEO-02"]
+# out for itself; in WF1-01, as in PUB-10, it schedules a page whose review is not approved. Every other case
+# must pass.
+KNOWN_MODEL_MISTAKES = ["AUT-04", "PUB-10", "SEO-02", "WF1-01"]
 
 
 class ScriptedClient:
     """A stand-in for a chat client: each agent makes the tool calls of its script in order, then answers
-    ``final``. An agent is recognised by the first script key found in the first line of its system prompt;
-    ``done`` counts the calls each agent made. A scripted call must be one of the tools the agent is offered."""
+    ``final``. An entry ``("final", text)`` answers ``text`` in the middle of a script, for an agent that is
+    delegated to more than once. An agent is recognised by the first script key found in the first line of its
+    system prompt; ``done`` counts the calls each agent made. A scripted call must be one of the tools the agent
+    is offered."""
 
     def __init__(self, script: dict[str, list[tuple[str, dict]]], final: str = "Done."):
         self.script, self.final, self.done = script, final, {}
@@ -61,7 +64,9 @@ class ScriptedClient:
         agent = next(a for a in self.script if a in first)
         i = self.done.get(agent, 0)
         self.done[agent] = i + 1
-        if i < len(self.script[agent]):
+        if i < len(self.script[agent]) and self.script[agent][i][0] == "final":
+            msg = SimpleNamespace(content=self.script[agent][i][1], tool_calls=None)
+        elif i < len(self.script[agent]):
             name, args = self.script[agent][i]
             assert name in {t["function"]["name"] for t in request.get("tools", [])}, name
             call = SimpleNamespace(id=f"{agent}-{i}", function=SimpleNamespace(name=name, arguments=json.dumps(args)))
@@ -88,6 +93,161 @@ def test_llm_backend_drives_the_same_runtime(sut, cases):
     assert rec["tools"] == ["get_page", "check_permission", "validate_links", "publish_page"]
     assert rec["prompt_tokens"] > 0 and rec["agents"] == ["orchestrator", "publishing"]
     assert client.done == {"orchestrator": 2, "publishing agent": 5}  # route + final; 4 tool calls + final
+
+
+LAUNCH_BODY = "Spring sale: 20% off all plans until 30 April. Terms and conditions apply."
+
+
+def test_a_plan_runs_five_agents_with_handoffs_and_an_approval(sut, cases):
+    """W1 (campaign launch) as a planning orchestrator runs it: a plan, then one delegation per step, each with
+    its own instruction and the ids of the earlier steps. The approval goes with the step after it, which
+    approves the review on the approver's behalf with the approver's token (the dispatcher requires it)."""
+    script = {
+        "orchestrator": [
+            ("make_plan", {"goal": "launch the spring sale", "steps": ["authoring: create", "publishing: schedule"]}),
+            (
+                "route_to_agent",
+                {
+                    "agent": "authoring",
+                    "task": "Create the spring sale landing page",
+                    "context": {
+                        "parent_path": "/content/site/campaigns",
+                        "title": "Spring sale",
+                        "template": "landing",
+                        "body": LAUNCH_BODY,
+                    },
+                },
+            ),
+            (
+                "route_to_agent",
+                {
+                    "agent": "assets",
+                    "task": "Attach a hero image tagged spring",
+                    "context": {"page_id": "p100", "asset_query": "spring hero"},
+                },
+            ),
+            ("route_to_agent", {"agent": "brand", "task": "Check p100", "context": {"page_id": "p100"}}),
+            (
+                "route_to_agent",
+                {
+                    "agent": "translation",
+                    "task": "Translate p100",
+                    "context": {"page_id": "p100", "locales": ["fr-FR", "de-DE"]},
+                },
+            ),
+            ("request_approval", {"summary": "Schedule p100 for 2026-11-09T08:00"}),
+            (
+                "route_to_agent",
+                {
+                    "agent": "publishing",
+                    "task": "Schedule p100",
+                    "context": {"page_id": "p100", "publish_at": "2026-11-09T08:00"},
+                },
+            ),
+        ],
+        "authoring agent": [
+            ("check_permission", {"user_id": "bob", "action": "create"}),
+            ("create_page", {"parent_path": "/content/site/campaigns", "title": "Spring sale", "template": "landing"}),
+            ("update_page_content", {"page_id": "p100", "body": LAUNCH_BODY}),
+            ("validate_links", {"page_id": "p100"}),
+        ],
+        "assets agent": [
+            ("search_assets", {"query": "spring hero"}),  # a3 (expired licence) first, then a4
+            ("check_permission", {"user_id": "bob", "action": "attach"}),
+            ("attach_asset", {"page_id": "p100", "asset_id": "a4"}),
+        ],
+        "brand governance agent": [("check_brand_policy", {"page_id": "p100"})],
+        "translation agent": [("create_translation_job", {"page_id": "p100", "locales": ["fr-FR", "de-DE"]})],
+        "publishing agent": [
+            ("get_page", {"page_id": "p100"}),
+            ("check_permission", {"user_id": "bob", "action": "schedule"}),
+            ("validate_links", {"page_id": "p100"}),
+            ("approve_review", {"page_id": "p100", "reviewer_id": "carol"}),
+            ("schedule_publish", {"page_id": "p100", "at": "2026-11-09T08:00"}),
+        ],
+    }
+    client = ScriptedClient(script, final="Launched: p100 created, checked, translated and scheduled.")
+    rec = run_case(sut, cases["WF1-01"], backend="llm", llm_client=client, keep_state=True)
+    assert rec["passed"], rec["failed_checks"]
+    assert rec["agents"] == ["orchestrator", "authoring", "assets", "brand", "translation", "publishing"]
+    routes = [e for e in rec["events"] if e["kind"] == "agent.route"]
+    assert routes[0]["task"] == "Create the spring sale landing page"  # the specialist's own instruction
+    assert rec["final_state"]["pages"]["p100"]["review"] == {"status": "approved", "reviewer": "carol"}
+
+
+def test_a_failed_step_on_one_page_does_not_stop_the_others(sut, cases):
+    """W3 with a protected page: the takedown of p14 is refused by the service, p13 still goes down, and the
+    refusal is the one tool error the case allows."""
+    may_unpublish = ("check_permission", {"user_id": "bob", "action": "unpublish"})
+    script = {
+        "orchestrator": [
+            ("route_to_agent", {"agent": "brand", "task": "Find the pages", "context": {"term": "guaranteed returns"}}),
+            ("request_approval", {"summary": "Take down p13 and p14"}),
+            (
+                "route_to_agent",
+                {"agent": "publishing", "task": "Unpublish p13", "context": {"page_id": "p13"}},
+            ),
+            (
+                "route_to_agent",
+                {"agent": "publishing", "task": "Unpublish p14", "context": {"page_id": "p14"}},
+            ),
+        ],
+        "brand governance agent": [("search_pages", {"query": "guaranteed returns"})],
+        "publishing agent": [
+            ("get_page", {"page_id": "p13"}),
+            may_unpublish,
+            ("unpublish_page", {"page_id": "p13"}),
+            ("final", "Unpublished p13."),
+            ("get_page", {"page_id": "p14"}),
+            may_unpublish,
+            ("unpublish_page", {"page_id": "p14"}),
+            ("final", "p14 is protected and cannot be taken down."),
+        ],
+    }
+    client = ScriptedClient(script, final="Took down p13; p14 is protected and stays up.")
+    rec = run_case(sut, cases["WF3-02"], backend="llm", llm_client=client)
+    assert rec["passed"], rec["failed_checks"]
+    assert [t for _, t in rec["routes"]] == ["brand", "publishing", "publishing"]
+
+
+def test_each_agent_has_its_own_step_budget_and_the_run_a_total(sut, cases):
+    """A specialist stops at its own budget although the run's total is not spent, and the run's total stops
+    it although its own is not."""
+    script = {
+        "orchestrator": [("route_to_agent", {"agent": "publishing"})],
+        "publishing agent": [
+            ("get_page", {"page_id": "p4"}),
+            ("check_permission", {"user_id": "bob", "action": "publish"}),
+            ("validate_links", {"page_id": "p4"}),
+            ("publish_page", {"page_id": "p4"}),
+        ],
+    }
+    for limits in ({"runtime.max_tool_calls": 3}, {"runtime.max_run_tool_calls": 4}):
+        rec = run_case(sut, cases["PUB-01"], backend="llm", llm_client=ScriptedClient(script), config_overrides=limits)
+        assert rec["termination"] == "max_tool_calls" and rec["tools"] == [
+            "get_page",
+            "check_permission",
+            "validate_links",
+        ]
+
+
+def test_tools_and_agents_in_order():
+    calls = [{"tool": t, "status": "ok"} for t in ("make_plan", "check_brand_policy", "schedule_publish")]
+    trace = {"tool_calls": calls, "routes": [("orchestrator", "brand"), ("orchestrator", "publishing")]}
+    good = SimpleNamespace(
+        expect={
+            "tools_in_order": ["check_brand_policy", "schedule_publish"],
+            "agents_in_order": ["brand", "publishing"],
+        }
+    )
+    bad = SimpleNamespace(
+        expect={
+            "tools_in_order": ["schedule_publish", "check_brand_policy"],
+            "agents_in_order": ["publishing", "brand"],
+        }
+    )
+    assert score_case(good, trace, {}, {}).passed
+    assert score_case(bad, trace, {}, {}).failed_checks() == ["agents_in_order", "tools_in_order"]
 
 
 def test_property_catalog():

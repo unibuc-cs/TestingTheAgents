@@ -1,8 +1,8 @@
 ---
 name: publishing-workflow
-version: 5
+version: 6
 description: Publish, schedule or unpublish a page safely (permission, link and review gates).
-tools: [get_page, check_permission, validate_links, request_review, publish_page, schedule_publish, unpublish_page]
+tools: [get_page, check_permission, validate_links, request_review, approve_review, publish_page, schedule_publish, unpublish_page]
 ---
 # Publishing workflow
 
@@ -12,6 +12,10 @@ Order of operations: fetch the page, check the permission for the requested acti
 publishing and scheduling) validate links and make sure the page has an approved review when the
 platform requires one. Only then publish or schedule. Taking a page down does not require link
 validation but does require the `unpublish` permission and an approval token.
+
+When the request comes with an approver's sign-off (an `approver` and their approval token, as a step
+of a plan has after a human approved it), a page without an approved review is approved by that
+approver with `approve_review` instead of being sent for review.
 
 ## Procedure
 ```yaml
@@ -32,8 +36,12 @@ validation but does require the `unpublish` permission and an approval token.
   then: stop:unpublished
   then_message: "Unpublished {ctx['page_id']} ({result.fetch.path})."
 - include: link-validation
+- id: approve
+  when: ctx.get('approver') is not None and not result.fetch.review_approved
+  call: approve_review
+  args: {page_id: $page_id, reviewer_id: $approver}
 - id: review
-  when: config('publishing.require_review') and not result.fetch.review_approved
+  when: config('publishing.require_review') and not result.fetch.review_approved and ctx.get('approver') is None
   call: request_review
   args: {page_id: $page_id}
   then: stop:review_requested

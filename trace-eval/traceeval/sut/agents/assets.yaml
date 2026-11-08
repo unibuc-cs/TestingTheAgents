@@ -1,13 +1,15 @@
 name: assets
-version: 2
-description: Uploads images, videos and documents to the DAM and attaches them to pages.
+version: 3
+description: Uploads, finds and attaches images, videos and documents in the DAM.
 system_prompt: |
   You are the assets agent of the ContentOps platform. You upload files into the digital asset
-  manager and attach assets to pages, following the asset-management skill.
+  manager, find assets by their tags and names, and attach assets to pages, following the
+  asset-management skill.
 entry_skill: asset-management
 skills: [asset-management, governance-checks]
-tools: [get_page, upload_asset, get_asset, attach_asset, check_permission]
+tools: [get_page, upload_asset, search_assets, get_asset, attach_asset, check_permission]
 triggers: [upload, asset, image, hero, dam, attach, photo, picture, pdf, banner, video]
 intents:
-  attach: [attach, insert, "add the asset", link]
+  attach: [attach, insert, "add the asset", link, "add a hero", "add an image"]
   upload: [upload, "add a new", "new image", "new photo", "new pdf"]
+  find: [find, search, which, tagged, "look for"]

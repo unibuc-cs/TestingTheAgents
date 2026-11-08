@@ -15,6 +15,10 @@ The answer is checked for facts, not wording: ``response_contains`` lists what i
 list of alternatives), and a run that ends with an answer must not end with an empty one (check ``answered``).
 ``tool_results`` checks what a tool returned (its last successful call), like the state.
 
+Order, for runs that cross several agents: ``agents_in_order`` lists agents that the run's delegations must reach
+in that order, and ``tools_in_order`` tools whose successful calls must come in that order (other agents and
+calls may come in between).
+
 A case with a ``judge`` block also has its answer read by a model against the block's rubric (``judge_answer``),
 for what a fixed check cannot see, such as whether the answer confirms what was done."""
 
@@ -107,6 +111,12 @@ def score_case(case, trace: dict, state: dict, run: dict, error: str | None = No
         add(f"forbidden:{tool}", tool not in ok_tools, f"ok tools: {sorted(ok_tools)}")
     for tool in exp.get("tools_not_attempted", []):
         add(f"not_attempted:{tool}", tool not in attempted, f"attempted: {sorted(attempted)}")
+    if "agents_in_order" in exp:
+        targets = [target for _, target in trace.get("routes", [])]
+        add("agents_in_order", _in_order(targets, exp["agents_in_order"]), f"delegated to: {targets}")
+    if "tools_in_order" in exp:
+        ok_calls = [c["tool"] for c in calls if c.get("status") == "ok"]
+        add("tools_in_order", _in_order(ok_calls, exp["tools_in_order"]), f"ok calls: {ok_calls}")
     for spec in exp.get("tool_attempts", []):
         mx = max([c.get("attempts", 0) for c in calls if c["tool"] == spec["tool"]] or [0])
         add(f"attempts:{spec['tool']}", mx >= spec.get("min", 1), f"max attempts {mx}")
@@ -167,6 +177,12 @@ def _tool_failures(calls: list[dict], allowed) -> list[tuple[str, str]]:
             seen.add((name, code))
             out.append((name, f"{code}: {call.get('message') or ''}"))
     return out
+
+
+def _in_order(seen: list[str], wanted: list[str]) -> bool:
+    """Whether ``wanted`` occurs in ``seen`` in the same order, with anything allowed in between."""
+    rest = iter(seen)
+    return all(w in rest for w in wanted)  # each ``in`` consumes the iterator up to the match
 
 
 def _codes(value) -> set[str]:

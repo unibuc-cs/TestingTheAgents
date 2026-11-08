@@ -52,10 +52,15 @@ def build_system_prompt(agent, session, runtime) -> str:
     rules close the prompt. The sections are joined with newlines.
     """
     parts = [agent.system_prompt.strip()]
-    # The orchestrator has to pick the specialist itself, so it is shown each one's description and triggers,
+    # The orchestrator has to pick the specialists itself, so it is shown each one's description and triggers,
     # and where a request goes that no specialist owns (routing.default_agent).
     if agent.is_orchestrator:
-        lines = ["", "## Specialist agents", "Delegate exactly once with `route_to_agent`. Available agents:"]
+        lines = [
+            "",
+            "## Specialist agents",
+            "Delegate with `route_to_agent`: once when one specialist owns the request, once per step when it needs "
+            "a plan. Available agents:",
+        ]
         for name, other in runtime.agents.load_all().items():
             if other.is_orchestrator:
                 continue

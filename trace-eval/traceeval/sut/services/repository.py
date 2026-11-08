@@ -211,6 +211,40 @@ def get_asset(state, asset_id: str) -> dict:
     return dict(asset, asset_id=asset_id)
 
 
+def search_assets(state, query: str) -> dict:
+    """The assets that match words of ``query`` in their name, folder, MIME type, tags or description, ignoring
+    case, best match first: ranked by how many of the words they match, then by asset id; an asset that matches
+    none is left out. Each match is summarised as ``asset_id``, ``name``, ``tags`` and ``license`` (an asset
+    whose licence has expired may not be used on the site)."""
+    words = query.lower().split()
+    scored = []
+    for aid, asset in state.assets.items():
+        hay = " ".join(
+            [asset["name"], asset["folder"], asset["mime"], *asset.get("tags", []), asset.get("description", "")]
+        ).lower()
+        score = sum(w in hay for w in words)
+        if score:
+            scored.append((-score, aid, asset))
+    hits = [
+        {"asset_id": aid, "name": a["name"], "tags": a.get("tags", []), "license": a.get("license")}
+        for _, aid, a in sorted(scored)
+    ]
+    return {"query": query, "assets": hits}
+
+
+def set_alt_text(state, asset_id: str, alt: str, actor: str) -> dict:
+    """Set the alt text of an asset (what screen readers say for an image) and return ``asset_id`` and ``alt``.
+    Raises NotFound for an unknown asset and ValidationError for an empty text."""
+    asset = state.assets.get(asset_id)
+    if asset is None:
+        raise NotFound(f"asset '{asset_id}' does not exist")
+    if not alt.strip():
+        raise ValidationError("alt text must not be empty")
+    asset["alt"] = alt
+    state.audit("set_alt_text", actor, asset_id=asset_id)
+    return {"asset_id": asset_id, "alt": alt}
+
+
 def attach_asset(state, page_id: str, asset_id: str, actor: str) -> dict:
     """Attach an existing asset to a page and return ``page_id`` and the page's ``assets`` list.
 

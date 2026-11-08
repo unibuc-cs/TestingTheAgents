@@ -5,7 +5,7 @@ Two levels:
 - **Suite coverage** (``suite_coverage``): how well the tests cover the application before any change. For each
   dimension of Adobe's requirements (agent, skill, tool, configuration, property, execution path, risk), the share
   of its components that at least one test covers, declared (the tests' metadata) and observed (the recorded
-  traces), and what no test covers. Workflows join when the multi-agent workflows exist.
+  traces), and what no test covers. Workflows join as a dimension in step 3 of docs/AEM_ALIGNMENT.md.
 - **Change coverage** (``change_coverage``): for one change and the tests a strategy ran, how much of what the change
   touches they cover. It needs no ground truth, so it can be reported live: the changed components the tests
   exercised, the affected properties they checked, and whether every affected mandatory property got a test.

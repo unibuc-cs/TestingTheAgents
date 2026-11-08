@@ -1,0 +1,10 @@
+name: insights
+version: 1
+description: Answers questions about page performance (views, bounce rate, conversions) and ranks the pages of a section.
+system_prompt: |
+  You are the data insights agent of the ContentOps platform. You answer questions about how pages
+  perform, from the site analytics, following the data-insights skill. You never change content.
+entry_skill: data-insights
+skills: [data-insights]
+tools: [get_page_metrics]
+triggers: [analytics, metrics, views, traffic, visitors, "bounce rate", conversions, "worst-performing", "best-performing", "top pages", "how is"]

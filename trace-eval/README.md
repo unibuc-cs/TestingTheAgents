@@ -5,7 +5,7 @@ tests should run, in what order, and when can we stop? The aim is to spend fewer
 still catch regressions.
 
 **What this repo is.** A testbed for that question. It contains a small working multi-agent app whose agents
-are played by a real model (Gemma 4 E4B or Qwen3.8-27B), 136 tests, 33 controlled changes with known effects, and
+are played by a real model (Gemma 4 E4B or Qwen3.8-27B), 168 tests, 33 controlled changes with known effects, and
 7 selection strategies, which are compared by replaying recorded runs. One of them, `adaptive_bayes`, is the
 proposed method; `traceeval check` runs it live on one change.
 
@@ -60,7 +60,8 @@ what each test costs and which code it runs.
    harmless changes, whether the adaptive one stops at the right moment, and the coverage of the suite and of each
    change.
 
-Main results, with Gemma and with Qwen3.8-27B playing the agents (three repetitions per test): hand-written
+Main results, with Gemma and with Qwen3.8-27B playing the agents (three repetitions per test; recorded on the app as
+it was before the multi-agent workflows, with 136 tests, and recorded again once they are complete): hand-written
 dependencies catch 62–71% of regressions. Trace-based selection catches 88–90% within a budget of 20% of the
 full-suite tokens. The adaptive method catches 81–83% while spending 5% of those tokens. Under Gemma it never calls a change that breaks nothing a regression; under Qwen it does in 8% of the replays
 of benign changes, when a test that passed all three times on the original app failed once in three runs
@@ -82,9 +83,9 @@ up in [docs/AEM_ALIGNMENT.md](docs/AEM_ALIGNMENT.md) with the plan and status):
 | **Mandatory properties in the method**: a check that found no regression does not end before every mandatory property the change may affect has a test | done (step 5 of `adaptive_bayes`) |
 | Test selection, prioritization and stopping under a token budget | done (`adaptive_bayes`, `traceeval check`) |
 | Per-test metadata: agents, skills, tools, config, risk, cost, history (declared and observed) | done |
-| Trace assertions: final state, required and forbidden tools, attempts, audit, step limit | done; agent order and tool order planned |
-| Workflows: one prompt that runs 2–5 agents (plans, data passed between agents, approvals, re-planning) | planned |
-| New agents modelled on AEM's (brand governance, site optimization, data insights, asset discovery) | planned |
+| Trace assertions: final state, required and forbidden tools, attempts, audit, step limit, agent order, tool order | done |
+| Workflows: one prompt that runs 2–5 agents: the orchestrator plans, passes each step its instruction and the ids of earlier steps, asks a person before publishing, scheduling or taking pages down, and stops at a failed step | planning, hand-offs and approvals done; W1 (campaign launch, five agents) and W3 (legal takedown) done; W2, W4–W6 planned |
+| New agents modelled on AEM's: brand governance, data insights, site optimization, and asset search in the assets agent | done |
 | OpenTelemetry export of traces, with plans and routing decisions as events | planned |
 
 ## Spec-driven development on the same testbed

@@ -22,12 +22,12 @@ clauses:
   - use: always_on_calls
     with:
       tools: [unpublish_page, export_user_data, approve_review]
-      where: event.approved_by is not None and event.approved_by == token_owner(run, run.context.approval_token)
+      where: event.approved_by is not None and event.approved_by == token_owner(run, call_token(run, event))
 
   - use: never_on_calls
     with:
       tools: [unpublish_page, export_user_data, approve_review]
-      where: event.status == 'ok' and token_owner(run, run.context.approval_token) is None
+      where: event.status == 'ok' and token_owner(run, call_token(run, event)) is None
 
   - use: scenario
     with:
