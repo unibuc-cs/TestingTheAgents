@@ -3,14 +3,18 @@
 traceeval catalog                         list eval cases
 traceeval mutations                       list controlled changes
 traceeval run --test PUB-01 [--backend hf|vllm|llm|replay]   run one case and print the record
-    hf: Gemma on the local GPU; vllm: Gemma on the GPU server (scripts/gpu_remote.sh up); llm: any
-    OpenAI-compatible endpoint (TRACEEVAL_LLM_*); replay: Gemma's recorded answers, no model
+    hf: Gemma on the local GPU; vllm: Gemma on the GPU server (scripts/gpu_remote.sh up gemma); llm: Qwen on
+    the GPU server (scripts/gpu_remote.sh up qwen), or any OpenAI-compatible endpoint (TRACEEVAL_LLM_*);
+    replay: Gemma's recorded answers, no model
     (TRACEEVAL_CACHE names the file of recorded answers; with hf or vllm, new answers are added to it)
+    TRACEEVAL_JUDGE=gemma|qwen picks the model that judges the cases with a rubric (default: the agents' model)
 traceeval baseline --workdir runs/exp1 --reps 3
 traceeval mutants  --workdir runs/exp1 --reps 3 [--only id ...]
 traceeval evaluate --workdir runs/exp1 --seeds 10
 traceeval report   --workdir runs/exp1
 traceeval experiment --workdir runs/exp1   (baseline + mutants + evaluate + report)
+traceeval check <mutation id | changed copy of traceeval/sut> --history runs/gemma3 [--budget 0.2] [--backend vllm]
+    check one change live with the proposed method; --history is an experiment recorded with the same model
 traceeval sdd --workdir runs/sdd [--specs FS-0101 ...] [--out docs/sdd] [--backend replay]   spec-driven demo
 traceeval sdd draft --request request.md --id FS-0106 [--replay answer.json]   draft a spec with an LLM
 """
@@ -58,7 +62,7 @@ def cmd_run(args):
 
     case = {c.id: c for c in load_catalog()}[args.test]
     sut = load_sut(Path(args.sut_dir) if args.sut_dir else SUT_ROOT)
-    # With --backend llm the endpoint and model come from TRACEEVAL_LLM_* (the backend's default settings).
+    # With --backend llm the endpoint and model are the backend's defaults (Qwen, or TRACEEVAL_LLM_*).
     rec = run_case(sut, case, backend=args.backend, config_overrides=_parse_overrides(args.set))
     # The observed dependencies and covered functions are long lists, left out of the printout.
     keep = {k: v for k, v in rec.items() if k not in ("deps", "code_functions")}
@@ -116,6 +120,12 @@ def cmd_experiment(args):
     cmd_mutants(args)
     cmd_evaluate(args)
     cmd_report(args)
+
+
+def cmd_check(args):
+    from traceeval.experiment.check import check
+
+    check(args.change, Path(args.history), args.budget, args.backend)
 
 
 def cmd_sdd(args):
@@ -196,6 +206,13 @@ def main(argv=None):
         sp = sub.add_parser(name)
         common(sp)
         sp.set_defaults(fn=fn)
+
+    ck = sub.add_parser("check")
+    ck.add_argument("change", help="a mutation id (see traceeval mutations) or a changed copy of traceeval/sut")
+    ck.add_argument("--history", required=True, help="an experiment recorded with the same model, e.g. runs/gemma3")
+    ck.add_argument("--budget", type=float, default=0.2, help="at most this fraction of the full suite's tokens")
+    ck.add_argument("--backend", default="vllm", choices=BACKENDS, help="who plays the agents (default: vllm, Gemma)")
+    ck.set_defaults(fn=cmd_check)
 
     sd = sub.add_parser("sdd")
     sd.add_argument("action", nargs="?", default="run", choices=["run", "draft"])

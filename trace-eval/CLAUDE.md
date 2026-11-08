@@ -12,10 +12,14 @@ pytest -q                           # ~60 s; must stay green; replays Gemma's re
 ruff check traceeval tests --select E,F,W,I,B --line-length 120
 ruff format traceeval tests --line-length 120   # see "Gotchas" before formatting sut/
 traceeval experiment --backend vllm --workdir runs/gemma2 --reps 3   # full experiment, Gemma on the GPU server, ~30 min
+traceeval experiment --backend llm --workdir runs/qwen2 --reps 3     # the same with Qwen (scripts/gpu_remote.sh up qwen)
+traceeval check code_retry_disabled --history runs/gemma3        # the prototype: one change, live, with the method
 traceeval sdd --workdir runs/sdd                                 # spec-driven development demo, replayed
 TRACEEVAL_BACKEND=vllm pytest -q    # record the answers the cassette lacks (Gemma up on the GPU server)
 traceeval sdd draft --request r.md --id FS-0106 [--replay a.json]  # draft a spec with a model
 scripts/gpu_remote.sh up [gemma|qwen] | status | down   # models on the GPU server; see docs/EXPERIMENT.md
+TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM cluster (2 GPUs, port + 10)
+# several servers in one run: TRACEEVAL_VLLM_URL / TRACEEVAL_LLM_BASE_URL take comma-separated URLs
 ```
 
 ## Layout (one line each)
@@ -24,10 +28,12 @@ scripts/gpu_remote.sh up [gemma|qwen] | status | down   # models on the GPU serv
   mutated by the experiment: **relative imports only**, no imports from `traceeval.*` outside `sut`.
 - `traceeval/catalog/` — eval cases (YAML) and loader.
 - `traceeval/tracing/` — trace recorder, coverage contexts.
-- `traceeval/scoring/` — deterministic scorers.
+- `traceeval/scoring/` — deterministic scorers, and the model judge for cases with a rubric (`TRACEEVAL_JUDGE`).
 - `traceeval/mutation/` — controlled changes (patch operators), change-set extraction.
 - `traceeval/selection/` — `strategies.py` baselines, `adaptive_bayes.py` the proposed method, `extras.py` optional baselines.
-- `traceeval/experiment/` — SUT loader, executor, history, runner, replay evaluator, metrics, report.
+- `traceeval/experiment/` — SUT loader, executor, history, runner, replay evaluator, metrics, report; `check.py`,
+  the prototype (one change checked live).
+- `traceeval/llm/` — Gemma's client (`chat.py`: prompt, engines, parsing, which model judges) and the answer cache.
 - `traceeval/spec/` — spec-driven development layer: clause catalog (`catalog.yaml`) and model, one checker per
   clause kind (`checks/`), product model, demo PRs, runner, report, drafting with a model (`draft.py`).
   Specs live in `traceeval/specs/FS-*.yaml` as catalog templates + slots (see `docs/SDD_GUIDE.md`).
@@ -71,6 +77,7 @@ scripts/gpu_remote.sh up [gemma|qwen] | status | down   # models on the GPU serv
   fixtures, case requests) changes the key: replays then miss (`HARNESS_ERROR` with `CacheMiss`). Record the
   missing answers with `TRACEEVAL_BACKEND=vllm pytest -q` and commit `tests/cassettes/gemma.jsonl`; to drop
   answers nothing asks for any more, delete the file first and record everything again.
-- `runs/*/history/*.jsonl` include line-level coverage and are large; do not commit them.
+- `runs/*/history/*.jsonl` include line-level coverage and are large; do not commit them. For the same reason a
+  history recorded before a code change no longer fits `traceeval check` (lines move): record a new one.
 - Record experiments on Python 3.12: on 3.15 coverage.py uses its sys.monitoring core, which does not support the
   per-test dynamic contexts (warning `no-sysmon-context`), so observed code dependencies may be incomplete.

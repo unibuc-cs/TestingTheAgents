@@ -5,8 +5,9 @@ tests should run, in what order, and when can we stop? The aim is to spend fewer
 still catch regressions.
 
 **What this repo is.** A testbed for that question. It contains a small working multi-agent app whose agents
-are played by a real model (Gemma 4 E4B), 136 tests, 38 controlled changes with known effects, and 7 selection
-strategies, which are compared by replaying recorded runs. One of them, `adaptive_bayes`, is the proposed method.
+are played by a real model (Gemma 4 E4B or Qwen3.8-27B), 136 tests, 38 controlled changes with known effects, and
+7 selection strategies, which are compared by replaying recorded runs. One of them, `adaptive_bayes`, is the
+proposed method; `traceeval check` runs it live on one change.
 
 ## Run it
 
@@ -20,22 +21,35 @@ traceeval sdd --workdir runs/sdd                            # spec-driven develo
 ```
 
 Recording an experiment needs the model: on the GPU server (see [docs/EXPERIMENT.md](docs/EXPERIMENT.md)), or
-on a local GPU with `--backend hf`.
+on a local GPU with `--backend hf`. `--backend vllm` is Gemma, `--backend llm` is Qwen.
 
 ```bash
 scripts/gpu_remote.sh up gemma
-traceeval experiment --backend vllm --workdir runs/gemma2 --reps 3    # ~30 min
-# -> runs/gemma2/results/report.md  (tables + 3 figures)
+traceeval experiment --backend vllm --workdir runs/gemma3 --reps 3    # ~30 min
+# -> runs/gemma3/results/report.md  (tables + 3 figures)
 scripts/gpu_remote.sh down
 ```
+
+**The prototype.** `traceeval check` checks one change live. The proposed method picks a test, the test runs on
+the changed app with the real model, the outcome decides what runs next, and it stops with a verdict:
+
+```bash
+traceeval check code_retry_disabled --history runs/gemma3 --budget 0.2              # a change from the catalog
+traceeval check path/to/my-copy-of-sut --history runs/qwen3 --backend llm           # your own edit, with Qwen
+```
+
+`--history` is an experiment recorded with the same model and the same version of the app; it tells the method
+what each test costs and which code it runs.
 
 ## What is in it
 
 1. **Tests** live in [`traceeval/catalog/`](traceeval/catalog/) (YAML). Each has a request, a context, and deterministic checks on the
-   final state, the tool calls and the response.
+   final state, the tool calls and the response. Two also have their answer judged by a model against a rubric
+   (Gemma or Qwen, `TRACEEVAL_JUDGE`; by default the model playing the agents).
 2. **The app under test** ("ContentOps", described in [docs/CONTENTOPS.md](docs/CONTENTOPS.md)) lives in [`traceeval/sut/`](traceeval/sut/): [agents](traceeval/sut/agents/) defined in YAML, [skills](traceeval/sut/skills/) ([example `SKILL.md`](traceeval/sut/skills/publishing-workflow/SKILL.md), each with
    a machine-readable procedure), [tools](traceeval/sut/tools/) and a [config file](traceeval/sut/config/runtime.yaml). Gemma 4 E4B plays the agents (locally, on a GPU
-   server, or from its recorded answers); `--backend llm` takes any OpenAI-compatible endpoint (so far Qwen3.8-27B).
+   server, or from its recorded answers); `--backend llm` plays them with Qwen3.8-27B on the GPU server, or with
+   any other OpenAI-compatible endpoint.
 3. **Changes** are the 38 entries in [`traceeval/mutation/catalog.py`](traceeval/mutation/catalog.py), applied as edits to a copy of the app's files. Running the
    full suite on each gives the ground truth: which tests reveal which change.
 4. **Strategies** in `traceeval/selection/` pick tests under a token budget. They see the diff of the code (without comments),
@@ -75,6 +89,6 @@ it, or with [docs/SDD_DEMO.md](docs/SDD_DEMO.md) for the results. The report is 
 - [docs/related_work.md](docs/related_work.md), [docs/tau2_integration.md](docs/tau2_integration.md): literature positioning, and tau2-bench as a second system under test.
 - [CLAUDE.md](CLAUDE.md): conventions for coding agents working in the repo.
 
-Status: prototype v0.1. The agents run on Gemma 4 E4B, locally or on the GPU server, and on Qwen3.8-27B through
-the `llm` backend ([docs/EXPERIMENT.md](docs/EXPERIMENT.md)). An OpenAI backend is planned. The tau2-bench
-adapter is designed but not implemented.
+Status: prototype v0.1. The agents and the judge run on real models only: Gemma 4 E4B, locally or on the GPU
+server, and Qwen3.8-27B through the `llm` backend ([docs/EXPERIMENT.md](docs/EXPERIMENT.md)). An OpenAI backend is
+planned. The tau2-bench adapter is designed but not implemented.

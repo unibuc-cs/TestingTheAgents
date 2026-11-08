@@ -105,8 +105,9 @@ traceeval sdd draft --request request.md --id FS-0106 [--save-response answer.js
 traceeval sdd draft --request request.md --id FS-0106 --replay answer.json      # no model needed
 ```
 
-The model can be any OpenAI-compatible endpoint, configured with `TRACEEVAL_LLM_BASE_URL`,
-`TRACEEVAL_LLM_API_KEY` and `TRACEEVAL_LLM_MODEL`. It receives the catalog, the request and a *slice of
+The model is the `llm` backend's: Qwen on the GPU server by default (`scripts/gpu_remote.sh up qwen`), or any
+OpenAI-compatible endpoint set with `TRACEEVAL_LLM_BASE_URL`, `TRACEEVAL_LLM_API_KEY` and `TRACEEVAL_LLM_MODEL`.
+It receives the catalog, the request and a *slice of
 the product model*: every tool with its kind and the service functions behind it, every configuration key
 with its value, every skill with the tools it calls, the code paths that change a page status, and every
 recorded case. It must answer in JSON, with template names and slot values only. The answer is expanded

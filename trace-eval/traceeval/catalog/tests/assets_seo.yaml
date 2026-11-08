@@ -187,7 +187,7 @@
   context: {user_id: bob, page_id: p1, seo_keywords: [example, home, welcome]}
   risk: low
   properties: [task_completion, answer_quality]
-  judge: {rubric: "The answer states the resulting SEO score and confirms the keywords were applied.", must_mention: ["score"]}
+  judge: {rubric: "The answer states the resulting SEO score and confirms the keywords were applied."}
   declared: {agents: [seo], skills: [seo-metadata], tools: [get_seo_report, set_page_metadata]}
   expect:
     route_to: seo

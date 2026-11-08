@@ -292,6 +292,7 @@ class AdaptiveBayes(Strategy):
             if remaining <= 0:
                 log.stop_reason = "budget"
                 break
+        log.p_broken = float(1.0 - post[0])
         return log
 
     def order(self, ctx):

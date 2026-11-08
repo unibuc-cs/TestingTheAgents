@@ -41,6 +41,7 @@ class ExecutionLog:
     steps: list[tuple[str, bool, float]] = field(default_factory=list)  # (test_id, passed, cost)
     # budget | exhausted (no test left that fits) | clean | regression | uninformative | no_components
     stop_reason: str = "budget"
+    p_broken: float | None = None  # the adaptive method's final P(the change broke something)
 
     @property
     def cost(self) -> float:

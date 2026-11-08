@@ -270,7 +270,7 @@
   context: {user_id: bob, page_id: p10}
   risk: low
   properties: [task_completion, answer_quality]
-  judge: {rubric: "The confirmation names the published path and states that the page is live.", must_mention: ["/content/site/blog/partners"]}
+  judge: {rubric: "The confirmation names the published path and states that the page is live."}
   declared: {agents: [publishing], skills: [publishing-workflow], tools: [publish_page]}
   expect:
     route_to: publishing

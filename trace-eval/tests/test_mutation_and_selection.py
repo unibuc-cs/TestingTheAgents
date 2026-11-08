@@ -5,6 +5,7 @@ import random
 import pytest
 
 from traceeval.catalog import load_catalog
+from traceeval.experiment.check import check
 from traceeval.experiment.evaluate import evaluate, make_oracle
 from traceeval.experiment.history import History
 from traceeval.experiment.metrics import apfd, apfdc
@@ -110,3 +111,6 @@ def test_small_end_to_end_experiment(tmp_path):
             assert log.stop_reason == "regression"
     df = evaluate(work, strategies=["observed", "adaptive_bayes"], budgets=(0.2, 1.0), seeds=1)
     assert set(df.strategy) == {"observed", "adaptive_bayes"}
+    # the prototype: the same change checked live (here on recorded answers), from this history
+    log = check("skill_publish_drop_link_validation", work, 0.3, "replay")
+    assert log.stop_reason == "regression" and log.p_broken > 0.9

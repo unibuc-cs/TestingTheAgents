@@ -13,7 +13,7 @@ import traceback
 from pathlib import Path
 
 from traceeval.catalog import EvalCase
-from traceeval.scoring.scorers import rubric_judge, score_case
+from traceeval.scoring.scorers import judge_answer, score_case
 from traceeval.tracing import TraceRecorder
 
 
@@ -66,11 +66,12 @@ def run_case(
     """Run one eval case once. Never raises: harness errors are recorded as HARNESS_ERROR.
 
     ``backend`` picks who plays the agents: "hf" (Gemma on the local GPU), "vllm" (Gemma on a vLLM server),
-    "replay" (Gemma's recorded answers, no model; ``traceeval/llm/cache.py``) or "llm" (any OpenAI-compatible
-    endpoint, configured by ``llm_settings``); None means ``default_backend()``. ``llm_client`` replaces the
-    model client, e.g. with a scripted one in tests. ``fault_profile`` overrides the case's own profile;
-    ``keep_state`` adds the initial fixture and the final state to the record (used by the spec layer's trace
-    monitors, too large for histories)."""
+    "replay" (Gemma's recorded answers, no model; ``traceeval/llm/cache.py``) or "llm" (an OpenAI-compatible
+    endpoint, by default Qwen on the GPU server, configured by ``llm_settings``); None means
+    ``default_backend()``. ``llm_client`` replaces the model client, e.g. with a scripted one in tests.
+    ``fault_profile`` overrides the case's own profile; ``keep_state`` adds the initial fixture and the final
+    state to the record (used by the spec layer's trace monitors, too large for histories). A case with a
+    ``judge`` block is judged by the model ``TRACEEVAL_JUDGE`` names (``llm/chat.py::judge_client``)."""
     backend = backend or default_backend()
     tracer = TraceRecorder(test_id=case.id, run_id=f"{variant}:{case.id}:{rep}", variant=variant, backend=backend)
     State = sut.sub("services.state").State
@@ -93,13 +94,13 @@ def run_case(
         if backend not in ("llm", "hf", "vllm", "replay"):
             raise ValueError(f"unknown backend {backend}")
         llm = sut.sub("harness.backends.llm_openai")
-        if backend != "llm":
-            # Gemma: local (hf), on the GPU server (vllm) or its recorded answers (replay). The client is created
-            # once per process and shared by every case and variant.
-            if llm_client is None:
-                from traceeval.llm.chat import shared_client
+        if llm_client is None:
+            # Gemma (local, on the GPU server, or its recorded answers) or the llm backend's servers (Qwen by
+            # default). The client is created once per process and shared by every case and variant.
+            from traceeval.llm.chat import shared_client
 
-                llm_client = shared_client(backend)
+            llm_client = shared_client(backend)
+        if backend != "llm":  # with "llm" the backend's own settings name the model (Qwen, or TRACEEVAL_LLM_MODEL)
             llm_settings = llm_settings or llm.LLMSettings(model=llm_client.model_id)
         factory = llm.make_backend_factory(settings=llm_settings, client=llm_client)
         faults = FaultInjector(fault_profile if fault_profile is not None else case.fault_profile)
@@ -115,13 +116,20 @@ def run_case(
 
     judge_tokens = 0
     judge_result = None
-    if case.judge and verdict.passed:  # deterministic checks first; judge only if they passed
-        judge_result = rubric_judge(case, trace.get("final_message", ""))
-        judge_tokens = judge_result["tokens"]
-        if not judge_result["ok"]:
+    if case.judge and verdict.passed:  # deterministic checks first; the judge only if they passed
+        from traceeval.llm.chat import judge_client
+
+        try:
+            judge_result = judge_answer(case, trace.get("final_message", ""), *judge_client(backend))
+            judge_tokens = judge_result["tokens"]
+            if not judge_result["ok"]:
+                verdict.passed = False
+                verdict.classification = "AGENT_FAILURE"
+                verdict.checks.append({"name": "judge", "ok": False, "detail": judge_result["verdict"]})
+        except Exception:  # noqa: BLE001 - a judge that cannot answer fails the run like any harness error
+            error = traceback.format_exc(limit=6)
             verdict.passed = False
-            verdict.classification = "AGENT_FAILURE"
-            verdict.checks.append({"name": "judge", "ok": False, "detail": judge_result["rubric"]})
+            verdict.classification = "HARNESS_ERROR"
 
     agent_tokens = trace["tokens"]
     record = {

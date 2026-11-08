@@ -5,10 +5,11 @@ The model sees the agent's system prompt, its skills (the prose, and the procedu
 with included skills written out and settings shown with their values), the routing triggers and the intents.
 It then decides every step itself, and its tool calls go through the same runtime and dispatcher.
 
-Environment variables (or explicit ``LLMSettings``):
-  TRACEEVAL_LLM_BASE_URL   e.g. http://127.0.0.1:8000/v1
-  TRACEEVAL_LLM_API_KEY    e.g. EMPTY for local vLLM
-  TRACEEVAL_LLM_MODEL      served model name
+Environment variables (or explicit ``LLMSettings``); the defaults reach Qwen as ``scripts/gpu_remote.sh up qwen``
+serves it:
+  TRACEEVAL_LLM_BASE_URL   default http://127.0.0.1:18101/v1
+  TRACEEVAL_LLM_API_KEY    default EMPTY (a local vLLM server needs none)
+  TRACEEVAL_LLM_MODEL      default Qwen/Qwen3.8-27B-FP8
 """
 
 import json
@@ -35,9 +36,9 @@ class LLMSettings:
     values instead.
     """
 
-    base_url: str = os.environ.get("TRACEEVAL_LLM_BASE_URL", "http://127.0.0.1:8000/v1")
+    base_url: str = os.environ.get("TRACEEVAL_LLM_BASE_URL", "http://127.0.0.1:18101/v1")
     api_key: str = os.environ.get("TRACEEVAL_LLM_API_KEY", "EMPTY")
-    model: str = os.environ.get("TRACEEVAL_LLM_MODEL", "local-model")
+    model: str = os.environ.get("TRACEEVAL_LLM_MODEL", "Qwen/Qwen3.8-27B-FP8")
     temperature: float = 0.0  # 0 keeps the model's choices as repeatable as the server allows
     max_tokens: int = 700  # the most tokens the model may write in one answer
     max_tool_calls_per_turn: int = 4  # tool calls taken from one answer; any further ones are dropped

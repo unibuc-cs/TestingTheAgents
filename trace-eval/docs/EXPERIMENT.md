@@ -133,7 +133,7 @@ model. The `--backend` option picks who plays the agents:
 |---|---|---|
 | `hf` (default) | Gemma in this Python process, on your local GPU (RTX 4090), one call at a time | a quick look at one case, no server needed |
 | `vllm` | Gemma served by vLLM on the GPU server (GPU0), reached through an SSH tunnel; many calls at once | recording experiments with Gemma |
-| `llm` | any OpenAI-compatible endpoint, named by `TRACEEVAL_LLM_BASE_URL` and `TRACEEVAL_LLM_MODEL` | Qwen on the GPU server (GPU1); later OpenAI's `gpt-6-luna` (phase 1) |
+| `llm` | an OpenAI-compatible endpoint: by default Qwen on the GPU server (GPU1), or the one named by `TRACEEVAL_LLM_BASE_URL` and `TRACEEVAL_LLM_MODEL` | recording experiments with Qwen; later OpenAI's `gpt-6-luna` (phase 1) |
 | `replay` | Gemma's recorded answers, no model (`tests/cassettes/gemma.jsonl`, or the file named by `TRACEEVAL_CACHE`) | the test suite and the SDD demo; running a recorded experiment again |
 
 The two models are wired in slightly differently:
@@ -145,6 +145,10 @@ The two models are wired in slightly differently:
 - **Qwen (`llm`):** the ordinary chat API. vLLM applies Qwen's chat template and turns Qwen's tool-call syntax
   into structured calls on the server, so there is no Qwen-specific code in the repo. Qwen's "thinking" mode
   is turned off on the server, so it answers directly, as Gemma does.
+
+The two cases with a rubric (SEO-07, PUB-20) are also judged by a model once their fixed checks pass. By
+default the judge is the model playing the agents; `TRACEEVAL_JUDGE=gemma` or `qwen` picks one. Gemma's verdicts
+are recorded and replayed with its other answers; Qwen is always asked on its server.
 
 This is the path of one model call when both models are running:
 
@@ -183,7 +187,7 @@ repo root in Git Bash (or any bash). It knows two models, called presets:
 | preset | model | GPU | port | run with |
 |---|---|---|---|---|
 | `gemma` (the default) | `google/gemma-4-E4B-it` | 0 | 18100 | `--backend vllm` |
-| `qwen` | `Qwen/Qwen3.8-27B-FP8` (8-bit weights, about 30 GB) | 1 | 18101 | `--backend llm` plus the two variables below |
+| `qwen` | `Qwen/Qwen3.8-27B-FP8` (8-bit weights, about 30 GB) | 1 | 18101 | `--backend llm` |
 
 Different GPUs and ports mean both can run at the same time, each with its own experiment.
 
@@ -213,11 +217,12 @@ scripts/gpu_remote.sh status    # GPU memory, and for each model: server, tunnel
 # Gemma
 traceeval run --test PUB-01 --backend vllm                              # one case, to check
 traceeval experiment --backend vllm --workdir runs/gemma2 --reps 3      # the whole recording
+traceeval check code_retry_disabled --history runs/gemma3               # one change, live (section 5)
 
 # Qwen (in another terminal, at the same time if you like)
-export TRACEEVAL_LLM_BASE_URL=http://127.0.0.1:18101/v1 TRACEEVAL_LLM_MODEL=Qwen/Qwen3.8-27B-FP8
 traceeval run --test PUB-01 --backend llm
 traceeval experiment --backend llm --workdir runs/qwen2 --reps 3
+traceeval check code_retry_disabled --history runs/qwen3 --backend llm
 
 scripts/gpu_remote.sh down      # stop both servers and close the tunnels: frees the GPUs
 scripts/gpu_remote.sh down qwen # or just one of them
@@ -240,18 +245,49 @@ You can run `up` as often as you like: it reuses a running server and an open tu
 **Please run `down` when you're done.** The server is shared, and vLLM keeps most of each GPU's memory
 reserved while it runs, even when idle.
 
+### More GPUs: the SLURM cluster, and several servers in one run
+
+Two more H100s are available through the university's SLURM cluster (login
+`ciprian.paduraru@hpc-ctrl01.acc-ub.local`). Its GPU node, `hpc-nodegpu01`, is the same machine as fmi0: it has 8
+H100s, and SLURM hands out 4 of them. The same script drives it with `TRACEEVAL_SITE=hpc`:
+
+```bash
+TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen     # a SLURM job for 2 GPUs (8 hours at most), tunnel on port 18111
+TRACEEVAL_SITE=hpc scripts/gpu_remote.sh status      # our jobs, and which endpoints answer
+TRACEEVAL_SITE=hpc scripts/gpu_remote.sh down        # cancel the jobs, close the tunnels
+```
+
+`up` submits a job that serves the model on the GPU node's own localhost, waits until SLURM starts it, and opens
+the tunnel through the controller. The first job also creates the vLLM environment in your cluster home and
+downloads the model, so it takes longer. The job checks its GPUs first and stops if one is already in use:
+SLURM doesn't see processes started outside it (another user's server, or one started on fmi0) and may hand out
+their GPUs anyway. That happened on the first try, so check `TRACEEVAL_SITE=hpc scripts/gpu_remote.sh status`
+and, if needed, ask the cluster's admin which GPUs are free.
+
+To use both sites in one run, list both servers, separated by commas. Each request goes to the next server in
+turn (`traceeval/llm/chat.py::Servers`); decoding is greedy, so which server answers doesn't matter:
+
+```bash
+export TRACEEVAL_LLM_BASE_URL=http://127.0.0.1:18101/v1,http://127.0.0.1:18111/v1   # Qwen on fmi0 and on the cluster
+traceeval experiment --backend llm --workdir runs/qwen3 --reps 3 --workers 64
+```
+
+For Gemma the variable is `TRACEEVAL_VLLM_URL` (ports 18100 and 18110).
+
 ### Settings
 
 All optional, as environment variables:
 
 | variable | default | meaning |
 |---|---|---|
-| `TRACEEVAL_GPU_HOST` | `fmi0@10.23.13.53` | the SSH login (key-based, no password prompt) |
-| `TRACEEVAL_GPUS` | the preset's GPU | which GPUs; one copy of the model on each. `TRACEEVAL_GPUS=0,1 scripts/gpu_remote.sh up gemma` puts Gemma on both GPUs when Qwen isn't needed |
-| `TRACEEVAL_VLLM_PORT` | the preset's port | the port, the same on both ends of the tunnel |
+| `TRACEEVAL_SITE` | `fmi0` | `fmi0` (the shared server) or `hpc` (the SLURM cluster) |
+| `TRACEEVAL_GPU_HOST` | `fmi0@10.23.13.53` (hpc: `ciprian.paduraru@hpc-ctrl01.acc-ub.local`) | the SSH login (key-based, no password prompt) |
+| `TRACEEVAL_GPUS` | the preset's GPU (hpc: 2) | which GPUs; one copy of the model on each. `TRACEEVAL_GPUS=0,1 scripts/gpu_remote.sh up gemma` puts Gemma on both GPUs when Qwen isn't needed. On hpc, how many GPUs to ask SLURM for |
+| `TRACEEVAL_VLLM_PORT` | the preset's port (hpc: plus 10) | the port, the same on both ends of the tunnel |
 | `TRACEEVAL_HF_MODEL` | `google/gemma-4-E4B-it` | the `gemma` preset's model; `--backend hf` and `vllm` read it too |
-| `TRACEEVAL_VLLM_URL` | `http://127.0.0.1:18100/v1` | where `--backend vllm` sends Gemma's calls |
-| `TRACEEVAL_LLM_BASE_URL`, `TRACEEVAL_LLM_MODEL` | (none useful) | where `--backend llm` sends its calls, and the model name the server knows |
+| `TRACEEVAL_VLLM_URL` | `http://127.0.0.1:18100/v1` | where `--backend vllm` sends Gemma's calls; several servers separated by commas |
+| `TRACEEVAL_LLM_BASE_URL`, `TRACEEVAL_LLM_MODEL` | `http://127.0.0.1:18101/v1`, `Qwen/Qwen3.8-27B-FP8` | where `--backend llm` sends its calls (several servers separated by commas), and the model name the servers know |
+| `TRACEEVAL_JUDGE` | the agents' model | `gemma` or `qwen`: the model that judges the cases with a rubric |
 
 To add a third model, add a preset to the `case` in `preset()` at the top of the script: model, GPU, port,
 and any vLLM flags it needs.
@@ -303,6 +339,28 @@ one JSON line: which agent, the last message it got, Gemma's raw answer, tokens 
 ```bash
 TRACEEVAL_MODEL_LOG=runs/gemma2/model_calls.jsonl traceeval run --test PUB-02 --backend vllm
 ```
+
+### Checking one change live (the prototype)
+
+`traceeval check` is what a developer would run before merging: the proposed method on one change, with the
+tests run live by the model instead of looked up in a recording
+([`traceeval/experiment/check.py`](../traceeval/experiment/check.py)).
+
+```bash
+traceeval check code_retry_disabled --history runs/gemma3 --budget 0.2            # a change from the catalog
+traceeval check my-sut-copy --history runs/qwen3 --backend llm                    # a changed copy of traceeval/sut
+```
+
+The method picks the most informative test for its cost, the test runs on the changed app, and its outcome
+decides what runs next. A failure that does not settle the question alone is re-run once before the method
+believes it. The check stops when the method is sure either way or the budget is spent. It prints each test as
+it runs, then the verdict (`REGRESSION`, `no regression`, `undecided`, or `no failure within the budget`), the
+tokens spent and the method's probability that the change broke something.
+
+`--history` gives the method what it knows beforehand: each test's cost and the code it runs on the original
+app, and how the other changes showed up in the tests. Record it with the same model, and again whenever the
+app's code changes, since code is matched by line number: `traceeval experiment --reps 1` is enough. A changed
+copy of the app is compared with `traceeval/sut`, so copy that folder before editing it.
 
 ### Recorded answers: running without a model
 
@@ -365,6 +423,10 @@ mistakes, which clearer wording did not fix:
 | SEO-02 | Gemma | it applies an 83-character title over the 60-character limit |
 | SEO-05 | Qwen | it counts the 60-character title as 61 and refuses it |
 
+Since a model judges the two rubric cases (phase 6), Qwen also fails SEO-07 when it judges its own answer:
+"Updated SEO metadata on p1; SEO score is now 100" does not say that the keywords were applied, which the rubric
+asks for. Gemma, judging the same kind of answer, lets it pass. The rubric stays strict on purpose.
+
 Gemma acts on guards that come from a tool's answer (a denied permission, a broken link), but not on guards
 it has to work out for itself (a review flag, a length). These are the kinds of slips the simulator used to
 fake on purpose. Now they come from the models themselves.
@@ -382,6 +444,7 @@ fake on purpose. Now they come from the models themselves.
 | 3 | pytest replays recorded model answers ("cassettes", `tests/cassettes/`), so tests need no GPU | done |
 | 4 | re-derive the ground truth under both models, with three repetitions (`runs/gemma2`, `runs/qwen2`, below) | done |
 | 5 | the SDD demo on Gemma ([SDD_DEMO.md](SDD_DEMO.md)); experiment 1 is now `runs/gemma2` and `runs/qwen2` (`docs/results/`); the simulated results stay in `docs/results/exp1` and `exp2_flaky` | SDD done; a real-model version of experiment 2 (flaky agents) is open |
+| 6 | real models only: the rubric cases judged by Gemma or Qwen instead of a word match; the prototype `traceeval check` (section 5) | done |
 
 The next two subsections are the first recordings, from before phase 4 (old changes, one repetition). The
 phase 4 recordings come after them.
@@ -531,13 +594,14 @@ experiment 1, with the old changes):
 | file | role |
 |---|---|
 | [`scripts/gpu_remote.sh`](../scripts/gpu_remote.sh) | start, check and stop the model server on the GPU server |
-| [`traceeval/llm/chat.py`](../traceeval/llm/chat.py) | the model client: prompt, engines (`hf`, `vllm`), parsing, log |
+| [`traceeval/llm/chat.py`](../traceeval/llm/chat.py) | the model client: prompt, engines (`hf`, `vllm`), parsing, log; the `llm` backend's client; several servers in turn (`Servers`); which model judges (`judge_client`) |
 | [`traceeval/llm/cache.py`](../traceeval/llm/cache.py) | recorded answers: the cache in front of a model, and `replay` without one |
 | [`traceeval/sut/harness/backends/llm_openai.py`](../traceeval/sut/harness/backends/llm_openai.py) | one agent's conversation with the model: system prompt, tool calls, results |
 | [`traceeval/sut/harness/skills.py`](../traceeval/sut/harness/skills.py) | skills, and `render_procedure`, which writes a procedure as plain steps |
 | [`traceeval/sut/harness/runtime.py`](../traceeval/sut/harness/runtime.py) | the agent loop and delegation |
 | [`traceeval/experiment/runner.py`](../traceeval/experiment/runner.py) | runs the suite on the original app and on each change, sequentially or in parallel |
-| [`traceeval/scoring/scorers.py`](../traceeval/scoring/scorers.py) | the checks |
+| [`traceeval/scoring/scorers.py`](../traceeval/scoring/scorers.py) | the checks, and the model judge (`judge_answer`) |
+| [`traceeval/experiment/check.py`](../traceeval/experiment/check.py) | the prototype: one change checked live with the proposed method |
 | [`traceeval/cli.py`](../traceeval/cli.py) | the `traceeval` command |
 
 For the rest of the repository (strategies, report, SDD), see [USER_GUIDE.md](USER_GUIDE.md) and

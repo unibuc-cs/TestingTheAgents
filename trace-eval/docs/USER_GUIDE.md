@@ -16,6 +16,8 @@ Read the README first. This guide adds what you need to work inside the reposito
 
 The runs are recorded once (with the model on the GPU server) and replayed thousands of times. `runs/<name>/`
 holds the edited copies (`variants/`), the recordings (`history/*.jsonl`) and the results (`results/`).
+`traceeval check` is the same loop for one change, live: "execute" runs the test with the model
+(`experiment/check.py`), and a recording supplies only the baseline traces and costs and the other changes.
 
 ## 2. Vocabulary
 
@@ -44,6 +46,7 @@ holds the edited copies (`variants/`), the recordings (`history/*.jsonl`) and th
 | the baselines | `selection/strategies.py` (about 140 lines) |
 | the proposed method | `selection/adaptive_bayes.py` (its docstring explains the four ideas) |
 | the metrics | `experiment/metrics.py`, `experiment/evaluate.py` |
+| the prototype (one change, live) | `experiment/check.py` |
 
 Everything else is plumbing (loaders, tracing, report).
 
@@ -83,15 +86,21 @@ Everything else is plumbing (loaders, tracing, report).
   strategies implement `run(ctx, oracle)`. Use only `ctx.change`, `ctx.catalog`, the baseline facts in
   `ctx.history` and the other changes' outcomes (`ctx.train_variants`). Add the name to `CORE` to include it
   in the default comparison.
-- **Model backends**: the agents run on Gemma 4 E4B. `--backend hf` (the default; `pip install -e ".[hf]"`) runs
-  it on the local GPU. `--backend vllm` sends it to a vLLM server: `scripts/gpu_remote.sh setup` once, then
-  `scripts/gpu_remote.sh up` starts it on the GPU server and opens an SSH tunnel; cases then run 32 at a time
-  (`--workers`). `scripts/gpu_remote.sh up qwen` serves the second model, Qwen3.8-27B, on the other GPU, for
-  `--backend llm` (see [EXPERIMENT.md](EXPERIMENT.md)). Both build the same prompts and parse answers the same way (`traceeval/llm/chat.py`).
-  `--backend llm` is any OpenAI-compatible endpoint (`pip install -e ".[llm]"`, `TRACEEVAL_LLM_BASE_URL`,
-  `TRACEEVAL_LLM_API_KEY`, `TRACEEVAL_LLM_MODEL`). `TRACEEVAL_MODEL_LOG=<file>` logs every model call.
-  `--backend replay` plays Gemma from its recorded answers, with no model (`traceeval/llm/cache.py`); with
-  `TRACEEVAL_CACHE=<file>`, `hf` and `vllm` answer from that file what they can and add every new answer to it.
+- **Model backends**: two models play the agents, Gemma 4 E4B and Qwen3.8-27B (see [EXPERIMENT.md](EXPERIMENT.md)).
+  - **Gemma.** `--backend hf` (the default; `pip install -e ".[hf]"`) runs it on the local GPU. `--backend vllm`
+    sends it to a vLLM server: `scripts/gpu_remote.sh setup` once, then `scripts/gpu_remote.sh up` starts it on
+    the GPU server and opens an SSH tunnel; cases then run 32 at a time (`--workers`). Both build the same
+    prompts and parse answers the same way (`traceeval/llm/chat.py`).
+  - **Qwen.** `scripts/gpu_remote.sh up qwen` serves it on the other GPU, and `--backend llm` reaches it there
+    (`pip install -e ".[llm]"`). The `llm` backend takes any other OpenAI-compatible endpoint through
+    `TRACEEVAL_LLM_BASE_URL`, `TRACEEVAL_LLM_API_KEY` and `TRACEEVAL_LLM_MODEL`.
+  - **Recorded answers.** `--backend replay` plays Gemma from its recorded answers, with no model
+    (`traceeval/llm/cache.py`). With `TRACEEVAL_CACHE=<file>`, `hf` and `vllm` answer from that file what they
+    can and add every new answer to it.
+  - **Debugging.** `TRACEEVAL_MODEL_LOG=<file>` logs every model call.
+- **Judge**: a case with a `judge: {rubric: ...}` block has its answer read by a model once its deterministic
+  checks pass (`scoring/scorers.py::judge_answer`). `TRACEEVAL_JUDGE=gemma` or `qwen` picks the model; by default
+  it is the one playing the agents. Gemma's verdicts are recorded and replayed with its other answers.
 
 ## 6. Gotchas
 

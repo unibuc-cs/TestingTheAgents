@@ -40,7 +40,7 @@ This plan merges five earlier inputs into one research design and one runnable t
 | System under test (SUT) | A purpose-built mini content-operations platform ("ContentOps": pages, assets, publishing, SEO, translation, governance, rollback) is the primary SUT. tau2-bench, with the local vLLM model as both agent and user simulator, is the second SUT (designed, not yet implemented; see `docs/tau2_integration.md`). | The primary SUT gives a multi-agent structure with shared components built in on purpose (the hard case Georgiana described) and full control over mutations. Its agents run on a local model, and recorded answers make reruns free and exact. tau2-bench adds external validity. |
 | Agent runtime | Pure Python harness with an OpenAI-compatible LLM backend; Pi is not used in the prototype. | Shortest path. The harness code must itself be mutable and instrumentable (coverage contexts). A Pi adapter remains possible later. |
 | Observability | Own trace recorder with an OpenTelemetry-compatible event model (agent/skill/tool/config/llm spans) rather than Phoenix/OpenInference as a dependency. | No services in the loop; an OTel exporter is a small addition. |
-| Oracles | Deterministic (final state, tool trajectories, audit log, response substrings); an LLM judge only for explicitly marked answer-quality properties, executed after deterministic checks pass (for now a rubric check of the required facts stands in for it). | Regression tracking must not depend on judge noise (docx report §"LLM-as-a-judge bottleneck"). |
+| Oracles | Deterministic (final state, tool trajectories, audit log, response substrings); an LLM judge only for explicitly marked answer-quality properties, executed after deterministic checks pass, by Gemma or Qwen against the case's rubric (the recordings in §5.1 still used a check of the required facts in its place). | Regression tracking must not depend on judge noise (docx report §"LLM-as-a-judge bottleneck"). |
 | Ground truth | Mutation analysis: 38 controlled changes, benign ones included, applied as file edits. The selectors see only the diff. | Needed to measure detection rate against a known answer, and to measure wasted budget. |
 | Evaluation | Record-then-replay: run the full suite once per variant, evaluate all strategies offline. | Decouples method development (thousands of replays) from execution cost (one recording per variant). |
 
@@ -261,10 +261,14 @@ Two optional baselines (`observed_diverse` and `history_ml`, run with `--strateg
 ## 6. Second system under test and the real-LLM mode
 
 - **ContentOps on real models** (done, `docs/EXPERIMENT.md`): Gemma 4 E4B (`--backend vllm`, or `hf` on a local
-  GPU) and Qwen3.8-27B (`--backend llm`, any OpenAI-compatible endpoint) run on the GPU server, two GPUs at most.
+  GPU) and Qwen3.8-27B (`--backend llm`, or any other OpenAI-compatible endpoint) run on the GPU server, two GPUs at most, plus two through SLURM on the same machine (`TRACEEVAL_SITE=hpc`); one run can spread its requests over several servers.
   A 38-variant × 3-rep recording is about 15.9k runs: about half an hour under Gemma and an hour and a half under
   Qwen. Every answer can be recorded (`traceeval/llm/cache.py`), so a rerun costs nothing and the test suite
   replays Gemma's answers without a GPU. An OpenAI backend is planned once API tokens are available.
+- **The prototype** (`traceeval check`, `docs/EXPERIMENT.md` §5): the adaptive method on one change, live.
+  Each test it picks runs on the changed app with the real model, and the outcome decides what runs next;
+  it stops with a verdict and its probability that the change broke something. A recording made with the
+  same model supplies the baseline traces, the costs and the other changes to calibrate from.
 - **tau2-bench** (verified facts and adapter design in `docs/tau2_integration.md`): airline domain first (50 tasks, DB + communicate reward, no NL judge), agent and user simulator on the local vLLM via `--agent-llm openai/<model> --agent-llm-args '{"api_base": ..., "api_key": "EMPTY"}'` (and the same for `--user-llm`), `TAU2_DATA_DIR` pointed at a mutated copy of `data/` for policy mutations, a mutated checkout for tool-code mutations, change sets from `git diff`, outcomes/tokens parsed from `results.json` into the same history format. The replay evaluator and all strategies then run unchanged. Expect large per-simulation token counts (tens of thousands) and pass^k well below 1, which is the nondeterministic regime the method must handle.
 
 ---
@@ -283,7 +287,9 @@ Two optional baselines (`observed_diverse` and `history_ml`, run with `--strateg
 
 Phase 4 answered "is the simulation realistic?": the ranking of the strategies is the same, but which changes a test reveals is not. A few changes only made sense to the simulator, and a model's own mistakes and blind spots shape the ground truth (`docs/EXPERIMENT.md`, phase 4).
 
-Immediate next steps, in order: test-level sensitivity learning (the adaptive method's misses under Qwen); the mandatory-safety wrapper; the flaky-agent condition with a real model (sampling instead of greedy decoding, or a model that is unstable at temperature 0); the OpenAI backend once API tokens are available.
+The prototype (`traceeval check`, §6) then ran live on four changes under each model, from recordings of the current app (`runs/gemma3`, `runs/qwen3`, one repetition). A skill regression was caught by the first test it ran (1% of the suite). The harmless prompt rewording ended "clean" at 15%, and a hand edit that no test covers ended with no failure at 20%. The code regression `code_retry_disabled` was the weak case. Its revealing test came 17th, and the run ended undecided at the 20% budget (P = 0.92 under Gemma, 0.93 under Qwen). The method first spends on cheap tests that merely call the changed function, because a function-level hit is calibrated per kind of change, across all changes. That is item 3(a). The new recordings also show that the ground truth moves with the app and the judge. Under Qwen, three regressions revealed in `runs/qwen2` are not revealed on the current app, one of them because the strict model judge now fails SEO-07 on the original app.
+
+Immediate next steps, in order: test-level sensitivity learning (the adaptive method's misses under Qwen, and its slow start on code changes in the live runs); re-recording the ground truth with three repetitions on the current app with the model judge, before the paper; the mandatory-safety wrapper; the flaky-agent condition with a real model (sampling instead of greedy decoding, or a model that is unstable at temperature 0); the OpenAI backend once API tokens are available.
 
 ---
 

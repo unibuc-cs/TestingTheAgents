@@ -12,8 +12,8 @@ product model, and written as a draft spec plus a plain-language rendering for t
 edit and confirm (rename ``.draft.yaml`` to ``.yaml``).
 
 ``--replay`` uses a saved model answer instead of calling the endpoint (for demos without a model);
-``--save-response`` saves the live answer for that purpose. The endpoint is configured like the LLM
-backend: TRACEEVAL_LLM_BASE_URL, TRACEEVAL_LLM_API_KEY, TRACEEVAL_LLM_MODEL.
+``--save-response`` saves the live answer for that purpose. The endpoint is the LLM backend's: Qwen on the
+GPU server by default, or TRACEEVAL_LLM_BASE_URL, TRACEEVAL_LLM_API_KEY, TRACEEVAL_LLM_MODEL.
 """
 
 import json

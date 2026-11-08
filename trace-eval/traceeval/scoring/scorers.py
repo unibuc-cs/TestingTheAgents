@@ -13,8 +13,12 @@ succeeded - e.g. an agent that fixes its own arguments. A crash (check ``crash:<
 
 The answer is checked for facts, not wording: ``response_contains`` lists what it must report (an item may be a
 list of alternatives), and a run that ends with an answer must not end with an empty one (check ``answered``).
-``tool_results`` checks what a tool returned (its last successful call), like the state."""
+``tool_results`` checks what a tool returned (its last successful call), like the state.
 
+A case with a ``judge`` block also has its answer read by a model against the block's rubric (``judge_answer``),
+for what a fixed check cannot see, such as whether the answer confirms what was done."""
+
+import re
 from dataclasses import dataclass, field
 
 _MISSING = object()
@@ -171,10 +175,31 @@ def _codes(value) -> set[str]:
     return {value} if isinstance(value, str) else set(value)
 
 
-def rubric_judge(case, message: str) -> dict:
-    """The judge step of a case with a ``judge`` block, done without a model: the answer must mention every
-    word in ``must_mention``. No model is called, so it costs no tokens."""
-    judge = case.judge or {}
-    must = judge.get("must_mention", [])
-    ok = all(m.lower() in message.lower() for m in must)
-    return {"ok": ok, "tokens": 0, "rubric": judge.get("rubric", ""), "mode": "rubric"}
+JUDGE_PROMPT = (
+    "You check an assistant's final answer against a rubric. Reply PASS if the answer meets the rubric and FAIL "
+    "if it does not, then one short sentence saying why."
+)
+
+
+def judge_answer(case, message: str, client, model: str) -> dict:
+    """The judge step of a case with a ``judge`` block: the model behind ``client`` reads the request, the rubric
+    and the answer, and says PASS or FAIL. It decodes greedily, so the same answer always gets the same verdict;
+    its tokens count in the test's cost."""
+    rubric = case.judge["rubric"]
+    resp = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": JUDGE_PROMPT},
+            {"role": "user", "content": f"Request: {case.request}\n\nRubric: {rubric}\n\nAnswer: {message}"},
+        ],
+        temperature=0.0,
+        max_tokens=80,
+    )
+    verdict = (resp.choices[0].message.content or "").strip()
+    found = re.search(r"\b(PASS|FAIL)\b", verdict.upper())  # whichever word comes first decides
+    return {
+        "ok": bool(found) and found.group(1) == "PASS",
+        "tokens": resp.usage.prompt_tokens + resp.usage.completion_tokens,
+        "rubric": rubric,
+        "verdict": verdict,
+    }
