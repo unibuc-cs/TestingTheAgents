@@ -68,6 +68,23 @@ Gemma misses five of the 26 regressions, because it ignores the guards they touc
 See the [Gemma](docs/results/gemma4/report.md) and [Qwen](docs/results/qwen4/report.md) reports and
 [docs/EXPERIMENT.md](docs/EXPERIMENT.md).
 
+## Features asked for by Adobe's AEM team
+
+The AEM team listed what they lack today and want in the prototype (requirements and follow-up questions, summed
+up in [docs/AEM_ALIGNMENT.md](docs/AEM_ALIGNMENT.md) with the plan and status):
+
+| feature | status |
+|---|---|
+| **Catalog of properties** with categories, how each is checked, mandatory flags and thresholds ([`properties.yaml`](traceeval/catalog/properties.yaml)); reports give pass rates against thresholds and the share of affected properties each strategy covered | done |
+| **Drafting the catalog with a model** from the requirements only (skills' rules, agents, config guards, specs), within fixed limits, for people to edit (`traceeval properties draft`, then `apply`) | done; the Qwen run comes with the GPU work |
+| **Coverage** from several angles (agents, skills, tools, config, properties, workflows, paths, risk; declared, observed, required), per suite and per change | property coverage done; the rest planned |
+| Test selection, prioritization and stopping under a token budget | done (`adaptive_bayes`, `traceeval check`) |
+| Per-test metadata: agents, skills, tools, config, risk, cost, history (declared and observed) | done |
+| Trace assertions: final state, required and forbidden tools, attempts, audit, step limit | done; agent order and tool order planned |
+| Workflows: one prompt that runs 2–5 agents (plans, data passed between agents, approvals, re-planning) | planned |
+| New agents modelled on AEM's (brand governance, site optimization, data insights, asset discovery) | planned |
+| OpenTelemetry export of traces, with plans and routing decisions as events | planned |
+
 ## Spec-driven development on the same testbed
 
 `traceeval sdd` checks 25 pull requests against five change requests written as

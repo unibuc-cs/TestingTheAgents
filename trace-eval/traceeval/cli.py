@@ -15,6 +15,9 @@ traceeval report   --workdir runs/gemma4
 traceeval experiment --workdir runs/gemma4   (baseline + mutants + evaluate + report)
 traceeval check <mutation id | changed copy of traceeval/sut> --history runs/gemma4 [--budget 0.2] [--backend vllm]
     check one change live with the proposed method; --history is an experiment recorded with the same model
+traceeval properties draft [--max 15] [--per-test 5] [--fresh] [--replay a.json] [--save-response a.json]
+    a model (Qwen, the llm backend) drafts the catalog of properties from the requirements and tags the tests
+traceeval properties apply   write properties.yaml and the tests' tags from the reviewed draft
 traceeval sdd --workdir runs/sdd [--specs FS-0101 ...] [--out docs/sdd] [--backend replay]   spec-driven demo
 traceeval sdd draft --request request.md --id FS-0106 [--replay answer.json]   draft a spec with an LLM
 """
@@ -128,6 +131,23 @@ def cmd_check(args):
     check(args.change, Path(args.history), args.budget, args.backend)
 
 
+def cmd_properties(args):
+    from traceeval.catalog import extract
+
+    if args.action == "apply":
+        print(extract.apply())
+        return
+    result = extract.draft(
+        max_properties=args.max,
+        per_test=args.per_test,
+        fresh=args.fresh,
+        replay=Path(args.replay) if args.replay else None,
+        save_response=Path(args.save_response) if args.save_response else None,
+    )
+    print(f"draft: {result['draft']}\nreport: {result['report']}")
+    print(f"{len(result['properties'])} properties, {len(result['tags'])} tests tagged, {len(result['notes'])} notes")
+
+
 def cmd_sdd(args):
     from traceeval.spec.runner import run_demo
 
@@ -213,6 +233,15 @@ def main(argv=None):
     ck.add_argument("--budget", type=float, default=0.2, help="at most this fraction of the full suite's tokens")
     ck.add_argument("--backend", default="vllm", choices=BACKENDS, help="who plays the agents (default: vllm, Gemma)")
     ck.set_defaults(fn=cmd_check)
+
+    pp = sub.add_parser("properties")
+    pp.add_argument("action", choices=["draft", "apply"])
+    pp.add_argument("--max", type=int, default=15, help="at most this many properties in the catalog (1-20)")
+    pp.add_argument("--per-test", type=int, default=5, help="at most this many properties per test")
+    pp.add_argument("--fresh", action="store_true", help="derive the catalog anew instead of keeping properties.yaml")
+    pp.add_argument("--replay", help="saved model answers to use instead of calling the model")
+    pp.add_argument("--save-response", help="save the model's answers here, for --replay")
+    pp.set_defaults(fn=cmd_properties)
 
     sd = sub.add_parser("sdd")
     sd.add_argument("action", nargs="?", default="run", choices=["run", "draft"])

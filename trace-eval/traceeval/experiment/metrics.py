@@ -58,6 +58,9 @@ def evaluate_log(log, variant: str, history, catalog, budget: float) -> dict:
             else:
                 false_alarms.add(t)
     safety_revealing = {t for t in revealing if catalog[t].is_safety}
+    # the properties the change breaks (those of its revealing tests), and those the strategy ran a test of
+    affected = {p for t in revealing for p in catalog[t].properties}
+    exercised = {p for t in executed for p in catalog[t].properties}
     out = {
         "variant": variant,
         "strategy": log.strategy,
@@ -73,6 +76,7 @@ def evaluate_log(log, variant: str, history, catalog, budget: float) -> dict:
         "cost_to_detect_fraction": (first_detect_cost / full_cost) if first_detect_cost is not None else None,
         "false_alarm": bool(false_alarms),
         "safety_recall": (len(true_fails & safety_revealing) / len(safety_revealing)) if safety_revealing else None,
+        "property_coverage": (len(affected & exercised) / len(affected)) if affected else None,
         "stop_reason": log.stop_reason,
         # did the strategy end with the right conclusion? "clean"/"regression" are explicit verdicts; any other
         # stop is judged by whether it found a true failure; with no components, "clean" is implied

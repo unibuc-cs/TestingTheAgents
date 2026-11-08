@@ -9,6 +9,8 @@ import pandas as pd
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
+from traceeval.catalog import load_catalog, load_properties  # noqa: E402
+
 from .history import History  # noqa: E402
 
 ORDER = [
@@ -143,6 +145,40 @@ def _by_budget(df, value, fmt="{:.2f}"):
     return _table(t, fmt)
 
 
+def _properties_section(history, reg) -> list[str]:
+    """Section 5: every property of the catalog with its tests' pass rate on the original app against its
+    threshold, and how much of the properties a change breaks each strategy exercised."""
+    cases = {c.id: c for c in load_catalog()}
+    rows = []
+    for p in load_properties().values():
+        tests = [t for t, c in cases.items() if p.id in c.properties and t in history.baseline]
+        rate = sum(history.baseline_pass_rate(t) for t in tests) / len(tests) if tests else float("nan")
+        met = "yes" if rate >= p.threshold else "**no**"
+        rows.append(
+            f"| `{p.id}` | {p.category} | {'yes' if p.mandatory else ''} | {p.threshold:.2f} | {len(tests)} | "
+            f"{rate:.2f} | {met} |"
+        )
+    out = [
+        "## 5. Properties",
+        "",
+        "The catalog of properties (`traceeval/catalog/properties.yaml`): for each, its tests' pass rate on the "
+        "original app against its threshold:",
+        "",
+        "| property | category | mandatory | threshold | tests | pass rate | met |",
+        "|---|---|---|---|---|---|---|",
+        *rows,
+        "",
+    ]
+    if "property_coverage" in reg:
+        out += [
+            "Coverage of the affected properties (those of a change's revealing tests) by the tests each strategy ran:",
+            "",
+            _by_budget(reg, "property_coverage"),
+            "",
+        ]
+    return out
+
+
 def write_report(workdir: Path) -> Path:
     workdir = Path(workdir)
     res, figs = workdir / "results", workdir / "results" / "figures"
@@ -226,6 +262,7 @@ def write_report(workdir: Path) -> Path:
             "![apfdc](figures/apfdc.png)",
             "",
         ]
+    parts += _properties_section(history, reg)
     parts += [
         "## How to read this",
         "",

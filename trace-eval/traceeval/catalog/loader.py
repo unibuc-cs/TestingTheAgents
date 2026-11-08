@@ -2,7 +2,8 @@
 
 Every item becomes an ``EvalCase``. Dataset items inherit the dataset's agent, context, declared
 dependencies, risk and properties, and carry ``dataset`` = the dataset id so that selectors can
-reason about "subsets of eval datasets"."""
+reason about "subsets of eval datasets". The properties a case checks must be in the catalog of properties
+(``properties.yaml``), loaded as ``Property``."""
 
 import json
 from dataclasses import dataclass, field
@@ -67,9 +68,30 @@ class EvalCase:
         )
 
 
+@dataclass
+class Property:
+    """A behavioural requirement the tests check (one entry of ``properties.yaml``): its category, how the tests
+    check it (state, trace, judge, dataset), whether it is mandatory (a release blocker), the share of its tests
+    that must pass on a run, and where it comes from: the components that state it, as the ids change sets use
+    (``skill:<name>#procedure``, ``agent:<name>.<field>``, ``config:<key>``) or a spec (``spec:FS-0101``)."""
+
+    id: str
+    category: str
+    description: str
+    checked_by: list[str]
+    mandatory: bool = False
+    threshold: float = 1.0
+    sources: list[str] = field(default_factory=list)
+
+
 def _load_yaml(path: Path):
     with open(path) as fh:
         return yaml.safe_load(fh)
+
+
+def load_properties(root: Path | str = CATALOG_ROOT) -> dict[str, Property]:
+    """The catalog of properties, by id."""
+    return {p["id"]: Property(**p) for p in _load_yaml(Path(root) / "properties.yaml")}
 
 
 def load_catalog(root: Path | str = CATALOG_ROOT) -> list[EvalCase]:
@@ -127,4 +149,7 @@ def load_catalog(root: Path | str = CATALOG_ROOT) -> list[EvalCase]:
     dupes = {i for i in ids if ids.count(i) > 1}
     if dupes:
         raise ValueError(f"duplicate eval ids: {sorted(dupes)}")
+    unknown = sorted({p for c in cases for p in c.properties} - set(load_properties(root)))
+    if unknown:
+        raise ValueError(f"properties missing from properties.yaml: {unknown}")
     return cases

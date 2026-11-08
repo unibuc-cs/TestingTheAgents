@@ -6,3 +6,6 @@ __pycache__/
 runs/
 dist/
 .venv/
+
+# drafts of the catalog of properties, under review (traceeval properties draft)
+traceeval/catalog/properties.draft.*

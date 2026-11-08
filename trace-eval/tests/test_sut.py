@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from traceeval.catalog import load_catalog
+from traceeval.catalog import load_catalog, load_properties
 from traceeval.experiment.executor import run_case
 from traceeval.experiment.sutloader import copy_sut, load_sut
 from traceeval.scoring import score_case
@@ -88,6 +88,16 @@ def test_llm_backend_drives_the_same_runtime(sut, cases):
     assert rec["tools"] == ["get_page", "check_permission", "validate_links", "publish_page"]
     assert rec["prompt_tokens"] > 0 and rec["agents"] == ["orchestrator", "publishing"]
     assert client.done == {"orchestrator": 2, "publishing agent": 5}  # route + final; 4 tool calls + final
+
+
+def test_property_catalog():
+    """Every property has a known category and way of checking, a threshold in (0, 1], and at least one test
+    (a test naming a property outside the catalog is rejected by load_catalog)."""
+    props = load_properties()
+    for p in props.values():
+        assert p.category in {"correctness", "safety", "resilience", "orchestration", "efficiency", "quality"}, p.id
+        assert set(p.checked_by) <= {"state", "trace", "judge", "dataset"} and 0 < p.threshold <= 1, p.id
+    assert set(props) == {p for c in load_catalog() for p in c.properties}
 
 
 def test_full_catalog_passes_on_baseline(sut, cases):

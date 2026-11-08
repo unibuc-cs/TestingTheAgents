@@ -15,6 +15,7 @@ traceeval experiment --backend vllm --workdir runs/gemma4 --reps 3   # full expe
 traceeval experiment --backend llm --workdir runs/qwen4 --reps 3     # the same with Qwen (scripts/gpu_remote.sh up qwen)
 traceeval check code_retry_drop_idempotency --history runs/gemma4   # the prototype: one change, live
 traceeval sdd --workdir runs/sdd                                 # spec-driven development demo, replayed
+traceeval properties draft [--fresh] | apply                     # a model drafts the catalog of properties; you edit
 TRACEEVAL_BACKEND=vllm pytest -q    # record the answers the cassette lacks (Gemma up on the GPU server)
 traceeval sdd draft --request r.md --id FS-0106 [--replay a.json]  # draft a spec with a model
 scripts/gpu_remote.sh up [gemma|qwen] | status | down   # models on the GPU server; see docs/EXPERIMENT.md
@@ -51,6 +52,8 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
   line (`mutation/changeset.py`), so no strategy and no probability may depend on them.
 - Mutation operators assert their anchors; a new mutation must be revealed by ≥ 1 test if labelled a regression
   and by none if labelled benign (the report's sanity line checks this).
+- A test's `properties` must be ids from `traceeval/catalog/properties.yaml` (the catalog of properties, a
+  feature the AEM team asked for; see docs/AEM_ALIGNMENT.md); add a property there before using it.
 - Keep the catalog passing on the baseline, apart from Gemma's known mistakes (`KNOWN_MODEL_MISTAKES` in
   `tests/test_sut.py`).
 - Derive seeds from names with a stable hash (`zlib.crc32`), never `hash()`: str hashes are salted per process,

@@ -23,6 +23,10 @@ holds the edited copies (`variants/`), the recordings (`history/*.jsonl`) and th
 
 - **Case / test**: one entry of the catalog. Scenario tests in `catalog/tests/*.yaml`; dataset items in
   `catalog/datasets/*.yaml` (ids `DS-ROUTING/r01` etc.).
+- **Property**: a behavioural requirement a test checks (`task_completion`, `safety_authorization`, ...). Every
+  property is defined in the catalog of properties, `catalog/properties.yaml`, with its category, how the tests
+  check it, whether it is mandatory and its threshold; a test lists the ids of the properties it checks. This
+  catalog is a feature the AEM team asked for ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md)).
 - **Declared dependencies**: the `declared:` block a test author writes. It is deliberately incomplete.
 - **Observed dependencies**: the components the trace shows the run touched (`agent:x`, `skill:x`, `tool:x`,
   `config:key`, `code:file::function`, `line:file:n`).
@@ -57,6 +61,8 @@ Everything else is plumbing (loaders, tracing, report).
   strategies run out of tests, the adaptive one stops early, and the rest always spend the whole budget.
 - **Section 3**: tokens spent on changes that break nothing. The stop-reason table shows whether the
   adaptive strategy said `clean` on benign changes and `regression` on regressions.
+- **Section 5**: the catalog of properties: each property's pass rate on the original app against its threshold,
+  and, per strategy, the share of the properties a change breaks that its tests exercised.
 - **Section 4**: APFD / APFD_c of the complete order (prioritization quality) and selection recall.
 - `replay.csv` has one row per (change, strategy, budget, seed) if you want to slice it yourself.
 
@@ -150,6 +156,17 @@ classification (unit tests cover it), and one that broke four tests in five and 
 
 ## 7. How to extend
 
+- **Property**: add an entry to `catalog/properties.yaml` (id, category, description, `checked_by`, `mandatory`,
+  `threshold`, `sources`) before a test uses it: the loader rejects a test that names an unknown property, and a
+  test fails if a property has no test. The fixed lists: category is one of correctness, safety, resilience,
+  orchestration, efficiency, quality; `checked_by` is a subset of state (the final application state), trace
+  (tool calls, agents, audit, steps), judge (a model reads the answer) and dataset (prompt -> expected item).
+  Instead of writing the catalog by hand, `traceeval properties draft` has a model (Qwen) draft it from the
+  requirements (skills' rules, agents, config guards, specs; not the tests), with at most 15 properties (`--max`,
+  up to 20) and 5 per test (`--per-test`), and tag the tests; edit `catalog/properties.draft.yaml`, read
+  `properties.draft.md`, then `traceeval properties apply`. Thresholds and the mandatory flag start from defaults
+  per category, and entries already in the catalog keep what a person wrote. Both are features the AEM team
+  asked for ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md)).
 - **Test**: add a YAML entry. `expect` supports `route_to`, `state` (`[path, op, value]` with `==`, `!=`, `len`,
   `contains`, `in`, `>=`, `<=`, `absent`, `exists`), `tools_required`, `tools_forbidden`, `tools_not_attempted`,
   `tool_attempts`, `tool_results`, `audit`, `response_contains`, `response_excludes`, `max_steps`, `termination` and

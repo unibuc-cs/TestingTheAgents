@@ -143,7 +143,7 @@ A `SKILL.md` has front matter, prose, and a `## Procedure` YAML block that the m
 
 ### 4.2 Eval catalog
 
-72 scenario tests (publishing 21, authoring 14, assets/SEO 16, translation/governance/maintenance/orchestration 21) and two dataset-style evals (40 routing items, prompt → expected delegation, run in route-only mode; 24 intent items, prompt → expected tool invocation). Each case defines an agent entry point, request, context slots, fixture (+ optional patch), fault profile (`healthy`, `transient_once:<tool>`, `ack_timeout_once:<tool>`, `permanent_down:<tool>`), risk (critical/high/medium/low → severity 4/3/2/1), properties (functional, routing, trajectory, safety_*, resilience_*, efficiency, answer_quality), declared dependencies, expectations (state assertions, required/forbidden tools, attempt counts, audit counts, response substrings, step limits, termination) and, for two cases, a judge rubric.
+72 scenario tests (publishing 21, authoring 14, assets/SEO 16, translation/governance/maintenance/orchestration 21) and two dataset-style evals (40 routing items, prompt → expected delegation, run in route-only mode; 24 intent items, prompt → expected tool invocation). Each case defines an agent entry point, request, context slots, fixture (+ optional patch), fault profile (`healthy`, `transient_once:<tool>`, `ack_timeout_once:<tool>`, `permanent_down:<tool>`), risk (critical/high/medium/low → severity 4/3/2/1), properties (functional, routing, trajectory, safety_*, resilience_*, efficiency, answer_quality), declared dependencies, expectations (state assertions, required/forbidden tools, attempt counts, audit counts, response substrings, step limits, termination) and, for two cases, a judge rubric. The properties come from a catalog of properties (`traceeval/catalog/properties.yaml`, a feature the AEM team asked for): each has a category (correctness, safety, resilience, orchestration, efficiency, quality), the ways it is checked (state, trace, judge, dataset), a mandatory flag (safety properties are release blockers) and a threshold, the share of its tests that must pass. A model can draft it from the requirements alone (skills' rules, agents, config guards, specs), within fixed limits, with each property citing the components it comes from; people edit the draft (`traceeval properties draft`, `docs/AEM_ALIGNMENT.md` §3.4). Coverage over the requirements' nine dimensions, declared, observed and required, is planned as a suite report and a per-change metric (§3.5 there).
 
 ### 4.3 Controlled changes (33)
 
@@ -171,7 +171,7 @@ The report checks a sanity property of the testbed: every regression-inducing ch
 1. `baseline`: full suite × K with coverage contexts, giving observed dependencies, cost and pass rates.
 2. `mutants`: for each change, copy the SUT, apply the edit, extract the change set and run the full suite × K, giving the fault matrix.
 3. `evaluate`: for every (change, strategy, budget ∈ {2,5,10,20,30,50,100}% of full-suite tokens, seed), the strategy selects from the baseline facts and the change set only. Each execution is answered from the recorded runs of that variant (a random repetition supplies the outcome and cost). Adaptive strategies interact sequentially.
-4. Metrics: detection (≥ 1 revealing test executed and failed), recall of revealing tests, tokens actually spent, cost to first detection, false alarms, safety recall, stop reason and stop correctness; APFD and APFD_c of the complete prioritized order; selection recall and selected-subset cost.
+4. Metrics: property coverage (of the properties a change breaks, those its selected tests exercise), detection (≥ 1 revealing test executed and failed), recall of revealing tests, tokens actually spent, cost to first detection, false alarms, safety recall, stop reason and stop correctness; APFD and APFD_c of the complete prioritized order; selection recall and selected-subset cost.
 
 ---
 
@@ -299,7 +299,9 @@ Calibration fixes after 3(b): on the two agent-definition changes, every test of
 
 The ground truth was then re-recorded on the current app with the model judge and three repetitions (`runs/gemma4`, `runs/qwen4`, §5.1): Gemma's matches the first recording, Qwen's loses two regressions (its strict judge, and links it checks anyway), and Qwen's runs disagree more often.
 
-Immediate next steps, in order: exactly repeatable decoding for Qwen (vLLM's batch-invariant mode), so that a one-off difference cannot pass for a regression; the mandatory-safety wrapper; the OpenAI backend once API tokens are available; tau2-bench.
+The AEM team's wish list (`docs/AEM_ALIGNMENT.md`) is now being implemented step by step: the catalog of properties first (done), then multi-agent workflows with planning, new agents modelled on AEM's, trace assertions on agent and tool order, and an OpenTelemetry export.
+
+Immediate next steps, in order: the AEM alignment steps; exactly repeatable decoding for Qwen (vLLM's batch-invariant mode), so that a one-off difference cannot pass for a regression; the mandatory-safety wrapper; the OpenAI backend once API tokens are available; tau2-bench.
 
 ---
 

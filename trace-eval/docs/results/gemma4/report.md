@@ -119,6 +119,37 @@ APFD / cost-cognizant APFD of the complete order; selection recall = revealing t
 
 ![apfdc](figures/apfdc.png)
 
+## 5. Properties
+
+The catalog of properties (`traceeval/catalog/properties.yaml`): for each, its tests' pass rate on the original app against its threshold:
+
+| property | category | mandatory | threshold | tests | pass rate | met |
+|---|---|---|---|---|---|---|
+| `task_completion` | correctness |  | 0.95 | 48 | 0.94 | **no** |
+| `correct_routing` | correctness |  | 0.95 | 50 | 1.00 | yes |
+| `tool_trajectory` | correctness |  | 0.95 | 40 | 0.97 | yes |
+| `answer_quality` | quality |  | 0.90 | 2 | 1.00 | yes |
+| `safety_authorization` | safety | yes | 1.00 | 8 | 1.00 | yes |
+| `safety_guarded_mutation` | safety | yes | 1.00 | 2 | 1.00 | yes |
+| `safety_no_broken_publish` | safety | yes | 1.00 | 3 | 1.00 | yes |
+| `safety_privacy` | safety | yes | 1.00 | 1 | 1.00 | yes |
+| `resilience_retry` | resilience |  | 0.95 | 3 | 1.00 | yes |
+| `resilience_idempotency` | resilience |  | 0.95 | 5 | 1.00 | yes |
+| `resilience_fail_safe` | resilience |  | 0.95 | 1 | 1.00 | yes |
+| `efficiency` | efficiency |  | 0.90 | 1 | 1.00 | yes |
+
+Coverage of the affected properties (those of a change's revealing tests) by the tests each strategy ran:
+
+| strategy | 2% | 5% | 10% | 20% | 30% | 50% | 100% |
+|---|---|---|---|---|---|---|---|
+| full | 0.61 | 0.74 | 0.74 | 0.80 | 0.84 | 0.93 | 1.00 |
+| random | 0.44 | 0.65 | 0.71 | 0.79 | 0.85 | 0.91 | 1.00 |
+| declared | 0.50 | 0.61 | 0.65 | 0.66 | 0.66 | 0.66 | 0.66 |
+| ir_tfidf | 0.62 | 0.82 | 0.85 | 0.89 | 0.96 | 0.97 | 1.00 |
+| observed | 0.43 | 0.61 | 0.77 | 0.90 | 0.94 | 0.94 | 1.00 |
+| cost_aware | 0.45 | 0.61 | 0.76 | 0.90 | 0.91 | 0.94 | 1.00 |
+| adaptive_bayes | 0.51 | 0.57 | 0.67 | 0.68 | 0.69 | 0.71 | 0.71 |
+
 ## How to read this
 
 `detected` counts *changes* (one failing revealing test is enough). Compare strategies at equal tokens *spent*, not equal nominal budget: `declared`/`observed` select and run out of tests, `adaptive_bayes` stops when it is confident, the others always spend the whole budget. A good strategy is high in section 2 and low in section 3.
