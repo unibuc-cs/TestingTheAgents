@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 from traceeval.mutation.catalog import Mutation, get_mutation
 
-ACCEPTED, REJECTED = "accepted", "rejected"
+ACCEPTED, REJECTED = "accepted", "rejected"  # an "accepted" PR also matches "accepted with gaps"
 
 
 @dataclass
@@ -401,11 +401,13 @@ _IDEM_UNPUBLISH = [
 FS0105_FIX = _IDEM_SCHEDULE + _IDEM_UNPUBLISH
 
 
-def _m(mid, desc, edits, category="pr"):
-    return Mutation(mid, category, desc, True, edits)
+def _m(mid, desc, edits):
+    """A PR's edits as a Mutation (category "pr"; its verdict is ``PR.expected``, not ``expected_regression``)."""
+    return Mutation(mid, "pr", desc, True, edits)
 
 
 def _with(edits, *more):
+    """Edits followed by more edits, applied in this order: a later edit may anchor on text an earlier one wrote."""
     return list(edits) + list(more)
 
 
@@ -415,9 +417,11 @@ PRS: list[PR] = [
         "FS-0101/pr_correct",
         "FS-0101",
         "Add the 30-day approval window (config + service + adapters + skill prose)",
-        ACCEPTED,
+        REJECTED,
         _m("FS-0101_pr_correct", "approval window, correct", FS0101_CORRECT),
-        "rule in the service layer, limit in config, proven for all inputs",
+        "rule in the service layer, limit in config, proven for all inputs; but with Gemma the stale-approval "
+        "scenario fails: the agent requests the new review itself (the prose says 'ask for a new review'), which "
+        "the spec leaves to the author",
     ),
     PR(
         "FS-0101/pr_no_lower_bound",
@@ -463,7 +467,7 @@ PRS: list[PR] = [
         "FS-0101/pr_branchy",
         "FS-0101",
         "Same rule, written with an if-branch instead of one comparison",
-        ACCEPTED,
+        REJECTED,
         _m(
             "FS-0101_pr_branchy",
             "approval window, branchy implementation",
@@ -478,7 +482,8 @@ PRS: list[PR] = [
             ),
         ),
         "behaviourally correct, but the proof backend only translates straight-line code: the contract stays at L2 "
-        "and the required L5 is reported as a gap for the owner to decide on",
+        "and the required L5 is reported as a gap for the owner to decide on; rejected with Gemma for the same "
+        "reason as pr_correct",
     ),
     PR(
         "FS-0101/pr_in_adapter",
@@ -566,9 +571,11 @@ PRS: list[PR] = [
         "FS-0103/pr_correct",
         "FS-0103",
         "Stamp each validation on the page (links service); publish and schedule refuse without a clean stamp for the current version (workflow service)",
-        ACCEPTED,
+        REJECTED,
         _m("FS-0103_pr_correct", "link gate in the service layer", FS0103_CORRECT),
-        "2 files: the rule moves from the skill procedure (a prompt) into the service, and is proven",
+        "2 files: the rule moves from the skill procedure (a prompt) into the service, and is proven; with Gemma it "
+        "exposes a slip: in DS-INTENTS/i05 the agent schedules without validating links, which the service now "
+        "refuses, so that regression test fails",
     ),
     PR(
         "FS-0103/pr_gate_ignores_version",
@@ -618,13 +625,14 @@ PRS: list[PR] = [
         "FS-0104/pr_config_70",
         "FS-0104",
         "Raise the SEO title limit to 70 (configuration only, 0 code lines)",
-        ACCEPTED,
+        REJECTED,
         _m(
             "FS-0104_pr_config_70",
             "title limit 70",
             [("replace", "config/runtime.yaml", "max_title_length: 60", "max_title_length: 70")],
         ),
-        "nothing to generate: a setting change verified by schema, property, boundary examples and monitor",
+        "nothing to generate: a setting change verified by schema, property, boundary examples and monitor; but "
+        "Gemma applies an over-long title whatever the limit (as in SEO-02), and the property finds one",
     ),
     PR(
         "FS-0104/pr_config_20",

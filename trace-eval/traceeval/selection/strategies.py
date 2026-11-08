@@ -16,7 +16,7 @@ from collections import defaultdict
 
 from .base import Strategy, affinity, line_hit, weighted_affinity
 
-STRATEGIES: dict[str, Strategy] = {}
+STRATEGIES: dict[str, Strategy] = {}  # name -> instance, filled by @register
 CORE = ["full", "random", "declared", "ir_tfidf", "observed", "cost_aware", "adaptive_bayes"]
 
 
@@ -30,6 +30,7 @@ def get_strategy(name: str) -> Strategy:
 
 
 def tokens(text: str) -> list[str]:
+    """Lower-cased identifier-like words of at least three characters (snake_case and kebab-case kept whole)."""
     return [w for w in re.findall(r"[a-zA-Z_][a-zA-Z0-9_\-]+", text.lower()) if len(w) > 2]
 
 
@@ -88,7 +89,7 @@ class IRTfidf(Strategy):
                 df[w] += 1
         n = len(docs)
 
-        def vec(toks):
+        def vec(toks):  # sublinear tf x smoothed idf
             tf = defaultdict(int)
             for w in toks:
                 tf[w] += 1
@@ -114,7 +115,7 @@ class Observed(Strategy):
     def order(self, ctx):
         scored = []
         for t in ctx.tests():
-            a = weighted_affinity(ctx.change, ctx.history.baseline[t].dep_frequency())
+            a = weighted_affinity(ctx.change, ctx.history.baseline[t].dep_frequency)
             if a > 0:
                 scored.append((-(a * ctx.catalog[t].severity) / ctx.cost(t), t))
         return [t for _, t in sorted(scored)]
@@ -131,9 +132,11 @@ class CostAware(Strategy):
         scored = []
         for t in ctx.tests():
             st = ctx.history.baseline[t]
-            a = weighted_affinity(ctx.change, st.dep_frequency())
-            if line_hit(ctx.change, set(st.dep_frequency())):
+            a = weighted_affinity(ctx.change, st.dep_frequency)
+            if line_hit(ctx.change, st.deps):
                 a += 1.0  # executed a changed line: strongest static evidence
+            # 0.05 keeps unaffected tests in the ranking; 2 - pass_rate is the failure history (1 if the test
+            # always passed at baseline, up to 2)
             score = ctx.catalog[t].severity * (0.05 + a) * (2.0 - st.pass_rate) / ctx.cost(t)
             scored.append((-score, t))
         return [t for _, t in sorted(scored)]

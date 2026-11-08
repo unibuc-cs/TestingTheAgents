@@ -49,7 +49,10 @@ def line_to_function(index_entries: list[tuple[str, int, int]], line: int) -> st
 
 
 class CoverageSession:
-    """Collect which SUT functions each test executed (contexts = test ids)."""
+    """Collect which SUT functions each test executed (contexts = test ids).
+
+    One coverage.py measurement runs for the whole session; ``begin`` switches its dynamic context before
+    each test, so every executed line is tagged with the test that ran it."""
 
     def __init__(self, sut_dir: Path):
         import coverage
@@ -60,9 +63,11 @@ class CoverageSession:
         os.close(fd)
         self.cov = coverage.Coverage(data_file=self.data_file, source=[str(self.sut_dir)], branch=False)
         self.cov.start()
+        # Lines run before the first test (module imports, decorators) belong to no test; finish() drops them.
         self.cov.switch_context("__setup__")
 
     def begin(self, context: str):
+        """Attribute every line executed from now on to ``context``, the id of the test about to run."""
         self.cov.switch_context(context)
 
     def finish(self) -> dict[str, set[str]]:
@@ -72,6 +77,8 @@ class CoverageSession:
         data = self.cov.get_data()
         result: dict[str, set[str]] = {}
         for filename in data.measured_files():
+            # Only files of this SUT copy count; a line outside every function (module level) is reported
+            # under the file alone, as ``code:<relpath>``.
             rel = (
                 Path(filename).resolve().relative_to(self.sut_dir).as_posix()
                 if str(filename).startswith(str(self.sut_dir))

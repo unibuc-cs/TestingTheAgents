@@ -24,7 +24,7 @@ from ..model import ClauseResult
 
 def check(clause, ctx) -> ClauseResult:
     t0 = time.perf_counter()
-    runs = ctx.runs_in_scope(clause.get("scope", "all"))
+    runs = ctx.run_many(cases_in_scope(clause.get("scope", "all"), ctx.model, ctx.catalog))
     rule = clause.get("rule", "always")
     violations, checked = [], 0
     for tid, rec in runs.items():
@@ -36,7 +36,7 @@ def check(clause, ctx) -> ClauseResult:
             try:
                 if rule == "always":
                     ok = bool(evaluate(clause["where"], ctx.env(run=rec, event=wrap(item))))
-                elif rule == "never":
+                elif rule == "never":  # without `where`, any matching item is a violation
                     ok = not (
                         clause.get("where") is None or evaluate(clause["where"], ctx.env(run=rec, event=wrap(item)))
                     )
@@ -62,6 +62,18 @@ def check(clause, ctx) -> ClauseResult:
     return ClauseResult(clause.id, "trace", "L3", status, summary, details, cost)
 
 
+def cases_in_scope(scope, model, catalog: dict) -> list[str]:
+    """The catalog cases a trace clause ranges over; a tool scope picks the cases whose baseline run called it."""
+    if scope in (None, "all"):
+        return list(catalog)
+    if "cases" in scope:
+        return [c for c in scope["cases"] if c in catalog]
+    tools = scope.get("tools") or ([scope["tool"]] if "tool" in scope else None)
+    kinds = scope.get("tool_kind")
+    kinds = [kinds] if isinstance(kinds, str) else kinds
+    return model.cases_calling(tools=tools, kinds=kinds)
+
+
 def _items(rec: dict, stream: str) -> list[dict]:
     if stream == "audit":
         return list(rec["final_state"].get("audit", []))
@@ -69,6 +81,7 @@ def _items(rec: dict, stream: str) -> list[dict]:
 
 
 def _match(item: dict, pattern: dict) -> bool:
+    """Field equality with every key of ``pattern``; a list value means "one of"."""
     for k, v in pattern.items():
         actual = item.get(k)
         if isinstance(v, list):
@@ -80,6 +93,7 @@ def _match(item: dict, pattern: dict) -> bool:
 
 
 def _preceded(earlier: list[dict], item: dict, clause, ctx, rec) -> bool:
+    """Is some earlier item a matching ``before`` that agrees on the ``same`` fields and passes ``before_where``?"""
     for prev in earlier:
         if not _match(prev, clause["before"]):
             continue
@@ -95,8 +109,9 @@ def _preceded(earlier: list[dict], item: dict, clause, ctx, rec) -> bool:
 
 def _coverage_gap(clause, ctx) -> list[str]:
     mc = clause.get("must_cover")
-    if not mc or "model" not in mc:
+    if not mc:
         return []
+    # the event field naming what the rule covers: an audit action or a tool
     field = mc.get("field", "action" if clause.get("stream") == "audit" else "tool")
     covered = clause["event"].get(field)
     covered = set(covered if isinstance(covered, list) else [covered])
@@ -116,6 +131,7 @@ def _coverage_gap(clause, ctx) -> list[str]:
 
 
 def _short(item: dict) -> str:
+    """The fields of an event or audit entry worth quoting in a violation."""
     keep = {
         k: v
         for k, v in item.items()

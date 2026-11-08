@@ -2,15 +2,16 @@
 
 traceeval catalog                         list eval cases
 traceeval mutations                       list controlled changes
-traceeval run --test PUB-01 [--backend hf|vllm|llm|simulated]   run one case and print the record
+traceeval run --test PUB-01 [--backend hf|vllm|llm|replay]   run one case and print the record
     hf: Gemma on the local GPU; vllm: Gemma on the GPU server (scripts/gpu_remote.sh up); llm: any
-    OpenAI-compatible endpoint (TRACEEVAL_LLM_*); simulated: the procedure-following stand-in
+    OpenAI-compatible endpoint (TRACEEVAL_LLM_*); replay: Gemma's recorded answers, no model
+    (TRACEEVAL_CACHE names the file of recorded answers; with hf or vllm, new answers are added to it)
 traceeval baseline --workdir runs/exp1 --reps 3
 traceeval mutants  --workdir runs/exp1 --reps 3 [--only id ...]
 traceeval evaluate --workdir runs/exp1 --seeds 10
 traceeval report   --workdir runs/exp1
 traceeval experiment --workdir runs/exp1   (baseline + mutants + evaluate + report)
-traceeval sdd --workdir runs/sdd [--specs FS-0101 ...] [--out docs/sdd]   spec-driven development demo
+traceeval sdd --workdir runs/sdd [--specs FS-0101 ...] [--out docs/sdd] [--backend replay]   spec-driven demo
 traceeval sdd draft --request request.md --id FS-0106 [--replay answer.json]   draft a spec with an LLM
 """
 
@@ -19,8 +20,15 @@ import json
 import sys
 from pathlib import Path
 
+BACKENDS = ["hf", "vllm", "llm", "replay"]
+
+# Each command imports what it needs when it runs, so that a quick one (catalog, mutations) does not load
+# pandas, coverage or the model libraries.
+
 
 def _parse_overrides(items):
+    """The ``--set key=value`` options as a dict. A value that starts like JSON (a number, list, object, quoted
+    string, true, false or null) is read as JSON; any other value is kept as text."""
     out = {}
     for item in items or []:
         key, _, value = item.partition("=")
@@ -48,15 +56,11 @@ def cmd_run(args):
     from traceeval.experiment.sutloader import load_sut
     from traceeval.sut import SUT_ROOT
 
-    cases = {c.id: c for c in load_catalog()}
-    case = cases[args.test]
+    case = {c.id: c for c in load_catalog()}[args.test]
     sut = load_sut(Path(args.sut_dir) if args.sut_dir else SUT_ROOT)
-    settings = None
-    if args.backend == "llm":
-        from traceeval.sut.harness.backends.llm_openai import LLMSettings
-
-        settings = LLMSettings()
-    rec = run_case(sut, case, backend=args.backend, config_overrides=_parse_overrides(args.set), llm_settings=settings)
+    # With --backend llm the endpoint and model come from TRACEEVAL_LLM_* (the backend's default settings).
+    rec = run_case(sut, case, backend=args.backend, config_overrides=_parse_overrides(args.set))
+    # The observed dependencies and covered functions are long lists, left out of the printout.
     keep = {k: v for k, v in rec.items() if k not in ("deps", "code_functions")}
     print(json.dumps(keep, indent=1, default=str))
 
@@ -64,12 +68,12 @@ def cmd_run(args):
 def cmd_baseline(args):
     from traceeval.experiment.runner import record_baseline
 
+    # No --workers here: the baseline records code coverage, which follows one case at a time.
     record_baseline(
         Path(args.workdir),
         reps=args.reps,
         backend=args.backend,
         config_overrides=_parse_overrides(args.set),
-        seed=args.seed,
     )
 
 
@@ -87,7 +91,6 @@ def cmd_mutants(args):
         reps=args.reps,
         backend=args.backend,
         config_overrides=_parse_overrides(args.set),
-        seed=args.seed,
         workers=_workers(args),
     )
 
@@ -120,7 +123,13 @@ def cmd_sdd(args):
 
     if args.action == "draft":
         return cmd_sdd_draft(args)
-    run_demo(Path(args.workdir), spec_ids=args.specs or None, out=Path(args.out) if args.out else None)
+    run_demo(
+        Path(args.workdir),
+        spec_ids=args.specs or None,
+        out=Path(args.out) if args.out else None,
+        backend=args.backend,
+        workers=_workers(args),
+    )
 
 
 def cmd_sdd_draft(args):
@@ -132,7 +141,7 @@ def cmd_sdd_draft(args):
     if not args.request:
         raise SystemExit("sdd draft needs --request <file>")
     catalog = {c.id: c for c in load_catalog()}
-    sut_dir, runs, deps = record_baseline(Path(args.workdir), catalog)
+    sut_dir, runs, deps = record_baseline(Path(args.workdir), catalog, backend=args.backend)
     out = Path(args.out) if args.out else Path("traceeval/specs") / f"{args.id}.draft.yaml"
     result = draft(
         Path(args.request),
@@ -159,20 +168,19 @@ def main(argv=None):
 
     r = sub.add_parser("run")
     r.add_argument("--test", required=True)
-    r.add_argument("--backend", default="hf", choices=["hf", "vllm", "llm", "simulated"])
+    r.add_argument("--backend", default="hf", choices=BACKENDS)
     r.add_argument("--sut-dir", default=None)
     r.add_argument("--set", action="append", help="config override key=value (JSON value)")
     r.set_defaults(fn=cmd_run)
 
+    # The experiment commands share one set of options, since `experiment` runs the other four in a row; each
+    # command reads only the options it needs.
     def common(sp):
         sp.add_argument("--workdir", default="runs/exp1")
         sp.add_argument("--reps", type=int, default=3)
-        sp.add_argument("--backend", default="hf", choices=["hf", "vllm", "llm", "simulated"])
+        sp.add_argument("--backend", default="hf", choices=BACKENDS)
         sp.add_argument("--workers", type=int, default=0, help="cases in parallel (default: 32 for vllm/llm, else 1)")
-        sp.add_argument(
-            "--set", action="append", help="config override key=value (JSON value), e.g. simulated.flakiness=0.05"
-        )
-        sp.add_argument("--seed", type=int, default=0)
+        sp.add_argument("--set", action="append", help="config override key=value (JSON value), e.g. runtime.retries=0")
         sp.add_argument("--only", nargs="*", help="mutation ids (mutants only)")
         sp.add_argument("--seeds", type=int, default=5, help="replay seeds (evaluate only)")
         sp.add_argument("--budgets", nargs="*", type=float)
@@ -198,6 +206,8 @@ def main(argv=None):
     sd.add_argument("--id", default="FS-0106", help="draft: id of the new spec")
     sd.add_argument("--replay", help="draft: a saved model answer to use instead of calling the endpoint")
     sd.add_argument("--save-response", help="draft: save the model's answer here for later --replay")
+    sd.add_argument("--backend", default="replay", choices=BACKENDS, help="who plays the agents (default: replay)")
+    sd.add_argument("--workers", type=int, default=0, help="cases in parallel (default: 32 for vllm/llm, else 1)")
     sd.set_defaults(fn=cmd_sdd)
 
     args = p.parse_args(argv)

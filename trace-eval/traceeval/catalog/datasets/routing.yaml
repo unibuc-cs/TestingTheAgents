@@ -1,6 +1,6 @@
 # Dataset-style eval: orchestrator routing. Each item is "prompt -> expected delegation target".
 # Items run in route-only mode (the specialist is not executed), so they are cheap but they only
-# exercise the orchestrator, the routing skill and the router code.
+# exercise the orchestrator and the routing skill.
 id: DS-ROUTING
 name: orchestrator routing dataset
 kind: dataset

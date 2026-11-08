@@ -15,6 +15,6 @@ from . import (  # noqa: F401
     publish_tools,
     translation_tools,
 )
-from .registry import TOOLS, ToolContext, ToolSpec, get_tool  # re-exported, so callers can import them from here
+from .registry import TOOLS  # the filled registry; the experiment's SUT loader reads it from here
 
-__all__ = ["TOOLS", "ToolContext", "ToolSpec", "get_tool"]
+__all__ = ["TOOLS"]

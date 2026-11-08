@@ -35,8 +35,6 @@ from traceeval.catalog import EvalCase
 from ..context import evaluate, resolve
 from ..model import ClauseResult
 
-_PY_TYPES = {"int": int, "bool": bool, "str": str}
-
 
 def check(clause, ctx) -> ClauseResult:
     t0 = time.perf_counter()
@@ -60,21 +58,19 @@ def _function_contract(clause, ctx) -> ClauseResult:
         return ClauseResult(clause.id, "contract", "L2", "fail", f"{clause['function']} does not exist", [])
     names = list(clause["inputs"])
     assume, ensures = clause.get("assume"), clause["ensures"]
-    details, status, rung = [], "pass", "L2"
+    details, status, rung, found_by_test = [], "pass", "L2", False
     cost = {"examples": 0}
 
     # L2: property test with Hypothesis -------------------------------------------------------
-    from hypothesis import HealthCheck, Phase, settings
     from hypothesis import strategies as st
     from hypothesis.errors import NoSuchExample
 
     strat = st.tuples(*[_strategy(st, clause["inputs"][n]) for n in names])
-    budget = int(clause.get("examples", 200))
 
     def violates(values):
         env = dict(zip(names, values, strict=True))
         cost["examples"] += 1
-        if assume and not evaluate(assume, dict(env)):
+        if assume and not evaluate(assume, dict(env)):  # outside the domain: not a counterexample
             return False
         try:
             env["result"] = fn(**env)
@@ -84,14 +80,14 @@ def _function_contract(clause, ctx) -> ClauseResult:
             return True
 
     try:
-        cx = find(strat, violates, budget, settings, Phase, HealthCheck)
+        cx = _find(strat, violates, int(clause.get("examples", 200)))
         env = dict(zip(names, cx, strict=True))
-        try:
+        try:  # call again on the shrunk counterexample, to show its result
             env["result"] = fn(**env)
         except Exception as exc:  # noqa: BLE001
             env["result"] = f"raised {type(exc).__name__}"
         details.append(f"counterexample {env}: '{ensures}' is false")
-        status = "fail"
+        status, found_by_test = "fail", True
     except NoSuchExample:
         details.append(f"{cost['examples']} examples, no counterexample")
 
@@ -104,17 +100,13 @@ def _function_contract(clause, ctx) -> ClauseResult:
         status = "fail"
     if proof["gap"] and status == "pass":
         status = "gap"
-    summary = _summary(
-        status,
-        rung,
-        proof,
-        cost["examples"],
-        found_by_test=status == "fail" and details[0].startswith("counterexample"),
-    )
+    summary = _summary(status, rung, proof, cost["examples"], found_by_test)
     return ClauseResult(clause.id, "contract", rung, status, summary, details, cost)
 
 
-def find(strat, predicate, budget, settings, Phase, HealthCheck):
+def _find(strat, predicate, budget):
+    """Hypothesis' smallest example satisfying ``predicate``; raises NoSuchExample when there is none."""
+    from hypothesis import HealthCheck, Phase, settings
     from hypothesis import find as h_find
 
     return h_find(
@@ -132,13 +124,14 @@ def find(strat, predicate, budget, settings, Phase, HealthCheck):
 
 
 def _strategy(st, spec):
+    """A Hypothesis strategy from an input type (int, bool, str) or a call such as {integers: {...}}."""
     if isinstance(spec, dict):  # {integers: {min_value: 1, max_value: 120}}
         ((name, kwargs),) = spec.items()
         return getattr(st, name)(**(kwargs or {}))
     return {"int": st.integers(), "bool": st.booleans(), "str": st.text(max_size=80)}[spec]
 
 
-def _summary(status, rung, proof, examples, found_by_test=False):
+def _summary(status, rung, proof, examples, found_by_test):
     if status == "fail":
         by = [w for w, hit in (("property test", found_by_test), ("solver", proof["counterexample"])) if hit]
         return "counterexample found (" + " and ".join(by) + ")"
@@ -152,6 +145,8 @@ def _summary(status, rung, proof, examples, found_by_test=False):
 
 
 def _prove(fn, names, inputs, assume, ensures, probe):
+    """Ask Z3 whether ``assume and not ensures`` is satisfiable for the function's translation. With ``probe``,
+    a proven contract is also tried outside ``assume``: a failure there is a gap in the spec, not in the code."""
     out = {"proved": False, "counterexample": None, "gap": None, "notes": [], "why_not": ""}
     try:
         import z3
@@ -223,10 +218,12 @@ class _ToZ3(ast.NodeTransformer):
 
 
 def _z3_eval(expr: str, env: dict):
+    """Evaluate a clause expression over z3 symbols (``and``/``or``/``not`` and chained comparisons rewritten)."""
     return _z3_eval_node(ast.parse(expr, mode="eval").body, env)
 
 
 def _z3_eval_node(node: ast.AST, env: dict):
+    # the rewrite works in place: on a copy, so the caller's tree stays as it was
     tree = ast.fix_missing_locations(_ToZ3().visit(ast.Expression(body=copy.deepcopy(node))))
     return eval(compile(tree, "<z3>", "eval"), {"__builtins__": {}}, env)
 
@@ -254,7 +251,7 @@ def _symbolic_call(fn, sym: dict, z3):
 def _behaviour_contract(clause, ctx) -> ClauseResult:
     ((var, domain),) = clause["forall"].items()
     scenario, ensures = clause["scenario"], clause["ensures"]
-    details, failures, skipped, n = [], [], [], 0
+    details, failures, skipped, n = [], [], [], 0  # n: scenarios actually run
 
     def evaluate_one(value) -> bool:
         """True when the property holds (or the scenario is not applicable)."""
@@ -288,19 +285,12 @@ def _behaviour_contract(clause, ctx) -> ClauseResult:
             + (f", {len(skipped)} without a recorded run" if skipped else "")
         )
     else:  # a Hypothesis strategy: sample
-        from hypothesis import HealthCheck, Phase, settings
         from hypothesis import strategies as st
         from hypothesis.errors import NoSuchExample
 
         try:
-            cx = find(
-                _strategy(st, domain),
-                lambda v: not evaluate_one(v),
-                int(clause.get("examples", 40)),
-                settings,
-                Phase,
-                HealthCheck,
-            )
+            cx = _find(_strategy(st, domain), lambda v: not evaluate_one(v), int(clause.get("examples", 40)))
+            # shrinking ran more failing scenarios than the one it ends on: report the shrunk value only
             failures = list(dict.fromkeys(f for f in failures if f"{var}={cx!r}" in f)) or failures[-1:]
         except NoSuchExample:
             pass

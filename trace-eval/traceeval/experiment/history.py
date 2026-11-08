@@ -1,10 +1,12 @@
 """History store: baseline runs (with observed dependencies, costs, flakiness) and per-variant runs
-(the ground-truth fault matrix). Everything the selectors may use at selection time is derived from
-the *baseline* history; variant runs are only used by the replay oracle and by the metrics."""
+(the ground-truth fault matrix). Everything the selectors may use about the change under evaluation is
+derived from the *baseline* history; variant runs are used by the replay oracle, by the metrics, and by
+the strategies that learn from the *other* changes (``ctx.train_variants``)."""
 
 import json
 import statistics
-from collections import defaultdict
+from collections import Counter
+from functools import cached_property
 from pathlib import Path
 
 from traceeval.mutation.changeset import ChangeSet
@@ -13,6 +15,8 @@ from .executor import read_jsonl
 
 
 class TestStats:
+    """The recorded runs of one test, on the baseline or on one variant."""
+
     def __init__(self, test_id: str):
         self.test_id = test_id
         self.runs: list[dict] = []
@@ -34,40 +38,23 @@ class TestStats:
 
     @property
     def mean_tokens(self) -> float:
-        return statistics.fmean(r["tokens"] for r in self.runs) if self.runs else 0.0
+        return statistics.fmean(r["tokens"] for r in self.runs)
 
-    @property
-    def mean_latency_ms(self) -> float:
-        return statistics.fmean(r["latency_ms"] for r in self.runs) if self.runs else 0.0
-
-    @property
-    def deps(self) -> set[str]:
-        cached = getattr(self, "_deps", None)
-        if cached is not None and cached[0] == self.n:
-            return cached[1]
-        out: set[str] = set()
-        for r in self.runs:
-            out |= set(r.get("deps", []))
-        self._deps = (self.n, out)
-        return out
-
+    # The two below are cached on first use: runs are only added while History.load reads the files.
+    @cached_property
     def dep_frequency(self) -> dict[str, float]:
-        """fraction of runs in which each component was exercised (depth/frequency of dependency)."""
-        cached = getattr(self, "_dep_freq", None)
-        if cached is not None and cached[0] == self.n:
-            return cached[1]
-        counts: dict[str, int] = defaultdict(int)
-        for r in self.runs:
-            for d in set(r.get("deps", [])):
-                counts[d] += 1
-        freq = {d: c / max(1, self.n) for d, c in counts.items()}
-        self._dep_freq = (self.n, freq)
-        return freq
+        """Fraction of runs in which each component was exercised (depth/frequency of dependency)."""
+        counts = Counter(d for r in self.runs for d in set(r.get("deps", [])))
+        return {d: c / self.n for d, c in counts.items()}
+
+    @cached_property
+    def deps(self) -> set[str]:
+        """Every component exercised in at least one run."""
+        return set(self.dep_frequency)
 
 
 class History:
-    def __init__(self, workdir: Path):
-        self.workdir = Path(workdir)
+    def __init__(self):
         self.baseline: dict[str, TestStats] = {}
         self.variants: dict[str, dict[str, TestStats]] = {}
         self.changesets: dict[str, ChangeSet] = {}
@@ -76,19 +63,21 @@ class History:
     # ---------------------------------------------------------------- loading
     @classmethod
     def load(cls, workdir: Path) -> "History":
-        h = cls(workdir)
-        base = h.workdir / "history" / "baseline.jsonl"
+        """Read ``history/baseline.jsonl``, ``history/variants/*.jsonl`` and each variant's change set and
+        mutation metadata (``variants/<id>/changeset.json``, ``mutation.json``)."""
+        h, workdir = cls(), Path(workdir)
+        base = workdir / "history" / "baseline.jsonl"
         if base.exists():
             for rec in read_jsonl(base):
                 h.baseline.setdefault(rec["test_id"], TestStats(rec["test_id"])).add(rec)
-        vdir = h.workdir / "history" / "variants"
+        vdir = workdir / "history" / "variants"
         if vdir.exists():
             for path in sorted(vdir.glob("*.jsonl")):
                 name = path.stem
                 stats = h.variants.setdefault(name, {})
                 for rec in read_jsonl(path):
                     stats.setdefault(rec["test_id"], TestStats(rec["test_id"])).add(rec)
-                vroot = h.workdir / "variants" / name
+                vroot = workdir / "variants" / name
                 if (vroot / "changeset.json").exists():
                     h.changesets[name] = ChangeSet.from_dict(json.loads((vroot / "changeset.json").read_text()))
                 if (vroot / "mutation.json").exists():
@@ -100,6 +89,7 @@ class History:
         return list(self.baseline.keys())
 
     def cost(self, test_id: str) -> float:
+        """Expected cost of a test: its mean tokens over the baseline runs."""
         return self.baseline[test_id].mean_tokens
 
     def total_cost(self) -> float:
@@ -112,6 +102,7 @@ class History:
         return self.baseline[test_id].pass_rate
 
     def variant_pass_rate(self, variant: str, test_id: str) -> float:
+        # a test the variant did not run counts as behaving like the baseline
         st = self.variants.get(variant, {}).get(test_id)
         return st.pass_rate if st else self.baseline_pass_rate(test_id)
 
@@ -123,19 +114,12 @@ class History:
                 out.add(t)
         return out
 
-    def is_regression(self, variant: str) -> bool:
-        return len(self.revealing_tests(variant)) > 0
-
-    def fault_matrix(self) -> dict[str, dict[str, float]]:
-        """variant -> test -> pass rate under the variant."""
-        return {v: {t: self.variant_pass_rate(v, t) for t in self.baseline} for v in self.variants}
-
     def summary(self) -> dict:
+        """The facts in the report's header line."""
         return {
             "tests": len(self.baseline),
             "variants": len(self.variants),
             "baseline_reps": max((s.n for s in self.baseline.values()), default=0),
             "flaky_tests": sorted(t for t, s in self.baseline.items() if s.flaky),
             "total_tokens_full_suite": round(self.total_cost()),
-            "revealing": {v: sorted(self.revealing_tests(v)) for v in self.variants},
         }

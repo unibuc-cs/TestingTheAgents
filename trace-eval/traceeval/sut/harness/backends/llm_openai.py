@@ -1,10 +1,9 @@
 """LLM agent backend over any OpenAI-compatible chat-completions endpoint with tool calling
 (vLLM, OpenAI, Ollama, LiteLLM proxies, ...).
 
-The model sees the agent's system prompt, its skills (the prose, and the procedure that the simulated backend
-executes written as numbered steps, with included skills written out and settings shown with their values),
-the routing triggers and the intents. It then decides every step itself, and its tool calls go through the
-same runtime and dispatcher.
+The model sees the agent's system prompt, its skills (the prose, and the procedure written as numbered steps,
+with included skills written out and settings shown with their values), the routing triggers and the intents.
+It then decides every step itself, and its tool calls go through the same runtime and dispatcher.
 
 Environment variables (or explicit ``LLMSettings``):
   TRACEEVAL_LLM_BASE_URL   e.g. http://127.0.0.1:8000/v1
@@ -52,9 +51,8 @@ def build_system_prompt(agent, session, runtime) -> str:
     rules close the prompt. The sections are joined with newlines.
     """
     parts = [agent.system_prompt.strip()]
-    # The orchestrator has to pick the specialist itself, so it is shown each one's description and triggers
-    # (the same triggers that the simulated backend's keyword router scores), and where a request goes that no
-    # specialist owns (the router's fallback, routing.default_agent).
+    # The orchestrator has to pick the specialist itself, so it is shown each one's description and triggers,
+    # and where a request goes that no specialist owns (routing.default_agent).
     if agent.is_orchestrator:
         lines = ["", "## Specialist agents", "Delegate exactly once with `route_to_agent`. Available agents:"]
         for name, other in runtime.agents.load_all().items():
@@ -65,7 +63,7 @@ def build_system_prompt(agent, session, runtime) -> str:
             f"If no specialist owns the request, delegate it to `{runtime.config.get('routing.default_agent')}`."
         )
         parts.append("\n".join(lines))
-    # The keywords of each intent, which the simulated backend matches against the request to pick one.
+    # The keywords of each intent; the procedure's steps depend on the intent the agent picks.
     if agent.intents:
         parts.append("## Intents\n" + "\n".join(f"- {k}: {', '.join(v)}" for k, v in agent.intents.items()))
     # Each skill under its own heading. The entry skill's procedure is written out as numbered steps (included
@@ -109,7 +107,6 @@ class LLMBackend:
     def __init__(self, agent, runtime, session, settings: LLMSettings | None = None, client=None):
         self.agent = agent
         self.runtime = runtime
-        self.session = session
         self.settings = settings or LLMSettings()
         # A caller may pass its own client (any object with the chat.completions.create shape of the OpenAI
         # client, a stub for example); otherwise connect to the configured server.
@@ -131,10 +128,10 @@ class LLMBackend:
         self.queue: list[Action] = []  # tool calls of the latest answer not yet handed to the runtime
         self.nudged = False  # whether the model was already asked once to reply after ending without a word
 
-    def next_action(self, session) -> Action:
+    def next_action(self) -> Action:
         """Return the agent's next move: the next tool call still queued, or a fresh answer from the model.
 
-        The token counts that the server reports for each model call are added to the session.
+        The token counts that the server reports for each model call are booked with the runtime.
         """
         # Calls left over from the previous answer go out one at a time before the model is asked again.
         if self.queue:
@@ -153,11 +150,10 @@ class LLMBackend:
         resp = self.client.chat.completions.create(**kwargs)
         choice = resp.choices[0]
         msg = choice.message
-        # Book the tokens that the server reports (0 when it reports none), through the same session
-        # accounting as the simulated backend.
+        # Book the tokens that the server reports (0 when it reports none).
         usage = getattr(resp, "usage", None)
-        session.add_usage(
-            getattr(usage, "prompt_tokens", 0) or 0, getattr(usage, "completion_tokens", 0) or 0, runtime=self.runtime
+        self.runtime.add_usage(
+            self.agent.name, getattr(usage, "prompt_tokens", 0) or 0, getattr(usage, "completion_tokens", 0) or 0
         )
         # At most max_tool_calls_per_turn calls are taken from the answer, and the answer goes into the
         # conversation with only those: every tool call in the conversation must be followed by its result.
@@ -183,7 +179,7 @@ class LLMBackend:
             if not (msg.content or "").strip() and not self.nudged:
                 self.nudged = True
                 self.messages.append({"role": "user", "content": REPLY_NUDGE})
-                return self.next_action(session)
+                return self.next_action()
             return Action("final", message=msg.content or "")
         # Every kept call becomes an action that carries the call id, so that observe() can answer the right
         # call. Arguments that are not valid JSON are passed on under "_raw": the call is then refused, and the

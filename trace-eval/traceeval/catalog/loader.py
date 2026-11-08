@@ -12,7 +12,7 @@ import yaml
 
 CATALOG_ROOT = Path(__file__).resolve().parent
 
-RISK_WEIGHT = {"critical": 4.0, "high": 3.0, "medium": 2.0, "low": 1.0}
+RISK_WEIGHT = {"critical": 4.0, "high": 3.0, "medium": 2.0, "low": 1.0}  # a case's severity, by its risk
 
 
 @dataclass
@@ -31,8 +31,6 @@ class EvalCase:
     expect: dict = field(default_factory=dict)
     judge: dict | None = None
     dataset: str | None = None
-    tags: list[str] = field(default_factory=list)
-    mandatory: bool = False
 
     @property
     def severity(self) -> float:
@@ -43,6 +41,7 @@ class EvalCase:
         return any(p.startswith("safety") for p in self.properties)
 
     def declared_components(self) -> set[str]:
+        """The hand-written ``declared`` dependencies, as component ids (agent:, skill:, tool:, config:)."""
         out: set[str] = set()
         for a in self.declared.get("agents", []):
             out.add(f"agent:{a}")
@@ -93,8 +92,6 @@ def load_catalog(root: Path | str = CATALOG_ROOT) -> list[EvalCase]:
                     declared=dict(raw.get("declared", {})),
                     expect=dict(raw.get("expect", {})),
                     judge=raw.get("judge"),
-                    tags=list(raw.get("tags", [])),
-                    mandatory=bool(raw.get("mandatory", False)),
                 )
             )
     for path in sorted((root / "datasets").glob("*.yaml")):
@@ -103,7 +100,7 @@ def load_catalog(root: Path | str = CATALOG_ROOT) -> list[EvalCase]:
         for item in ds.get("items", []):
             ctx = dict(base_ctx)
             ctx.update(item.get("context", {}))
-            if ds.get("route_only"):
+            if ds.get("route_only"):  # score the routing decision only: the chosen specialist does not run
                 ctx["_route_only"] = True
             expect = dict(item.get("expect", {}))
             if "expect_route" in item:
@@ -124,7 +121,6 @@ def load_catalog(root: Path | str = CATALOG_ROOT) -> list[EvalCase]:
                     expect=expect,
                     judge=item.get("judge"),
                     dataset=ds["id"],
-                    tags=list(ds.get("tags", [])),
                 )
             )
     ids = [c.id for c in cases]

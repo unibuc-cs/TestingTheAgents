@@ -18,7 +18,7 @@ from traceeval.catalog import load_catalog
 from traceeval.mutation import MUTATIONS, get_mutation, materialize_variant
 from traceeval.tracing.codecov import CoverageSession
 
-from .executor import attach_code_functions, run_case, write_jsonl
+from .executor import attach_code_functions, default_backend, run_case, write_jsonl
 from .sutloader import load_sut
 
 
@@ -32,32 +32,22 @@ def run_suite(
     *,
     reps: int,
     variant: str,
-    backend: str,
+    backend: str | None,
     config_overrides: dict | None,
     with_coverage: bool,
-    seed: int,
-    llm_settings=None,
-    only: set[str] | None = None,
     workers: int = 1,
 ) -> list[dict]:
+    """Run every case ``reps`` times on ``sut``; with coverage, attach the code each run executed."""
+    backend = backend or default_backend()
     cov = CoverageSession(sut.path) if with_coverage else None
-    jobs = [(rep, case) for rep in range(reps) for case in cases if only is None or case.id in only]
+    jobs = [(rep, case) for rep in range(reps) for case in cases]
 
     def one(job):  # one case once; with coverage, inside its own coverage context
         rep, case = job
         if cov:
             cov.begin(f"{case.id}|{rep}")
-        rec = run_case(
-            sut,
-            case,
-            backend=backend,
-            rep=rep,
-            variant=variant,
-            config_overrides=config_overrides,
-            seed=seed,
-            llm_settings=llm_settings,
-        )
-        if backend != "simulated":  # model runs are slow: report each case as it finishes
+        rec = run_case(sut, case, backend=backend, rep=rep, variant=variant, config_overrides=config_overrides)
+        if backend != "replay":  # model runs are slow: report each case as it finishes
             failed = ",".join(rec["failed_checks"])
             _log(
                 f"[{variant}] rep {rep} {case.id}: {rec['classification']} "
@@ -81,14 +71,12 @@ def record_baseline(
     workdir: Path,
     *,
     reps: int = 3,
-    backend: str = "simulated",
+    backend: str | None = None,
     config_overrides: dict | None = None,
-    seed: int = 0,
-    llm_settings=None,
 ) -> list[dict]:
     workdir = Path(workdir)
     cases = load_catalog()
-    sut_dir, cs = materialize_variant(None, workdir / "variants")
+    sut_dir, _ = materialize_variant(None, workdir / "variants")
     sut = load_sut(sut_dir)
     t0 = time.time()
     records = run_suite(
@@ -99,8 +87,6 @@ def record_baseline(
         backend=backend,
         config_overrides=config_overrides,
         with_coverage=True,
-        seed=seed,
-        llm_settings=llm_settings,
     )
     write_jsonl(workdir / "history" / "baseline.jsonl", records)
     passed = sum(r["passed"] for r in records)
@@ -114,10 +100,8 @@ def record_mutants(
     *,
     mutation_ids: list[str] | None = None,
     reps: int = 3,
-    backend: str = "simulated",
+    backend: str | None = None,
     config_overrides: dict | None = None,
-    seed: int = 0,
-    llm_settings=None,
     workers: int = 1,
 ) -> dict[str, list[dict]]:
     workdir = Path(workdir)
@@ -136,8 +120,6 @@ def record_mutants(
             backend=backend,
             config_overrides=config_overrides,
             with_coverage=False,
-            seed=seed,
-            llm_settings=llm_settings,
             workers=workers,
         )
         write_jsonl(workdir / "history" / "variants" / f"{m.id}.jsonl", records)

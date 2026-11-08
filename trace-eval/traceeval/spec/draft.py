@@ -22,8 +22,9 @@ from pathlib import Path
 
 import yaml
 
-from .model import CATALOG_PATH, Spec, expand_clause, load_catalog, validate_spec
+from .model import Spec, expand_clause, load_catalog, number_duplicates, validate_spec
 
+# the expression helpers of context.py, described for the model
 HELPERS = (
     "config('dotted.key') -> the configured value; "
     "approval_age(run, page_id) -> days since the page's approval; "
@@ -70,6 +71,7 @@ def product_slice(model, catalog_cases: dict) -> str:
 
 
 def _flatten(node: dict, prefix: str = "") -> dict:
+    """Nested configuration -> {dotted.key: value}."""
     out = {}
     for k, v in node.items():
         key = f"{prefix}{k}"
@@ -81,6 +83,7 @@ def _flatten(node: dict, prefix: str = "") -> dict:
 
 
 def build_messages(request_text: str, catalog: dict, slice_text: str) -> list[dict]:
+    """The chat prompt: rules, the catalog of templates and the product slice as system message; the request."""
     templates = "\n".join(
         f"- {name}: kind {t['kind']}, slots {json.dumps(t['slots'])}"
         + (f", optional {t['optional']}" if t.get("optional") else "")
@@ -137,22 +140,16 @@ def parse_answer(text: str) -> dict:
 
 
 # ---------------------------------------------------------------------------- from answer to draft
-def draft_from_answer(answer: dict, spec_id: str, catalog: dict | None = None) -> tuple[Spec, list[str]]:
+def draft_from_answer(answer: dict, spec_id: str, catalog: dict) -> tuple[Spec, list[str]]:
     """Expand the answer's clauses; clauses that do not fit the catalog are dropped and reported."""
-    catalog = catalog or load_catalog()
     clauses, problems = [], []
     for i, raw in enumerate(answer.get("clauses", []), 1):
         try:
             clauses.append(expand_clause(raw, catalog))
-        except (ValueError, KeyError, TypeError) as exc:
+        except (ValueError, KeyError, TypeError) as exc:  # a model's answer may be malformed in any way
             problems.append(f"clause {i} dropped: {exc} ({json.dumps(raw)[:120]})")
-    seen: dict[str, int] = {}
-    for c in clauses:
-        seen[c.id] = seen.get(c.id, 0) + 1
-        if seen[c.id] > 1:
-            c.id = f"{c.id}#{seen[c.id]}"
-    spec = Spec(spec_id, answer.get("title", spec_id), str(answer.get("intent", "")).strip(), clauses)
-    return spec, problems
+    intent = str(answer.get("intent", "")).strip()
+    return Spec(spec_id, answer.get("title", spec_id), intent, number_duplicates(clauses)), problems
 
 
 def write_draft(spec: Spec, answer: dict, notes: list[str], out: Path) -> tuple[Path, Path]:
@@ -163,6 +160,7 @@ def write_draft(spec: Spec, answer: dict, notes: list[str], out: Path) -> tuple[
         "id": spec.id,
         "title": spec.title,
         "intent": spec.intent + "\n",
+        # the clauses as the model wrote them (catalog form, which the owner edits), not expanded
         "clauses": [
             {k: v for k, v in raw.items() if k in ("use", "with", "require")}
             for raw in answer.get("clauses", [])
@@ -206,18 +204,20 @@ def draft(
     settings=None,
 ) -> dict:
     """The whole flow; returns {spec, problems, validation, draft, rendering, answer_text}."""
-    catalog = load_catalog(CATALOG_PATH)
+    catalog = load_catalog()
     request_text = Path(request_path).read_text()
     if replay:
         saved = json.loads(Path(replay).read_text())
+        # a file written by --save-response ({"content": text}), or the answer's JSON itself
         text = saved["content"] if isinstance(saved, dict) and "content" in saved else json.dumps(saved)
     else:
         text = call_model(build_messages(request_text, catalog, product_slice(model, catalog_cases)), client, settings)
         if save_response:
             Path(save_response).write_text(json.dumps({"content": text}, indent=1))
-    spec, problems = draft_from_answer(parse_answer(text), spec_id, catalog)
+    answer = parse_answer(text)
+    spec, problems = draft_from_answer(answer, spec_id, catalog)
     validation = [f"{level}: {msg}" for level, msg in validate_spec(spec, model, catalog)]
-    draft_path, md_path = write_draft(spec, parse_answer(text), problems + validation, out)
+    draft_path, md_path = write_draft(spec, answer, problems + validation, out)
     return {
         "spec": spec,
         "problems": problems,

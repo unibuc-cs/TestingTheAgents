@@ -9,6 +9,7 @@ Each entry: id, category, description, regression?, edits. An edit is one of
     ("delete_line",  file, text_in_line)         delete the single line containing the text
     ("delete_block", file, start_text, end_text) delete from the start line up to (not incl.) the end line
     ("append",       file, text)                 append text to the file
+    ("custom",       function)                   call function(sut_dir), for an edit no anchor can express
 Anchors are literal text: if a SUT source is reformatted, re-anchor here (the operators raise).
 """
 

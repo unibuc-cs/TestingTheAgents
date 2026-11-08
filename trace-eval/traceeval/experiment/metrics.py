@@ -20,6 +20,7 @@ def apfdc(order: list[str], revealing: set[str], cost: dict[str, float], severit
     if not order or m == 0:
         return None
     total_cost = sum(cost[t] for t in order)
+    revealing = sorted(revealing)  # a fixed order, so the float sums are the same in every process
     total_sev = sum(severity.get(t, 1.0) for t in revealing)
     pos = {t: i for i, t in enumerate(order)}
     cum = []
@@ -37,6 +38,8 @@ def apfdc(order: list[str], revealing: set[str], cost: dict[str, float], severit
 
 
 def evaluate_log(log, variant: str, history, catalog, budget: float) -> dict:
+    """One row of replay.csv: what a strategy's execution log detected, at what cost, and how it stopped.
+    A failure of a test outside the ground truth (flakiness) is a false alarm, not a detection."""
     revealing = history.revealing_tests(variant)
     is_regression = len(revealing) > 0
     executed = log.executed
@@ -70,6 +73,8 @@ def evaluate_log(log, variant: str, history, catalog, budget: float) -> dict:
         "false_alarm": bool(false_alarms),
         "safety_recall": (len(true_fails & safety_revealing) / len(safety_revealing)) if safety_revealing else None,
         "stop_reason": log.stop_reason,
+        # did the strategy end with the right conclusion? "clean"/"regression" are explicit verdicts; any other
+        # stop is judged by whether it found a true failure; with no components, "clean" is implied
         "stop_correct": (
             (log.stop_reason == "clean" and not is_regression)
             or (log.stop_reason == "regression" and is_regression)

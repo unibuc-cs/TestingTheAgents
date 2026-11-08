@@ -19,12 +19,13 @@ In plain words
 """
 
 import math
+from dataclasses import replace
 from itertools import product
 
 import numpy as np
 
 from .base import ExecutionLog, SelectionContext, Strategy, matches
-from .strategies import STRATEGIES, CostAware, change_text, tokens
+from .strategies import CostAware, change_text, register, tokens
 
 # prior probability that a changed component of this kind is broken
 PRIOR = {
@@ -59,27 +60,30 @@ def _kind_key(comp) -> str:
     return comp.kind
 
 
+@register
 class AdaptiveBayes(Strategy):
     name = "adaptive_bayes"
-    adaptive = True
 
     def __init__(
         self, eps_clean=0.05, eps_detect=0.02, max_components=8, indirect=0.02, risk_tilt=0.25, duplicate_discount=0.35
     ):
-        self.eps_clean, self.eps_detect = eps_clean, eps_detect
-        self.max_components, self.indirect = max_components, indirect
-        self.risk_tilt, self.duplicate_discount = risk_tilt, duplicate_discount
+        self.eps_clean, self.eps_detect = eps_clean, eps_detect  # stopping thresholds (step 4)
+        self.max_components = max_components  # 2^k hypotheses, so k stays small
+        self.indirect = indirect  # sensitivity of a test with no known link to the component
+        self.risk_tilt = risk_tilt  # how much a riskier test is preferred
+        self.duplicate_discount = duplicate_discount  # factor on a near-duplicate's sensitivity after a pass
 
     # ------------------------------------------------------------------ step 1: hypotheses
     def components(self, ctx):
-        """The changed components we reason about, with their prior (tool:/line: ids are facets of code)."""
+        """The changed components we reason about, with their prior. tool: and line: ids are other views of a
+        code change (its adapter, its lines), not separate causes; line hits come back in the sensitivities."""
         comps, seen = [], set()
         for c in ctx.change.components:
             if c.kind in ("tool", "line") or c.id in seen:
                 continue
             seen.add(c.id)
             comps.append((c, PRIOR.get(c.kind, 0.3)))
-        comps.sort(key=lambda cp: -cp[1])
+        comps.sort(key=lambda cp: -cp[1])  # with too many components, keep the likeliest culprits
         return comps[: self.max_components]
 
     # ------------------------------------------------------------------ step 2: sensitivities
@@ -102,11 +106,6 @@ class AdaptiveBayes(Strategy):
     def calibrate(self, ctx) -> dict[str, float]:
         """Reveal ratio per component kind, measured on the training changes (never on the one under test):
         |revealing tests among impacted tests| / |impacted tests|.  "Coverage does not imply detection"."""
-        cache = ctx.options.setdefault("bayes_calibration", {})
-        key = tuple(sorted(ctx.train_variants))
-        if key in cache:
-            return cache[key]
-        impacted_cache = ctx.options.setdefault("impacted_cache", {})
         sums: dict[str, list[float]] = {}
         for v in ctx.train_variants:
             change = ctx.history.changesets.get(v)
@@ -116,10 +115,9 @@ class AdaptiveBayes(Strategy):
             for comp in change.components:
                 if comp.kind in ("line", "tool"):
                     continue
-                if (v, comp.id) not in impacted_cache:
-                    impacted_cache[(v, comp.id)] = self.impacted(ctx, change, comp)
-                imp = impacted_cache[(v, comp.id)]
+                imp = self.impacted(ctx, change, comp)
                 if comp.kind == "code":
+                    # two buckets: running a changed line is much stronger evidence than calling the function
                     for sub in ("line", "fn"):
                         if imp[sub]:
                             sums.setdefault(f"code:{sub}", []).append(len(revealing & imp[sub]) / len(imp[sub]))
@@ -127,38 +125,36 @@ class AdaptiveBayes(Strategy):
                     sums.setdefault(_kind_key(comp), []).append(len(revealing & imp["match"]) / len(imp["match"]))
         ratios = dict(DEFAULT_REVEAL)
         for k, vals in sums.items():
-            ratios[k] = max(0.01, min(0.9, sum(vals) / len(vals)))
-        cache[key] = ratios
+            ratios[k] = max(0.01, min(0.9, sum(vals) / len(vals)))  # mean over changes, kept off 0 and 1
         return ratios
 
     @staticmethod
     def lexical_relevance(ctx) -> dict[str, float]:
-        """Per test, how much vocabulary it shares with the change text (0..1, cached per change)."""
-        cache = ctx.options.setdefault("lexical_relevance", {})
-        if ctx.change.variant not in cache:
-            qt = set(
-                tokens(
-                    " ".join(c.detail for c in ctx.change.components if c.kind == "line")
-                    + " "
-                    + " ".join(c.id.split(":", 1)[1] for c in ctx.change.components)
-                    + " "
-                    + change_text(ctx.change)
-                )
+        """Per test, how much vocabulary it shares with the change text (0..1, the closest test gets 1)."""
+        # the change's words: its changed code lines, its component ids without the kind prefix, its diff
+        qt = set(
+            tokens(
+                " ".join(c.detail for c in ctx.change.components if c.kind == "line")
+                + " "
+                + " ".join(c.id.split(":", 1)[1] for c in ctx.change.components)
+                + " "
+                + change_text(ctx.change)
             )
-            rel = {}
-            for t in ctx.tests():
-                tt = set(tokens(ctx.catalog[t].text()))
-                rel[t] = len(qt & tt) / math.sqrt(max(1, len(qt)) * max(1, len(tt)))
-            mx = max(rel.values()) or 1.0
-            cache[ctx.change.variant] = {t: v / mx for t, v in rel.items()}
-        return cache[ctx.change.variant]
+        )
+        rel = {}
+        for t in ctx.tests():
+            tt = set(tokens(ctx.catalog[t].text()))
+            rel[t] = len(qt & tt) / math.sqrt(max(1, len(qt)) * max(1, len(tt)))  # cosine of the two word sets
+        mx = max(rel.values()) or 1.0
+        return {t: v / mx for t, v in rel.items()}
 
     def sensitivity(self, ctx, t, comp, lex, ratios) -> float:
         """P(test t fails | component comp is broken)."""
-        freq = ctx.history.baseline[t].dep_frequency()
+        freq = ctx.history.baseline[t].dep_frequency
         deps = set(freq)
         declared = matches(comp, ctx.catalog[t].declared_components())
         tilt = 0.5 + lex + (0.5 if declared else 0.0)  # lexical relevance [0.5, 1.5] + declared bonus
+        # base = calibrated reveal ratio x how often the baseline runs exercised the component
         base = None
         if comp.kind == "code":
             hit = [
@@ -169,28 +165,26 @@ class AdaptiveBayes(Strategy):
             elif matches(comp, deps):
                 base = ratios["code:fn"]
         elif matches(comp, deps):
-            hits = [freq[d] for d in deps if d == comp.id or d == comp.base]
-            base = ratios.get(_kind_key(comp) if _kind_key(comp) in ratios else comp.kind, 0.2) * (
-                max(hits) if hits else 1.0
-            )
+            # an agent field without training data of its own falls back to the ratio of its kind
+            ratio = ratios.get(_kind_key(comp), ratios.get(comp.kind, 0.2))
+            base = ratio * max(freq[d] for d in deps if d in (comp.id, comp.base))
         if base is not None:
             return min(0.9, max(0.02, base * tilt))
-        if declared:
+        if declared:  # declared by the test's author but never observed: half the reveal ratio
             return min(0.9, max(0.02, 0.5 * ratios.get("code:line" if comp.kind == "code" else comp.kind, 0.1)))
         return self.indirect
 
-    # ------------------------------------------------------------------ model assembly (cached per change)
+    # ------------------------------------------------------------------ model assembly
     def model(self, ctx) -> dict:
-        cache = ctx.options.setdefault("bayes_models", {})
-        key = (ctx.change.variant, self.max_components, self.indirect)
-        if key in cache:
-            return cache[key]
+        """Everything the run needs that does not depend on outcomes."""
         comps, tests = self.components(ctx), ctx.tests()
         k = len(comps)
+        # one row per combination of broken components; row 0 (all zeros) is "nothing is broken"
         hyps = np.array(list(product([0, 1], repeat=k)), dtype=float) if k else np.zeros((1, 0))
         prior = np.ones(len(hyps))
-        for j, (_comp, pi) in enumerate(comps):
+        for j, (_comp, pi) in enumerate(comps):  # a priori the components break independently
             prior *= np.where(hyps[:, j] > 0, pi, 1 - pi)
+        # a test may fail with nothing broken (baseline flakiness); the floor keeps any failure possible
         flaky = np.array([max(0.01, 1.0 - ctx.history.baseline_pass_rate(t)) for t in tests])
         lex, ratios = self.lexical_relevance(ctx), self.calibrate(ctx)
         S = (
@@ -198,6 +192,7 @@ class AdaptiveBayes(Strategy):
             if k
             else np.zeros((len(tests), 0))
         )
+        # near-duplicate tests: same agents and tools in the first baseline run, same fault profile and dataset
         groups: dict[tuple, list[int]] = {}
         for i, t in enumerate(tests):
             run0 = ctx.history.baseline[t].runs[0]
@@ -208,7 +203,7 @@ class AdaptiveBayes(Strategy):
                 ctx.catalog[t].dataset,
             )
             groups.setdefault(sig, []).append(i)
-        model = {
+        return {
             "comps": comps,
             "tests": tests,
             "hyps": hyps,
@@ -220,13 +215,12 @@ class AdaptiveBayes(Strategy):
             "cost": np.array([ctx.cost(t) for t in tests]),
             "risk": np.array([1.0 + self.risk_tilt * (ctx.catalog[t].severity - 1.0) for t in tests]),
         }
-        cache[key] = model
-        return model
 
     # ------------------------------------------------------------------ inference helpers
     @staticmethod
     def p_fail_matrix(S, flaky, hyps):
-        """P(test fails | hypothesis) for every test x hypothesis: 1 - (1-flaky) * prod_{broken c} (1 - S_tc)."""
+        """P(test fails | hypothesis) for every test x hypothesis: 1 - (1-flaky) * prod_{broken c} (1 - S_tc).
+        A test passes only if neither flakiness nor any of the broken components makes it fail."""
         return 1.0 - (1.0 - flaky)[:, None] * np.exp(np.log1p(-np.clip(S, 0, 0.999)) @ hyps.T)
 
     @staticmethod
@@ -235,29 +229,30 @@ class AdaptiveBayes(Strategy):
             return -np.where(P > 1e-12, P * np.log(P), 0.0).sum(axis=-1)
 
     def info_gain(self, post, p_fail):
-        """Expected reduction of posterior entropy for every test, and its failure probability."""
-        pf = np.clip(p_fail @ post, 1e-12, 1 - 1e-12)
+        """Expected reduction of posterior entropy for every test, over its two possible outcomes."""
+        pf = np.clip(p_fail @ post, 1e-12, 1 - 1e-12)  # P(test fails) under the current posterior
         post_if_fail = (p_fail * post[None, :]) / pf[:, None]
         post_if_pass = ((1 - p_fail) * post[None, :]) / (1 - pf)[:, None]
         gain = self._entropy(post) - (pf * self._entropy(post_if_fail) + (1 - pf) * self._entropy(post_if_pass))
-        return np.maximum(gain, 0.0), pf
+        return np.maximum(gain, 0.0)
 
     # ------------------------------------------------------------------ steps 3 and 4: run and stop
     def run(self, ctx: SelectionContext, oracle, stopping: bool = True) -> ExecutionLog:
+        """Run tests one by one through ``oracle``. ``stopping=False`` (used by ``order``) disables both the
+        early stops and the confirmation re-run."""
         log = ExecutionLog(self.name)
         m = self.model(ctx)
         tests, hyps, cost, risk, flaky = m["tests"], m["hyps"], m["cost"], m["risk"], m["flaky"]
-        if hyps.shape[1] == 0:
+        if hyps.shape[1] == 0:  # no component to reason about
             log.stop_reason = "no_components"
             return log
-        S = m["S"].copy()
+        S = m["S"]
         p_fail = self.p_fail_matrix(S, flaky, hyps)
-        post = m["prior"].copy()
+        post = m["prior"]
         runs_left = np.where(flaky > 0.1, 2, 1)  # flaky tests may be re-run once
         remaining = ctx.budget
         seen_failure = False
         confirm, confirmed = None, set()  # a failed test to re-run before any other; tests already re-run
-        trajectory = []
         while True:
             p_any = 1.0 - post[0]  # hypothesis 0 = nothing broken
             if stopping and p_any < self.eps_clean:
@@ -269,7 +264,8 @@ class AdaptiveBayes(Strategy):
             if confirm is not None and cost[confirm] <= remaining:
                 i = confirm
             else:
-                gain, _ = self.info_gain(post, p_fail)
+                # best information per token, weighted by risk; tests that cannot or need not run are ruled out
+                gain = self.info_gain(post, p_fail)
                 score = gain * risk / cost
                 score[(runs_left <= 0) | (cost > remaining) | (gain <= 1e-9)] = -1.0
                 i = int(np.argmax(score))
@@ -285,6 +281,7 @@ class AdaptiveBayes(Strategy):
                 confirm = i
                 confirmed.add(i)
             log.steps.append((tests[i], passed, spent))
+            # Bayes' rule: weigh every hypothesis by the likelihood of the observed outcome
             post = post * ((1 - p_fail[i]) if passed else p_fail[i])
             post /= post.sum() or 1e-12
             if passed:  # near-duplicates of a passed test are correlated evidence: discount them
@@ -292,26 +289,15 @@ class AdaptiveBayes(Strategy):
                     if j != i and runs_left[j] > 0:
                         S[j] *= self.duplicate_discount
                         p_fail[j] = self.p_fail_matrix(S[j][None, :], flaky[j : j + 1], hyps)[0]
-            trajectory.append((tests[i], passed, round(float(1.0 - post[0]), 4)))
             if remaining <= 0:
                 log.stop_reason = "budget"
                 break
-        log.diagnostics = {
-            "p_any_final": float(1.0 - post[0]),
-            "trajectory": trajectory[:60],
-            "components": [c.id for c, _ in m["comps"]],
-        }
         return log
 
     def order(self, ctx):
         """Non-adaptive view for APFD metrics: the greedy order assuming every test passes, no stopping,
         followed by the untouched tests in cost-aware order."""
-        big = SelectionContext(
-            ctx.change, ctx.catalog, ctx.history, float("inf"), ctx.rng, ctx.train_variants, options=ctx.options
-        )
-        executed = self.run(big, lambda t: (True, ctx.cost(t)), stopping=False).executed
+        unlimited = replace(ctx, budget=float("inf"))
+        executed = self.run(unlimited, lambda t: (True, ctx.cost(t)), stopping=False).executed
         seen = set(executed)
         return executed + [t for t in CostAware().order(ctx) if t not in seen]
-
-
-STRATEGIES["adaptive_bayes"] = AdaptiveBayes()

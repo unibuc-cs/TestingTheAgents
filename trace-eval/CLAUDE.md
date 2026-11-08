@@ -8,12 +8,12 @@ systems. Read `README.md` (5 minutes), then `docs/USER_GUIDE.md` only when you n
 ```
 uv venv --python 3.12 .venv         # the project venv (git-ignored); use .venv/Scripts/python on Windows
 pip install -e ".[dev,ml]"          # or: uv pip install --python .venv -e ".[dev,ml]" ruff
-pytest -q                           # ~60 s; must stay green
+pytest -q                           # ~60 s; must stay green; replays Gemma's recorded answers (tests/cassettes/)
 ruff check traceeval tests --select E,F,W,I,B --line-length 120
 ruff format traceeval tests --line-length 120   # see "Gotchas" before formatting sut/
-traceeval experiment --backend simulated --workdir runs/exp1 --reps 3 --seeds 10   # full simulated experiment, ~5 min
-traceeval experiment --backend vllm --workdir runs/gemma2 --reps 3    # the same with Gemma (docs/EXPERIMENT.md)
-traceeval sdd --workdir runs/sdd                                 # spec-driven development demo, ~30 s
+traceeval experiment --backend vllm --workdir runs/gemma2 --reps 3   # full experiment, Gemma on the GPU server, ~30 min
+traceeval sdd --workdir runs/sdd                                 # spec-driven development demo, replayed
+TRACEEVAL_BACKEND=vllm pytest -q    # record the answers the cassette lacks (Gemma up on the GPU server)
 traceeval sdd draft --request r.md --id FS-0106 [--replay a.json]  # draft a spec with a model
 scripts/gpu_remote.sh up [gemma|qwen] | status | down   # models on the GPU server; see docs/EXPERIMENT.md
 ```
@@ -45,7 +45,8 @@ scripts/gpu_remote.sh up [gemma|qwen] | status | down   # models on the GPU serv
   line (`mutation/changeset.py`), so no strategy and no probability may depend on them.
 - Mutation operators assert their anchors; a new mutation must be revealed by ≥ 1 test if labelled a regression
   and by none if labelled benign (the report's sanity line checks this).
-- Keep the catalog passing on the baseline (`tests/test_sut.py::test_full_catalog_passes_on_baseline`).
+- Keep the catalog passing on the baseline, apart from Gemma's known mistakes (`KNOWN_MODEL_MISTAKES` in
+  `tests/test_sut.py`).
 - Derive seeds from names with a stable hash (`zlib.crc32`), never `hash()`: str hashes are salted per process,
   so runs would differ from one process to the next. Hypothesis searches run with `derandomize=True` for the
   same reason. Idempotency keys are derived from the operation (request id, tool, arguments, earlier
@@ -62,9 +63,14 @@ scripts/gpu_remote.sh up [gemma|qwen] | status | down   # models on the GPU serv
 
 - Reformatting files under `traceeval/sut/` can move the literal text anchors used in
   `traceeval/mutation/catalog.py` (the table is excluded from the formatter); run `pytest` afterwards and re-anchor failures.
-- Skills' `## Procedure` blocks are executed by the simulated backend and shown to a model as numbered steps
+- Skills' `## Procedure` blocks are shown to the model as numbered steps
   (`sut/harness/skills.py::render_procedure`: included skills written out, settings with their values);
-  the YAML in them must stay parseable and its step keys are documented in `sut/harness/backends/simulated.py`.
+  the YAML in them must stay parseable and its step keys are documented in `sut/harness/skills.py`.
+- The tests replay Gemma's recorded answers, keyed by the exact request (`traceeval/llm/cache.py`). Anything a
+  prompt is built from (skills, agent definitions, config values, the rendering, tool schemas and results,
+  fixtures, case requests) changes the key: replays then miss (`HARNESS_ERROR` with `CacheMiss`). Record the
+  missing answers with `TRACEEVAL_BACKEND=vllm pytest -q` and commit `tests/cassettes/gemma.jsonl`; to drop
+  answers nothing asks for any more, delete the file first and record everything again.
 - `runs/*/history/*.jsonl` include line-level coverage and are large; do not commit them.
 - Record experiments on Python 3.12: on 3.15 coverage.py uses its sys.monitoring core, which does not support the
   per-test dynamic contexts (warning `no-sysmon-context`), so observed code dependencies may be incomplete.

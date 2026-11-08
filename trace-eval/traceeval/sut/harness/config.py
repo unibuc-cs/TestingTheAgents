@@ -16,7 +16,6 @@ class Config:
     def __init__(self, data: dict, tracer=None):
         self.data = data  # the nested settings, as parsed from the YAML file
         self.tracer = tracer  # receives a "config.read" event per read; None turns the recording off
-        self.reads: list[str] = []  # every key read through get, in order and with repeats
 
     @classmethod
     def load(cls, path: str | Path, tracer=None, overrides: dict | None = None) -> "Config":
@@ -45,7 +44,6 @@ class Config:
                 break
             node = node[part]
         # Record the read, also when the default was returned.
-        self.reads.append(key)
         if self.tracer is not None:
             self.tracer.event("config.read", key=key, value=_short(node))
         return node

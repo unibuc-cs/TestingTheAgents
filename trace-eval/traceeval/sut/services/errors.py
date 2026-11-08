@@ -8,7 +8,6 @@ class ToolError(Exception):
     """Base class for errors surfaced to the agent as tool results."""
 
     code = "tool_error"  # what the agent receives in the "error" field; every subclass sets its own
-    retryable = False  # True when the same call may succeed if it is simply repeated (only TransientError)
 
     def to_dict(self):
         """The tool result that replaces the normal answer: the error code and the human-readable message."""
@@ -56,4 +55,3 @@ class TransientError(ToolError):
     apply the change a second time."""
 
     code = "transient_error"
-    retryable = True

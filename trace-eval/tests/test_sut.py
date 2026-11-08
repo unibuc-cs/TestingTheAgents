@@ -1,5 +1,10 @@
-"""Unit tests for the system under test, the harness and the scoring layer."""
+"""Unit tests for the system under test, the harness and the scoring layer.
 
+Cases run on Gemma's recorded answers (``run_case``'s default backend, ``replay``: tests/cassettes/). Tests of
+the harness itself use a scripted client instead, so that they do not depend on what the model chose.
+"""
+
+import json
 import os
 import subprocess
 import sys
@@ -13,8 +18,6 @@ from traceeval.experiment.sutloader import load_sut
 from traceeval.mutation import get_mutation, materialize_variant
 from traceeval.scoring import score_case
 from traceeval.sut import SUT_ROOT
-from traceeval.sut.harness.expressions import DotDict, resolve_value, safe_eval
-from traceeval.sut.harness.router import detect_intent, route
 from traceeval.sut.harness.skills import parse_skill
 from traceeval.tracing.recorder import TraceRecorder
 
@@ -34,32 +37,64 @@ def test_catalog_loads_without_duplicates(cases):
     assert "PUB-01" in cases and "DS-ROUTING/r01" in cases
 
 
-def test_safe_eval_whitelist():
-    env = {"last": DotDict({"allowed": True, "broken": [{"link": "x"}]}), "ctx": {"page_id": "p1"}}
-    assert safe_eval("last.allowed", env) is True
-    assert safe_eval("[b['link'] for b in last.broken]", env) == ["x"]
-    assert resolve_value("$page_id", env) == "p1"
-    with pytest.raises(ValueError):
-        safe_eval("__import__('os').system('true')", env)
-
-
 def test_skill_parsing_exposes_procedure():
     skill = parse_skill((SUT_ROOT / "skills" / "publishing-workflow" / "SKILL.md").read_text())
     assert skill.name == "publishing-workflow"
     assert any(step.get("include") == "link-validation" for step in skill.procedure)
 
 
-def test_router_prefers_phrase_triggers(sut):
-    agents = sut.sub("harness.agents").AgentLoader(SUT_ROOT / "agents").load_all()
-    target, info = route("Take it down, the update was wrong", agents, "authoring")
-    assert target == "publishing" and info["reason"] == "trigger_match"
-    assert route("Hello there", agents, "authoring")[0] == "authoring"
-    assert detect_intent("Take down the old news page", agents["publishing"].intents) == "unpublish"
+# Gemma's own mistakes on the original app (docs/EXPERIMENT.md, section 6): it ignores guards it has to work
+# out for itself. Every other case must pass.
+KNOWN_MODEL_MISTAKES = ["AUT-04", "PUB-10", "SEO-02"]
+
+
+class ScriptedClient:
+    """A stand-in for a chat client: each agent makes the tool calls of its script in order, then answers
+    ``final``. An agent is recognised by the first script key found in the first line of its system prompt;
+    ``done`` counts the calls each agent made. A scripted call must be one of the tools the agent is offered."""
+
+    def __init__(self, script: dict[str, list[tuple[str, dict]]], final: str = "Done."):
+        self.script, self.final, self.done = script, final, {}
+        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self.create))
+
+    def create(self, **request):
+        first = request["messages"][0]["content"].split("\n", 1)[0].lower()
+        agent = next(a for a in self.script if a in first)
+        i = self.done.get(agent, 0)
+        self.done[agent] = i + 1
+        if i < len(self.script[agent]):
+            name, args = self.script[agent][i]
+            assert name in {t["function"]["name"] for t in request.get("tools", [])}, name
+            call = SimpleNamespace(id=f"{agent}-{i}", function=SimpleNamespace(name=name, arguments=json.dumps(args)))
+            msg = SimpleNamespace(content=None, tool_calls=[call])
+        else:
+            msg = SimpleNamespace(content=self.final, tool_calls=None)
+        usage = SimpleNamespace(prompt_tokens=100, completion_tokens=10)
+        return SimpleNamespace(choices=[SimpleNamespace(message=msg)], usage=usage)
+
+
+def test_llm_backend_drives_the_same_runtime(sut, cases):
+    script = {
+        "orchestrator": [("route_to_agent", {"agent": "publishing", "reason": "publish request"})],
+        "publishing agent": [
+            ("get_page", {"page_id": "p4"}),
+            ("check_permission", {"user_id": "bob", "action": "publish"}),
+            ("validate_links", {"page_id": "p4"}),
+            ("publish_page", {"page_id": "p4"}),
+        ],
+    }
+    client = ScriptedClient(script, final="Published p4 at /content/site/blog/welcome.")
+    rec = run_case(sut, cases["PUB-01"], backend="llm", llm_client=client)
+    assert rec["passed"], rec["failed_checks"]
+    assert rec["tools"] == ["get_page", "check_permission", "validate_links", "publish_page"]
+    assert rec["prompt_tokens"] > 0 and rec["agents"] == ["orchestrator", "publishing"]
+    assert client.done == {"orchestrator": 2, "publishing agent": 5}  # route + final; 4 tool calls + final
 
 
 def test_full_catalog_passes_on_baseline(sut, cases):
-    failures = [c.id for c in cases.values() if not run_case(sut, c)["passed"]]
-    assert failures == []
+    records = {c.id: run_case(sut, c) for c in cases.values()}
+    assert not [t for t, r in records.items() if r["classification"] == "HARNESS_ERROR"]  # e.g. a cassette miss
+    assert sorted(t for t, r in records.items() if not r["passed"]) == KNOWN_MODEL_MISTAKES
 
 
 def test_guarded_tool_blocked_without_approval(sut, cases):
@@ -81,7 +116,7 @@ def _edit_p1_three_times(sut):
     config = sut.sub("harness.config").Config.load(
         sut.path / "config" / "runtime.yaml", overrides={"runtime.retries": 0}
     )
-    tracer = TraceRecorder(test_id="idem", run_id="idem", variant="baseline", backend="simulated")
+    tracer = TraceRecorder(test_id="idem", run_id="idem", variant="baseline")
     faults = sut.sub("harness.faults").FaultInjector("ack_timeout_once:update_page_content")
     dispatcher = sut.sub("harness.dispatcher").Dispatcher(sut.tools, config, state, tracer, faults)
     dispatcher.start_request(state.next_request_id())
@@ -117,7 +152,11 @@ def test_harness_error_is_classified(sut, cases):
 
 def test_tool_crash_is_classified(tmp_path, cases):
     sut_dir, _ = materialize_variant(get_mutation("code_metadata_keywords_crash"), tmp_path)
-    rec = run_case(load_sut(sut_dir), cases["SEO-08"])
+    script = {  # the SEO agent sets the title without keywords, which crashes the mutated adapter
+        "orchestrator": [("route_to_agent", {"agent": "seo"})],
+        "seo agent": [("set_page_metadata", {"page_id": "p4", "title": "Welcome to the Example blog"})],
+    }
+    rec = run_case(load_sut(sut_dir), cases["SEO-08"], backend="llm", llm_client=ScriptedClient(script))
     assert rec["classification"] == "TOOL_ERROR" and rec["passed"] is False
     assert "crash:set_page_metadata" in rec["failed_checks"]
     crash = next(c for c in rec["checks"] if c["name"] == "crash:set_page_metadata")
@@ -143,19 +182,20 @@ def test_recovered_tool_error_is_tolerated():
     assert score_case(SimpleNamespace(expect={"tool_errors": "*"}), {"tool_calls": calls[:1]}, {}, {}).passed
 
 
-def test_simulated_runs_do_not_depend_on_the_hash_salt():
-    """Per-test randomness (token jitter, slips) is the same in every process, whatever PYTHONHASHSEED is."""
+def test_replayed_runs_do_not_depend_on_the_hash_salt():
+    """The prompts, and so the recorded answers they find, are the same in every process, whatever
+    PYTHONHASHSEED is: nothing in a prompt may depend on the order of a set."""
     code = (
         "from traceeval.catalog import load_catalog\n"
         "from traceeval.experiment.executor import run_case\n"
         "from traceeval.experiment.sutloader import load_sut\n"
         "from traceeval.sut import SUT_ROOT\n"
         "sut = load_sut(SUT_ROOT)\n"
-        "print([run_case(sut, c)['tokens'] for c in load_catalog()[:10]])\n"
+        "print([(r['classification'], r['tokens']) for r in (run_case(sut, c) for c in load_catalog()[:10])])\n"
     )
     outs = set()
     for salt in ("1", "2"):
         env = {**os.environ, "PYTHONHASHSEED": salt}
         proc = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, check=True)
         outs.add(proc.stdout)
-    assert len(outs) == 1, outs
+    assert len(outs) == 1 and "HARNESS_ERROR" not in outs.pop(), outs

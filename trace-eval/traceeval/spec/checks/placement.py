@@ -21,8 +21,7 @@ def check(clause, ctx) -> ClauseResult:
     problems, notes = [], []
     for rule in clause["rules"]:
         ((kind, spec),) = rule.items()
-        fn = _RULES[kind]
-        problems += fn(spec, ctx.model)
+        problems += _RULES[kind](spec, ctx.model)
         notes.append(f"{kind} {spec}")
     status = "fail" if problems else "pass"
     summary = f"{len(clause['rules'])} rules hold" if not problems else "; ".join(problems[:3])
@@ -30,14 +29,9 @@ def check(clause, ctx) -> ClauseResult:
 
 
 def _files(model, where) -> list[str]:
+    """The variant's files that are, or lie under, ``where`` (a path or a list of paths)."""
     wheres = where if isinstance(where, list) else [where]
-    out = []
-    for rel in model.files:
-        for w in wheres:
-            if rel == w or rel.startswith(w.rstrip("/") + "/"):
-                out.append(rel)
-                break
-    return out
+    return [rel for rel in model.files if any(rel == w or rel.startswith(w.rstrip("/") + "/") for w in wheres)]
 
 
 def _define(spec, model) -> list[str]:
@@ -71,7 +65,7 @@ def _forbid_name(spec, model) -> list[str]:
                     isinstance(node, ast.Attribute) and node.attr == spec["name"]
                 ):
                     out.append(f"{rel} uses {spec['name']} (line {node.lineno})")
-                    break
+                    break  # one report per file
         elif re.search(rf"\b{re.escape(spec['name'])}\b", model.files[rel]):
             out.append(f"{rel} mentions {spec['name']}")
     return out
@@ -82,10 +76,13 @@ def _forbid_literal(spec, model) -> list[str]:
     for rel in _files(model, spec["in"]):
         if rel.endswith(".py"):
             for node in ast.walk(ast.parse(model.files[rel])):
+                # same type as well: the literal 1 must not match True
                 if isinstance(node, ast.Constant) and type(node.value) is type(value) and node.value == value:
                     out.append(f"{rel} hard-codes {value!r} (line {node.lineno})")
                     break
         else:
+            # a skill counts by its yaml block (the procedure) only: its prose may quote the number;
+            # whole tokens only, so that 60 matches neither 600 nor 0.60
             text = model.files[rel]
             body = re.search(r"```yaml\n(.*?)```", text, re.S)
             text = body.group(1) if body else text
@@ -97,7 +94,7 @@ def _forbid_literal(spec, model) -> list[str]:
 def _skill_order(spec, model) -> list[str]:
     steps = model.skill_procedure(spec["skill"])
 
-    def index(pattern):
+    def index(pattern):  # the first step whose fields include ``pattern``
         for i, step in enumerate(steps):
             if all(step.get(k) == v for k, v in pattern.items()):
                 return i

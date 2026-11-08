@@ -29,6 +29,9 @@ def _resolve(strategies):
 
 
 def make_oracle(history: History, variant: str, rng: random.Random):
+    """Answer "run this test" from the recorded runs of the variant: one repetition drawn at random, so a
+    flaky test passes or fails as often as it did when recorded."""
+
     def oracle(test_id: str):
         stats = history.variants.get(variant, {}).get(test_id)
         runs = stats.runs if stats and stats.runs else history.baseline[test_id].runs
@@ -54,12 +57,13 @@ def evaluate(
     shared = {"order_cache": {}}
     for variant in variants:
         change = history.changesets[variant]
-        train = [v for v in variants if v != variant]
+        train = [v for v in variants if v != variant]  # learning may use every change but this one
         for name in strategies:
             strat = get_strategy(name)
             for b in budgets:
                 budget = b * history.total_cost()
                 for seed in range(seeds):
+                    # from the seed and the variant name, not hash() (salted per process)
                     rng = random.Random(1000 * seed + sum(map(ord, variant)))
                     opts = dict(shared, seed=seed)
                     ctx = SelectionContext(change, catalog, history, budget, rng, train_variants=train, options=opts)

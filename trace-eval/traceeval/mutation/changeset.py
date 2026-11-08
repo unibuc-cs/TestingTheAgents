@@ -4,7 +4,7 @@ This is the only information about a change that the selectors receive (they nev
 mutation label). Components use the same identifiers as observed/declared dependencies:
 
     code:<relpath>::<qualname>      function-level code change (AST-normalised, docstrings ignored)
-    code:<relpath>                  module-level change outside any function
+    code:<relpath>                  module-level change outside any function (class attributes included)
     tool:<name>                     a changed function is a registered tool adapter
     line:<relpath>:<n>              baseline code line <n> inside a changed hunk
     skill:<name>#procedure|#prose|#meta
@@ -20,6 +20,7 @@ blank lines removed. Skill files are prompts that the model reads word for word,
 counts."""
 
 import ast
+import copy
 import difflib
 import io
 import json
@@ -58,9 +59,6 @@ class ChangeSet:
 
     def ids(self) -> set[str]:
         return {c.id for c in self.components}
-
-    def base_ids(self) -> set[str]:
-        return {c.base for c in self.components}
 
     def is_provably_benign(self) -> bool:
         """Nothing that can change behaviour was edited: at most comments, docstrings or formatting."""
@@ -104,6 +102,7 @@ def _docstring(node: ast.AST) -> ast.Expr | None:
 
 
 def _strip_docstrings(tree: ast.AST) -> ast.AST:
+    """Drop every docstring, so that editing one leaves the AST dump unchanged."""
     for node in ast.walk(tree):
         if isinstance(node, _DOCUMENTED) and _docstring(node) is not None:
             node.body = node.body[1:] or [ast.Pass()]
@@ -118,14 +117,15 @@ def _python_code_lines(source: str) -> list[tuple[int, str]]:
     try:
         for node in ast.walk(ast.parse(source)):
             doc = _docstring(node) if isinstance(node, _DOCUMENTED) else None
-            if doc is not None and _OPENS_STRING.match(lines[doc.lineno - 1]):  # a docstring on lines of its own
+            # only a docstring that starts its line: one written after ``def f():`` must not take that code along
+            if doc is not None and _OPENS_STRING.match(lines[doc.lineno - 1]):
                 docstring_lines.update(range(doc.lineno, doc.end_lineno + 1))
     except SyntaxError:
         pass  # a variant that does not parse still has its comments removed below
     try:
         tokens = tokenize.generate_tokens(io.StringIO(source).readline)
         comment_at = {t.start[0]: t.start[1] for t in tokens if t.type == tokenize.COMMENT}
-    except (SyntaxError, tokenize.TokenError):
+    except (SyntaxError, tokenize.TokenError):  # untokenizable variant: drop whole-line comments only
         comment_at = {n: line.index("#") for n, line in enumerate(lines, 1) if line.lstrip().startswith("#")}
     code = []
     for n, line in enumerate(lines, 1):
@@ -141,12 +141,13 @@ def _function_dumps(source: str) -> tuple[dict[str, str], str, dict[str, str]]:
     dumps: dict[str, str] = {}
     tools: dict[str, str] = {}
 
+    # qualified names as tracing/codecov.py builds them (Class.method, outer.inner), so the ids match
     def visit(node, prefix=""):
         for child in ast.iter_child_nodes(node):
             if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 name = f"{prefix}{child.name}"
-                dumps[name] = ast.dump(child, include_attributes=False)
-                for deco in child.decorator_list:
+                dumps[name] = ast.dump(child, include_attributes=False)  # no line numbers: formatting is no change
+                for deco in child.decorator_list:  # @tool("name", ...) marks a tool adapter
                     if (
                         isinstance(deco, ast.Call)
                         and getattr(deco.func, "id", "") == "tool"
@@ -161,13 +162,27 @@ def _function_dumps(source: str) -> tuple[dict[str, str], str, dict[str, str]]:
                 visit(child, prefix)
 
     visit(tree)
-    module_level = [n for n in tree.body if not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))]
-    module_dump = ast.dump(ast.Module(body=module_level, type_ignores=[]), include_attributes=False)
+    module_dump = ast.dump(ast.Module(body=_without_functions(tree.body), type_ignores=[]), include_attributes=False)
     return dumps, module_dump, tools
+
+
+def _without_functions(body: list[ast.stmt]) -> list[ast.stmt]:
+    """The statements that run at import time: functions dropped (they have their own dumps), classes kept
+    with their own statements only, so that a changed class attribute (a dataclass default) still counts."""
+    out = []
+    for node in body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if isinstance(node, ast.ClassDef):
+            node = copy.copy(node)
+            node.body = _without_functions(node.body)
+        out.append(node)
+    return out
 
 
 def _line_components(rel: str, old: list[tuple[int, str]], new: list[tuple[int, str]]) -> list[ChangedComponent]:
     """Baseline code lines of every changed hunk (an insertion anchors to the code lines around it)."""
+    # diff the code lines only, then map positions back to the baseline file's own line numbers
     sm = difflib.SequenceMatcher(a=[t for _, t in old], b=[t for _, t in new], autojunk=False)
     touched: set[int] = set()
     for tag, i1, i2, _j1, _j2 in sm.get_opcodes():
@@ -181,6 +196,7 @@ def _line_components(rel: str, old: list[tuple[int, str]], new: list[tuple[int, 
 
 
 def _python_components(rel: str, old: str, new: str) -> list[ChangedComponent]:
+    """code:, tool: and line: components of a Python file; a variant that does not parse is one module change."""
     comps: list[ChangedComponent] = []
     try:
         od, om, ot = _function_dumps(old)
@@ -189,6 +205,8 @@ def _python_components(rel: str, old: str, new: str) -> list[ChangedComponent]:
         return [ChangedComponent(f"code:{rel}", "code", rel, f"syntax error: {exc}")]
     if od == nd and om == nm:
         return []  # AST-equivalent: only comments, docstrings or formatting changed
+    # one component per changed function (a nested function changes its parent's dump too, so both are
+    # listed) and its tool if it is an adapter; then the module level; then the changed lines
     for name in sorted(set(od) | set(nd)):
         if od.get(name) != nd.get(name):
             status = "added" if name not in od else "removed" if name not in nd else "modified"
@@ -231,6 +249,7 @@ def _yaml_code_lines(source: str) -> list[tuple[int, str]]:
 
 
 def _skill_parts(text: str) -> tuple[str, str, str]:
+    """A SKILL.md split into front matter, the YAML of its ``## Procedure`` block, and the remaining prose."""
     m = _FRONT.match(text)
     front = m.group(1) if m else ""
     pm = _PROC.search(text)
@@ -244,6 +263,7 @@ def _skill_components(rel: str, old: str, new: str) -> list[ChangedComponent]:
     of, op_, opr = _skill_parts(old)
     nf, np_, npr = _skill_parts(new)
     comps = []
+    # procedure and front matter are compared as parsed YAML; prose word for word, whitespace collapsed
     if yaml.safe_load(op_ or "[]") != yaml.safe_load(np_ or "[]"):
         comps.append(ChangedComponent(f"skill:{name}#procedure", "skill", rel, "procedure block changed"))
     if yaml.safe_load(of or "{}") != yaml.safe_load(nf or "{}"):
@@ -270,6 +290,7 @@ def _agent_components(rel: str, old: str, new: str) -> list[ChangedComponent]:
 
 
 def _flatten(d, prefix="") -> dict[str, str]:
+    """Nested config -> {dotted.key: JSON of the value}; the dotted keys are the ids the harness reads."""
     out = {}
     if isinstance(d, dict):
         for k, v in d.items():
@@ -298,6 +319,7 @@ def _read(path: Path) -> str | None:
 
 
 def _components(rel: str, old: str, new: str) -> list[ChangedComponent]:
+    """The changed components of one file, by where it lives in the SUT tree."""
     if rel.endswith(".py"):
         return _python_components(rel, old, new)
     if rel.startswith("skills/") and rel.endswith("SKILL.md"):
@@ -322,6 +344,7 @@ def _code_lines(rel: str, text: str) -> list[tuple[int, str]]:
 
 
 def compute_changeset(baseline: Path, variant: Path, name: str = "variant") -> ChangeSet:
+    """Compare two SUT trees file by file (added and removed files included)."""
     baseline, variant = Path(baseline), Path(variant)
     rels = set()
     for root in (baseline, variant):

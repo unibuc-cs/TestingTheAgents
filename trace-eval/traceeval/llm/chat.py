@@ -8,14 +8,18 @@ split into prose and tool calls here, by the tokenizer's own parser.
 
 The default model is Gemma 4 E4B, instruction-tuned, decoded greedily at temperature 0. When
 ``TRACEEVAL_MODEL_LOG`` names a file, every call is appended to it as one JSON line (the last message sent,
-the raw answer, tokens and time), for seeing what the model did.
+the raw answer, tokens and time), for seeing what the model did. ``shared_client`` can put a cache of answers
+in front of either engine, or replay recorded answers with no model at all (``cache.py``).
 """
 
 import json
 import os
 import threading
 import time
+from pathlib import Path
 from types import SimpleNamespace
+
+from .cache import CachedClient
 
 DEFAULT_MODEL = "google/gemma-4-E4B-it"
 
@@ -29,29 +33,23 @@ def to_template_messages(messages: list[dict]) -> list[dict]:
     for m in messages:
         if m.get("role") == "tool":
             # Attach the result to the model turn that made the call, under the name of the tool it called.
+            # Tool messages follow their turn directly, so that turn is the last one kept.
             turn = out[-1]
-            name = next(
-                (tc["function"]["name"] for tc in turn["tool_calls"] if tc.get("id") == m.get("tool_call_id")),
-                "unknown",
-            )
+            name = next(tc["function"]["name"] for tc in turn["tool_calls"] if tc["id"] == m["tool_call_id"])
             try:
                 body = json.loads(m["content"])
-            except (json.JSONDecodeError, TypeError):
+            except json.JSONDecodeError:
                 body = m["content"]
             turn.setdefault("tool_responses", []).append({"name": name, "response": body})
             continue
         m = dict(m)
         if m.get("tool_calls"):
-            # The template wants the arguments as an object; the backend keeps them as a JSON string.
-            calls = []
-            for tc in m["tool_calls"]:
-                raw = tc["function"]["arguments"]
-                try:
-                    args = json.loads(raw) if isinstance(raw, str) else raw
-                except json.JSONDecodeError:
-                    args = {"_raw": raw}
-                calls.append({**tc, "function": {"name": tc["function"]["name"], "arguments": args}})
-            m["tool_calls"] = calls
+            # The template wants the arguments as an object. The backend keeps them as the JSON text that
+            # create() wrote (or that was recorded from it), so they always decode.
+            m["tool_calls"] = [
+                {**tc, "function": {**tc["function"], "arguments": json.loads(tc["function"]["arguments"])}}
+                for tc in m["tool_calls"]
+            ]
         out.append(m)
     return out
 
@@ -60,7 +58,7 @@ class GemmaChat:
     """What both engines share: the prompt, the parsing of the answer and the log. An engine implements
     ``_generate``. Calls may come from several threads at once."""
 
-    def __init__(self, model_id: str = DEFAULT_MODEL):
+    def __init__(self, model_id: str):
         from transformers import AutoTokenizer, GenerationConfig
 
         self.model_id = model_id
@@ -79,15 +77,16 @@ class GemmaChat:
         """The answer to the prompt ``ids``, as text with its special tokens, and its length in tokens."""
         raise NotImplementedError
 
-    def create(self, *, messages, tools=None, temperature=0.0, max_tokens=700, **_ignored):
+    def create(self, *, messages, temperature, max_tokens, tools=None, **_ignored):
         """One model call. Of the chat-completions arguments, only ``messages``, ``tools``, ``temperature`` and
-        ``max_tokens`` are used."""
+        ``max_tokens`` are used: the model is the one loaded here, and it always chooses freely between calling
+        a tool and answering (the backend's ``tool_choice`` is "auto")."""
         t0 = time.perf_counter()
         with self._lock:
             ids = list(
                 self.tokenizer.apply_chat_template(
                     to_template_messages(messages),
-                    tools=tools or None,
+                    tools=tools,
                     tokenize=True,
                     return_dict=True,
                     add_generation_prompt=True,
@@ -103,6 +102,9 @@ class GemmaChat:
                 parsed = self.tokenizer.parse_response(text, prefix=ids)
             except Exception:  # noqa: BLE001 - whatever the parser raises, the run must not crash on it
                 parsed = {"content": text}
+        # The call ids go back into later prompts, so they are derived from the call and not random: a run must
+        # build the same prompts again for its recorded answers to be found. The prompt length keeps the ids
+        # of different turns apart.
         tool_calls = [
             SimpleNamespace(
                 id=f"call_{i}_{len(ids)}",
@@ -137,7 +139,7 @@ class GemmaChat:
 class HFChatClient(GemmaChat):
     """The model run in-process with transformers on the local GPU, one answer at a time."""
 
-    def __init__(self, model_id: str = DEFAULT_MODEL):
+    def __init__(self, model_id: str):
         import torch
         from transformers import AutoModelForMultimodalLM
 
@@ -163,12 +165,12 @@ class VLLMChatClient(GemmaChat):
     """The model served by vLLM at ``TRACEEVAL_VLLM_URL``; by default the tunnel that
     ``scripts/gpu_remote.sh up`` opens. Many calls may run at once; the server batches them."""
 
-    def __init__(self, model_id: str = DEFAULT_MODEL):
+    def __init__(self, model_id: str):
         from openai import OpenAI
 
         super().__init__(model_id)
-        self.base_url = os.environ.get("TRACEEVAL_VLLM_URL", "http://127.0.0.1:18100/v1")
-        self.client = OpenAI(base_url=self.base_url, api_key="EMPTY", timeout=600, max_retries=2)
+        base_url = os.environ.get("TRACEEVAL_VLLM_URL", "http://127.0.0.1:18100/v1")
+        self.client = OpenAI(base_url=base_url, api_key="EMPTY", timeout=600, max_retries=2)
 
     def _generate(self, ids, temperature, max_tokens):
         # The prompt goes to the plain completions endpoint as token ids, so the server sees exactly the prompt
@@ -188,15 +190,28 @@ class VLLMChatClient(GemmaChat):
         return resp.choices[0].text, int(resp.usage.completion_tokens)
 
 
-_SHARED: dict[str, GemmaChat] = {}
+_SHARED: dict[str, object] = {}  # one client per engine and process
 _SHARED_LOCK = threading.Lock()
+# The recorded answers the test suite replays (``--backend replay`` uses them when TRACEEVAL_CACHE is not set).
+CASSETTE = Path(__file__).resolve().parents[2] / "tests" / "cassettes" / "gemma.jsonl"
 
 
-def shared_client(engine: str = "hf") -> GemmaChat:
-    """The process-wide client of ``engine`` ("hf" or "vllm"), created on first use for the model named by
-    ``TRACEEVAL_HF_MODEL`` (Gemma 4 E4B by default)."""
+def shared_client(engine: str):
+    """The process-wide client of ``engine``, created on first use for the model named by ``TRACEEVAL_HF_MODEL``
+    (Gemma 4 E4B by default): "hf" or "vllm" runs the model, "replay" only answers from recorded answers.
+
+    When ``TRACEEVAL_CACHE`` names a file, the answers go through that cache (``cache.py``): a request it has
+    recorded is answered from it, and any other is asked of the model and recorded. "replay" reads that file, or
+    the test suite's cassette when the variable is not set."""
     with _SHARED_LOCK:  # the threads of a run may ask at the same moment; the model must load only once
         if engine not in _SHARED:
-            client = {"hf": HFChatClient, "vllm": VLLMChatClient}[engine]
-            _SHARED[engine] = client(os.environ.get("TRACEEVAL_HF_MODEL", DEFAULT_MODEL))
+            model_id = os.environ.get("TRACEEVAL_HF_MODEL", DEFAULT_MODEL)
+            cache = os.environ.get("TRACEEVAL_CACHE")
+            if engine == "replay":
+                client = CachedClient(None, cache or CASSETTE, model_id)
+            else:
+                client = {"hf": HFChatClient, "vllm": VLLMChatClient}[engine](model_id)
+                if cache:
+                    client = CachedClient(client, cache, model_id)
+            _SHARED[engine] = client
         return _SHARED[engine]

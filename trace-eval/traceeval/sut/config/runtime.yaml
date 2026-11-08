@@ -9,7 +9,7 @@ tools:
   requires_approval: [approve_review, export_user_data, unpublish_page]
 
 routing:
-  default_agent: authoring    # specialist used when no trigger matches
+  default_agent: authoring    # specialist for requests that no specialist owns
 
 publishing:
   require_review: true        # pages need an approved review before publishing
@@ -21,6 +21,3 @@ seo:
 
 translation:
   default_locales: [de-DE, fr-FR]
-
-simulated:
-  flakiness: 0.0              # probability that the simulated agent slips on a slot (emulates LLM noise)

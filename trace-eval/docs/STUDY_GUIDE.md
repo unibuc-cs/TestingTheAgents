@@ -23,7 +23,7 @@ on these runs and traces and on controlled edits of the application.
 ![One run of a case, end to end](figures/guide_2_run.png)
 
 Open these three files side by side as you read: `traceeval/catalog/tests/publishing.yaml`
-(PUB-01), `traceeval/sut/skills/publishing-workflow/SKILL.md` (the Procedure the backend executes)
+(PUB-01), `traceeval/sut/skills/publishing-workflow/SKILL.md` (the Procedure the model reads as numbered steps)
 and `traceeval/sut/harness/dispatcher.py` (where every tool call is governed and recorded).
 
 ### 1.2 The earlier work in one paragraph
@@ -31,7 +31,7 @@ and `traceeval/sut/harness/dispatcher.py` (where every tool call is governed and
 After a change (a skill, a prompt, harness code, a config key), which of the 136 cases should run and
 when can we stop? The 38 mutations give the ground truth (which change breaks which case), and the
 baseline traces give observed dependencies. The strategies in `traceeval/selection/` rank cases under a
-token budget and are compared by replaying recorded outcomes (`docs/results/exp1/report.md`). The SDD
+token budget and are compared by replaying recorded outcomes (`docs/results/gemma2/report.md`). The SDD
 layer reuses the executor, the catalog, the recorder with coverage, the mutation machinery, the
 change-set extraction and the `observed` selection.
 
@@ -122,18 +122,18 @@ clause stays at L2 and the record says so.
 
 | file | lines | role |
 |---|---|---|
-| `traceeval/spec/catalog.yaml` + `model.py` | 164 + 257 | the clause templates; `Spec`, `Clause`, `ClauseResult`; expansion of `use/with` clauses, generated ids and texts; `validate_spec` against the product model |
+| `traceeval/spec/catalog.yaml` + `model.py` | 164 + 261 | the clause templates; `Spec`, `Clause`, `ClauseResult`; expansion of `use/with` clauses, generated ids and texts; `validate_spec` against the product model |
 | `traceeval/spec/draft.py` | 228 | `traceeval sdd draft`: product-model slice + catalog → prompt → model answer → expanded, validated draft spec and its plain-language rendering |
-| `traceeval/spec/product.py` | 195 | the product model: files and token counts, functions (AST), tool registry (from decorators), skill procedures, config; queries `locate`, `cases_calling`, `status_setters`, `skill_write_tools`, `model_set` |
-| `traceeval/spec/context.py` | 181 | `CheckContext`: runs cases on the variant with cost accounting, resolves scopes, builds the expression environment; the helpers usable in clauses (`config`, `approval_age`, `expected_broken`, `audit_count`, `applied`, `token_owner`, `title_of_length`, `first_case_calling`, `baseline_run`) |
-| `traceeval/spec/checks/settings.py` | 47 | schema check |
+| `traceeval/spec/product.py` | 187 | the product model: files and token counts, functions (AST), tool registry (from decorators), skill procedures, config; queries `locate`, `cases_calling`, `status_setters`, `skill_write_tools`, `model_set` |
+| `traceeval/spec/context.py` | 182 | `CheckContext`: runs cases on the variant with cost accounting (in parallel when asked), builds the expression environment; the helpers usable in clauses (`config`, `approval_age`, `expected_broken`, `audit_count`, `applied`, `token_owner`, `title_of_length`, `first_case_calling`, `baseline_run`) |
+| `traceeval/spec/checks/settings.py` | 48 | schema check |
 | `traceeval/spec/checks/examples.py` | 32 | one run, catalog-format expectations, `=expr` values |
-| `traceeval/spec/checks/placement.py` | 120 | the five lint rules |
-| `traceeval/spec/checks/traces.py` | 124 | `always` / `never` / `precedes`, `must_cover` |
-| `traceeval/spec/checks/contracts.py` | 339 | Hypothesis `find`; `_ToZ3` AST rewriter, `_symbolic_call`, `_prove`; behavioural `forall` |
-| `traceeval/spec/runner.py` | 224 | `record_baseline`, `agent_brief`, `evaluate_pr`, `run_demo` |
-| `traceeval/spec/report.py` | 191 | markdown report and the figure |
-| `traceeval/spec/prs.py` | 731 | the PR table; open it only to see how a PR is written (a `Mutation` with literal-anchor edits) |
+| `traceeval/spec/checks/placement.py` | 117 | the five lint rules |
+| `traceeval/spec/checks/traces.py` | 140 | `always` / `never` / `precedes`, `must_cover`; `cases_in_scope` resolves a clause's scope to catalog cases |
+| `traceeval/spec/checks/contracts.py` | 329 | Hypothesis `find`; `_ToZ3` AST rewriter, `_symbolic_call`, `_prove`; behavioural `forall` |
+| `traceeval/spec/runner.py` | 241 | `record_baseline`, `agent_brief`, `evaluate_pr`, `run_demo` |
+| `traceeval/spec/report.py` | 195 | markdown report and the figure |
+| `traceeval/spec/prs.py` | 739 | the PR table; open it only to see how a PR is written (a `Mutation` with literal-anchor edits) |
 | `traceeval/cli.py::cmd_sdd`, `tests/test_sdd.py` | | the command and the tests that pin the expected verdicts |
 
 Where to extend: a new clause kind is one checker module, one line in `checks/__init__.py`, its name in `KINDS` in
@@ -163,6 +163,5 @@ rung next to the reached one.
 ## 6. What is not there yet
 
 The generation side (an agent that reads the brief and writes the PR, with a repair loop against the
-evidence), the LLM backend for the application's own agents (the simulated backend follows the skills),
-a real repository (this is a testbed), a second proof backend, and the measurements the note asks for
+evidence), a real repository (this is a testbed), a second proof backend, and the measurements the note asks for
 (first-pass acceptance, placement, minimality, cost) on the same requests done with and without a spec.

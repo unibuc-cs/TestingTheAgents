@@ -15,7 +15,8 @@
 # A server listens only on the server's own localhost; this machine reaches it through its tunnel, at
 # http://127.0.0.1:PORT/v1. Environment variables override a preset for one call:
 #   TRACEEVAL_GPU_HOST   [fmi0@10.23.13.53]  SSH login on the server (key-based)
-#   TRACEEVAL_GPUS       GPUs to use, one copy of the model per GPU (e.g. TRACEEVAL_GPUS=0,1 for gemma alone)
+#   TRACEEVAL_GPUS       GPUs to use, one copy of the model per GPU (e.g. TRACEEVAL_GPUS=0,1 for gemma alone);
+#                        the server is shared: only GPUs 0 and 1 are ours, never list GPU 2
 #   TRACEEVAL_VLLM_PORT  port on both ends of the tunnel
 #   TRACEEVAL_HF_MODEL   the gemma preset's model (the vllm backend reads the same variable)
 set -euo pipefail

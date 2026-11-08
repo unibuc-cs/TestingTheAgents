@@ -21,7 +21,7 @@ class Dispatcher:
     Agents never call a tool function themselves: the runtime hands every tool request to ``call``,
     which decides whether the call may run at all, runs it (with fault injection and retries) and
     records what happened in the trace. Because every call passes through here, these rules hold for
-    every agent, every skill and both backends alike.
+    every agent and every skill alike.
     """
 
     def __init__(self, tools: dict, config, state, tracer, faults):

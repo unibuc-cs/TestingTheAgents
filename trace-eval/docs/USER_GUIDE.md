@@ -14,7 +14,7 @@ Read the README first. This guide adds what you need to work inside the reposito
        └─────► run all tests K× ──► which tests fail ───┘─► metrics ─► report
 ```
 
-The runs are recorded once (free with the simulated agent) and replayed thousands of times. `runs/<name>/`
+The runs are recorded once (with the model on the GPU server) and replayed thousands of times. `runs/<name>/`
 holds the edited copies (`variants/`), the recordings (`history/*.jsonl`) and the results (`results/`).
 
 ## 2. Vocabulary
@@ -38,7 +38,7 @@ holds the edited copies (`variants/`), the recordings (`history/*.jsonl`) and th
 | Want to understand… | Read |
 |---|---|
 | what the agents do | `sut/skills/publishing-workflow/SKILL.md`, `sut/agents/publishing.yaml`, `sut/config/runtime.yaml` |
-| how a request becomes tool calls | `sut/harness/runtime.py` (`_run_agent`), `dispatcher.py`, `backends/simulated.py` |
+| how a request becomes tool calls | `sut/harness/runtime.py` (`_run_agent`), `dispatcher.py`, `backends/llm_openai.py` |
 | how a test is run and scored | `experiment/executor.py` (`run_case`), `scoring/scorers.py` |
 | how a change becomes components | `mutation/catalog.py` (data), `mutation/changeset.py` |
 | the baselines | `selection/strategies.py` (about 140 lines) |
@@ -68,7 +68,8 @@ Everything else is plumbing (loaders, tracing, report).
   wording; an item that is a list is a set of alternatives. A run that ends with an answer must not end with an
   empty one (check `answered`). A test can also set `fixture_patch`
   and `fault_profile` (`transient_once:<tool>`, `ack_timeout_once:<tool>`, `permanent_down:<tool>`). `pytest`
-  checks that the whole catalog passes on the baseline.
+  checks that the whole catalog passes on the baseline, apart from Gemma's known mistakes, on Gemma's recorded
+  answers: record the new case's answers with `TRACEEVAL_BACKEND=vllm pytest -q` (see the gotchas).
 - **Tool errors**: a tool error the test intends (a refusal, a missing page, an injected outage) must be listed,
   e.g. `tool_errors: {unpublish_page: approval_required}`. Any other error fails the test as `tool_error:<tool>`,
   unless a later call of the same tool succeeded. A crash in tool or service code (any exception other than a
@@ -89,10 +90,15 @@ Everything else is plumbing (loaders, tracing, report).
   `--backend llm` (see [EXPERIMENT.md](EXPERIMENT.md)). Both build the same prompts and parse answers the same way (`traceeval/llm/chat.py`).
   `--backend llm` is any OpenAI-compatible endpoint (`pip install -e ".[llm]"`, `TRACEEVAL_LLM_BASE_URL`,
   `TRACEEVAL_LLM_API_KEY`, `TRACEEVAL_LLM_MODEL`). `TRACEEVAL_MODEL_LOG=<file>` logs every model call.
+  `--backend replay` plays Gemma from its recorded answers, with no model (`traceeval/llm/cache.py`); with
+  `TRACEEVAL_CACHE=<file>`, `hf` and `vllm` answer from that file what they can and add every new answer to it.
 
 ## 6. Gotchas
 
-- Simulated token counts are synthetic: their shape is realistic, their absolute values are not.
+- The tests replay Gemma's recorded answers (`tests/cassettes/gemma.jsonl`), each keyed by the exact request. After
+  a change to anything a prompt is built from (a skill, an agent, a config value, a tool, a case), the replay
+  misses (`CacheMiss`): start Gemma (`scripts/gpu_remote.sh up`), run `TRACEEVAL_BACKEND=vllm pytest -q` to record
+  what is missing, and commit the cassette.
 - Test texts share vocabulary with skills and config keys, which is why `ir_tfidf` is strong here.
 - `history_ml` (needs scikit-learn) and `observed_diverse` are optional. `--strategies all` includes them.
 - `runs/` is git-ignored and large (it holds line-level coverage). To keep a run, copy its `results/` into

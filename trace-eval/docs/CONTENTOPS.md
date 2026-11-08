@@ -47,9 +47,9 @@ Each layer is a folder or file you can open:
 | Tools | Thin adapters. Each has a name, a kind (`read`, `write` or `guarded`) and a parameter schema. The orchestrator also has a control tool, `route_to_agent` | [`sut/tools/`](../traceeval/sut/tools/) |
 | Services | The business logic: pages, versions and assets; review, publish, schedule and unpublish; links; SEO; roles and permissions; consent, export and audit; translation | [`sut/services/`](../traceeval/sut/services/) |
 | Data | An in-memory copy of a JSON file with the users, pages, assets, consents and audit log, plus a memory of idempotency keys | [`fixtures/base.json`](../traceeval/sut/fixtures/base.json), [`services/state.py`](../traceeval/sut/services/state.py) |
-| Harness | What runs the agents: the agent loop, the dispatcher that every tool call passes through, the router, the skill loader, fault injection and retries | [`sut/harness/`](../traceeval/sut/harness/) |
-| Settings | The step budget, retries, idempotency keys, disabled and guarded tools, the default agent, the review and scheduling switches, SEO limits, default languages, and how noisy the simulated agent is | [`config/runtime.yaml`](../traceeval/sut/config/runtime.yaml) |
-| Backends | What makes the decisions. The *simulated* backend follows the skill's procedure step by step, so it is deterministic and costs nothing. The *LLM* backend lets a real model decide, through any OpenAI-compatible endpoint that supports tool calling | [`harness/backends/`](../traceeval/sut/harness/backends/) |
+| Harness | What runs the agents: the agent loop, the dispatcher that every tool call passes through, the skill loader, fault injection and retries | [`sut/harness/`](../traceeval/sut/harness/) |
+| Settings | The step budget, retries, idempotency keys, disabled and guarded tools, the default agent, the review and scheduling switches, SEO limits and default languages | [`config/runtime.yaml`](../traceeval/sut/config/runtime.yaml) |
+| Backends | What makes the decisions: a model. Gemma 4 E4B by default (on the local GPU, on a GPU server, or replayed from its recorded answers), or any OpenAI-compatible endpoint that supports tool calling | [`harness/backends/`](../traceeval/sut/harness/backends/) |
 
 ## The agents, and how they work together
 
@@ -152,8 +152,9 @@ tool it hits ([`faults.py`](../traceeval/sut/harness/faults.py)):
 
 The application is small but realistic. It has enough layers (instructions, skills, tools, services,
 settings, harness) that a change can land in the wrong one. It has enough rules (gates, retries, budgets)
-that a change can break one without touching the feature it was aimed at. And under the simulated backend
-every run is deterministic and free, so the whole catalog can be run again and again.
+that a change can break one without touching the feature it was aimed at. And because the model decodes
+greedily and the app has no clock and no randomness, a run replays exactly from recorded answers, so the whole
+catalog can be run again and again for free.
 
 To follow a single request through the code, see [STUDY_GUIDE.md §1.1](STUDY_GUIDE.md#11-one-run-end-to-end).
 The test scenarios that exercise the platform are in [`traceeval/catalog/tests/`](../traceeval/catalog/tests/).

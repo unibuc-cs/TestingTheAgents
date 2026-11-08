@@ -21,7 +21,6 @@ dependencies = [
 [project.optional-dependencies]
 hf = ["torch>=2.6", "transformers>=5.5", "accelerate>=1.0"]  # the local default model (Gemma 4 E4B)
 llm = ["openai>=1.30"]
-otel = ["opentelemetry-sdk>=1.25"]
 ml = ["scikit-learn>=1.4"]
 sdd = ["hypothesis>=6.100", "z3-solver>=4.12"]
 dev = ["pytest>=8.0", "hypothesis>=6.100", "z3-solver>=4.12"]

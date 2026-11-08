@@ -3,16 +3,18 @@ name, so that several variants can coexist in one process and code mutations tak
 
 import importlib
 import importlib.util
+import itertools
 import shutil
 import sys
 from pathlib import Path
 
 from traceeval.sut import SUT_ROOT
 
-_COUNTER = [0]
+_COUNTER = itertools.count(1)  # numbers the module names sut_variant_1, sut_variant_2, ...
 
 
 def copy_sut(dest: Path, source: Path = SUT_ROOT) -> Path:
+    """Copy the SUT tree to ``dest`` (replacing what is there), without bytecode caches."""
     dest = Path(dest)
     if dest.exists():
         shutil.rmtree(dest)
@@ -21,14 +23,14 @@ def copy_sut(dest: Path, source: Path = SUT_ROOT) -> Path:
 
 
 class LoadedSUT:
-    """Handle to a loaded SUT module tree (``module`` is the package object)."""
+    """Handle to a loaded SUT module tree: ``name`` is its top-level module name, ``path`` its directory."""
 
-    def __init__(self, module, name: str, path: Path):
-        self.module = module
+    def __init__(self, name: str, path: Path):
         self.name = name
         self.path = Path(path)
 
     def sub(self, dotted: str):
+        """A submodule of this copy, e.g. ``sub("harness.runtime")``."""
         return importlib.import_module(f"{self.name}.{dotted}")
 
     @property
@@ -36,15 +38,16 @@ class LoadedSUT:
         return self.sub("tools").TOOLS
 
     def unload(self):
+        """Forget this copy's modules, so that a long experiment does not keep every variant in memory."""
         for key in [k for k in sys.modules if k == self.name or k.startswith(self.name + ".")]:
             del sys.modules[key]
 
 
-def load_sut(path: Path | str, name: str | None = None) -> LoadedSUT:
+def load_sut(path: Path | str) -> LoadedSUT:
+    """Import the SUT package at ``path`` under a fresh module name. The SUT uses relative imports only,
+    so every module of the copy resolves inside the copy."""
     path = Path(path).resolve()
-    if name is None:
-        _COUNTER[0] += 1
-        name = f"sut_variant_{_COUNTER[0]}"
+    name = f"sut_variant_{next(_COUNTER)}"
     spec = importlib.util.spec_from_file_location(name, path / "__init__.py", submodule_search_locations=[str(path)])
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
@@ -52,5 +55,5 @@ def load_sut(path: Path | str, name: str | None = None) -> LoadedSUT:
     # eagerly import the parts the runtime needs (also registers the tools)
     importlib.import_module(f"{name}.tools")
     importlib.import_module(f"{name}.harness.runtime")
-    importlib.import_module(f"{name}.harness.backends.simulated")
-    return LoadedSUT(module, name, path)
+    importlib.import_module(f"{name}.harness.backends.llm_openai")
+    return LoadedSUT(name, path)

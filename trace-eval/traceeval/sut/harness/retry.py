@@ -15,13 +15,12 @@ def idempotency_key(operation: str) -> str:
     return "idem-" + hashlib.sha256(operation.encode()).hexdigest()[:10]
 
 
-def with_retry(call, *, retries: int, is_write: bool, idempotency_enabled: bool, operation: str, on_attempt=None):
+def with_retry(call, *, retries: int, is_write: bool, idempotency_enabled: bool, operation: str):
     """``call(idempotency_key)`` is invoked up to ``retries + 1`` times on TransientError.
 
     Returns ``(result, attempts, key)``. Any other exception is passed on at once, without a retry, and
     when the last attempt fails too, its TransientError is raised. There is no pause between attempts.
-    ``operation`` identifies the write for its idempotency key. ``on_attempt(attempt, error)``, when
-    given, hears about every attempt (``error`` is None for the one that succeeded).
+    ``operation`` identifies the write for its idempotency key.
     """
     # A write gets one key, made before the first attempt and reused by every retry: that is how the
     # service recognises a retry of a write it has already made. Reads, and writes with keys switched
@@ -31,13 +30,8 @@ def with_retry(call, *, retries: int, is_write: bool, idempotency_enabled: bool,
     while True:
         attempt += 1
         try:
-            result = call(key)
-            if on_attempt:
-                on_attempt(attempt, None)
-            return result, attempt, key
-        except TransientError as exc:
-            if on_attempt:
-                on_attempt(attempt, exc)
+            return call(key), attempt, key
+        except TransientError:
             # Out of retries: the last transient failure goes to the caller.
             if attempt > retries:
                 raise

@@ -46,10 +46,10 @@ flowchart LR
     S --> P["Report<br/>runs/NAME/results/report.md"]
 ```
 
-**What changed recently.** Until now the "agents" were a simulator that executed the skills' procedures
-literally. It cost nothing and was fully reproducible, but it isn't an LLM. Now each agent's decisions come
-from Gemma 4 E4B, a small open model from Google. Recording is no longer free, which is why we use the GPU
-server (section 4).
+**Where this came from.** The agents used to be a simulator that executed the skills' procedures literally:
+free and reproducible, but not an LLM. It is gone (phase 2). Each agent's decisions now come from Gemma 4 E4B,
+a small open model from Google. Recording costs GPU time, which is why we use the GPU server (section 4);
+replaying recorded answers is free (section 5).
 
 ## 2. What happens when one test runs
 
@@ -109,7 +109,8 @@ reads:
    page_id=<page_id>. Then stop and answer: "Page {page_id} needs an approved review ..."
 ```
 
-The same YAML procedure drives the simulator, so a change to a skill changes what both backends do.
+The procedure is the skill's own statement of the workflow, so a change to it changes what the model is told
+to do.
 
 ### What Gemma writes
 
@@ -133,7 +134,7 @@ model. The `--backend` option picks who plays the agents:
 | `hf` (default) | Gemma in this Python process, on your local GPU (RTX 4090), one call at a time | a quick look at one case, no server needed |
 | `vllm` | Gemma served by vLLM on the GPU server (GPU0), reached through an SSH tunnel; many calls at once | recording experiments with Gemma |
 | `llm` | any OpenAI-compatible endpoint, named by `TRACEEVAL_LLM_BASE_URL` and `TRACEEVAL_LLM_MODEL` | Qwen on the GPU server (GPU1); later OpenAI's `gpt-6-luna` (phase 1) |
-| `simulated` | the old procedure-following stand-in | the existing results in `docs/results/`; will be removed (phase 2) |
+| `replay` | Gemma's recorded answers, no model (`tests/cassettes/gemma.jsonl`, or the file named by `TRACEEVAL_CACHE`) | the test suite and the SDD demo; running a recorded experiment again |
 
 The two models are wired in slightly differently:
 
@@ -303,6 +304,28 @@ one JSON line: which agent, the last message it got, Gemma's raw answer, tokens 
 TRACEEVAL_MODEL_LOG=runs/gemma2/model_calls.jsonl traceeval run --test PUB-02 --backend vllm
 ```
 
+### Recorded answers: running without a model
+
+Every answer Gemma gives can be recorded, keyed by exactly what it was sent
+([`traceeval/llm/cache.py`](../traceeval/llm/cache.py)). Decoding is greedy and the app has no clock and no
+randomness, so a run that starts from recorded answers sends the same prompts again and replays exactly.
+
+- **`--backend replay`** answers only from recorded answers, with no model and no GPU. The test suite and
+  `traceeval sdd` do this by default, from `tests/cassettes/gemma.jsonl`.
+- **`TRACEEVAL_CACHE=<file>`** with `--backend hf` or `vllm` answers what the file has, asks Gemma for the rest
+  and adds those answers to the file. Running the same experiment again then costs nothing.
+- **When the app changes a prompt** (a skill, an agent definition, a config value, a tool result), the recorded
+  answer no longer matches, and a replay fails with `CacheMiss`. Start Gemma, run `TRACEEVAL_BACKEND=vllm pytest
+  -q` (it replays what it can and records the rest) and commit the cassette. To drop answers nothing asks for
+  any more, delete the file first and record everything again.
+
+```bash
+scripts/gpu_remote.sh up gemma
+TRACEEVAL_BACKEND=vllm pytest -q            # records into tests/cassettes/gemma.jsonl what the tests lack
+TRACEEVAL_CACHE=tests/cassettes/gemma.jsonl traceeval sdd --backend vllm --workers 32   # the SDD demo, faster
+scripts/gpu_remote.sh down
+```
+
 ## 6. What we changed to make Gemma work, and why
 
 The first full run of Gemma on the original app passed 92 of 136 tests, and most failures were not about
@@ -354,11 +377,11 @@ fake on purpose. Now they come from the models themselves.
 | — | GPU server: `scripts/gpu_remote.sh`, `--backend vllm`, parallel runs | done |
 | — | first full recording with Gemma (`runs/gemma1`, below) | done |
 | — | second model: Qwen3.8-27B on GPU1, next to Gemma on GPU0 (`runs/qwen1`, below) | done |
-| 1 | an OpenAI backend (`gpt-6-luna`) and a cache of model answers | next |
-| 2 | remove the simulator (scripted slips, flakiness, synthetic tokens and latency) | planned |
-| 3 | pytest replays recorded model answers ("cassettes"), so tests need no GPU | planned |
+| 1 | a cache of model answers (`traceeval/llm/cache.py`, section 5); an OpenAI backend (`gpt-6-luna`) | cache done; OpenAI waits for API tokens |
+| 2 | remove the simulator (scripted slips, flakiness, synthetic tokens and latency) | done |
+| 3 | pytest replays recorded model answers ("cassettes", `tests/cassettes/`), so tests need no GPU | done |
 | 4 | re-derive the ground truth under both models, with three repetitions (`runs/gemma2`, `runs/qwen2`, below) | done |
-| 5 | re-record experiments 1 and 2 and the SDD demo; archive the simulated results; update the docs | planned |
+| 5 | the SDD demo on Gemma ([SDD_DEMO.md](SDD_DEMO.md)); experiment 1 is now `runs/gemma2` and `runs/qwen2` (`docs/results/`); the simulated results stay in `docs/results/exp1` and `exp2_flaky` | SDD done; a real-model version of experiment 2 (flaky agents) is open |
 
 The next two subsections are the first recordings, from before phase 4 (old changes, one repetition). The
 phase 4 recordings come after them.
@@ -509,6 +532,7 @@ experiment 1, with the old changes):
 |---|---|
 | [`scripts/gpu_remote.sh`](../scripts/gpu_remote.sh) | start, check and stop the model server on the GPU server |
 | [`traceeval/llm/chat.py`](../traceeval/llm/chat.py) | the model client: prompt, engines (`hf`, `vllm`), parsing, log |
+| [`traceeval/llm/cache.py`](../traceeval/llm/cache.py) | recorded answers: the cache in front of a model, and `replay` without one |
 | [`traceeval/sut/harness/backends/llm_openai.py`](../traceeval/sut/harness/backends/llm_openai.py) | one agent's conversation with the model: system prompt, tool calls, results |
 | [`traceeval/sut/harness/skills.py`](../traceeval/sut/harness/skills.py) | skills, and `render_procedure`, which writes a procedure as plain steps |
 | [`traceeval/sut/harness/runtime.py`](../traceeval/sut/harness/runtime.py) | the agent loop and delegation |

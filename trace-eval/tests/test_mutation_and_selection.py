@@ -11,7 +11,7 @@ from traceeval.experiment.metrics import apfd, apfdc
 from traceeval.experiment.runner import record_baseline, record_mutants
 from traceeval.experiment.sutloader import copy_sut
 from traceeval.mutation import MUTATIONS, get_mutation, materialize_variant
-from traceeval.mutation.changeset import _yaml_code_lines
+from traceeval.mutation.changeset import _python_components, _yaml_code_lines
 from traceeval.selection import SelectionContext, get_strategy
 from traceeval.sut import SUT_ROOT
 
@@ -62,6 +62,12 @@ def test_commenting_the_code_does_not_change_the_changeset(tmp_path):
 def test_yaml_comments_are_cut_but_a_hash_inside_a_scalar_stays():
     text = 'a: 1  # note\n# a whole-line comment\nb: "x # y"\nc: |\n  # part of the prompt\n  text\n'
     assert [t for _, t in _yaml_code_lines(text)] == ["a: 1", 'b: "x # y"', "c: |", "  # part of the prompt", "  text"]
+
+
+def test_a_changed_class_attribute_is_a_change():
+    old = "class Settings:\n    max_tokens: int = 512\n\n    def f(self):\n        return self.max_tokens\n"
+    comps = _python_components("x.py", old, old.replace("512", "256"))
+    assert "code:x.py" in {c.id for c in comps} and any(c.kind == "line" for c in comps)
 
 
 def test_changeset_is_order_sensitive_for_intents(tmp_path):

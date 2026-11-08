@@ -13,7 +13,7 @@ that drafts a spec from a prose request with a model. If you are new to this, re
 
 ```bash
 pip install -e ".[dev]"                 # adds hypothesis + z3-solver
-traceeval sdd --workdir runs/sdd        # ~30 s  ->  runs/sdd/report.md (+ evidence/*.json, one figure)
+traceeval sdd --workdir runs/sdd        # ~1 min, replays Gemma's recorded answers  ->  runs/sdd/report.md
 traceeval sdd draft --request docs/sdd/draft_example/request.md --id FS-0101 \
     --replay docs/sdd/draft_example/answer.json --out /tmp/FS-0101.draft.yaml   # draft a spec (offline example)
 ```
@@ -39,9 +39,9 @@ in expressions are in `traceeval/spec/context.py`. L0 (reviewed) is the prose `i
 
 ## The five requests, chosen for diversity
 
-| request | the accepted PR | what it demonstrates |
+| request | the correct PR | what it demonstrates |
 |---|---|---|
-| FS-0101 approvals expire after 30 days | new feature, 4 files (config, workflow service, publish adapters, skill prose), 45 diff lines | a **proof** (L5) of the rule for all inputs; the proof catches a future-dated approval no fixture has; an off-by-one; the same logic in the wrong layer (placement fails, and the contract cannot find the function in the service); a proven function that is never wired in (only the stale-approval example fails); a correct but branchy implementation that the prover cannot translate, accepted *with a gap* because the clause requires L5 |
+| FS-0101 approvals expire after 30 days | new feature, 4 files (config, workflow service, publish adapters, skill prose), 45 diff lines | a **proof** (L5) of the rule for all inputs; the proof catches a future-dated approval no fixture has; an off-by-one; the same logic in the wrong layer (placement fails, and the contract cannot find the function in the service); a proven function that is never wired in (only the stale-approval example fails); a correct but branchy implementation that the prover cannot translate, reported *with a gap* because the clause requires L5 |
 | FS-0102 guarded operations need a *valid* token and record the approver | security fix, 2 files (permissions service, dispatcher), 13 diff lines | the spec first **exposes a weakness of the current code** (any made-up token passes); the property and an example catch a "self-approved" variant; a lookup written inside the harness is caught only by placement |
 | FS-0103 nothing goes live without a clean link check of its current version | defence in depth, 2 files (links service, workflow service), 22 diff lines | the rule moves from a skill procedure (a prompt) into the service and is **proven**; a gate that ignores the check's version is missed by 200 random examples and found by the solver; a **temporal** rule (`precedes`) with completeness against the product model; a skill reordering is stopped by the service gate and still rejected |
 | FS-0104 SEO title limit raised to 70 | configuration only, 1 file, 2 diff lines | a property over **agent behaviour** (titles of every length); boundary examples computed from config; a hard-coded constant caught only by placement |
@@ -60,10 +60,34 @@ will run and the **agent brief**. The brief is the locate step: the files and fu
 needs to read, as a fraction of the repository. It comes from the product model: the tool adapters, the
 services behind them, the skills that call them, and the config keys.
 
-Headline numbers from `runs/sdd`: the brief is 10–20% of the repository (13% on average), and all 25
+Headline numbers from `runs/sdd`: the brief is 11–23% of the repository (14% on average), and all 25
 verdicts are as expected. Every wrong PR is rejected, with the clause, the counterexample or the
 misplaced code named. Two rules are proven for all inputs (FS-0101, FS-0103). Two specs find defects in
 the current code before any PR is written (FS-0102, FS-0105).
+
+## With a real model playing the agents
+
+The demo first ran on a simulator that executed the skills' procedures to the letter. The agents are now
+played by Gemma 4 E4B. Its answers are recorded (`tests/cassettes/`), so `traceeval sdd` replays them without
+a GPU. Three things changed:
+
+- **The regression line counts only cases that pass on the original app.** Gemma gets three catalog cases
+  wrong on the original app (AUT-04, PUB-10, SEO-02). They would fail under every PR and say nothing about it.
+- **Four correct PRs are now rejected, and the evidence says why.**
+  - FS-0101 `pr_correct` and `pr_branchy`: the code is right and the rule is still proven, but the
+    stale-approval scenario fails. The agent requests the new review itself (the PR's skill prose says "ask
+    for a new review"), which the spec leaves to the author. The simulator never read the prose.
+  - FS-0103 `pr_correct`: the service now refuses a schedule without a fresh link check, and in
+    DS-INTENTS/i05 Gemma schedules without one, so that regression case fails.
+  - FS-0104 `pr_config_70`: Gemma applies an over-long title whatever the limit (as in SEO-02), and the
+    property over title lengths finds one.
+- **Two wrong PRs are caught in more ways.** FS-0101 `pr_in_adapter` lets Gemma's schedule of an unapproved
+  page (PUB-10) through, which the service version refuses: the monitor catches it. FS-0103
+  `pr_gate_ignores_version` lets the unchecked schedule of i05 through, and the `precedes` rule catches it.
+
+So the accepted PRs are now FS-0102 `pr_correct` and FS-0105 `pr_fix`. A spec checks the whole system, model
+included: a correct code change can still be rejected when the model doesn't do what the skill or the spec
+asks, and the evidence names the run where it didn't.
 
 ## How this maps to the direction note
 
@@ -86,7 +110,6 @@ the current code before any PR is written (FS-0102, FS-0105).
 ## What is not here yet
 
 Missing so far: the generation side (an agent that reads the brief and writes the PR, with the repair loop
-against the evidence), the LLM backend for the agent system itself (the simulated agent follows the
-skills), a real repository (this is the testbed), and a second proof backend. The next step is to
+against the evidence), a real repository (this is the testbed), and a second proof backend. The next step is to
 run the loop spec -> brief -> coding agent -> PR -> evidence, and to measure first-pass acceptance,
 placement, minimality and cost against the same requests done without a spec.

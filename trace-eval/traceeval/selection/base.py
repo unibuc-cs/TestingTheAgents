@@ -6,7 +6,8 @@ A strategy receives a ``SelectionContext`` (change set, catalog, baseline histor
 - drives execution itself through an oracle (``run``), choosing the next test from the outcomes so far
   and deciding when to stop (adaptive strategies).
 
-Strategies never see variant outcomes other than through the oracle, and never see mutation labels."""
+Strategies see the outcomes of the variant under evaluation only through the oracle (those of the other
+variants, ``train_variants``, they may learn from), and never see mutation labels."""
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -23,9 +24,9 @@ class SelectionContext:
     catalog: dict[str, EvalCase]
     history: object  # traceeval.experiment.history.History (baseline facts only)
     budget: float  # tokens
-    rng: object
+    rng: object  # random.Random of this replay seed (used by stochastic strategies)
     train_variants: list[str] = field(default_factory=list)  # variants usable for learning (never the one under test)
-    options: dict = field(default_factory=dict)
+    options: dict = field(default_factory=dict)  # "seed" and the evaluator's "order_cache"; strategies' scratch space
 
     def tests(self) -> list[str]:
         return [t for t in self.history.test_ids() if t in self.catalog]
@@ -38,8 +39,8 @@ class SelectionContext:
 class ExecutionLog:
     strategy: str
     steps: list[tuple[str, bool, float]] = field(default_factory=list)  # (test_id, passed, cost)
+    # budget | exhausted (no test left that fits) | clean | regression | uninformative | no_components
     stop_reason: str = "budget"
-    diagnostics: dict = field(default_factory=dict)
 
     @property
     def cost(self) -> float:
@@ -53,6 +54,8 @@ class ExecutionLog:
 # ---------------------------------------------------------------------------- dependency matching
 def matches(component: ChangedComponent, deps: set[str]) -> bool:
     """Does a changed component touch a test whose (declared or observed) dependencies are ``deps``?"""
+    # Dependencies are recorded at the coarser level (skill:x, agent:x), so a change to skill:x#procedure or
+    # agent:x.tools touches every test that used skill x or ran agent x.
     cid, base = component.id, component.base
     if cid in deps or base in deps:
         return True
@@ -62,7 +65,8 @@ def matches(component: ChangedComponent, deps: set[str]) -> bool:
 
 
 def affinity(change: ChangeSet, deps: set[str]) -> int:
-    """Number of changed components touching ``deps`` (line-level hits count once per file)."""
+    """Number of changed components touching ``deps``. Line-level hits count once per file, so a long hunk
+    does not outweigh a changed skill or config key."""
     n, line_files = 0, set()
     for c in change.components:
         if not matches(c, deps):
@@ -79,10 +83,6 @@ def line_hit(change: ChangeSet, deps: set[str]) -> bool:
     return any(c.kind == "line" and c.id in deps for c in change.components)
 
 
-def code_components(change: ChangeSet) -> list[ChangedComponent]:
-    return [c for c in change.components if c.kind in ("code", "tool")]
-
-
 def weighted_affinity(change: ChangeSet, dep_freq: dict[str, float]) -> float:
     """Affinity weighted by how often the component was exercised in the test's baseline runs."""
     total = 0.0
@@ -94,20 +94,20 @@ def weighted_affinity(change: ChangeSet, dep_freq: dict[str, float]) -> float:
         if c.kind == "line":
             line_files[c.file] = max(line_files.get(c.file, 0.0), dep_freq.get(c.id, 1.0))
             continue
-        hits = [
+        # the frequency of the dependency that made it match (the same three cases as ``matches``): the
+        # component itself, its base, or a function of a module changed at module level
+        total += max(
             dep_freq[d]
             for d in deps
-            if d == c.id
-            or d == c.base
-            or (c.id.startswith("code:") and "::" not in c.id and d.startswith(c.id.split("#")[0] + "::"))
-        ]
-        total += max(hits) if hits else 1.0
+            if d in (c.id, c.base) or (c.id.startswith("code:") and "::" not in c.id and d.startswith(c.id + "::"))
+        )
     return total + sum(line_files.values())
 
 
 class Strategy:
+    """Base class: subclasses implement ``order``; adaptive ones override ``run`` as well."""
+
     name = "base"
-    adaptive = False
     stochastic = False  # order depends on ctx.rng (then it is cached per seed, not per variant)
 
     def order(self, ctx: SelectionContext) -> list[str]:

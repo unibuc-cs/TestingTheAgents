@@ -2,7 +2,7 @@
 
 The services hold the business rules of the ContentOps platform and read and change the in-memory ``State``;
 the tool adapters in ``tools/`` are thin wrappers around them. A service refuses a request by raising one
-of the ``ToolError`` subclasses re-exported here, which the dispatcher turns into an error result for the
+of the ``ToolError`` subclasses in ``errors``, which the dispatcher turns into an error result for the
 agent. The modules:
 
     state        the platform data (users, pages, assets, ...), the audit log, the logical clock and the
@@ -16,16 +16,3 @@ agent. The modules:
     governance   permission checks, consent, personal-data export and the audit log
     translation  translation jobs
 """
-
-from .errors import ApprovalRequired, NotFound, PermissionDenied, ToolError, TransientError, ValidationError
-from .state import State
-
-__all__ = [
-    "ApprovalRequired",
-    "NotFound",
-    "PermissionDenied",
-    "State",
-    "ToolError",
-    "TransientError",
-    "ValidationError",
-]

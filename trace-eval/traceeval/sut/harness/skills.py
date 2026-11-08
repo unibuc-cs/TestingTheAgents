@@ -1,8 +1,23 @@
-"""Skill loading. A skill is a SKILL.md with YAML front matter, prose instructions and a machine-readable
-``## Procedure`` block. The simulated backend executes the procedure; a model reads it as numbered plain
-steps (``render_procedure``), with included skills written out in place and settings shown with their
-values. The procedure block is the canonical statement of the workflow, so a mutation of the procedure
-changes the behaviour of *both* backends."""
+"""Skill loading. A skill is a SKILL.md with YAML front matter, prose instructions and a ``## Procedure``
+block: the workflow as a YAML list of steps. The model reads the procedure as numbered plain steps
+(``render_procedure``), with included skills written out in place and settings shown with their values.
+
+The keys a step may use (each step does one of ``set``, ``say``, ``route``, ``call``, ``include``):
+
+- ``include: <skill>``: that skill's own steps, in place (``SkillLoader.expand``).
+- ``when``: a condition; the step applies only when it holds.
+- ``set``: context slots and the values they take, for later steps.
+- ``say``: the final answer, a template with ``{expr}`` placeholders; it ends the agent's work.
+- ``route``: hand the request to the specialist that owns it (the routing skill writes ``route: auto``).
+- ``call`` with ``args``: call a tool. ``id`` names its result for later steps (``result.<id>``).
+- ``require``, ``on_fail``, ``fail_message``: a condition on the call's result; when it fails the agent stops
+  and answers ``fail_message``, unless ``on_fail`` is ``continue``.
+- ``then: stop`` with ``then_message``: the call is the agent's last; it answers ``then_message``.
+- ``on_error: continue``: an error result does not stop the agent.
+
+Values in ``set`` and ``args`` are ``$slot`` (a context slot), ``=expr`` (a Python-like expression over the
+slots and earlier results) or a literal. Nothing evaluates these expressions: the model reads them, rewritten
+as plain text where that helps (``_plain``)."""
 
 import hashlib
 import json
@@ -20,15 +35,12 @@ _PROC = re.compile(r"## Procedure\s*```yaml\n(.*?)```", re.DOTALL)
 
 @dataclass
 class Skill:
-    """One parsed skill: what its front matter declares, its full markdown text and its procedure."""
+    """One parsed skill: its name and version from the front matter, its full markdown text and its procedure."""
 
     name: str
     version: str  # from the front matter, always kept as a string ("0" when it is missing)
-    description: str
-    tools: list[str]  # tools the skill says it uses; what an agent may call is set by its own definition
-    text: str  # full markdown (for the LLM backend)
+    text: str  # full markdown, front matter included; the LLM backend puts it in the prompt
     procedure: list[dict] = field(default_factory=list)  # one dict per step, include steps not yet expanded
-    path: str = ""  # the SKILL.md it was read from; empty when no path was given
 
     @property
     def digest(self) -> str:
@@ -51,14 +63,10 @@ class SkillLoader:
         self.tracer = tracer  # receives a "skill.load" event per load; None turns the recording off
         self._cache: dict[str, Skill] = {}  # skill name -> parsed Skill, so each file is read only once
 
-    def available(self) -> list[str]:
-        """Names of all skills on disk (the folders that contain a SKILL.md), sorted."""
-        return sorted(p.parent.name for p in self.skills_dir.glob("*/SKILL.md"))
-
-    def load(self, name: str, record: bool = True) -> Skill:
-        """Return the skill called ``name``, parsing its file on first use. Each call with ``record`` set
-        is reported as a ``skill.load`` event, also when the skill comes from the cache. Raises
-        FileNotFoundError for a skill that does not exist."""
+    def load(self, name: str) -> Skill:
+        """Return the skill called ``name``, parsing its file on first use. Each call is reported as a
+        ``skill.load`` event, also when the skill comes from the cache. Raises FileNotFoundError for a skill
+        that does not exist."""
         # First use: read and parse the file, then keep the result.
         if name not in self._cache:
             path = self.skills_dir / name / "SKILL.md"
@@ -67,7 +75,7 @@ class SkillLoader:
             self._cache[name] = parse_skill(path.read_text(), path=str(path))
         # Report the use; in the trace it makes this skill, at this version, a dependency of the run.
         skill = self._cache[name]
-        if record and self.tracer is not None:
+        if self.tracer is not None:
             self.tracer.event(
                 "skill.load", skill=skill.name, version=skill.version, digest=skill.digest, tokens=skill.token_estimate
             )
@@ -97,6 +105,7 @@ class SkillLoader:
         return steps
 
 
+# The paragraph above every rendered procedure: how to read the notation of the numbered steps below it.
 PROCEDURE_INTRO = (
     "Follow these steps in order, one tool call at a time. <name> is the value `name` from the request "
     "context, or the value an earlier step set. `fetch.path` is the field `path` in the result of the step "
@@ -104,6 +113,7 @@ PROCEDURE_INTRO = (
     "error, stop and tell the user what failed."
 )
 
+# A runtime setting read inside a procedure expression: config('publishing.require_review').
 _CONFIG = re.compile(r"config\('([^']+)'\)")
 
 
@@ -116,6 +126,7 @@ def _plain(expr, config, template: bool = False) -> str:
     text = str(expr)
 
     def setting(m):  # config('key') -> "key (value)", or just the value inside a message
+        # Read through Config.get, so the trace records that the prompt, and so the run, depends on it.
         value = json.dumps(config.get(m.group(1)))
         return value if template else f"{m.group(1)} ({value})"
 
@@ -165,8 +176,8 @@ def _answer(message: str | None, config) -> str:
 
 def render_procedure(steps: list[dict], config) -> str:
     """The expanded steps of a procedure (``SkillLoader.expand``) as numbered sentences for a model: the
-    same workflow the simulated backend executes, with every setting it reads shown with its value from
-    ``config``. The step keys are documented in the simulated backend."""
+    workflow, with every setting it reads shown with its value from ``config``. The step keys are listed in
+    the module docstring."""
     lines = []
     for step in steps:
         if "set" in step:  # the agent notes a value for later steps
@@ -205,10 +216,10 @@ def replace_procedure(text: str, replacement: str) -> str:
 
 
 def parse_skill(text: str, path: str = "") -> Skill:
-    """Parse the text of a SKILL.md into a Skill. The front matter gives name, version, description and
-    tools; the ``## Procedure`` block gives the steps. Both are optional: without a name the skill is
-    named after the folder that holds the file at ``path`` (or "unknown" when there is no path), and
-    without a procedure it has no steps."""
+    """Parse the text of a SKILL.md into a Skill. The front matter gives name and version; the
+    ``## Procedure`` block gives the steps. Both are optional: without a name the skill is named after
+    the folder that holds the file at ``path`` (or "unknown" when there is no path), and without a
+    procedure it has no steps."""
     # The front matter at the top of the file, if there is one.
     m = _FRONT.match(text)
     meta = yaml.safe_load(m.group(1)) if m else {}
@@ -219,9 +230,6 @@ def parse_skill(text: str, path: str = "") -> Skill:
     return Skill(
         name=meta.get("name", Path(path).parent.name if path else "unknown"),
         version=str(meta.get("version", "0")),
-        description=meta.get("description", ""),
-        tools=list(meta.get("tools", [])),
         text=text,
         procedure=procedure or [],
-        path=path,
     )

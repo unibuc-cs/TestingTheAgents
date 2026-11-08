@@ -1,6 +1,6 @@
 """The agent loop. Backend-agnostic: a backend proposes the next action (tool call or final answer);
 the runtime enforces the step budget, dispatches tools, handles delegation between agents and records
-agent transitions. The same loop drives the simulated backend and the LLM backend."""
+agent transitions."""
 
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -31,54 +31,37 @@ class Action:
 
 @dataclass
 class Session:
-    """What one agent works with during its turn: its definition and skills, the request and its context,
-    the calls it has made so far and the tokens its model calls used."""
+    """What one agent starts its turn with: its definition and skills, the request and its context. The
+    backend builds the agent's prompt from it."""
 
     agent: object  # the AgentDef of the agent this session belongs to
     skills: list  # the Skill objects named in the agent definition, loaded when the agent started
     ctx: dict  # the request context (user id, page id, approval token, ...), shared by all agents of the run
     request: str
-    history: list = field(default_factory=list)  # (Action, result) per tool call or delegation, in order
-    # Token usage and number of model calls of this agent alone; the Runtime adds up the whole run.
-    prompt_tokens: int = 0
-    completion_tokens: int = 0
-    llm_calls: int = 0
-
-    def add_usage(self, prompt: int, completion: int, runtime=None):
-        """Record the tokens of one model call. When ``runtime`` is given, the call is also written to the
-        trace as an ``llm.call`` event, which is where the trace's token totals come from, and added to the
-        totals of the whole run."""
-        self.prompt_tokens += prompt
-        self.completion_tokens += completion
-        self.llm_calls += 1
-        if runtime is not None:
-            runtime.tracer.event("llm.call", agent=self.agent.name, prompt_tokens=prompt, completion_tokens=completion)
-            runtime.prompt_tokens += prompt
-            runtime.completion_tokens += completion
 
 
 class Runtime:
     """Runs one request through the agents: the entry agent, and every agent it delegates to.
 
-    A backend (simulated or LLM) decides what an agent does next, and the runtime carries the decision
+    A backend decides what an agent does next, and the runtime carries the decision
     out: it sends tool calls to the dispatcher, handles ``route_to_agent`` itself by running the target
     agent, and stops an agent that would go over the step budget. The budget, the token totals and the
     termination reason belong to the whole run, so all agents of a delegation chain share them, and a
     Runtime serves a single request.
 
     ``backend_factory(agent, runtime, session)`` makes a fresh backend for every agent turn. A backend
-    offers ``next_action(session)``, which returns an ``Action``, and ``observe(action, result)``, which
+    offers ``next_action()``, which returns an ``Action``, and ``observe(action, result)``, which
     receives the result of that action.
     """
 
     def __init__(self, sut_dir: str | Path, config, state, tracer, backend_factory, faults, tools: dict):
-        self.sut_dir = Path(sut_dir)  # root of the SUT copy; agent definitions and skills are read from it
+        sut_dir = Path(sut_dir)  # root of the SUT copy; agent definitions and skills are read from it
         self.config = config  # runtime settings: config/runtime.yaml plus any overrides for this run
         self.state = state  # the in-memory platform data that the tools read and change
         self.tracer = tracer  # the trace recorder that every event of the run goes to
         self.backend_factory = backend_factory
-        self.agents = AgentLoader(self.sut_dir / "agents")
-        self.skills = SkillLoader(self.sut_dir / "skills", tracer=tracer)  # every skill load is traced
+        self.agents = AgentLoader(sut_dir / "agents")
+        self.skills = SkillLoader(sut_dir / "skills", tracer=tracer)  # every skill load is traced
         self.dispatcher = Dispatcher(tools, config, state, tracer, faults)  # every tool call except delegation
         # State of the whole run, shared by all agents of the delegation chain.
         self.steps = 0  # tool calls and delegations made so far; the step budget limits this number
@@ -86,6 +69,13 @@ class Runtime:
         self.completion_tokens = 0
         self.termination_reason = "final"  # becomes "max_tool_calls" when an agent is stopped by the budget
         self.agent_path: list[str] = []  # the agents in the order they started, the entry agent first
+
+    def add_usage(self, agent_name: str, prompt: int, completion: int):
+        """Book the tokens of one model call made by ``agent_name``: an ``llm.call`` event in the trace (the
+        trace's token totals are summed from these events) and the totals of the whole run."""
+        self.tracer.event("llm.call", agent=agent_name, prompt_tokens=prompt, completion_tokens=completion)
+        self.prompt_tokens += prompt
+        self.completion_tokens += completion
 
     # ---------------------------------------------------------------- public entry point
     def run(self, agent_name: str, request: str, context: dict) -> dict:
@@ -137,9 +127,9 @@ class Runtime:
         self.tracer.event("agent.start", agent=agent.name, version=agent.version, digest=agent.digest, depth=depth)
         # Load the skills the definition names; each load is traced, so the run depends on these skills.
         skills = [self.skills.load(s) for s in agent.skills]
-        # An orchestrator chooses by reading the triggers and the description of every specialist. Record
-        # that for all of them, not just the one chosen: a change to any of these fields can change the
-        # choice. (The LLM backend shows the model both fields; the keyword router uses only the triggers.)
+        # An orchestrator chooses by reading the triggers and the description of every specialist (the LLM
+        # backend shows the model both). Record that for all of them, not just the one chosen: a change to
+        # any of these fields can change the choice.
         if agent.is_orchestrator:
             for other in self.agents.load_all().values():
                 if not other.is_orchestrator:
@@ -152,7 +142,7 @@ class Runtime:
         max_tool_calls = int(self.config.get("runtime.max_tool_calls"))
         while True:
             # Ask the backend for the next move. A final answer ends the turn, even when the budget is spent.
-            action = backend.next_action(session)
+            action = backend.next_action()
             if action.type == "final":
                 self.tracer.event("agent.end", agent=agent.name, message=action.message)
                 return action.message
@@ -169,8 +159,7 @@ class Runtime:
                 result = self._delegate(agent, action, request, ctx, depth)
             else:
                 result = self.dispatcher.call(agent, action.name, action.args, ctx)
-            # Keep the call in the session and let the backend see the result before it plans its next move.
-            session.history.append((action, result))
+            # Let the backend see the result before it plans its next move.
             backend.observe(action, result)
 
     def _delegate(self, agent, action: Action, request: str, ctx: dict, depth: int) -> dict:
@@ -180,8 +169,7 @@ class Runtime:
         sees like any other refused call."""
         target = action.args.get("agent")
         reason = action.args.get("reason", "")
-        # Refuse a target that has no definition: a model can invent an agent name, and a default agent
-        # misconfigured in routing.default_agent ends up here as well.
+        # Refuse a target that has no definition: a model can invent an agent name.
         if target not in self.agents.available():
             self.tracer.event("agent.route", source=agent.name, target=target, status="error", reason=reason)
             return {"error": "unknown_agent", "message": f"no agent named '{target}'"}

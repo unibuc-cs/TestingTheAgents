@@ -1,4 +1,4 @@
-"""Spec layer: clause checkers and end-to-end verdicts on the demo PRs."""
+"""Spec layer: clause checkers and end-to-end verdicts on the demo PRs (cases replay Gemma's recorded answers)."""
 
 import json
 from pathlib import Path
@@ -37,22 +37,27 @@ def test_specs_load_and_every_pr_has_a_spec():
 def test_fs0101_verdicts_and_proof(world):
     ev = _verdicts(world, "FS-0101")
     assert {k: v["verdict"] for k, v in ev.items()} == {
-        "FS-0101/pr_correct": "accepted",
+        "FS-0101/pr_correct": "rejected",
         "FS-0101/pr_no_lower_bound": "rejected",
         "FS-0101/pr_off_by_one": "rejected",
-        "FS-0101/pr_branchy": "accepted with gaps",
+        "FS-0101/pr_branchy": "rejected",
         "FS-0101/pr_in_adapter": "rejected",
         "FS-0101/pr_unwired": "rejected",
     }
     rule, monitor = "function_contract:review_age_ok", "always_on_calls:publish_page+schedule_publish"
+    stale = "scenario:please-publish-the-staleapproval"
     by = {c["clause_id"]: c for c in ev["FS-0101/pr_correct"]["clauses"]}
     assert by[rule]["rung"] == "L5" and by[rule]["status"] == "pass" and by[rule]["required"] == "L5"
+    # the code is right; only the scenario fails: Gemma requests the new review, which the spec leaves to the author
+    assert [k for k, c in by.items() if c["status"] == "fail"] == [stale]
     wrong = {c["clause_id"]: c for c in ev["FS-0101/pr_no_lower_bound"]["clauses"]}
     assert wrong[rule]["status"] == "fail" and any("age_days': -1" in d for d in wrong[rule]["details"])
     placed = {c["clause_id"]: c for c in ev["FS-0101/pr_in_adapter"]["clauses"]}
-    assert placed["function_in_layer:review_age_ok"]["status"] == "fail" and placed[monitor]["status"] == "pass"
+    assert placed["function_in_layer:review_age_ok"]["status"] == "fail"
+    # Gemma schedules a page with no approval (PUB-10): the service refuses it, the adapter version lets it through
+    assert placed[monitor]["status"] == "fail" and any("PUB-10" in d for d in placed[monitor]["details"])
     branchy = {c["clause_id"]: c for c in ev["FS-0101/pr_branchy"]["clauses"]}
-    assert ev["FS-0101/pr_branchy"]["verdict"] == "accepted with gaps"
+    assert [k for k, c in branchy.items() if c["status"] == "fail"] == [stale]
     assert branchy[rule]["status"] == "gap" and branchy[rule]["rung"] == "L2" and branchy[rule]["required"] == "L5"
 
 
@@ -76,9 +81,16 @@ def test_fs0102_and_fs0103_verdicts(world):
         "forbid_name_in:users",
     ]
     ev = _verdicts(world, "FS-0103")
-    assert ev["FS-0103/pr_correct"]["verdict"] == "accepted"
+    # the code is right, but the service now refuses Gemma's schedule without a link check (DS-INTENTS/i05)
+    correct = {c["clause_id"]: c for c in ev["FS-0103/pr_correct"]["clauses"]}
+    assert [k for k, c in correct.items() if c["status"] == "fail"] == ["regression-tests"]
+    assert correct["regression-tests"]["details"] == ["DS-INTENTS/i05"]
     stale = {c["clause_id"]: c for c in ev["FS-0103/pr_gate_ignores_version"]["clauses"]}
-    assert [k for k, c in stale.items() if c["status"] == "fail"] == ["function_contract:links_clean"]
+    # the same unchecked schedule goes through a gate that ignores the version, and the audit order shows it
+    assert [k for k, c in stale.items() if c["status"] == "fail"] == [
+        "precedes_in_audit:publish_page+schedule_publish",
+        "function_contract:links_clean",
+    ]
     assert stale["function_contract:links_clean"]["rung"] == "L5" and "solver counterexample" in " ".join(
         stale["function_contract:links_clean"]["details"]
     )

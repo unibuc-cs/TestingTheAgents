@@ -5,10 +5,11 @@ from pathlib import Path
 
 from .model import RUNG_LABEL
 
-STATUS = {"pass": "pass", "fail": "FAIL", "gap": "gap", "skipped": "skipped"}
+STATUS = {"pass": "pass", "fail": "FAIL", "gap": "gap"}  # a failure stands out in the tables
 
 
 def write_report(workdir: Path, specs, briefs: dict, evidence: list[dict], model, out: Path | None = None) -> Path:
+    """Write <out or workdir>/report.md and its figure; returns the report's path."""
     out = Path(out) if out else Path(workdir)
     out.mkdir(parents=True, exist_ok=True)
     fig = _figure(out / "figures", specs, briefs, evidence)
@@ -38,7 +39,7 @@ def write_report(workdir: Path, specs, briefs: dict, evidence: list[dict], model
             for c in ev["clauses"]
             if c["status"] in ("fail", "gap")
         ]
-        ok = "" if ev["verdict"].startswith(ev["expected"]) else " **(unexpected)**"
+        ok = "" if ev["verdict"].startswith(ev["expected"]) else " **(unexpected)**"  # "accepted" covers "with gaps"
         cost = ev["cost"]
         lines.append(
             f"| {ev['request']} | {ev['pr'].split('/', 1)[1]} | {ev['expected']} | **{ev['verdict']}**{ok} | "
@@ -56,6 +57,7 @@ def write_report(workdir: Path, specs, briefs: dict, evidence: list[dict], model
 
 
 def _profile(assurance: dict) -> str:
+    """{rung: clauses} as "L5×1, L4×3", highest rung first."""
     return ", ".join(f"{k}×{v}" for k, v in sorted(assurance.items(), reverse=True)) or "-"
 
 
@@ -67,7 +69,7 @@ def _resources_section(briefs, evidence, model) -> list[str]:
     cruns = [e["cost"]["clause_runs"] for e in evidence]
     rsel = [e["cost"]["regression_selected"] for e in evidence]
     toks = [e["cost"]["tokens"] for e in evidence]
-    highest = {}
+    highest = {}  # rung -> clauses holding at it, over the accepted PRs
     for e in evidence:
         if e["verdict"].startswith("accepted"):
             for k, v in e["assurance"].items():
@@ -149,10 +151,12 @@ def _change_line(change: dict) -> str:
 
 
 def _md(text: str) -> str:
+    """Text safe inside a markdown table cell."""
     return str(text).replace("|", "\\|").replace("\n", " ")
 
 
 def _figure(figdir: Path, specs, briefs, evidence) -> Path:
+    """Two bar charts per request: context read (brief vs. repository) and agent runs (per PR vs. full suite)."""
     import matplotlib
 
     matplotlib.use("Agg")

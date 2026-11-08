@@ -1,3 +1,6 @@
-from .recorder import NullTracer, TraceRecorder
+"""Tracing of eval runs: ``recorder`` collects the events the SUT emits during a run, and ``codecov`` records
+which SUT functions and lines each test executed."""
 
-__all__ = ["NullTracer", "TraceRecorder"]
+from .recorder import TraceRecorder
+
+__all__ = ["TraceRecorder"]

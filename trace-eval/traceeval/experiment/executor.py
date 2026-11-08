@@ -7,17 +7,19 @@ A history record is the unit the selectors learn from and the replay evaluator s
 
 import copy
 import json
+import os
 import time
 import traceback
-import zlib
 from pathlib import Path
 
 from traceeval.catalog import EvalCase
-from traceeval.scoring.scorers import score_case, simulated_judge
+from traceeval.scoring.scorers import rubric_judge, score_case
 from traceeval.tracing import TraceRecorder
 
 
 def observed_components(trace: dict) -> set[str]:
+    """The components a run exercised, as the ids change sets use (code functions are added later from
+    coverage, see ``attach_code_functions``)."""
     deps: set[str] = set()
     for a in trace.get("agents", []):
         deps.add(f"agent:{a}")
@@ -27,14 +29,13 @@ def observed_components(trace: dict) -> set[str]:
         deps.add(f"tool:{t}")
     for k in trace.get("config_keys", []):
         deps.add(f"config:{k}")
-    for c in trace.get("consulted", []):
+    for c in trace.get("consulted", []):  # already ids: agent:<name>.<field>
         deps.add(c)
-    for f in trace.get("code_functions", []):
-        deps.add(f)
     return deps
 
 
 def _apply_patch(data: dict, patch: dict):
+    """Set each dotted key of ``patch`` in the fixture data (a case's ``fixture_patch``)."""
     for dotted, value in patch.items():
         node = data
         parts = dotted.split(".")
@@ -43,25 +44,34 @@ def _apply_patch(data: dict, patch: dict):
         node[parts[-1]] = copy.deepcopy(value)
 
 
+def default_backend() -> str:
+    """The backend of a run that names none: ``TRACEEVAL_BACKEND``, or "replay" (recorded answers, no model).
+    Running the test suite with ``TRACEEVAL_BACKEND=vllm`` records the answers its cassette lacks."""
+    return os.environ.get("TRACEEVAL_BACKEND", "replay")
+
+
 def run_case(
     sut,
     case: EvalCase,
     *,
-    backend: str = "simulated",
+    backend: str | None = None,
     rep: int = 0,
     variant: str = "baseline",
     config_overrides: dict | None = None,
     llm_settings=None,
     llm_client=None,
-    seed: int = 0,
-    judge_mode: str = "simulated",
     fault_profile: str | None = None,
     keep_state: bool = False,
 ) -> dict:
     """Run one eval case once. Never raises: harness errors are recorded as HARNESS_ERROR.
 
-    ``fault_profile`` overrides the case's own profile; ``keep_state`` adds the initial fixture and the
-    final state to the record (used by the spec layer's trace monitors, too large for histories)."""
+    ``backend`` picks who plays the agents: "hf" (Gemma on the local GPU), "vllm" (Gemma on a vLLM server),
+    "replay" (Gemma's recorded answers, no model; ``traceeval/llm/cache.py``) or "llm" (any OpenAI-compatible
+    endpoint, configured by ``llm_settings``); None means ``default_backend()``. ``llm_client`` replaces the
+    model client, e.g. with a scripted one in tests. ``fault_profile`` overrides the case's own profile;
+    ``keep_state`` adds the initial fixture and the final state to the record (used by the spec layer's trace
+    monitors, too large for histories)."""
+    backend = backend or default_backend()
     tracer = TraceRecorder(test_id=case.id, run_id=f"{variant}:{case.id}:{rep}", variant=variant, backend=backend)
     State = sut.sub("services.state").State
     Config = sut.sub("harness.config").Config
@@ -80,25 +90,18 @@ def run_case(
         if keep_state:
             initial = state.snapshot()
         config = Config.load(sut.path / "config" / "runtime.yaml", tracer=tracer, overrides=config_overrides)
-        if backend == "simulated":
-            sim = sut.sub("harness.backends.simulated")
-            flakiness = float(config.data.get("simulated", {}).get("flakiness", 0.0))
-            # crc32, not hash(): str hashes are salted per process, which made runs differ between processes
-            case_key = zlib.crc32(case.id.encode()) % 10007
-            factory = sim.make_backend_factory(flakiness=flakiness, seed=seed * 7919 + rep * 104729 + case_key)
-        elif backend in ("llm", "hf", "vllm"):
-            llm = sut.sub("harness.backends.llm_openai")
-            if backend in ("hf", "vllm"):
-                # The agents' model, local (hf) or on the GPU server (vllm). Its client is created once per
-                # process and shared by every case and variant.
-                if llm_client is None:
-                    from traceeval.llm.chat import shared_client
-
-                    llm_client = shared_client(backend)
-                llm_settings = llm_settings or llm.LLMSettings(model=llm_client.model_id)
-            factory = llm.make_backend_factory(settings=llm_settings, client=llm_client)
-        else:
+        if backend not in ("llm", "hf", "vllm", "replay"):
             raise ValueError(f"unknown backend {backend}")
+        llm = sut.sub("harness.backends.llm_openai")
+        if backend != "llm":
+            # Gemma: local (hf), on the GPU server (vllm) or its recorded answers (replay). The client is created
+            # once per process and shared by every case and variant.
+            if llm_client is None:
+                from traceeval.llm.chat import shared_client
+
+                llm_client = shared_client(backend)
+            llm_settings = llm_settings or llm.LLMSettings(model=llm_client.model_id)
+        factory = llm.make_backend_factory(settings=llm_settings, client=llm_client)
         faults = FaultInjector(fault_profile if fault_profile is not None else case.fault_profile)
         runtime = Runtime(sut.path, config, state, tracer, factory, faults, sut.tools)
         run = runtime.run(case.agent, case.request, dict(case.context))
@@ -113,23 +116,14 @@ def run_case(
     judge_tokens = 0
     judge_result = None
     if case.judge and verdict.passed:  # deterministic checks first; judge only if they passed
-        if judge_mode == "simulated" or backend == "simulated":
-            judge_result = simulated_judge(case, trace.get("final_message", ""))
-        else:
-            judge_result = simulated_judge(case, trace.get("final_message", ""))
-            judge_result["mode"] = "deterministic-fallback"
+        judge_result = rubric_judge(case, trace.get("final_message", ""))
         judge_tokens = judge_result["tokens"]
         if not judge_result["ok"]:
             verdict.passed = False
             verdict.classification = "AGENT_FAILURE"
             verdict.checks.append({"name": "judge", "ok": False, "detail": judge_result["rubric"]})
-        verdict.judge = judge_result
 
     agent_tokens = trace["tokens"]
-    if backend == "simulated":
-        latency_ms = 120.0 * (run.get("steps") or 0) + 0.35 * agent_tokens + (0.4 * judge_tokens)
-    else:
-        latency_ms = wall_ms
     record = {
         "test_id": case.id,
         "dataset": case.dataset,
@@ -146,7 +140,7 @@ def run_case(
         "tokens": agent_tokens + judge_tokens,
         "prompt_tokens": trace["prompt_tokens"],
         "completion_tokens": trace["completion_tokens"],
-        "latency_ms": round(latency_ms, 1),
+        "latency_ms": round(wall_ms, 1),
         "steps": run.get("steps"),
         "termination": run.get("termination"),
         "deps": sorted(observed_components(trace)),
@@ -167,6 +161,7 @@ def run_case(
 
 
 def attach_code_functions(record: dict, functions: set[str]):
+    """Add the code functions and lines that coverage saw in this run to the record's dependencies."""
     record["code_functions"] = sorted(functions)
     record["deps"] = sorted(set(record["deps"]) | set(functions))
     return record

@@ -21,7 +21,7 @@
   <!-- backend -->
   <rect x="830" y="30" width="250" height="60" rx="6" fill="#f9fafb" stroke="#9ca3af" stroke-dasharray="5 3"/>
   <text x="955" y="54" text-anchor="middle" font-weight="bold" font-size="13">backend — drives every agent</text>
-  <text x="955" y="74" text-anchor="middle" font-size="12">simulated (follows the Procedure) or an LLM</text>
+  <text x="955" y="74" text-anchor="middle" font-size="12">a model (Gemma, Qwen) or its recorded answers</text>
   <path d="M830,60 L770,60" fill="none" stroke="#9ca3af" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#a)"/>
 
   <!-- fan-out to specialists -->
@@ -127,5 +127,5 @@
   <!-- config -->
   <rect x="42" y="556" width="1016" height="50" rx="6" fill="#f9fafb" stroke="#9ca3af"/>
   <text x="56" y="576" font-size="13" font-weight="bold">config/runtime.yaml — read by the harness, the skills and the tools</text>
-  <text x="56" y="594" font-size="12">step budget, retries, idempotency keys · disabled and guarded tools · default agent · review and scheduling flags · SEO limits · default locales · simulated flakiness</text>
+  <text x="56" y="594" font-size="12">step budget, retries, idempotency keys · disabled and guarded tools · default agent · review and scheduling flags · SEO limits · default locales</text>
 </svg>

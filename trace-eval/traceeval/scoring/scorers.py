@@ -25,13 +25,13 @@ class Verdict:
     passed: bool
     classification: str  # PASS | TOOL_ERROR | AGENT_FAILURE | HARNESS_ERROR | INFRA_INVALID
     checks: list[dict] = field(default_factory=list)
-    judge: dict | None = None
 
     def failed_checks(self) -> list[str]:
         return [c["name"] for c in self.checks if not c["ok"]]
 
 
 def _resolve(data, path: str):
+    """The value at a dotted path ("pages.p1.status", list items by index), or _MISSING."""
     node = data
     for part in path.split("."):
         if isinstance(node, dict):
@@ -49,6 +49,7 @@ def _resolve(data, path: str):
 
 
 def _state_check(state: dict, assertion) -> tuple[bool, str]:
+    """Check one [path, op, value] assertion; returns (ok, detail for the record)."""
     path, op, value = assertion
     actual = _resolve(state, path)
     if op == "absent":
@@ -170,11 +171,10 @@ def _codes(value) -> set[str]:
     return {value} if isinstance(value, str) else set(value)
 
 
-def simulated_judge(case, message: str) -> dict:
-    """Stand-in for an LLM judge in simulated mode: deterministic rubric check with a token charge
-    proportional to the evidence handed to the judge."""
+def rubric_judge(case, message: str) -> dict:
+    """The judge step of a case with a ``judge`` block, done without a model: the answer must mention every
+    word in ``must_mention``. No model is called, so it costs no tokens."""
     judge = case.judge or {}
     must = judge.get("must_mention", [])
     ok = all(m.lower() in message.lower() for m in must)
-    tokens = 450 + len(judge.get("rubric", "")) // 4 + len(message) // 4
-    return {"ok": ok, "tokens": tokens, "rubric": judge.get("rubric", ""), "mode": "simulated"}
+    return {"ok": ok, "tokens": 0, "rubric": judge.get("rubric", ""), "mode": "rubric"}

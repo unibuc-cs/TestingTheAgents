@@ -4,17 +4,29 @@
 tests should run, in what order, and when can we stop? The aim is to spend fewer tokens and less time and
 still catch regressions.
 
-**What this repo is.** A testbed for that question that needs no LLM. It contains a small working
-multi-agent app, 136 tests, 38 controlled changes with known effects, and 7 selection strategies, which are
-compared by replaying recorded runs. One of them, `adaptive_bayes`, is the proposed method.
+**What this repo is.** A testbed for that question. It contains a small working multi-agent app whose agents
+are played by a real model (Gemma 4 E4B), 136 tests, 38 controlled changes with known effects, and 7 selection
+strategies, which are compared by replaying recorded runs. One of them, `adaptive_bayes`, is the proposed method.
 
-## Run it (5 minutes, no API keys)
+## Run it
+
+The tests and the SDD demo replay Gemma's recorded answers ([`tests/cassettes/`](tests/cassettes/)), so they need
+no GPU and no API key:
 
 ```bash
 pip install -e ".[dev]"
 pytest -q                                                   # ~60 s
-traceeval experiment --backend simulated --workdir runs/exp1 --reps 3 --seeds 10
-# -> runs/exp1/results/report.md  (tables + 3 figures)
+traceeval sdd --workdir runs/sdd                            # spec-driven development demo
+```
+
+Recording an experiment needs the model: on the GPU server (see [docs/EXPERIMENT.md](docs/EXPERIMENT.md)), or
+on a local GPU with `--backend hf`.
+
+```bash
+scripts/gpu_remote.sh up gemma
+traceeval experiment --backend vllm --workdir runs/gemma2 --reps 3    # ~30 min
+# -> runs/gemma2/results/report.md  (tables + 3 figures)
+scripts/gpu_remote.sh down
 ```
 
 ## What is in it
@@ -22,8 +34,8 @@ traceeval experiment --backend simulated --workdir runs/exp1 --reps 3 --seeds 10
 1. **Tests** live in [`traceeval/catalog/`](traceeval/catalog/) (YAML). Each has a request, a context, and deterministic checks on the
    final state, the tool calls and the response.
 2. **The app under test** ("ContentOps", described in [docs/CONTENTOPS.md](docs/CONTENTOPS.md)) lives in [`traceeval/sut/`](traceeval/sut/): [agents](traceeval/sut/agents/) defined in YAML, [skills](traceeval/sut/skills/) ([example `SKILL.md`](traceeval/sut/skills/publishing-workflow/SKILL.md), each with
-   a machine-readable procedure), [tools](traceeval/sut/tools/) and a [config file](traceeval/sut/config/runtime.yaml). A *simulated* agent follows the skills, so runs
-   cost nothing. An *LLM* backend can replace it (`--backend llm`, OpenAI-compatible endpoint).
+   a machine-readable procedure), [tools](traceeval/sut/tools/) and a [config file](traceeval/sut/config/runtime.yaml). Gemma 4 E4B plays the agents (locally, on a GPU
+   server, or from its recorded answers); `--backend llm` takes any OpenAI-compatible endpoint (so far Qwen3.8-27B).
 3. **Changes** are the 38 entries in [`traceeval/mutation/catalog.py`](traceeval/mutation/catalog.py), applied as edits to a copy of the app's files. Running the
    full suite on each gives the ground truth: which tests reveal which change.
 4. **Strategies** in `traceeval/selection/` pick tests under a token budget. They see the diff of the code (without comments),
@@ -33,9 +45,14 @@ traceeval experiment --backend simulated --workdir runs/exp1 --reps 3 --seeds 10
 5. **The report** shows how many changes each strategy catches for how many tokens, how much it spends on
    harmless changes, and whether the adaptive one stops at the right moment.
 
-Main results from `runs/exp1`: hand-written dependencies catch 66% of regressions. Trace-based selection
-catches 91% within a budget of 20% of the full-suite tokens. The adaptive method catches 84% while spending
-5–7% of those tokens, and never calls a benign change a regression. See the [experiment 1 report](docs/results/exp1/report.md) and the [flaky-agent condition](docs/results/exp2_flaky/report.md).
+Main results, with Gemma and with Qwen3.8-27B playing the agents (three repetitions per test): hand-written
+dependencies catch 61–64% of regressions. Trace-based selection catches 84–92% within a budget of 20% of the
+full-suite tokens. The adaptive method catches 68–80% while spending 7% of those tokens, and never calls a
+change that breaks nothing a regression. Gemma misses six of the 31 regressions, because it ignores the guards
+they touch either way; Qwen reveals all 31. See the [Gemma](docs/results/gemma2/report.md) and
+[Qwen](docs/results/qwen2/report.md) reports and [docs/EXPERIMENT.md](docs/EXPERIMENT.md). The first results came
+from a simulated agent, since removed; they are kept in [docs/results/exp1](docs/results/exp1/report.md) and
+[exp2_flaky](docs/results/exp2_flaky/report.md).
 
 ## Spec-driven development on the same testbed
 
@@ -51,14 +68,13 @@ it, or with [docs/SDD_DEMO.md](docs/SDD_DEMO.md) for the results. The report is 
 
 ## Further reading
 
-- [docs/EXPERIMENT.md](docs/EXPERIMENT.md): the experiment with a real model (Gemma 4 E4B): where it runs, the GPU server script, what to type.
+- [docs/EXPERIMENT.md](docs/EXPERIMENT.md): the experiment with real models (Gemma 4 E4B, Qwen3.8-27B): where they run, the GPU server script, recorded answers, what to type.
 - [docs/STUDY_GUIDE.md](docs/STUDY_GUIDE.md): the whole repository in diagrams, with the focus on the SDD layer, and a 2–3 hour reading plan.
 - [docs/USER_GUIDE.md](docs/USER_GUIDE.md): how the pieces fit, how to read the report, how to add a test, a change or a strategy.
 - [docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md): the research framing (RQs, method, results, roadmap, paper plan), opening with a TL;DR.
 - [docs/related_work.md](docs/related_work.md), [docs/tau2_integration.md](docs/tau2_integration.md): literature positioning, and tau2-bench as a second system under test.
 - [CLAUDE.md](CLAUDE.md): conventions for coding agents working in the repo.
 
-Status: prototype v0.1. The results above come from the simulated backend, which is fully reproducible. The
-agents now also run on Gemma 4 E4B, locally or on the GPU server ([docs/EXPERIMENT.md](docs/EXPERIMENT.md)),
-and the ground truth under it is being recorded. The backend for other OpenAI-compatible endpoints (`llm`)
-has been tested only against a scripted client. The tau2-bench adapter is designed but not implemented.
+Status: prototype v0.1. The agents run on Gemma 4 E4B, locally or on the GPU server, and on Qwen3.8-27B through
+the `llm` backend ([docs/EXPERIMENT.md](docs/EXPERIMENT.md)). An OpenAI backend is planned. The tau2-bench
+adapter is designed but not implemented.

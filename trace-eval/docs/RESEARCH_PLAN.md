@@ -2,7 +2,7 @@
 
 **Change-aware, cost-bounded selection, prioritization and stopping of tests and evals for LLM agent systems**
 
-Ciprian Păduraru · University of Bucharest · working document, 6 October 2026 · status: prototype v0.1 running, first results in `docs/results/exp1/report.md`
+Ciprian Păduraru · University of Bucharest · working document, 6 October 2026, updated 8 November 2026 · status: prototype v0.1 running on real models, results in `docs/results/gemma2/report.md` and `docs/results/qwen2/report.md`
 
 ---
 
@@ -14,15 +14,18 @@ Ciprian Păduraru · University of Bucharest · working document, 6 October 2026
   and match them to tests through the dependencies observed in traces. Rank tests by expected information per
   token in a Bayesian model whose sensitivities are calibrated from history, and stop when the probability of a
   regression is low. The method is `adaptive_bayes`; six baselines run alongside it.
-- **Testbed.** A small multi-agent app (`traceeval/sut`) with 136 tests and 38 controlled changes applied as file
-  edits (6 of them benign). Full-suite runs give the ground truth, and strategies are compared by offline replay.
-- **Results so far (simulated agent).** Hand-written dependencies catch 66% of regressions. Trace-based selection
-  catches 91% within a budget of 20% of the full-suite tokens. The adaptive method catches 84% while spending
-  5–7% of those tokens, and never calls a benign change a regression. Under 5% agent flakiness it still never does,
-  while the other strategies see at least one failure the change did not cause in 18–65% of replays. TF-IDF over the diff is a strong baseline (84%
-  at 5%). Change sets hold code only, so the results are the same whether or not the code is commented.
-- **Next.** Calibrate sensitivities per test rather than per kind, fold the IR signal into the model, run the LLM
-  backend on the DGX, then move to tau2-bench as the external system under test. Paper: ASE/ISSTA/ICST framing.
+- **Testbed.** A small multi-agent app (`traceeval/sut`) whose agents are played by a real model (Gemma 4 E4B, and
+  Qwen3.8-27B as a second model), 136 tests and 38 controlled changes applied as file edits (7 of them benign).
+  Full-suite runs with three repetitions give the ground truth, and strategies are compared by offline replay.
+- **Results so far (§5.1).** Hand-written dependencies catch 61–64% of regressions. Trace-based selection catches
+  84–92% within a budget of 20% of the full-suite tokens. The adaptive method catches 68–80% while spending 7% of
+  those tokens, and never calls a change that breaks nothing a regression, even though Gemma fails three tests on
+  the original app and the other strategies take those failures for regressions. TF-IDF over the diff is a strong
+  baseline (77–84% at 5%). The same ranking held earlier with a simulated agent (§5.2). Change sets hold code
+  only, so the results are the same whether or not the code is commented.
+- **Next.** Calibrate sensitivities per test rather than per kind (the adaptive method stops too early on
+  regressions that one or two tests reveal), fold the IR signal into the model, repeat the flaky-agent condition
+  with a real model, then move to tau2-bench as the external system under test. Paper: ASE/ISSTA/ICST framing.
 
 ---
 
@@ -34,10 +37,10 @@ This plan merges five earlier inputs into one research design and one runnable t
 
 | Topic | Decision | Reason |
 |---|---|---|
-| System under test (SUT) | A purpose-built mini content-operations platform ("ContentOps": pages, assets, publishing, SEO, translation, governance, rollback) is the primary SUT. tau2-bench, with the local vLLM model as both agent and user simulator, is the second SUT (designed, not yet implemented; see `docs/tau2_integration.md`). | The primary SUT gives a free, deterministic simulated mode to develop and evaluate selection methods now, a multi-agent structure with shared components built in on purpose (the hard case Georgiana described), and full control over mutations. tau2-bench adds external validity with a real LLM. |
+| System under test (SUT) | A purpose-built mini content-operations platform ("ContentOps": pages, assets, publishing, SEO, translation, governance, rollback) is the primary SUT. tau2-bench, with the local vLLM model as both agent and user simulator, is the second SUT (designed, not yet implemented; see `docs/tau2_integration.md`). | The primary SUT gives a multi-agent structure with shared components built in on purpose (the hard case Georgiana described) and full control over mutations. Its agents run on a local model, and recorded answers make reruns free and exact. tau2-bench adds external validity. |
 | Agent runtime | Pure Python harness with an OpenAI-compatible LLM backend; Pi is not used in the prototype. | Shortest path. The harness code must itself be mutable and instrumentable (coverage contexts). A Pi adapter remains possible later. |
 | Observability | Own trace recorder with an OpenTelemetry-compatible event model (agent/skill/tool/config/llm spans) rather than Phoenix/OpenInference as a dependency. | No services in the loop; an OTel exporter is a small addition. |
-| Oracles | Deterministic (final state, tool trajectories, audit log, response substrings); an LLM judge only for explicitly marked answer-quality properties, executed after deterministic checks pass, simulated in the free mode. | Regression tracking must not depend on judge noise (docx report §"LLM-as-a-judge bottleneck"). |
+| Oracles | Deterministic (final state, tool trajectories, audit log, response substrings); an LLM judge only for explicitly marked answer-quality properties, executed after deterministic checks pass (for now a rubric check of the required facts stands in for it). | Regression tracking must not depend on judge noise (docx report §"LLM-as-a-judge bottleneck"). |
 | Ground truth | Mutation analysis: 38 controlled changes, benign ones included, applied as file edits. The selectors see only the diff. | Needed to measure detection rate against a known answer, and to measure wasted budget. |
 | Evaluation | Record-then-replay: run the full suite once per variant, evaluate all strategies offline. | Decouples method development (thousands of replays) from execution cost (one recording per variant). |
 
@@ -81,7 +84,7 @@ The extractor (`traceeval/mutation/changeset.py`) turns a diff into *components*
 
 ### 2.3 Cost model
 
-c(t) = agent tokens (prompt + completion over all LLM calls in the delegation chain) + judge tokens (only when a judge runs). Latency is recorded alongside. In simulated mode, tokens are synthesised from the prompt material the agent actually "reads" (agent prompt + skills + request/context + growing history). This gives a realistic ~10× spread (0.9k–9k tokens per case), and multi-agent runs cost more. Real-LLM runs use the API usage fields.
+c(t) = agent tokens (prompt + completion over all LLM calls in the delegation chain) + judge tokens (only when a judge runs). Latency is recorded alongside. Tokens come from the model server's usage fields, so a case that delegates, retries or reads long skills costs more. A full-suite run costs about 0.96M tokens under Gemma and 1.08M under Qwen. The first version synthesised tokens from the prompt material a simulated agent "read"; that is gone.
 
 ### 2.4 Outcome model
 
@@ -128,11 +131,11 @@ They cover the design space of the literature: classic RTS/TCP on declared cover
 
 ### 4.1 System under test — ContentOps
 
-`traceeval/sut` contains eight agents (orchestrator, authoring, publishing, assets, seo, translation, governance, maintenance), ten skills, 24 tools over deterministic services (repository with versions, workflow with reviews/scheduling, links, governance with consent and approval tokens, translation, SEO), a harness (configuration with instrumented reads, skill loader with a procedure DSL, keyword router, retry helper with idempotency keys, dispatcher with tool enablement + approval gate + fault injection, runtime loop with delegation and a step budget) and `config/runtime.yaml`.
+`traceeval/sut` contains eight agents (orchestrator, authoring, publishing, assets, seo, translation, governance, maintenance), ten skills, 24 tools over deterministic services (repository with versions, workflow with reviews/scheduling, links, governance with consent and approval tokens, translation, SEO), a harness (configuration with instrumented reads, skill loader with a procedure DSL, retry helper with idempotency keys, dispatcher with tool enablement + approval gate + fault injection, runtime loop with delegation and a step budget) and `config/runtime.yaml`.
 
 The structure is deliberate, so that selection is hard and defence-in-depth questions can be discussed. Some components are shared and have a wide blast radius: `governance-checks` and `link-validation` are included by several skills, `check_permission` is available to every specialist agent and `get_page` to all but the governance agent, and the retry helper wraps every tool call. Others are narrow: the approval gate matters to one test. Some policies are enforced only in skills (publish permission), others also in tools (approval tokens).
 
-Skills are executable by both backends. A `SKILL.md` has front matter, prose for the LLM, and a `## Procedure` YAML block that the simulated agent executes and the LLM reads as numbered steps (included skills written out in place, settings shown with their current values). A mutation of the procedure therefore changes both backends' behaviour at the same place. Prose-only mutations affect only the LLM and are flagged `#prose`.
+A `SKILL.md` has front matter, prose, and a `## Procedure` YAML block that the model reads as numbered steps (included skills written out in place, settings shown with their current values). The first version also had a simulated agent that executed the procedure; it was removed once the agents ran on real models. Mutations of the prose and of the procedure are separate components (`#prose`, `#procedure`).
 
 ### 4.2 Eval catalog
 
@@ -152,9 +155,9 @@ Skills are executable by both backends. A `SKILL.md` has front matter, prose for
 
 This is the set as revised for real models (phase 4 in `docs/EXPERIMENT.md`): two changes that only the
 simulator could see were replaced, one became benign, and the skill changes also edit the prose that
-repeated the removed step. The simulated results in §5 used the earlier set.
+repeated the removed step. The results in §5.1 use this set; the simulated results in §5.2 used the earlier one.
 
-The report checks a sanity property of the testbed: every regression-inducing change is revealed by ≥ 1 test, and no benign change is revealed by any test. Revealing-set sizes range from 1 to 109 tests.
+The report checks a sanity property of the testbed: every regression-inducing change is revealed by ≥ 1 test, and no benign change is revealed by any test. It holds under Qwen. Under Gemma six regressions are revealed by no test, for reasons that belong to the model (§5.1).
 
 ### 4.4 Protocol and metrics
 
@@ -165,7 +168,63 @@ The report checks a sanity property of the testbed: every regression-inducing ch
 
 ---
 
-## 5. First results (simulated backend, `runs/exp1`: 136 cases × 3 reps baseline, 38 variants × 3 reps, 10 replay seeds; 483k tokens per full-suite run)
+## 5. Results
+
+### 5.1 With real models (`runs/gemma2`, `runs/qwen2`: 136 cases × 3 reps baseline, 38 variants × 3 reps, 5 replay seeds)
+
+The agents are played by Gemma 4 E4B and by Qwen3.8-27B, served with vLLM on a GPU server
+(`docs/EXPERIMENT.md`, phase 4). The ground truth belongs to the model:
+
+- **Original app:** 133 of 136 tests pass under Gemma, 135 of 136 under Qwen. The failures are model mistakes
+  that clearer wording did not fix (Gemma schedules a page without an approved review, requests a review nobody
+  asked for, and applies an over-long SEO title; Qwen counts a 60-character title as 61).
+- **Regressions:** Qwen reveals all 31. Gemma reveals 25: it does not act on guards it has to work out for itself
+  (a review flag, a length), so it behaves the same, wrongly, with or without the six changes to those guards.
+- **Benign changes:** none of the seven fails a test under either model.
+
+Detection of the regressions each model reveals (25 under Gemma, 31 under Qwen), vs. nominal budget, and tokens
+actually spent. Each cell is Gemma / Qwen:
+
+| strategy | 5% | 10% | 20% | 50% | 100% | spent @20% | spent @100% | waste on benign @100% |
+|---|---|---|---|---|---|---|---|---|
+| full (catalog order) | 0.16 / 0.13 | 0.24 / 0.23 | 0.48 / 0.52 | 0.72 / 0.77 | 1.00 / 1.00 | 0.20 / 0.20 | 0.96 / 0.98 | 1.00 / 1.00 |
+| random | 0.21 / 0.17 | 0.34 / 0.33 | 0.55 / 0.52 | 0.80 / 0.77 | 1.00 / 1.00 | 0.20 / 0.20 | 0.96 / 0.97 | 1.00 / 1.00 |
+| declared | 0.64 / 0.52 | 0.64 / 0.61 | 0.64 / 0.61 | 0.64 / 0.61 | 0.64 / 0.61 | 0.07 / 0.06 | 0.09 / 0.08 | 0.07 / 0.11 |
+| ir_tfidf | 0.84 / 0.77 | 0.84 / 0.84 | 0.92 / 0.90 | 1.00 / 1.00 | 1.00 / 1.00 | 0.20 / 0.20 | 0.96 / 0.97 | 0.99 / 1.00 |
+| observed | 0.56 / 0.55 | 0.64 / 0.68 | 0.92 / 0.84 | 0.96 / 0.97 | 1.00 / 1.00 | 0.15 / 0.16 | 0.48 / 0.44 | 0.23 / 0.20 |
+| cost_aware | 0.56 / 0.55 | 0.64 / 0.68 | 0.88 / 0.84 | 0.96 / 0.97 | 1.00 / 1.00 | 0.20 / 0.20 | 0.96 / 0.97 | 0.99 / 0.99 |
+| adaptive_bayes | 0.60 / 0.45 | 0.72 / 0.65 | 0.80 / 0.68 | 0.80 / 0.71 | 0.84 / 0.71 | 0.07 / 0.07 | 0.13 / 0.14 | 0.39 / 0.29 |
+
+APFD_c of the full prioritized order (Gemma / Qwen): random 0.47/0.45, full 0.55/0.58, adaptive 0.77/0.76,
+declared 0.79/0.78 (selection recall 0.57/0.50), ir_tfidf 0.79/0.81, cost_aware 0.82/0.84, observed 0.83/0.84
+(selection recall 1.00 at about half of the suite cost). Cost to first detection: declared 0.02, ir 0.03–0.04,
+adaptive 0.04, observed and cost_aware 0.06, random 0.14–0.16 of the full suite.
+
+**Reading.**
+- *RQ1/RQ2.* Declared metadata caps detection at 64% (Gemma) and 61% (Qwen), close to the 66% of the simulated
+  run, for the same reason: shared skills reached through `include`, harness code and most configuration keys are
+  not declared. Observed dependencies recover full selection recall and reach 84–92% within a 20% budget. The
+  main argument for trace-informed selection holds under real models.
+- *RQ3.* Informed strategies raise APFD_c from about 0.46 (random) to 0.76–0.84; observed and cost-aware ranking
+  are the best.
+- *RQ4.* The adaptive method again is the only one that returns budget: 80% (Gemma) and 68% (Qwen) detection for
+  7% of the tokens, 13–14% at full budget. It is weaker under Qwen because Qwen reveals more regressions that only
+  one or two tests catch, and on those the method stops "clean" before reaching them (230 of 1085 replays on
+  regressions). This is the limit already seen with the simulated agent; per-test sensitivities and the IR term
+  inside the model (§7) now have real data to aim at.
+- *Red tests on the original app.* Gemma's three failing tests fail on every changed copy too, so a strategy that
+  runs one of them sees a failure the change did not cause. On the changes that no test reveals, `full` sees such
+  a failure in 71% of replays and `ir_tfidf` in 61% under Gemma (56% and 16% under Qwen). The adaptive method
+  discounts a test by its failures on the original app and raised none of these. Its only "regression" verdicts
+  on changes without a revealing test are on the keyword crash, in the one repetition of three where Gemma makes
+  the call that crashes.
+- *IR.* TF-IDF over the diff is still the strongest prioritizer at small budgets (84%/77% at 5%).
+
+### 5.2 Earlier results with a simulated agent (archived: `runs/exp1`, `docs/results/exp1`; 136 cases × 3 reps baseline, 38 variants × 3 reps, 10 replay seeds; 483k tokens per full-suite run)
+
+These results come from the first version of the testbed, where a simulated agent executed the skills'
+procedures literally, with the earlier set of changes (§4.3). The simulator has been removed; the numbers are
+kept because the ranking of the strategies is the same under the real models.
 
 Re-run on 2026-11-04 with the tool-error oracle (tests also fail on unexpected tool errors and on tool crashes, classified TOOL_ERROR: 225 of the 807 failing variant runs) and two crash mutations, each revealed by one new test. The stricter oracle alone adds revealing tests to four changes (both retry changes 4→8, `config_disable_validate_links` 32→42, `skill_governance_drop_consent` 4→5).
 
@@ -201,7 +260,11 @@ Two optional baselines (`observed_diverse` and `history_ml`, run with `--strateg
 
 ## 6. Second system under test and the real-LLM mode
 
-- **ContentOps + LLM backend** (implemented, tested against a scripted client): set `TRACEEVAL_LLM_BASE_URL/API_KEY/MODEL` to the local vLLM endpoint (Muse Glimmer 30B per the setup notes) and run `traceeval baseline/mutants --backend llm`. Expected cost per case: 2–8k tokens × delegation. A 38-variant × 3-rep recording is ≈ 136 × 39 × 3 ≈ 15.9k runs, or ≈ 60–100M tokens: free on the DGX, and several hours of wall-clock time with batching. Start with 10 variants.
+- **ContentOps on real models** (done, `docs/EXPERIMENT.md`): Gemma 4 E4B (`--backend vllm`, or `hf` on a local
+  GPU) and Qwen3.8-27B (`--backend llm`, any OpenAI-compatible endpoint) run on the GPU server, two GPUs at most.
+  A 38-variant × 3-rep recording is about 15.9k runs: about half an hour under Gemma and an hour and a half under
+  Qwen. Every answer can be recorded (`traceeval/llm/cache.py`), so a rerun costs nothing and the test suite
+  replays Gemma's answers without a GPU. An OpenAI backend is planned once API tokens are available.
 - **tau2-bench** (verified facts and adapter design in `docs/tau2_integration.md`): airline domain first (50 tasks, DB + communicate reward, no NL judge), agent and user simulator on the local vLLM via `--agent-llm openai/<model> --agent-llm-args '{"api_base": ..., "api_key": "EMPTY"}'` (and the same for `--user-llm`), `TAU2_DATA_DIR` pointed at a mutated copy of `data/` for policy mutations, a mutated checkout for tool-code mutations, change sets from `git diff`, outcomes/tokens parsed from `results.json` into the same history format. The replay evaluator and all strategies then run unchanged. Expect large per-simulation token counts (tens of thousands) and pass^k well below 1, which is the nondeterministic regime the method must handle.
 
 ---
@@ -213,12 +276,14 @@ Two optional baselines (`observed_diverse` and `history_ml`, run with `--strateg
 | 1. Testbed | SUT, catalog, tracing, mutations, change sets, record/replay, metrics, report, CLI, tests | done (v0.1) |
 | 2. Methods | baselines + cost-aware + predictive + adaptive Bayesian selector with stopping | done (v0.1); tune ε, priors, discount; add a mandatory-safety policy wrapper |
 | 3. Method improvements | (a) test-level learned sensitivities (per test × component-kind reveal history) instead of kind-level; (b) IR relevance inside the Bayesian likelihood; (c) joint allocation of repetitions for flaky tests (sequential testing with anytime-valid stopping, FAQ-style); (d) CASPER-style slices and the Risk-Aware Adaptive Evaluation bandit as reproduced baselines | next |
-| 4. Real LLM | ContentOps with local vLLM: baseline + 10–15 variants × 3 reps; compare the simulated and LLM fault matrices (does the simulated backend predict which tests reveal a change?) | next, needs the DGX |
+| 4. Real LLM | ContentOps with local vLLM: baseline + 10–15 variants × 3 reps; compare the simulated and LLM fault matrices (does the simulated backend predict which tests reveal a change?) | done: all 38 variants × 3 reps under Gemma and Qwen; the simulator is removed (`docs/EXPERIMENT.md`) |
 | 5. External SUT | tau2-bench airline adapter; 12 mutations (6 policy, 4 tool-code, 2 benign); same evaluation | after phase 4 |
 | 6. Scale/robustness | more mutations (mutation operators generated systematically: step deletion/swap/condition negation in procedures, argument swaps in adapters, config boundary values), equivalent-mutant analysis, sensitivity to K and to budget definitions (time vs. tokens), ablations of each model ingredient | with the paper |
 | 7. Paper | see §8 | drafting can start from this document and the report |
 
-Immediate next steps, in order: implement the mandatory-safety wrapper and test-level sensitivity learning; run the LLM-backend baseline once on the DGX for the whole catalog. Comparing its cost and fault matrix with the simulated mode gives the first answer to "is the simulation realistic?".
+Phase 4 answered "is the simulation realistic?": the ranking of the strategies is the same, but which changes a test reveals is not. A few changes only made sense to the simulator, and a model's own mistakes and blind spots shape the ground truth (`docs/EXPERIMENT.md`, phase 4).
+
+Immediate next steps, in order: test-level sensitivity learning (the adaptive method's misses under Qwen); the mandatory-safety wrapper; the flaky-agent condition with a real model (sampling instead of greedy decoding, or a model that is unstable at temperature 0); the OpenAI backend once API tokens are available.
 
 ---
 
@@ -226,9 +291,9 @@ Immediate next steps, in order: implement the mandatory-safety wrapper and test-
 
 **Working title.** TRACE-Eval: change-aware, cost-bounded regression test selection for LLM agent systems.
 
-**Abstract (draft).** Agent platforms ship dozens of agents assembled from skills, prompts, tools, harness code and configuration, and verify them with tests and statistical evals whose cost is dominated by tokens. After a change, teams either re-run everything or guess. We formulate selection, prioritization and budget-aware stopping of agent tests as one problem and propose a method that (i) extracts a change set from the diff at the granularity of code lines, skill procedures, agent-definition fields and configuration keys, (ii) maps it to tests through dependencies *observed* in execution traces rather than declared metadata, (iii) ranks tests by expected information per token in a Bayesian model whose sensitivities are calibrated from history, and (iv) stops when the posterior probability of a regression is low. We evaluate on a testbed with a working multi-agent application, 136 tests/eval items, and 38 controlled changes with mutation-based ground truth, with a simulated agent that follows the skills; runs with LLM-driven agents are planned. Trace-informed selection recovers the 34% of regressions invisible to declared dependencies. The adaptive method detects 84% of regressions for 5–7% of the full-suite tokens and returns most of the budget on benign changes.
+**Abstract (draft).** Agent platforms ship dozens of agents assembled from skills, prompts, tools, harness code and configuration, and verify them with tests and statistical evals whose cost is dominated by tokens. After a change, teams either re-run everything or guess. We formulate selection, prioritization and budget-aware stopping of agent tests as one problem and propose a method that (i) extracts a change set from the diff at the granularity of code lines, skill procedures, agent-definition fields and configuration keys, (ii) maps it to tests through dependencies *observed* in execution traces rather than declared metadata, (iii) ranks tests by expected information per token in a Bayesian model whose sensitivities are calibrated from history, and (iv) stops when the posterior probability of a regression is low. We evaluate on a testbed with a working multi-agent application whose agents are played by two open models (a small and a mid-size one), 136 tests/eval items, and 38 controlled changes with a mutation-based ground truth derived per model. Declared dependencies miss 36–39% of the regressions; trace-informed selection finds 84–92% of them within 20% of the full-suite tokens. The adaptive method detects 68–80% for 7% of the tokens, returns most of the budget on benign changes, and, unlike the other strategies, does not mistake the tests the model already fails for regressions.
 
-**Outline.** 1 Introduction (motivation from AEM-scale platforms; nightly batch + PR use; three sub-problems) · 2 Background and related work (RTS/TCP; efficient LLM evaluation; agent benchmarks; fault injection; CASPER as closest work) · 3 Problem formulation and models (§1–2) · 4 Method (§3.1) · 5 Testbed (§4) · 6 Evaluation (RQ1–RQ4 + ablations + LLM/tau2 external validity) · 7 Threats to validity (synthetic mutants vs. real regressions; simulated agent realism; single primary domain; calibration leakage controlled by leave-one-change-out; textual testbed favouring IR) · 8 Conclusion.
+**Outline.** 1 Introduction (motivation from AEM-scale platforms; nightly batch + PR use; three sub-problems) · 2 Background and related work (RTS/TCP; efficient LLM evaluation; agent benchmarks; fault injection; CASPER as closest work) · 3 Problem formulation and models (§1–2) · 4 Method (§3.1) · 5 Testbed (§4) · 6 Evaluation (RQ1–RQ4 + ablations + LLM/tau2 external validity) · 7 Threats to validity (synthetic mutants vs. real regressions; two models, greedy decoding, and a ground truth that depends on the model; single primary domain; calibration leakage controlled by leave-one-change-out; textual testbed favouring IR) · 8 Conclusion.
 
 **Venues.** ASE / ISSTA / ICST (SE framing: RTS/TCP for LLM-based systems, mutation-based ground truth, APFD_c). Alternative: NeurIPS D&B / EMNLP with the testbed as the headline ("a benchmark for regression test selection in agent systems").
 

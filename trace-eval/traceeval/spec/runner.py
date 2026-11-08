@@ -21,10 +21,12 @@ from traceeval.selection.base import affinity
 from traceeval.tracing.codecov import CoverageSession
 
 from .checks import CHECKERS
+from .checks.traces import cases_in_scope
 from .context import CheckContext
-from .model import RUNG_LABEL, ClauseResult, Spec, load_specs, validate_spec
+from .model import ClauseResult, Spec, load_specs, validate_spec
 from .product import ProductModel
 from .prs import PR, prs_for
+from .report import write_report
 
 
 def _log(msg: str):
@@ -32,15 +34,16 @@ def _log(msg: str):
 
 
 # ---------------------------------------------------------------------------- baseline / product model
-def record_baseline(workdir: Path, catalog: dict) -> tuple[Path, dict, dict]:
-    """Run every catalog case on the baseline with coverage: records (events + states) and observed deps."""
+def record_baseline(workdir: Path, catalog: dict, backend: str | None = None) -> tuple[Path, dict, dict]:
+    """Run every catalog case on the baseline with coverage: records (events + states) and observed deps.
+    One case at a time, because coverage follows one test at a time in a process."""
     sut_dir, _ = materialize_variant(None, workdir / "variants")
     sut = load_sut(sut_dir)
     cov = CoverageSession(sut.path)
     runs = {}
     for tid, case in catalog.items():
         cov.begin(tid)
-        runs[tid] = run_case(sut, case, keep_state=True)
+        runs[tid] = run_case(sut, case, backend=backend, keep_state=True)
     functions = cov.finish()
     deps = {tid: set(rec["deps"]) | functions.get(tid, set()) for tid, rec in runs.items()}
     sut.unload()
@@ -50,11 +53,12 @@ def record_baseline(workdir: Path, catalog: dict) -> tuple[Path, dict, dict]:
 # ---------------------------------------------------------------------------- the locate step
 def agent_brief(spec: Spec, model: ProductModel, catalog: dict) -> dict:
     """What a coding agent needs for this request, derived from the spec and the product model."""
-    scoped: set[str] = set()
+    # the checks that will run, with the agent runs each plans
+    scoped: set[str] = set()  # catalog cases the trace and example clauses use
     checks = []
     for c in spec.clauses:
         if c.kind == "trace":
-            ids = _cases_in_scope(model, catalog, c.get("scope", "all"))
+            ids = cases_in_scope(c.get("scope", "all"), model, catalog)
             scoped |= set(ids)
             checks.append({"clause": c.id, "kind": c.kind, "runs": len(ids)})
         elif c.kind == "example":
@@ -67,7 +71,7 @@ def agent_brief(spec: Spec, model: ProductModel, catalog: dict) -> dict:
                 checks.append(
                     {"clause": c.id, "kind": c.kind, "runs": 0, "examples": c.get("examples", 200), "proof": True}
                 )
-            else:
+            else:  # one run per value of a finite domain, or the sampling budget of a strategy
                 values = model.model_set(next(iter(c["forall"].values())), catalog)
                 n = len(values) if values is not None else c.get("examples", 40)
                 checks.append({"clause": c.id, "kind": c.kind, "runs": n})
@@ -76,23 +80,25 @@ def agent_brief(spec: Spec, model: ProductModel, catalog: dict) -> dict:
     # locate: the tools the spec talks about -> their adapters, the services behind them, the skills calling them;
     # plus files named by placement rules and the configuration keys of setting clauses
     text = spec.path.read_text() if spec.path else ""
-    tools = {t for t in model.tools_static() if re.search(rf"\b{re.escape(t)}\b", text)}
+    static_tools = model.tools_static()
+    tools = {t for t in static_tools if re.search(rf"\b{re.escape(t)}\b", text)}
     for c in spec.clauses:  # a clause quantifying over a set of tools makes all of their sites relevant
         if c.kind == "contract" and "forall" in c.data:
             values = model.model_set(next(iter(c["forall"].values())), catalog) or []
-            tools |= {v for v in values if v in model.tools_static()}
+            tools |= {v for v in values if v in static_tools}
     tools = sorted(tools)
     read: dict[str, set[str]] = {k: set(v) for k, v in model.locate(tools).items()}
     for c in spec.clauses:
         if c.kind == "placement":
             for rule in c["rules"]:
-                ((_, body),) = rule.items()
+                ((_, body),) = rule.items()  # {rule kind: body}
                 if "function" in body and isinstance(body.get("in"), str):
                     read.setdefault(body["in"], set())
                 if "skill" in body:
                     read.setdefault(f"skills/{body['skill']}/SKILL.md", set())
         if c.kind == "setting":
             read.setdefault("config/runtime.yaml", set()).add(c["key"])
+    # a file the request adds does not exist yet: nothing to read
     read = {k: sorted(v) for k, v in sorted(read.items()) if k in model.files}
     return {
         "request": spec.id,
@@ -108,18 +114,23 @@ def agent_brief(spec: Spec, model: ProductModel, catalog: dict) -> dict:
     }
 
 
-def _cases_in_scope(model, catalog, scope):
-    ctx = CheckContext(sut=None, model=model, catalog=catalog)
-    return ctx.cases_in_scope(scope)
-
-
 # ---------------------------------------------------------------------------- evaluating one PR
-def evaluate_pr(spec: Spec, pr: PR, workdir: Path, catalog: dict, baseline_runs: dict, baseline_deps: dict) -> dict:
+def evaluate_pr(
+    spec: Spec,
+    pr: PR,
+    workdir: Path,
+    catalog: dict,
+    baseline_runs: dict,
+    baseline_deps: dict,
+    backend: str | None = None,
+    workers: int = 1,
+) -> dict:
+    """Check every clause of the spec on the PR's variant, then the change-selected regression tests."""
     t0 = time.perf_counter()
     sut_dir, change = materialize_variant(pr.mutation, workdir / "variants")
     sut = load_sut(sut_dir)
     model = ProductModel(sut_dir, baseline_runs, baseline_deps)
-    ctx = CheckContext(sut=sut, model=model, catalog=catalog, variant=pr.id)
+    ctx = CheckContext(sut=sut, model=model, catalog=catalog, variant=pr.id, backend=backend, workers=workers)
     results: list[ClauseResult] = []
     for clause in spec.clauses:
         try:
@@ -127,24 +138,28 @@ def evaluate_pr(spec: Spec, pr: PR, workdir: Path, catalog: dict, baseline_runs:
         except Exception as exc:  # noqa: BLE001 - a crashing checker is itself evidence
             res = ClauseResult(clause.id, clause.kind, "L0", "fail", f"checker error: {type(exc).__name__}: {exc}")
         res.required = clause.require
-        if res.status == "pass" and not res.meets_required:
+        if res.status == "pass" and not res.meets_required:  # holds, but not with the assurance asked for
             res.status = "gap"
             res.summary += f"; reached {res.rung}, {res.required} required"
         results.append(res)
     clause_runs = ctx.cost["runs"]
-    # regression: the catalog cases whose recorded traces touch the changed components (trace-eval selection)
+    # regression: the catalog cases whose recorded traces touch the changed components (trace-eval selection).
+    # A case that already fails on the baseline (a mistake of the model) says nothing about the PR: not run.
     selected = sorted(t for t in catalog if affinity(change, baseline_deps[t]) > 0)
-    failed = [t for t in selected if not ctx.run(catalog[t])["passed"]]
+    red = [t for t in selected if not baseline_runs[t]["passed"]]
+    failed = [t for t, rec in ctx.run_many([t for t in selected if t not in red]).items() if not rec["passed"]]
     results.append(
         ClauseResult(
             "regression-tests",
             "example",
             "L1",
             "fail" if failed else "pass",
-            f"{len(selected)} of {len(catalog)} catalog cases selected by observed dependencies; "
+            f"{len(selected)} of {len(catalog)} catalog cases selected by observed dependencies"
+            + (f" ({len(red)} failing on the baseline, not run)" if red else "")
+            + "; "
             + (f"failed: {failed}" if failed else "all pass"),
             failed,
-            {"runs": len(selected)},
+            {"runs": len(selected) - len(red)},
         )
     )
     sut.unload()
@@ -152,7 +167,7 @@ def evaluate_pr(spec: Spec, pr: PR, workdir: Path, catalog: dict, baseline_runs:
     # below the required one) is reported but does not reject
     statuses = {r.status for r in results}
     verdict = "rejected" if "fail" in statuses else ("accepted with gaps" if "gap" in statuses else "accepted")
-    profile: dict[str, int] = {}
+    profile: dict[str, int] = {}  # rung -> clauses that hold at that rung
     for r in results:
         if r.status in ("pass", "gap"):
             profile[r.rung] = profile.get(r.rung, 0) + 1
@@ -189,11 +204,18 @@ def evaluate_pr(spec: Spec, pr: PR, workdir: Path, catalog: dict, baseline_runs:
 
 
 # ---------------------------------------------------------------------------- everything
-def run_demo(workdir: Path, spec_ids: list[str] | None = None, out: Path | None = None) -> dict:
+def run_demo(
+    workdir: Path,
+    spec_ids: list[str] | None = None,
+    out: Path | None = None,
+    backend: str | None = None,
+    workers: int = 1,
+) -> dict:
+    """``traceeval sdd``: record the baseline, then brief and evaluate every PR of every spec."""
     workdir = Path(workdir)
     catalog = {c.id: c for c in load_catalog()}
     t0 = time.time()
-    sut_dir, baseline_runs, baseline_deps = record_baseline(workdir, catalog)
+    sut_dir, baseline_runs, baseline_deps = record_baseline(workdir, catalog, backend=backend)
     _log(f"[sdd] baseline: {len(catalog)} runs with coverage in {time.time() - t0:.1f}s")
     base_model = ProductModel(sut_dir, baseline_runs, baseline_deps)
     specs = load_specs(ids=spec_ids)
@@ -204,7 +226,7 @@ def run_demo(workdir: Path, spec_ids: list[str] | None = None, out: Path | None 
     for spec in specs:
         briefs[spec.id] = agent_brief(spec, base_model, catalog)
         for pr in prs_for(spec.id):
-            ev = evaluate_pr(spec, pr, workdir, catalog, baseline_runs, baseline_deps)
+            ev = evaluate_pr(spec, pr, workdir, catalog, baseline_runs, baseline_deps, backend, workers)
             evidence.append(ev)
             (workdir / "evidence" / (pr.id.replace("/", "__") + ".json")).write_text(
                 json.dumps(ev, indent=1, default=str)
@@ -214,11 +236,6 @@ def run_demo(workdir: Path, spec_ids: list[str] | None = None, out: Path | None 
                 f"[sdd] {pr.id:45s} {ev['verdict']:19s} (expected {pr.expected}) "
                 f"runs={ev['cost']['runs']:3d} {ev['cost']['seconds']}s{flag}"
             )
-    from .report import write_report
-
     path = write_report(workdir, specs, briefs, evidence, base_model, out=out)
     _log(f"[sdd] report: {path}")
     return {"briefs": briefs, "evidence": evidence, "report": str(path)}
-
-
-RUNGS_IN_ORDER = list(RUNG_LABEL)
