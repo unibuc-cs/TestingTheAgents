@@ -569,12 +569,12 @@ changes and a handful of tests flip once. The majority vote absorbs all of it.
 | `declared` (hand-written dependencies) | 71% | 65% |
 | `observed` (dependencies from traces) | 90% | 85% |
 | `ir_tfidf` (text similarity to the diff) | 90% | 88% |
-| `adaptive_bayes` (spending) | 76% (5%) | 65% (6%) |
+| `adaptive_bayes` (spending) | 81% (5%) | 73% (6%) |
 
 - **The main claim holds under real models.** Hand-written dependencies stay at 65–71%, and traces recover most
   of the rest.
 - **The adaptive method is weaker under Qwen.** On regressions that only one or two tests reveal, it stops with
-  "clean" before reaching them (185 of 910 replays). Each test's own record is now part of the method (see
+  "clean" before reaching them (115 of 910 replays). Each test's own record is now part of the method (see
   USER_GUIDE.md §5); the text-similarity signal inside the model is the next planned improvement.
 - **Tests that are red on the original app cost the other strategies dearly.** Gemma's three failing tests fail
   on every changed copy, so a strategy that runs one of them sees a failure the change did not cause. On the

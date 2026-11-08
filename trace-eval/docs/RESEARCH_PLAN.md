@@ -18,14 +18,14 @@ Ciprian Păduraru · University of Bucharest · working document, 6 October 2026
   Qwen3.8-27B as a second model), 136 tests and 33 controlled changes applied as file edits (7 of them benign).
   Full-suite runs with three repetitions give the ground truth, and strategies are compared by offline replay.
 - **Results so far (§5.1).** Hand-written dependencies catch 65–71% of regressions. Trace-based selection catches
-  85–90% within a budget of 20% of the full-suite tokens. The adaptive method catches 65–76% while spending 5–6% of
+  85–90% within a budget of 20% of the full-suite tokens. The adaptive method catches 73–81% while spending 5–6% of
   those tokens, and never calls a change that breaks nothing a regression, even though Gemma fails three tests on
   the original app and the other strategies take those failures for regressions. TF-IDF over the diff is a strong
   baseline (73–81% at 5%). Change sets hold code only, so the results are the same whether or not the code is
   commented.
-- **Next.** Fold the IR signal into the model (the adaptive method still stops too early on regressions that one
-  or two tests reveal, mostly under Qwen), re-record the ground truth on the current app, then move to
-  tau2-bench as the external system under test. Real models only, decoded greedily. Paper: ASE/ISSTA/ICST framing.
+- **Next.** Re-record the ground truth on the current app with three repetitions (the adaptive method still
+  stops too early on some regressions that one or two tests reveal, mostly under Qwen), add the mandatory-safety
+  wrapper, then move to tau2-bench as the external system under test. Real models only, decoded greedily. Paper: ASE/ISSTA/ICST framing.
 
 ---
 
@@ -72,7 +72,7 @@ The extractor (`traceeval/mutation/changeset.py`) turns a diff into *components*
 | `code:<file>::<function>` + `line:<file>:<n>` | `code:harness/retry.py::with_retry`, `line:harness/retry.py:29` | AST-normalised function comparison (docstrings ignored); changed baseline code lines; an insertion anchors to the code lines around it. |
 | `tool:<name>` | `tool:set_page_metadata` | When a changed function is a registered tool adapter. |
 | `skill:<name>#procedure` / `#prose` / `#meta` | `skill:link-validation#procedure` | The machine-readable procedure block vs. instruction prose vs. front matter. |
-| `agent:<name>.<field>` | `agent:publishing.triggers`, `agent:seo.tools` | Order-sensitive comparison (intent order matters). |
+| `agent:<name>.<field>` | `agent:publishing.triggers`, `agent:seo.tools` | Order-sensitive comparison (intent order matters). A tool or skill list that only lost items names them (`removed: tool:check_consent`). |
 | `config:<dotted.key>` | `config:runtime.retries` | Effective value changes only. |
 | comments and formatting | — | Left out: comments, docstrings, blank lines, YAML comments and the order of config mappings add no component, file or diff line, so no selector or probability depends on them. The selectors read the diff of the code alone. |
 
@@ -117,9 +117,9 @@ variants of the proposed method differ only in how text is compared (§5.2): `ad
 *Likelihood.* P(t fails | B) = 1 − (1 − f_t) ∏_{c∈B} (1 − s_tc). The sensitivity s_tc of test t to component c is
 s_tc = r_kind(c) · lift_t,kind(c) · freq_t(c) · tilt_t, where
 
-- r_kind is the empirical reveal ratio learned from the other recorded changes: the fraction of statically impacted tests that actually revealed a change of that kind. Kinds separate, for example, "executed the changed line" from "executed only the changed function", and agent fields are calibrated per field. This encodes "coverage does not imply detection" with measured numbers instead of hand-set constants.
+- r_kind is the empirical reveal ratio learned from the other recorded changes: the fraction of statically impacted tests that actually revealed a change of that kind. Kinds separate, for example, "executed the changed line" from "executed only the changed function", and agent fields are calibrated per field. This encodes "coverage does not imply detection" with measured numbers instead of hand-set constants. A ratio learned from few changes is padded toward a default for its kind (m = 2 changes' worth, as below), so that one earlier change cannot make a whole kind look certain: the agent tool-list ratio came from a single change (5 of 8 tests revealed it) and, unpadded, put every test of the agent at the 0.9 cap.
 - lift_t,k = (O_tk + m) / (E_tk + m) is the test's own record on the earlier changes of kind k that impacted it: O_tk is how many of them it revealed, E_tk how many an average impacted test would have revealed (the sum of those changes' reveal rates), and m = 2 pads a short record. A test that ran many changed functions and never caught anything gets a lift below 1; one that caught changes most impacted tests missed gets a lift above 1. Comparing with E rather than counting catches matters: a change that breaks a large part of the suite (link validation turned off everywhere: 40 tests) says little about each test it breaks. Like r_kind, the records are recomputed from the recordings at every run, without the change under evaluation, so they grow as more changes are recorded (`docs/USER_GUIDE.md` §5).
-- freq_t(c) is how often t exercised c in its baseline runs.
+- freq_t(c) is how often t exercised c in its baseline runs. For an agent's tool or skill list that only lost items, it is how often t used one of the removed items: losing `check_consent` can affect only the tests that call it, not every test of the governance agent.
 - tilt_t ∈ [0.5, 2.0] combines the lexical relevance of the change text (code only, never comments) to the test's own text (name, request, expectations) with a bonus when the author declared the dependency. It is a proxy for "the test's oracle plausibly observes the changed behaviour". The relevance measure is an option (`text`): word overlap (the default), TF-IDF, or none (§5.2).
 
 *Policy.* The next test is the argmax over t of (expected information gain about B, tilted by risk) / c(t). After a pass, the sensitivities of tests with the same behaviour signature (agents, tools, fault profile, dataset) are discounted (×0.35), because near-duplicate tests are correlated evidence, not independent draws. Each test runs at most once: the models decode greedily, so a rerun gives the same answer.
@@ -201,12 +201,12 @@ actually spent. Each cell is Gemma / Qwen:
 | ir_tfidf | 0.81 / 0.73 | 0.81 / 0.81 | 0.90 / 0.88 | 1.00 / 1.00 | 1.00 / 1.00 | 0.20 / 0.20 | 0.98 / 0.99 | 0.99 / 0.99 |
 | observed | 0.52 / 0.54 | 0.62 / 0.65 | 0.90 / 0.85 | 0.95 / 0.96 | 1.00 / 1.00 | 0.15 / 0.15 | 0.46 / 0.43 | 0.23 / 0.20 |
 | cost_aware | 0.52 / 0.54 | 0.62 / 0.65 | 0.86 / 0.85 | 0.95 / 0.96 | 1.00 / 1.00 | 0.20 / 0.20 | 0.98 / 0.99 | 0.99 / 0.99 |
-| adaptive_bayes | 0.62 / 0.46 | 0.76 / 0.58 | 0.76 / 0.65 | 0.81 / 0.69 | 0.86 / 0.73 | 0.05 / 0.06 | 0.07 / 0.08 | 0.37 / 0.25 |
+| adaptive_bayes | 0.67 / 0.54 | 0.81 / 0.65 | 0.81 / 0.73 | 0.86 / 0.77 | 0.90 / 0.81 | 0.05 / 0.06 | 0.07 / 0.08 | 0.37 / 0.27 |
 
 APFD_c of the full prioritized order (Gemma / Qwen): random 0.47/0.44, full 0.55/0.58, adaptive 0.78/0.76,
 ir_tfidf 0.79/0.80, cost_aware 0.81/0.83, observed 0.82/0.83 (selection recall 1.00 at about half of the suite
 cost), declared 0.83/0.80 (selection recall 0.63/0.52). Cost to first detection: declared 0.02, ir 0.03–0.04,
-adaptive 0.04, observed 0.06, cost_aware 0.06–0.07, random 0.15–0.17 of the full suite.
+adaptive 0.03–0.04, observed 0.06, cost_aware 0.06–0.07, random 0.15–0.17 of the full suite.
 
 **Reading.**
 - *RQ1/RQ2.* Declared metadata caps detection at 71% (Gemma) and 65% (Qwen), because shared skills reached through
@@ -215,12 +215,15 @@ adaptive 0.04, observed 0.06, cost_aware 0.06–0.07, random 0.15–0.17 of the 
   under real models.
 - *RQ3.* Informed strategies raise APFD_c from about 0.45 (random) to 0.76–0.83; declared ranks well but selects
   only part of the revealing tests (selection recall 0.52–0.63), observed and cost-aware ranking select them all.
-- *RQ4.* The adaptive method again is the only one that returns budget: 76% (Gemma) and 65% (Qwen) detection for
+- *RQ4.* The adaptive method again is the only one that returns budget: 81% (Gemma) and 73% (Qwen) detection for
   5–6% of the tokens, 7–8% at full budget. It stops at the first failure of a test that passed on the original
   app, and each test's own record (§3.1) brings the revealing test forward (on the earlier set of 38 changes it
   found regressions 3–15% sooner than kind-level sensitivities). It is weaker under Qwen because Qwen reveals
   more regressions that only one or two tests catch, and on those the method stops "clean" before reaching them
-  (185 of 910 replays on regressions). The IR term inside the model (§7) is meant to address it.
+  (115 of 910 replays on regressions). Two calibration fixes (§3.1: kind ratios padded like the test records,
+  and an agent list that lost items reaching only the tests that used them) raised it from 76% and 65%; before
+  them, the two agent-definition changes ended "clean" after two passing tests at the 0.9 cap, and now the first
+  test catches them. The IR term inside the model (§7) is meant to address it.
 - *Red tests on the original app.* Gemma's three failing tests fail on every changed copy too, so a strategy that
   runs one of them sees a failure the change did not cause. On the changes that no test reveals, `full` sees such
   a failure in 71% of replays and `ir_tfidf` in 58% under Gemma (56% and 16% under Qwen). The adaptive method
@@ -237,18 +240,18 @@ recordings of the current app):
 
 | recording | overlap (default) | TF-IDF | no text | `ir_tfidf` alone |
 |---|---|---|---|---|
-| gemma2 | 0.76 (4.8%) | 0.81 (4.6%) | 0.67 (6.7%) | 0.90 (20%) |
-| qwen2 | 0.65 (6.1%) | 0.81 (5.8%) | 0.62 (6.6%) | 0.88 (20%) |
-| gemma3 | 0.76 (4.9%) | 0.81 (4.6%) | 0.67 (6.8%) | 0.90 (20%) |
-| qwen3 | 0.79 (5.0%) | 0.83 (4.6%) | 0.71 (6.2%) | 0.92 (20%) |
+| gemma2 | 0.81 (4.8%) | 0.86 (4.5%) | 0.71 (6.7%) | 0.90 (20%) |
+| qwen2 | 0.73 (6.1%) | 0.85 (5.6%) | 0.69 (6.6%) | 0.88 (20%) |
+| gemma3 | 0.81 (4.9%) | 0.86 (4.5%) | 0.71 (6.7%) | 0.90 (20%) |
+| qwen3 | 0.88 (5.0%) | 0.88 (4.4%) | 0.75 (6.2%) | 0.92 (20%) |
 
-At a 50% budget the default reaches 0.69–0.86 and the TF-IDF variant 0.81–0.90, still for under 6% of the
+At a 50% budget the default reaches 0.77–0.90 and the TF-IDF variant 0.85–0.95, still for under 6% of the
 suite. No variant gives a "regression" verdict on a change that no test reveals (0 of 1000 replays each), and
-the TF-IDF variant stops correctly most often (0.86, against 0.79 for the default and 0.73 without text).
+the TF-IDF variant stops correctly most often (0.89, against 0.84 for the default and 0.76 without text).
 
-**Reading.** On this testbed TF-IDF is the better text measure, most of all under Qwen (+16 points on `qwen2`),
+**Reading.** On this testbed TF-IDF is the better text measure, most of all under Qwen (+12 points on `qwen2`),
 where it brings forward the one test that reveals a narrow change (the approval gate, the agent loop's step
-limit). Without any text the method loses 3–10 points, so text matters, but coverage and history carry most of
+limit). Without any text the method loses 4–13 points, so text matters, but coverage and history carry most of
 the result. The testbed is textual: tests, skills and config keys share vocabulary, which favours any text
 measure (a threat noted in §8). Whether TF-IDF helps as much where tests and changes are worded differently is a
 question for tau2-bench, so the default stays word overlap and TF-IDF stays an option.
@@ -287,7 +290,9 @@ Phase 4 showed that a model's own mistakes and blind spots shape the ground trut
 
 The prototype (`traceeval check`, §6) ran live on four changes under each model, from recordings of the current app (`runs/gemma3`, `runs/qwen3`, one repetition). It caught a skill regression with its first test, called a harmless prompt rewording clean, and found nothing for a hand edit that no test covers. The weak case was the retry change: the method first spent on cheap tests that merely call the changed function, and ran out of budget undecided. That led to item 3(a), each test's own record, together with stopping at the first failure of a test that passed on the original app. Replayed on the same recordings, the retry change now ends "regression" after 17 tests (8.9% of the suite) under Gemma and 11 (5.9%) under Qwen. The new recordings also show that the ground truth moves with the app and the judge: under Qwen, three regressions revealed in `runs/qwen2` are not revealed on the current app, one because the strict model judge now fails SEO-07 on the original app.
 
-Immediate next steps, in order: overconfident sensitivities (on the two agent-definition changes, many tests reach the 0.9 cap, two of them pass, and the method stops "clean" before reaching the revealing ones); re-recording the ground truth with three repetitions on the current app with the model judge, before the paper; the mandatory-safety wrapper; the OpenAI backend once API tokens are available.
+Calibration fixes after 3(b): on the two agent-definition changes, every test of the agent reached the 0.9 sensitivity cap, and two passing tests ended the run "clean". Kind ratios are now padded like the test records, and an agent's tool or skill list that only lost items reaches only the tests that used them (§3.1). Both changes are now caught by the first test, and detection at a 20% budget rose from 76% to 81% (Gemma) and from 65% to 73% (Qwen) at the same spend.
+
+Immediate next steps, in order: re-recording the ground truth with three repetitions on the current app with the model judge, before the paper; the mandatory-safety wrapper; the OpenAI backend once API tokens are available.
 
 ---
 
@@ -295,7 +300,7 @@ Immediate next steps, in order: overconfident sensitivities (on the two agent-de
 
 **Working title.** TRACE-Eval: change-aware, cost-bounded regression test selection for LLM agent systems.
 
-**Abstract (draft).** Agent platforms ship dozens of agents assembled from skills, prompts, tools, harness code and configuration, and verify them with tests and statistical evals whose cost is dominated by tokens. After a change, teams either re-run everything or guess. We formulate selection, prioritization and budget-aware stopping of agent tests as one problem and propose a method that (i) extracts a change set from the diff at the granularity of code lines, skill procedures, agent-definition fields and configuration keys, (ii) maps it to tests through dependencies *observed* in execution traces rather than declared metadata, (iii) ranks tests by expected information per token in a Bayesian model whose sensitivities are calibrated from history, and (iv) stops when the posterior probability of a regression is low. We evaluate on a testbed with a working multi-agent application whose agents are played by two open models (a small and a mid-size one), 136 tests/eval items, and 33 controlled changes with a mutation-based ground truth derived per model. Declared dependencies miss 29–35% of the regressions; trace-informed selection finds 85–90% of them within 20% of the full-suite tokens. The adaptive method detects 65–76% for 5–6% of the tokens, returns most of the budget on benign changes, and, unlike the other strategies, does not mistake the tests the model already fails for regressions.
+**Abstract (draft).** Agent platforms ship dozens of agents assembled from skills, prompts, tools, harness code and configuration, and verify them with tests and statistical evals whose cost is dominated by tokens. After a change, teams either re-run everything or guess. We formulate selection, prioritization and budget-aware stopping of agent tests as one problem and propose a method that (i) extracts a change set from the diff at the granularity of code lines, skill procedures, agent-definition fields and configuration keys, (ii) maps it to tests through dependencies *observed* in execution traces rather than declared metadata, (iii) ranks tests by expected information per token in a Bayesian model whose sensitivities are calibrated from history, and (iv) stops when the posterior probability of a regression is low. We evaluate on a testbed with a working multi-agent application whose agents are played by two open models (a small and a mid-size one), 136 tests/eval items, and 33 controlled changes with a mutation-based ground truth derived per model. Declared dependencies miss 29–35% of the regressions; trace-informed selection finds 85–90% of them within 20% of the full-suite tokens. The adaptive method detects 73–81% for 5–6% of the tokens, returns most of the budget on benign changes, and, unlike the other strategies, does not mistake the tests the model already fails for regressions.
 
 **Outline.** 1 Introduction (motivation from AEM-scale platforms; nightly batch + PR use; three sub-problems) · 2 Background and related work (RTS/TCP; efficient LLM evaluation; agent benchmarks; fault injection; CASPER as closest work) · 3 Problem formulation and models (§1–2) · 4 Method (§3.1) · 5 Testbed (§4) · 6 Evaluation (RQ1–RQ4 + ablations + LLM/tau2 external validity) · 7 Threats to validity (synthetic mutants vs. real regressions; two models, greedy decoding, and a ground truth that depends on the model; single primary domain; calibration leakage controlled by leave-one-change-out; textual testbed favouring IR) · 8 Conclusion.
 

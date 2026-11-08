@@ -6,12 +6,14 @@ In plain words
   2. For every test we estimate how likely it is to FAIL if a given component is broken ("sensitivity").
      Covering a component is weak evidence by itself, so the sensitivity is calibrated from history:
      among the tests that statically looked impacted by earlier changes of the same kind, how many
-     actually revealed the change?  That ratio is then scaled by the test's own record on earlier changes of
-     that kind that touched it: the changes it revealed over those an average impacted test would have
-     revealed.  Catching a change that broke almost everything says little; being the one test that caught a
-     subtle change says a lot.  The sensitivity is finally tilted up for tests
-     whose own text (name, request, expectations) shares vocabulary with the diff, and for tests whose
-     author declared the dependency.  How text is compared is an option (``text``): word overlap by default,
+     actually revealed the change?  A ratio learned from one or two changes stays near a default for its kind,
+     so that a single earlier change cannot make a whole kind look certain.  That ratio is then scaled by the
+     test's own record on earlier changes of that kind that touched it: the changes it revealed over those an
+     average impacted test would have revealed.  Catching a change that broke almost everything says little;
+     being the one test that caught a subtle change says a lot.  The sensitivity is finally tilted up for tests
+     whose own text (name, request, expectations) shares vocabulary with the diff, and for tests whose author
+     declared the dependency.  An agent's tool or skill list that only lost items reaches only the
+     tests that used one of them.  How text is compared is an option (``text``): word overlap by default,
      the TF-IDF similarity of the ``ir_tfidf`` strategy, or not at all (the variants registered at the end).
   3. We run the test with the best expected information per token, update the probabilities with the
      outcome, and repeat; each test runs at most once.  A test that already fails on the original app (a
@@ -65,6 +67,15 @@ def _kind_key(comp) -> str:
     return comp.kind
 
 
+def _reach(comp) -> tuple[str, ...]:
+    """The dependency ids through which a non-code component reaches a test: the items an agent's tool or skill
+    list lost, when the change set names them ("removed: tool:x"), since only the runs that used one of them can
+    notice; otherwise the component itself or its base (agent:x.tools -> agent:x)."""
+    if comp.detail.startswith("removed: "):
+        return tuple(comp.detail.split()[1:])
+    return (comp.id, comp.base)
+
+
 @register
 class AdaptiveBayes(Strategy):
     name = "adaptive_bayes"
@@ -113,7 +124,7 @@ class AdaptiveBayes(Strategy):
                     out["line"].add(t)
                 elif matches(comp, deps):
                     out["fn"].add(t)
-            elif matches(comp, deps):
+            elif any(d in deps for d in _reach(comp)):
                 out["match"].add(t)
         return out
 
@@ -154,7 +165,11 @@ class AdaptiveBayes(Strategy):
                     seen[1] += rate
         ratios = dict(DEFAULT_REVEAL)
         for k, vals in sums.items():
-            ratios[k] = max(0.01, min(0.9, sum(vals) / len(vals)))  # mean over changes, kept off 0 and 1
+            # the mean over changes, padded like the test records: a ratio learned from one or two changes stays
+            # near the default of its kind (agent.tools falls back to agent), and it is kept off 0 and 1
+            prior = DEFAULT_REVEAL.get(k, DEFAULT_REVEAL.get(k.split(".", 1)[0], 0.2))
+            mean = (sum(vals) + self.prior_strength * prior) / (len(vals) + self.prior_strength)
+            ratios[k] = max(0.01, min(0.9, mean))
         return ratios, record
 
     @staticmethod
@@ -212,10 +227,10 @@ class AdaptiveBayes(Strategy):
                 base = own("code:line", ratios["code:line"]) * max(hit)
             elif matches(comp, deps):
                 base = own("code:fn", ratios["code:fn"])
-        elif matches(comp, deps):
+        elif any(d in deps for d in _reach(comp)):
             # an agent field without training data of its own falls back to the ratio of its kind
             ratio = ratios.get(_kind_key(comp), ratios.get(comp.kind, 0.2))
-            base = own(_kind_key(comp), ratio) * max(freq[d] for d in deps if d in (comp.id, comp.base))
+            base = own(_kind_key(comp), ratio) * max(freq[d] for d in _reach(comp) if d in deps)
         if base is not None:
             return min(0.9, max(0.02, base * tilt))
         if declared:  # declared by the test's author but never observed: half the reveal ratio

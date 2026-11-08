@@ -285,7 +285,14 @@ def _agent_components(rel: str, old: str, new: str) -> list[ChangedComponent]:
     for key in sorted(set(od) | set(nd)):
         if _ordered(od.get(key)) != _ordered(nd.get(key)):
             kind = "agent-prompt" if key in ("system_prompt", "description") else "agent"
-            comps.append(ChangedComponent(f"agent:{name}.{key}", kind, rel, f"{key} changed"))
+            detail = f"{key} changed"
+            if key in ("tools", "skills"):
+                # A list that only lost items affects only the runs that used one of them: name them, as the
+                # dependency ids the traces record (tool:<name>, skill:<name>).
+                old_items, new_items = set(od.get(key) or []), set(nd.get(key) or [])
+                if old_items > new_items:
+                    detail = "removed: " + " ".join(f"{key[:-1]}:{x}" for x in sorted(old_items - new_items))
+            comps.append(ChangedComponent(f"agent:{name}.{key}", kind, rel, detail))
     return comps  # empty for a comment- or format-only change
 
 

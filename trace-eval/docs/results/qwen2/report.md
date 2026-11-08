@@ -54,7 +54,7 @@ Fraction of regression-inducing changes detected, by nominal budget (% of full-s
 | ir_tfidf | 0.50 | 0.73 | 0.81 | 0.88 | 0.96 | 1.00 | 1.00 |
 | observed | 0.42 | 0.54 | 0.65 | 0.85 | 0.92 | 0.96 | 1.00 |
 | cost_aware | 0.38 | 0.54 | 0.65 | 0.85 | 0.92 | 0.96 | 1.00 |
-| adaptive_bayes | 0.35 | 0.46 | 0.58 | 0.65 | 0.65 | 0.69 | 0.73 |
+| adaptive_bayes | 0.38 | 0.54 | 0.65 | 0.73 | 0.73 | 0.77 | 0.81 |
 
 Tokens actually spent on those changes (fraction of the full suite):
 
@@ -66,7 +66,7 @@ Tokens actually spent on those changes (fraction of the full suite):
 | ir_tfidf | 0.019 | 0.049 | 0.099 | 0.199 | 0.299 | 0.499 | 0.990 |
 | observed | 0.017 | 0.047 | 0.085 | 0.150 | 0.206 | 0.293 | 0.425 |
 | cost_aware | 0.019 | 0.049 | 0.099 | 0.199 | 0.299 | 0.498 | 0.990 |
-| adaptive_bayes | 0.016 | 0.031 | 0.047 | 0.061 | 0.069 | 0.081 | 0.082 |
+| adaptive_bayes | 0.016 | 0.031 | 0.047 | 0.061 | 0.069 | 0.081 | 0.083 |
 
 ![detection vs cost](figures/detection_vs_cost.png)
 
@@ -80,7 +80,7 @@ Cost until the first true detection (fraction of the full suite, detected cases 
 | ir_tfidf | 0.041 |
 | observed | 0.059 |
 | cost_aware | 0.061 |
-| adaptive_bayes | 0.045 |
+| adaptive_bayes | 0.042 |
 
 ## 3. Benign changes — wasted budget and stopping
 
@@ -92,7 +92,7 @@ Cost until the first true detection (fraction of the full suite, detected cases 
 | ir_tfidf | 0.019 | 0.049 | 0.098 | 0.198 | 0.298 | 0.498 | 0.995 |
 | observed | 0.011 | 0.033 | 0.056 | 0.090 | 0.120 | 0.154 | 0.196 |
 | cost_aware | 0.019 | 0.049 | 0.099 | 0.199 | 0.299 | 0.498 | 0.989 |
-| adaptive_bayes | 0.014 | 0.027 | 0.048 | 0.084 | 0.113 | 0.170 | 0.251 |
+| adaptive_bayes | 0.014 | 0.029 | 0.050 | 0.086 | 0.115 | 0.172 | 0.270 |
 
 ![benign waste](figures/benign_waste.png)
 
@@ -100,8 +100,8 @@ Stop reasons of `adaptive_bayes` (rows: is the change a regression?):
 
 | is_regression | budget | clean | no_components | regression | uninformative |
 |---|---|---|---|---|---|
-| False | 75 | 95 | 70 | 0 | 5 |
-| True | 190 | 185 | 0 | 535 | 0 |
+| False | 79 | 90 | 70 | 0 | 6 |
+| True | 195 | 115 | 0 | 600 | 0 |
 
 ## 4. Prioritization and selection quality
 
@@ -115,7 +115,7 @@ APFD / cost-cognizant APFD of the complete order; selection recall = revealing t
 | ir_tfidf | 0.788 | 0.799 | 1.000 | 1.000 |
 | observed | 0.814 | 0.834 | 1.000 | 0.430 |
 | cost_aware | 0.813 | 0.833 | 1.000 | 1.000 |
-| adaptive_bayes | 0.787 | 0.760 | 1.000 | 1.000 |
+| adaptive_bayes | 0.785 | 0.756 | 1.000 | 1.000 |
 
 ![apfdc](figures/apfdc.png)
 
