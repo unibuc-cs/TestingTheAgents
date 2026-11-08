@@ -55,7 +55,7 @@ what each test costs and which code it runs.
 4. **Strategies** in `traceeval/selection/` pick tests under a token budget. They see the diff of the code (without comments),
    the baseline traces (which agents, skills, tools, config keys and code lines each test touched), the test
    catalog and the outcomes of the other changes, but never the outcome of the change being evaluated.
-   [`strategies.py`](traceeval/selection/strategies.py) holds the baselines, [`adaptive_bayes.py`](traceeval/selection/adaptive_bayes.py) the method.
+   [`strategies.py`](traceeval/selection/strategies.py) holds the baselines, [`adaptive_bayes.py`](traceeval/selection/adaptive_bayes.py) the method (with two variants that compare text measures, `adaptive_bayes_tfidf` and `adaptive_bayes_notext`).
 5. **The report** shows how many changes each strategy catches for how many tokens, how much it spends on
    harmless changes, and whether the adaptive one stops at the right moment.
 

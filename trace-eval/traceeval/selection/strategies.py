@@ -74,6 +74,32 @@ class Declared(Strategy):
         return [t for *_, t in sorted(scored)]
 
 
+def tfidf_relevance(ctx) -> dict[str, float]:
+    """TF-IDF cosine similarity between the change text and each test's text (0..1). The words' weights come
+    from the test suite: a word that many tests share counts little."""
+    docs = {t: tokens(ctx.catalog[t].text()) for t in ctx.tests()}
+    df = defaultdict(int)
+    for toks in docs.values():
+        for w in set(toks):
+            df[w] += 1
+    n = len(docs)
+
+    def vec(toks):  # sublinear tf x smoothed idf
+        tf = defaultdict(int)
+        for w in toks:
+            tf[w] += 1
+        return {w: (1 + math.log(c)) * math.log((n + 1) / (df.get(w, 0) + 1)) for w, c in tf.items()}
+
+    q = vec(tokens(change_text(ctx.change)))
+    qn = math.sqrt(sum(v * v for v in q.values())) or 1.0
+    out = {}
+    for t, toks in docs.items():
+        d = vec(toks)
+        dn = math.sqrt(sum(v * v for v in d.values())) or 1.0
+        out[t] = sum(q[w] * d[w] for w in q if w in d) / (qn * dn)
+    return out
+
+
 @register
 class IRTfidf(Strategy):
     """Rank every test by TF-IDF cosine similarity between the change text and the test text."""
@@ -81,28 +107,8 @@ class IRTfidf(Strategy):
     name = "ir_tfidf"
 
     def order(self, ctx):
-        docs = {t: tokens(ctx.catalog[t].text()) for t in ctx.tests()}
-        query = tokens(change_text(ctx.change))
-        df = defaultdict(int)
-        for toks in docs.values():
-            for w in set(toks):
-                df[w] += 1
-        n = len(docs)
-
-        def vec(toks):  # sublinear tf x smoothed idf
-            tf = defaultdict(int)
-            for w in toks:
-                tf[w] += 1
-            return {w: (1 + math.log(c)) * math.log((n + 1) / (df.get(w, 0) + 1)) for w, c in tf.items()}
-
-        q = vec(query)
-        qn = math.sqrt(sum(v * v for v in q.values())) or 1.0
-        scored = []
-        for t, toks in docs.items():
-            d = vec(toks)
-            dn = math.sqrt(sum(v * v for v in d.values())) or 1.0
-            scored.append((-sum(q[w] * d[w] for w in q if w in d) / (qn * dn), ctx.cost(t), t))
-        return [t for *_, t in sorted(scored)]
+        rel = tfidf_relevance(ctx)
+        return sorted(rel, key=lambda t: (-rel[t], ctx.cost(t), t))
 
 
 @register

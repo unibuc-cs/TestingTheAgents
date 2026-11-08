@@ -11,7 +11,8 @@ In plain words
      revealed.  Catching a change that broke almost everything says little; being the one test that caught a
      subtle change says a lot.  The sensitivity is finally tilted up for tests
      whose own text (name, request, expectations) shares vocabulary with the diff, and for tests whose
-     author declared the dependency.
+     author declared the dependency.  How text is compared is an option (``text``): word overlap by default,
+     the TF-IDF similarity of the ``ir_tfidf`` strategy, or not at all (the variants registered at the end).
   3. We run the test with the best expected information per token, update the probabilities with the
      outcome, and repeat; each test runs at most once.  A test that already fails on the original app (a
      mistake of the model) tells nothing either way.  After a test passes, tests that behave exactly like it
@@ -29,7 +30,7 @@ from itertools import product
 import numpy as np
 
 from .base import ExecutionLog, SelectionContext, Strategy, matches
-from .strategies import CostAware, change_text, register, tokens
+from .strategies import CostAware, change_text, register, tfidf_relevance, tokens
 
 # prior probability that a changed component of this kind is broken
 PRIOR = {
@@ -76,6 +77,7 @@ class AdaptiveBayes(Strategy):
         risk_tilt=0.25,
         duplicate_discount=0.35,
         prior_strength=2.0,
+        text="overlap",
     ):
         self.eps_clean = eps_clean  # "clean" below this P(something is broken) (step 4)
         self.max_components = max_components  # 2^k hypotheses, so k stays small
@@ -83,6 +85,7 @@ class AdaptiveBayes(Strategy):
         self.risk_tilt = risk_tilt  # how much a riskier test is preferred
         self.duplicate_discount = duplicate_discount  # factor on a near-duplicate's sensitivity after a pass
         self.prior_strength = prior_strength  # padding of a test's record (step 2): a short record moves little
+        self.text = text  # how a test's text is compared with the change (step 2): "overlap", "tfidf" or "none"
 
     # ------------------------------------------------------------------ step 1: hypotheses
     def components(self, ctx):
@@ -174,12 +177,23 @@ class AdaptiveBayes(Strategy):
         mx = max(rel.values()) or 1.0
         return {t: v / mx for t, v in rel.items()}
 
+    def text_relevance(self, ctx) -> dict[str, float]:
+        """Per test, 0..1: how close its text is to the change, by the measure ``text`` names. "none" gives every
+        test the middle value, so text plays no part (an ablation)."""
+        if self.text == "none":
+            return {t: 0.5 for t in ctx.tests()}
+        if self.text == "tfidf":
+            rel = tfidf_relevance(ctx)
+            mx = max(rel.values()) or 1.0
+            return {t: v / mx for t, v in rel.items()}  # the closest test gets 1, as with word overlap
+        return self.lexical_relevance(ctx)
+
     def sensitivity(self, ctx, t, comp, lex, ratios, record) -> float:
         """P(test t fails | component comp is broken)."""
         freq = ctx.history.baseline[t].dep_frequency
         deps = set(freq)
         declared = matches(comp, ctx.catalog[t].declared_components())
-        tilt = 0.5 + lex + (0.5 if declared else 0.0)  # lexical relevance [0.5, 1.5] + declared bonus
+        tilt = 0.5 + lex + (0.5 if declared else 0.0)  # text relevance [0.5, 1.5] + declared bonus
 
         def own(bucket, ratio):
             """The bucket's reveal ratio times this test's lift on it: the changes it revealed over the changes an
@@ -221,7 +235,7 @@ class AdaptiveBayes(Strategy):
         # P(test fails with nothing broken): 1 for a test the model already fails on the original app; the floor
         # keeps every outcome possible, so that no single result rules a hypothesis out completely
         fails_anyway = np.array([max(0.01, 1.0 - ctx.history.baseline_pass_rate(t)) for t in tests])
-        lex, (ratios, record) = self.lexical_relevance(ctx), self.calibrate(ctx)
+        lex, (ratios, record) = self.text_relevance(ctx), self.calibrate(ctx)
         S = (
             np.array([[self.sensitivity(ctx, t, c, lex[t], ratios, record) for c, _ in comps] for t in tests])
             if k
@@ -328,3 +342,25 @@ class AdaptiveBayes(Strategy):
         executed = self.run(unlimited, lambda t: (True, ctx.cost(t)), stopping=False).executed
         seen = set(executed)
         return executed + [t for t in CostAware().order(ctx) if t not in seen]
+
+
+# The same method with another text measure (step 2), registered under their own names so that a replay can
+# compare them with --strategies; neither is in the default comparison.
+@register
+class AdaptiveBayesTfidf(AdaptiveBayes):
+    """Text compared by the TF-IDF similarity of the ir_tfidf strategy instead of word overlap."""
+
+    name = "adaptive_bayes_tfidf"
+
+    def __init__(self):
+        super().__init__(text="tfidf")
+
+
+@register
+class AdaptiveBayesNoText(AdaptiveBayes):
+    """No text at all: only coverage, history and declarations decide (an ablation)."""
+
+    name = "adaptive_bayes_notext"
+
+    def __init__(self):
+        super().__init__(text="none")

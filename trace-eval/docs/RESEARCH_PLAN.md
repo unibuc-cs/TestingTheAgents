@@ -106,7 +106,9 @@ A test run is PASS / TOOL_ERROR (a tool crashed, or failed in a way the case doe
 | `history_ml` (optional) | predictive test selection (Machalica et al.) | logistic model over affinity/cost/risk features trained on other changes (leave-one-change-out) | ranks all | no |
 | `adaptive_bayes` | **proposed** | everything above + sequential inference | yes | yes |
 
-The two optional baselines run only with `--strategies all`; the results in §5 compare the other seven.
+The two optional baselines run only with `--strategies all`; the results in §5 compare the other seven. Two
+variants of the proposed method differ only in how text is compared (§5.2): `adaptive_bayes_tfidf` and
+`adaptive_bayes_notext`.
 
 ### 3.1 The proposed method: adaptive Bayesian selection with budget-aware stopping
 
@@ -118,7 +120,7 @@ s_tc = r_kind(c) · lift_t,kind(c) · freq_t(c) · tilt_t, where
 - r_kind is the empirical reveal ratio learned from the other recorded changes: the fraction of statically impacted tests that actually revealed a change of that kind. Kinds separate, for example, "executed the changed line" from "executed only the changed function", and agent fields are calibrated per field. This encodes "coverage does not imply detection" with measured numbers instead of hand-set constants.
 - lift_t,k = (O_tk + m) / (E_tk + m) is the test's own record on the earlier changes of kind k that impacted it: O_tk is how many of them it revealed, E_tk how many an average impacted test would have revealed (the sum of those changes' reveal rates), and m = 2 pads a short record. A test that ran many changed functions and never caught anything gets a lift below 1; one that caught changes most impacted tests missed gets a lift above 1. Comparing with E rather than counting catches matters: a change that breaks a large part of the suite (link validation turned off everywhere: 40 tests) says little about each test it breaks. Like r_kind, the records are recomputed from the recordings at every run, without the change under evaluation, so they grow as more changes are recorded (`docs/USER_GUIDE.md` §5).
 - freq_t(c) is how often t exercised c in its baseline runs.
-- tilt_t ∈ [0.5, 2.0] combines the lexical relevance of the change text (code only, never comments) to the test's own text (name, request, expectations) with a bonus when the author declared the dependency. It is a proxy for "the test's oracle plausibly observes the changed behaviour".
+- tilt_t ∈ [0.5, 2.0] combines the lexical relevance of the change text (code only, never comments) to the test's own text (name, request, expectations) with a bonus when the author declared the dependency. It is a proxy for "the test's oracle plausibly observes the changed behaviour". The relevance measure is an option (`text`): word overlap (the default), TF-IDF, or none (§5.2).
 
 *Policy.* The next test is the argmax over t of (expected information gain about B, tilted by risk) / c(t). After a pass, the sensitivities of tests with the same behaviour signature (agents, tools, fault profile, dataset) are discounted (×0.35), because near-duplicate tests are correlated evidence, not independent draws. Each test runs at most once: the models decode greedily, so a rerun gives the same answer.
 
@@ -226,6 +228,31 @@ adaptive 0.04, observed 0.06, cost_aware 0.06–0.07, random 0.15–0.17 of the 
   test reveals (0 of 665 replays).
 - *IR.* TF-IDF over the diff is still the strongest prioritizer at small budgets (81%/73% at 5%).
 
+### 5.2 Text in the method: an option (roadmap 3(b))
+
+The method's text signal (the tilt in §3.1) can be word overlap (the default), the TF-IDF similarity of the
+`ir_tfidf` strategy (`adaptive_bayes_tfidf`), or nothing (`adaptive_bayes_notext`, an ablation). Detected and
+spent at a 20% budget, on the 33 changes (5 seeds; `runs/gemma3` and `runs/qwen3` are the one-repetition
+recordings of the current app):
+
+| recording | overlap (default) | TF-IDF | no text | `ir_tfidf` alone |
+|---|---|---|---|---|
+| gemma2 | 0.76 (4.8%) | 0.81 (4.6%) | 0.67 (6.7%) | 0.90 (20%) |
+| qwen2 | 0.65 (6.1%) | 0.81 (5.8%) | 0.62 (6.6%) | 0.88 (20%) |
+| gemma3 | 0.76 (4.9%) | 0.81 (4.6%) | 0.67 (6.8%) | 0.90 (20%) |
+| qwen3 | 0.79 (5.0%) | 0.83 (4.6%) | 0.71 (6.2%) | 0.92 (20%) |
+
+At a 50% budget the default reaches 0.69–0.86 and the TF-IDF variant 0.81–0.90, still for under 6% of the
+suite. No variant gives a "regression" verdict on a change that no test reveals (0 of 1000 replays each), and
+the TF-IDF variant stops correctly most often (0.86, against 0.79 for the default and 0.73 without text).
+
+**Reading.** On this testbed TF-IDF is the better text measure, most of all under Qwen (+16 points on `qwen2`),
+where it brings forward the one test that reveals a narrow change (the approval gate, the agent loop's step
+limit). Without any text the method loses 3–10 points, so text matters, but coverage and history carry most of
+the result. The testbed is textual: tests, skills and config keys share vocabulary, which favours any text
+measure (a threat noted in §8). Whether TF-IDF helps as much where tests and changes are worded differently is a
+question for tau2-bench, so the default stays word overlap and TF-IDF stays an option.
+
 ---
 
 ## 6. Models, the prototype, and a second system under test
@@ -250,7 +277,7 @@ adaptive 0.04, observed 0.06, cost_aware 0.06–0.07, random 0.15–0.17 of the 
 |---|---|---|
 | 1. Testbed | SUT, catalog, tracing, mutations, change sets, record/replay, metrics, report, CLI, tests | done (v0.1) |
 | 2. Methods | baselines + cost-aware + predictive + adaptive Bayesian selector with stopping | done (v0.1); tune ε, priors, discount; add a mandatory-safety policy wrapper |
-| 3. Method improvements | (a) test-level learned sensitivities (per test × component-kind reveal history) instead of kind-level; (b) IR relevance inside the Bayesian likelihood; (c) CASPER-style slices and the Risk-Aware Adaptive Evaluation bandit as reproduced baselines | (a) done; (b), (c) next |
+| 3. Method improvements | (a) test-level learned sensitivities (per test × component-kind reveal history) instead of kind-level; (b) IR relevance inside the Bayesian likelihood; (c) CASPER-style slices and the Risk-Aware Adaptive Evaluation bandit as reproduced baselines | (a) done; (b) done as an option (§5.2); (c) next |
 | 4. Real LLM | ContentOps on real models (local vLLM): all variants × 3 reps under two models | done: Gemma and Qwen (`docs/EXPERIMENT.md`) |
 | 5. External SUT | tau2-bench airline adapter; 12 mutations (6 policy, 4 tool-code, 2 benign); same evaluation | after 3(b) |
 | 6. Scale/robustness | more mutations (mutation operators generated systematically: step deletion/swap/condition negation in procedures, argument swaps in adapters, config boundary values), equivalent-mutant analysis, sensitivity to K and to budget definitions (time vs. tokens), ablations of each model ingredient | with the paper |
@@ -260,7 +287,7 @@ Phase 4 showed that a model's own mistakes and blind spots shape the ground trut
 
 The prototype (`traceeval check`, §6) ran live on four changes under each model, from recordings of the current app (`runs/gemma3`, `runs/qwen3`, one repetition). It caught a skill regression with its first test, called a harmless prompt rewording clean, and found nothing for a hand edit that no test covers. The weak case was the retry change: the method first spent on cheap tests that merely call the changed function, and ran out of budget undecided. That led to item 3(a), each test's own record, together with stopping at the first failure of a test that passed on the original app. Replayed on the same recordings, the retry change now ends "regression" after 17 tests (8.9% of the suite) under Gemma and 11 (5.9%) under Qwen. The new recordings also show that the ground truth moves with the app and the judge: under Qwen, three regressions revealed in `runs/qwen2` are not revealed on the current app, one because the strict model judge now fails SEO-07 on the original app.
 
-Immediate next steps, in order: the IR signal inside the likelihood (the adaptive method's misses under Qwen); re-recording the ground truth with three repetitions on the current app with the model judge, before the paper; the mandatory-safety wrapper; the OpenAI backend once API tokens are available.
+Immediate next steps, in order: overconfident sensitivities (on the two agent-definition changes, many tests reach the 0.9 cap, two of them pass, and the method stops "clean" before reaching the revealing ones); re-recording the ground truth with three repetitions on the current app with the model judge, before the paper; the mandatory-safety wrapper; the OpenAI backend once API tokens are available.
 
 ---
 
