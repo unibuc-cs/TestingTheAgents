@@ -14,8 +14,7 @@ import pytest
 
 from traceeval.catalog import load_catalog
 from traceeval.experiment.executor import run_case
-from traceeval.experiment.sutloader import load_sut
-from traceeval.mutation import get_mutation, materialize_variant
+from traceeval.experiment.sutloader import copy_sut, load_sut
 from traceeval.scoring import score_case
 from traceeval.sut import SUT_ROOT
 from traceeval.sut.harness.skills import parse_skill
@@ -151,7 +150,10 @@ def test_harness_error_is_classified(sut, cases):
 
 
 def test_tool_crash_is_classified(tmp_path, cases):
-    sut_dir, _ = materialize_variant(get_mutation("code_metadata_keywords_crash"), tmp_path)
+    sut_dir = copy_sut(tmp_path / "sut")  # an adapter that crashes (TypeError) when no keywords are given
+    tool = sut_dir / "tools" / "content_tools.py"
+    crashing = "keywords=[k.strip() for k in keywords], actor=ctx.user_id"
+    tool.write_text(tool.read_text().replace("keywords=keywords, actor=ctx.user_id", crashing))
     script = {  # the SEO agent sets the title without keywords, which crashes the mutated adapter
         "orchestrator": [("route_to_agent", {"agent": "seo"})],
         "seo agent": [("set_page_metadata", {"page_id": "p4", "title": "Welcome to the Example blog"})],

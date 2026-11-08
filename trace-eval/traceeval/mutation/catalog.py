@@ -1,4 +1,4 @@
-"""The 38 controlled changes ("mutations"), written as data.
+"""The 33 controlled changes ("mutations"), written as data.
 
 A mutation is a controlled change to the system under test, applied as a real file edit. The
 experiment never shows the selectors the mutation label - only the diff. ``regression`` says whether
@@ -99,8 +99,6 @@ MUTATIONS: list[Mutation] = [
              [('replace', 'tools/content_tools.py', 'title=title, description=description,', 'title=title, description=title,')]),
     Mutation('code_retry_drop_idempotency', CODE, 'Retries no longer carry idempotency keys (duplicates after lost acks).', True,
              [('replace', 'harness/retry.py', 'key = idempotency_key(operation) if (is_write and idempotency_enabled) else None', 'key = None')]),
-    Mutation('code_retry_disabled', CODE, 'Retry helper gives up after the first transient failure.', True,
-             [('replace', 'harness/retry.py', 'if attempt > retries:', 'if attempt > 0:')]),
     Mutation('code_approval_gate_bypass', CODE, 'Dispatcher no longer enforces approval tokens for guarded tools.', True,
              [('replace', 'harness/dispatcher.py', 'return spec.kind == "guarded" and name in gated', 'return False')]),
     Mutation('code_links_external_lenient', CODE, 'Link validation treats every external URL as reachable.', True,
@@ -109,16 +107,9 @@ MUTATIONS: list[Mutation] = [
              [('replace', 'tools/content_tools.py', '"review_approved": page["review"]["status"] == "approved",', '"review_approved": page["review"]["status"] == "requested",')]),
     Mutation('code_edit_keeps_review', CODE, 'Editing a page no longer invalidates its approved review.', True,
              [('delete_line', 'services/repository.py', 'page["review"] = {"status": "none", "reviewer": None}  # edits invalidate')]),
-    # crashes: the tool raises an unhandled exception, only on some inputs (verdict TOOL_ERROR)
-    Mutation('code_metadata_keywords_crash', CODE, 'Tool adapter normalises keywords and crashes when none are given (TypeError).', True,
-             [('replace', 'tools/content_tools.py', 'keywords=keywords, actor=ctx.user_id', 'keywords=[k.strip() for k in keywords], actor=ctx.user_id')]),
-    Mutation('code_links_unknown_url_crash', CODE, 'Link validation crashes on external URLs missing from the reachability table (KeyError).', True,
-             [('replace', 'services/links.py', 'return table.get(url, "unknown")', 'return table[url]')]),
     # ---------------------------------------------------------------- runtime (agent loop)
     Mutation('code_termination_off_by_six', RUNTIME, 'Agent loop stops six tool calls before the configured budget.', True,
              [('replace', 'harness/runtime.py', 'if self.steps >= max_tool_calls:', 'if self.steps >= max_tool_calls - 6:')]),
-    Mutation('code_delegation_depth_zero', RUNTIME, 'Delegation depth zero: the orchestrator cannot hand off to specialists.', True,
-             [('replace', 'harness/runtime.py', 'MAX_DELEGATION_DEPTH = 3', 'MAX_DELEGATION_DEPTH = 0')]),
     Mutation('code_delegation_truncates_answer', RUNTIME, "Delegation passes on only the first 40 characters of the specialist's answer.", True,
              [('replace', 'harness/runtime.py', 'return {"agent": target, "delegated_response": message}', 'return {"agent": target, "delegated_response": message[:40]}')]),
     # ---------------------------------------------------------------- skills
@@ -167,8 +158,6 @@ MUTATIONS: list[Mutation] = [
              [('replace', 'config/runtime.yaml', 'max_title_length: 60', 'max_title_length: 20')]),
     Mutation('config_default_agent_publishing', CONFIG, 'Requests no specialist owns go to publishing instead of authoring.', True,
              [('replace', 'config/runtime.yaml', 'default_agent: authoring', 'default_agent: publishing')]),
-    Mutation('config_approval_drop_unpublish', CONFIG, 'unpublish_page no longer requires an approval token.', True,
-             [('replace', 'config/runtime.yaml', 'requires_approval: [approve_review, export_user_data, unpublish_page]', 'requires_approval: [approve_review, export_user_data]')]),
     # ---------------------------------------------------------------- combined (code + config; each alone is harmless)
     Mutation('combined_seo_keyword_limit', COMBINED, 'SEO report gains a keyword-count rule (code) and a very low limit (config).', True,
              [('replace', 'services/seo.py', _SEO_SIG_OLD, _SEO_SIG_NEW), ('replace', 'services/seo.py', _SEO_KW_OLD, _SEO_KW_NEW), ('replace', 'tools/translation_tools.py', _SEO_CALL_OLD, _SEO_CALL_NEW), ('replace', 'config/runtime.yaml', '  require_description: true\n', '  require_description: true\n  max_keywords: 2\n')]),

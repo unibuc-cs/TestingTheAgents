@@ -29,7 +29,7 @@ and `traceeval/sut/harness/dispatcher.py` (where every tool call is governed and
 ### 1.2 The earlier work in one paragraph
 
 After a change (a skill, a prompt, harness code, a config key), which of the 136 cases should run and
-when can we stop? The 38 mutations give the ground truth (which change breaks which case), and the
+when can we stop? The 33 mutations give the ground truth (which change breaks which case), and the
 baseline traces give observed dependencies. The strategies in `traceeval/selection/` rank cases under a
 token budget and are compared by replaying recorded outcomes (`docs/results/gemma2/report.md`). The SDD
 layer reuses the executor, the catalog, the recorder with coverage, the mutation machinery, the

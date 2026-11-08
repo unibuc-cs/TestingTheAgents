@@ -5,7 +5,7 @@ tests should run, in what order, and when can we stop? The aim is to spend fewer
 still catch regressions.
 
 **What this repo is.** A testbed for that question. It contains a small working multi-agent app whose agents
-are played by a real model (Gemma 4 E4B or Qwen3.8-27B), 136 tests, 38 controlled changes with known effects, and
+are played by a real model (Gemma 4 E4B or Qwen3.8-27B), 136 tests, 33 controlled changes with known effects, and
 7 selection strategies, which are compared by replaying recorded runs. One of them, `adaptive_bayes`, is the
 proposed method; `traceeval check` runs it live on one change.
 
@@ -34,7 +34,7 @@ scripts/gpu_remote.sh down
 the changed app with the real model, the outcome decides what runs next, and it stops with a verdict:
 
 ```bash
-traceeval check code_retry_disabled --history runs/gemma3 --budget 0.2              # a change from the catalog
+traceeval check code_retry_drop_idempotency --history runs/gemma3 --budget 0.2      # a change from the catalog
 traceeval check path/to/my-copy-of-sut --history runs/qwen3 --backend llm           # your own edit, with Qwen
 ```
 
@@ -50,7 +50,7 @@ what each test costs and which code it runs.
    a machine-readable procedure), [tools](traceeval/sut/tools/) and a [config file](traceeval/sut/config/runtime.yaml). Gemma 4 E4B plays the agents (locally, on a GPU
    server, or from its recorded answers); `--backend llm` plays them with Qwen3.8-27B on the GPU server, or with
    any other OpenAI-compatible endpoint.
-3. **Changes** are the 38 entries in [`traceeval/mutation/catalog.py`](traceeval/mutation/catalog.py), applied as edits to a copy of the app's files. Running the
+3. **Changes** are the 33 entries in [`traceeval/mutation/catalog.py`](traceeval/mutation/catalog.py), applied as edits to a copy of the app's files. Running the
    full suite on each gives the ground truth: which tests reveal which change.
 4. **Strategies** in `traceeval/selection/` pick tests under a token budget. They see the diff of the code (without comments),
    the baseline traces (which agents, skills, tools, config keys and code lines each test touched), the test
@@ -60,10 +60,10 @@ what each test costs and which code it runs.
    harmless changes, and whether the adaptive one stops at the right moment.
 
 Main results, with Gemma and with Qwen3.8-27B playing the agents (three repetitions per test): hand-written
-dependencies catch 61–64% of regressions. Trace-based selection catches 84–92% within a budget of 20% of the
-full-suite tokens. The adaptive method catches 65–80% while spending 5–6% of those tokens, and never calls a
-change that breaks nothing a regression. Gemma misses six of the 31 regressions, because it ignores the guards
-they touch either way; Qwen reveals all 31. See the [Gemma](docs/results/gemma2/report.md) and
+dependencies catch 65–71% of regressions. Trace-based selection catches 85–90% within a budget of 20% of the
+full-suite tokens. The adaptive method catches 65–76% while spending 5–6% of those tokens, and never calls a
+change that breaks nothing a regression. Gemma misses five of the 26 regressions, because it ignores the guards
+they touch either way; Qwen reveals all 26. See the [Gemma](docs/results/gemma2/report.md) and
 [Qwen](docs/results/qwen2/report.md) reports and [docs/EXPERIMENT.md](docs/EXPERIMENT.md).
 
 ## Spec-driven development on the same testbed

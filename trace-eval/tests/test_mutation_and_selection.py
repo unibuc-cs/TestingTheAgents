@@ -31,7 +31,7 @@ def test_every_mutation_applies_and_changes_something(tmp_path):
 def test_changeset_leaves_out_comments(tmp_path):
     _, cs = materialize_variant(get_mutation("benign_code_comment_docstring"), tmp_path / "v")
     assert cs.is_provably_benign()
-    _, cs = materialize_variant(get_mutation("code_retry_disabled"), tmp_path / "v")
+    _, cs = materialize_variant(get_mutation("code_retry_drop_idempotency"), tmp_path / "v")
     assert not cs.is_provably_benign()
     assert any(c.id == "code:harness/retry.py::with_retry" for c in cs.components)
     assert any(c.kind == "line" for c in cs.components)
@@ -45,11 +45,12 @@ def test_commenting_the_code_does_not_change_the_changeset(tmp_path):
     retry.write_text(
         "# A new comment at the top.\n"
         + retry.read_text().replace(
-            "            if attempt > retries:\n",
-            "            # A new comment above the line.\n            if attempt > retries:  # and a trailing one\n",
+            "    key = idempotency_key(operation) if (is_write and idempotency_enabled) else None\n",
+            "    # A new comment above the line.\n"
+            "    key = idempotency_key(operation) if (is_write and idempotency_enabled) else None  # a trailing one\n",
         )
     )
-    m = get_mutation("code_retry_disabled")
+    m = get_mutation("code_retry_drop_idempotency")
     _, plain = materialize_variant(m, tmp_path / "v1")
     _, again = materialize_variant(m, tmp_path / "v2", baseline=commented)
     assert again.diff == plain.diff

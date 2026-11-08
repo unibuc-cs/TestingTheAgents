@@ -22,7 +22,7 @@ To study that, the repo has four things:
 - **Tests.** 136 cases in [`traceeval/catalog/tests/`](../traceeval/catalog/tests/). Each gives a request
   ("Please publish the welcome page") and checks the outcome: was the page published, which tools were
   called, which facts the answer reports.
-- **Changes.** 38 controlled edits in [`traceeval/mutation/catalog.py`](../traceeval/mutation/catalog.py),
+- **Changes.** 33 controlled edits in [`traceeval/mutation/catalog.py`](../traceeval/mutation/catalog.py),
   each labelled *regression* (it should break something) or *benign* (it should not). Example:
   `config_seo_title_20` lowers the SEO title limit from 60 to 20 characters.
 - **Selection strategies.** In [`traceeval/selection/`](../traceeval/selection/), they decide which tests
@@ -215,12 +215,12 @@ scripts/gpu_remote.sh status    # GPU memory, and for each model: server, tunnel
 # Gemma
 traceeval run --test PUB-01 --backend vllm                              # one case, to check
 traceeval experiment --backend vllm --workdir runs/gemma2 --reps 3      # the whole recording
-traceeval check code_retry_disabled --history runs/gemma3               # one change, live (section 5)
+traceeval check code_retry_drop_idempotency --history runs/gemma3       # one change, live (section 5)
 
 # Qwen (in another terminal, at the same time if you like)
 traceeval run --test PUB-01 --backend llm
 traceeval experiment --backend llm --workdir runs/qwen2 --reps 3
-traceeval check code_retry_disabled --history runs/qwen3 --backend llm
+traceeval check code_retry_drop_idempotency --history runs/qwen3 --backend llm
 
 scripts/gpu_remote.sh down      # stop both servers and close the tunnels: frees the GPUs
 scripts/gpu_remote.sh down qwen # or just one of them
@@ -345,7 +345,7 @@ tests run live by the model instead of looked up in a recording
 ([`traceeval/experiment/check.py`](../traceeval/experiment/check.py)).
 
 ```bash
-traceeval check code_retry_disabled --history runs/gemma3 --budget 0.2            # a change from the catalog
+traceeval check code_retry_drop_idempotency --history runs/gemma3 --budget 0.2    # a change from the catalog
 traceeval check my-sut-copy --history runs/qwen3 --backend llm                    # a changed copy of traceeval/sut
 ```
 
@@ -521,7 +521,8 @@ Phase 4 fixed them and then recorded both models again, this time with three rep
 - **Two tests:** AST-07 now lets the model look the missing asset up (`get_asset: not_found` is allowed).
   SEO-07 checks the score in the last SEO report (a new kind of check, `tool_results`) rather than only
   looking for "100" in the answer.
-- **The changes:** still 38, now 31 regressions and 7 benign.
+- **The changes:** still 38, now 31 regressions and 7 benign. Five were dropped later as redundant
+  ([USER_GUIDE.md](USER_GUIDE.md) §6); the results below are for the remaining 33 (26 regressions).
 
 | before | now | why |
 |---|---|---|
@@ -540,12 +541,12 @@ then the changes on a copy of Qwen on each GPU (`TRACEEVAL_GPUS=0,1`, `--workers
 | | Gemma 4 E4B | Qwen3.8-27B |
 |---|---|---|
 | original app | 133 of 136 pass | 135 of 136 pass |
-| regressions caught | 25 of 31 | 31 of 31 |
+| regressions caught | 21 of 26 | 26 of 26 |
 | benign changes that fail a test | none | none |
-| sanity line of the report | VIOLATED (the six below) | OK |
+| sanity line of the report | VIOLATED (the five below) | OK |
 
 Qwen catches every regression, so the changes and the tests are now sound for a model that follows its
-instructions. Gemma misses six, for one reason: it doesn't act on a guard it has to work out for itself, so it
+instructions. Gemma misses five, for one reason: it doesn't act on a guard it has to work out for itself, so it
 behaves the same (wrongly) with or without the change.
 
 | change | why Gemma can't see it |
@@ -553,7 +554,6 @@ behaves the same (wrongly) with or without the change.
 | `config_require_review_false`, `code_edit_keeps_review` | Gemma schedules a page without an approved review anyway (PUB-10), and requests a review nobody asked for after an edit (AUT-04) |
 | `config_seo_title_20`, `skill_seo_drop_length_guard` | Gemma applies an over-long title whatever the limit (SEO-02) |
 | `skill_linkval_ignore_assets` | Gemma stops at a broken asset reference even when the skill says it doesn't block |
-| `code_metadata_keywords_crash` | the crash needs a call without keywords. Gemma makes that call in one repetition of three, so the majority says "not caught" |
 
 We keep them as they are. The ground truth belongs to a model, and a change that a model can't see is a fact
 about that model, not a bug in the testbed.
@@ -566,22 +566,21 @@ changes and a handful of tests flip once. The majority vote absorbs all of it.
 
 | strategy | Gemma | Qwen |
 |---|---|---|
-| `declared` (hand-written dependencies) | 64% | 61% |
-| `observed` (dependencies from traces) | 92% | 84% |
-| `ir_tfidf` (text similarity to the diff) | 92% | 90% |
-| `adaptive_bayes` (spending) | 80% (5%) | 65% (6%) |
+| `declared` (hand-written dependencies) | 71% | 65% |
+| `observed` (dependencies from traces) | 90% | 85% |
+| `ir_tfidf` (text similarity to the diff) | 90% | 88% |
+| `adaptive_bayes` (spending) | 76% (5%) | 65% (6%) |
 
-- **The main claim holds under real models.** Hand-written dependencies stay near 60%, and traces recover most
+- **The main claim holds under real models.** Hand-written dependencies stay at 65–71%, and traces recover most
   of the rest.
 - **The adaptive method is weaker under Qwen.** On regressions that only one or two tests reveal, it stops with
-  "clean" before reaching them (225 of 1085 replays). Each test's own record is now part of the method (see
+  "clean" before reaching them (185 of 910 replays). Each test's own record is now part of the method (see
   USER_GUIDE.md §5); the text-similarity signal inside the model is the next planned improvement.
 - **Tests that are red on the original app cost the other strategies dearly.** Gemma's three failing tests fail
   on every changed copy, so a strategy that runs one of them sees a failure the change did not cause. On the
-  changes that no test reveals, `full` sees such a failure in 71% of replays and `ir_tfidf` in 61% under Gemma
-  (56% and 16% under Qwen). `adaptive_bayes` discounts a test by its failures on the original app and raised
-  none of these: its few "false alarms" under Gemma are the keywords crash, found in the one repetition where
-  it happens.
+  changes that no test reveals, `full` sees such a failure in 71% of replays and `ir_tfidf` in 58% under Gemma
+  (56% and 16% under Qwen). `adaptive_bayes` discounts a test by its failures on the original app and gives no
+  "regression" verdict on any of these changes.
 
 ## 8. Where to look in the code
 
