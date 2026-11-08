@@ -61,12 +61,10 @@ what each test costs and which code it runs.
 
 Main results, with Gemma and with Qwen3.8-27B playing the agents (three repetitions per test): hand-written
 dependencies catch 61–64% of regressions. Trace-based selection catches 84–92% within a budget of 20% of the
-full-suite tokens. The adaptive method catches 68–80% while spending 7% of those tokens, and never calls a
+full-suite tokens. The adaptive method catches 65–80% while spending 5–6% of those tokens, and never calls a
 change that breaks nothing a regression. Gemma misses six of the 31 regressions, because it ignores the guards
 they touch either way; Qwen reveals all 31. See the [Gemma](docs/results/gemma2/report.md) and
-[Qwen](docs/results/qwen2/report.md) reports and [docs/EXPERIMENT.md](docs/EXPERIMENT.md). The first results came
-from a simulated agent, since removed; they are kept in [docs/results/exp1](docs/results/exp1/report.md) and
-[exp2_flaky](docs/results/exp2_flaky/report.md).
+[Qwen](docs/results/qwen2/report.md) reports and [docs/EXPERIMENT.md](docs/EXPERIMENT.md).
 
 ## Spec-driven development on the same testbed
 

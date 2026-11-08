@@ -105,10 +105,9 @@ def test_small_end_to_end_experiment(tmp_path):
         )
         log = get_strategy(name).run(ctx, make_oracle(h, "skill_publish_drop_link_validation", random.Random(0)))
         assert any(not ok for _, ok, _ in log.steps), name
-        if name == "adaptive_bayes":  # the first failure ends the run, or is re-run at once and then ends it
-            first = next(i for i, (_, ok, _) in enumerate(log.steps) if not ok)
-            assert first == len(log.steps) - 1 or log.steps[first + 1][0] == log.steps[first][0]
-            assert log.stop_reason == "regression"
+        if name == "adaptive_bayes":  # a test that passed on the original app and now fails ends the run
+            assert not log.steps[-1][1] and log.stop_reason == "regression"
+            assert len(set(log.executed)) == len(log.executed)  # no test runs twice
     df = evaluate(work, strategies=["observed", "adaptive_bayes"], budgets=(0.2, 1.0), seeds=1)
     assert set(df.strategy) == {"observed", "adaptive_bayes"}
     # the prototype: the same change checked live (here on recorded answers), from this history

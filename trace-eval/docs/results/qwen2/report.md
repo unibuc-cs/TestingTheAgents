@@ -1,6 +1,6 @@
 # TRACE-Eval experiment report
 
-`runs/qwen2` · 136 tests · 38 changes · 3 baseline repetitions · full suite = 1,080,378 tokens · 0 flaky tests at baseline
+`runs/qwen2` · 136 tests · 38 changes · 3 baseline repetitions · full suite = 1,080,378 tokens · tests failing on the original app: 1
 
 ## 1. Ground truth — which changes are revealed by how many tests
 
@@ -59,7 +59,7 @@ Fraction of regression-inducing changes detected, by nominal budget (% of full-s
 | ir_tfidf | 0.52 | 0.77 | 0.84 | 0.90 | 0.97 | 1.00 | 1.00 |
 | observed | 0.42 | 0.55 | 0.68 | 0.84 | 0.94 | 0.97 | 1.00 |
 | cost_aware | 0.42 | 0.55 | 0.68 | 0.84 | 0.94 | 0.97 | 1.00 |
-| adaptive_bayes | 0.39 | 0.45 | 0.65 | 0.68 | 0.68 | 0.71 | 0.71 |
+| adaptive_bayes | 0.35 | 0.52 | 0.61 | 0.65 | 0.65 | 0.68 | 0.71 |
 
 Tokens actually spent on those changes (fraction of the full suite):
 
@@ -71,7 +71,7 @@ Tokens actually spent on those changes (fraction of the full suite):
 | ir_tfidf | 0.019 | 0.049 | 0.099 | 0.199 | 0.299 | 0.497 | 0.974 |
 | observed | 0.018 | 0.047 | 0.087 | 0.155 | 0.213 | 0.304 | 0.441 |
 | cost_aware | 0.019 | 0.049 | 0.099 | 0.199 | 0.299 | 0.497 | 0.974 |
-| adaptive_bayes | 0.017 | 0.034 | 0.055 | 0.068 | 0.078 | 0.097 | 0.139 |
+| adaptive_bayes | 0.016 | 0.031 | 0.047 | 0.059 | 0.066 | 0.075 | 0.078 |
 
 ![detection vs cost](figures/detection_vs_cost.png)
 
@@ -85,7 +85,7 @@ Cost until the first true detection (fraction of the full suite, detected cases 
 | ir_tfidf | 0.036 |
 | observed | 0.057 |
 | cost_aware | 0.058 |
-| adaptive_bayes | 0.036 |
+| adaptive_bayes | 0.038 |
 
 ## 3. Benign changes — wasted budget and stopping
 
@@ -97,7 +97,7 @@ Cost until the first true detection (fraction of the full suite, detected cases 
 | ir_tfidf | 0.019 | 0.049 | 0.098 | 0.198 | 0.298 | 0.498 | 0.995 |
 | observed | 0.011 | 0.033 | 0.056 | 0.090 | 0.120 | 0.154 | 0.196 |
 | cost_aware | 0.019 | 0.049 | 0.099 | 0.199 | 0.299 | 0.498 | 0.989 |
-| adaptive_bayes | 0.014 | 0.029 | 0.050 | 0.086 | 0.115 | 0.172 | 0.292 |
+| adaptive_bayes | 0.014 | 0.027 | 0.048 | 0.084 | 0.113 | 0.164 | 0.224 |
 
 ![benign waste](figures/benign_waste.png)
 
@@ -105,8 +105,8 @@ Stop reasons of `adaptive_bayes` (rows: is the change a regression?):
 
 | is_regression | budget | clean | no_components | regression | uninformative |
 |---|---|---|---|---|---|
-| False | 80 | 85 | 70 | 0 | 10 |
-| True | 280 | 230 | 0 | 560 | 15 |
+| False | 70 | 100 | 70 | 0 | 5 |
+| True | 215 | 225 | 0 | 645 | 0 |
 
 ## 4. Prioritization and selection quality
 
@@ -120,7 +120,7 @@ APFD / cost-cognizant APFD of the complete order; selection recall = revealing t
 | ir_tfidf | 0.787 | 0.805 | 1.000 | 1.000 |
 | observed | 0.815 | 0.840 | 1.000 | 0.463 |
 | cost_aware | 0.816 | 0.840 | 1.000 | 1.000 |
-| adaptive_bayes | 0.786 | 0.762 | 1.000 | 1.000 |
+| adaptive_bayes | 0.775 | 0.745 | 1.000 | 1.000 |
 
 ![apfdc](figures/apfdc.png)
 

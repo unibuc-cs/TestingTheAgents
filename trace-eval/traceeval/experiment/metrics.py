@@ -39,7 +39,8 @@ def apfdc(order: list[str], revealing: set[str], cost: dict[str, float], severit
 
 def evaluate_log(log, variant: str, history, catalog, budget: float) -> dict:
     """One row of replay.csv: what a strategy's execution log detected, at what cost, and how it stopped.
-    A failure of a test outside the ground truth (flakiness) is a false alarm, not a detection."""
+    A failure of a test outside the ground truth (one that fails on the original app too) is a false alarm,
+    not a detection."""
     revealing = history.revealing_tests(variant)
     is_regression = len(revealing) > 0
     executed = log.executed

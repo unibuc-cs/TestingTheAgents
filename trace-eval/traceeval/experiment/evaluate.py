@@ -29,8 +29,8 @@ def _resolve(strategies):
 
 
 def make_oracle(history: History, variant: str, rng: random.Random):
-    """Answer "run this test" from the recorded runs of the variant: one repetition drawn at random, so a
-    flaky test passes or fails as often as it did when recorded."""
+    """Answer "run this test" from the recorded runs of the variant: the outcome and cost of one recorded
+    repetition, drawn at random."""
 
     def oracle(test_id: str):
         stats = history.variants.get(variant, {}).get(test_id)

@@ -1,4 +1,4 @@
-"""History store: baseline runs (with observed dependencies, costs, flakiness) and per-variant runs
+"""History store: baseline runs (with observed dependencies, costs, pass rates) and per-variant runs
 (the ground-truth fault matrix). Everything the selectors may use about the change under evaluation is
 derived from the *baseline* history; variant runs are used by the replay oracle, by the metrics, and by
 the strategies that learn from the *other* changes (``ctx.train_variants``)."""
@@ -31,10 +31,6 @@ class TestStats:
     @property
     def pass_rate(self) -> float:
         return sum(1 for r in self.runs if r["passed"]) / max(1, self.n)
-
-    @property
-    def flaky(self) -> bool:
-        return 0.0 < self.pass_rate < 1.0
 
     @property
     def mean_tokens(self) -> float:
@@ -120,6 +116,6 @@ class History:
             "tests": len(self.baseline),
             "variants": len(self.variants),
             "baseline_reps": max((s.n for s in self.baseline.values()), default=0),
-            "flaky_tests": sorted(t for t, s in self.baseline.items() if s.flaky),
+            "failing_tests": sorted(t for t, s in self.baseline.items() if s.pass_rate < 0.5),  # model mistakes
             "total_tokens_full_suite": round(self.total_cost()),
         }

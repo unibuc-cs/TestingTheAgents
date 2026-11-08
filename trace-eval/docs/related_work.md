@@ -59,7 +59,6 @@ Fault-injection work usable as ground-truth generators or contrast:
 - Saha, Zhang, Khurshid, Perry, "An IR approach for regression test prioritization based on program changes" (REPiR), ICSE 2015.
 - Spieker, Gotlieb, Marijan, Mossige, "RL for automatic TCP and selection in CI" (RETECS), ISSTA 2017.
 - Memon et al., "Taming Google-scale continuous testing", ICSE-SEIP 2017. Machalica et al., "Predictive test selection", ICSE-SEIP 2019 (arXiv 1810.05286) [verified].
-- Fallahzadeh & Rigby, "The impact of flaky tests on historical test prioritization on Chrome", ICSE-SEIP 2022 [verified].
 - Pan, Ghaleb, Briand, "LTM: Scalable and black-box similarity-based test suite minimization based on language models", IEEE TSE 50(11), 2024 (arXiv 2304.01397) [verified].
 - Elbaum, Rothermel, Penix, "Techniques for improving regression testing in CI development environments", FSE 2014.
 
@@ -71,7 +70,7 @@ Fault-injection work usable as ground-truth generators or contrast:
 - **SkillsBench** (above): deterministic verifiers; paired skill/no-skill design.
 - **Terminal-Bench** (Merrill et al.; arXiv 2601.11868, ICLR 2026): 89 containerized tasks; harness at tbench.ai ("Harbor" not verified).
 - **AgentDojo** (Debenedetti et al., ETH; arXiv 2406.13352): 97 tasks, 629 security cases; deterministic utility + security checks.
-- **ToolSandbox** (Lu et al., Apple; arXiv 2408.04682): stateful tools, milestone/minefield evaluation, user simulator.
+- **ToolSandbox** (Lu et al., Apple; arXiv 2408.04682): stateful tools, milestone/minefield evaluation, a user played by an LLM.
 - **WorkArena** (Drouin et al., ServiceNow; arXiv 2403.07718, ICML 2024).
 
 ## 6. Agent reliability / nondeterminism statistics
@@ -80,7 +79,7 @@ Fault-injection work usable as ground-truth generators or contrast:
 - **ReliabilityBench** (above); **Beyond pass@1: A Reliability Science Framework for Long-Horizon LLM Agents** (Khanal, Tao, Zhou; arXiv 2603.29231, 2026): Reliability Decay Curve, Variance Amplification Factor.
 - **Adding Error Bars to Evals** (Miller, Anthropic; arXiv 2411.00640, 2024): CLT SEs, clustered SEs, paired comparisons, power analysis. For us: paired per-test V0/V1 comparison and power-based run budgeting.
 - **On Randomness in Agentic Evals** (Bjarnason, Silva, Monperrus, KTH; arXiv 2602.07150, 2026): single-run pass@1 varies 2.2–6.0 pp; SD > 1.5 pp even at temperature 0.
-- **When Agents Disagree With Themselves** (Mehta; arXiv 2602.11619, 2026): behavioral consistency as an uncertainty signal. For us: trace-divergence features as flakiness predictors.
+- **When Agents Disagree With Themselves** (Mehta; arXiv 2602.11619, 2026): behavioral consistency as an uncertainty signal.
 - **FAQ** (above) for anytime-valid CIs. **[unverified]** arXiv 2511.10661, 2608.22659.
 
 ## 7. Observability standards
@@ -111,7 +110,7 @@ Fault-injection work usable as ground-truth generators or contrast:
 ## Venues and framing
 
 - **ICSE / FSE / ASE / ISSTA:** regression test selection & prioritization for LLM-based systems: trace-coverage RTS, APFD_c with token cost, mutation analysis as ground truth, RQ-driven evaluation vs. CASPER/random/mid-range/IRT. ASE is a natural fit (AgentChaos appeared there). ISSTA favours the mutation/oracle angle.
-- **ICST / ISSRE:** adequacy of mutants, flakiness-aware statistics, reliability (pass^k, stopping rules).
+- **ICST / ISSRE:** adequacy of mutants, stopping rules.
 - **NeurIPS D&B / EMNLP:** a benchmark + protocol ("RegressionBench": seeded skill/prompt/harness mutants across τ²/AppWorld/SkillsBench with cost-bounded detection metrics) plus a released trace dataset.
 
 ## References
@@ -157,6 +156,5 @@ Fault-injection work usable as ground-truth generators or contrast:
 39. OpenTelemetry GenAI semantic conventions — agent spans. https://github.com/open-telemetry/semantic-conventions-genai/blob/main/docs/gen-ai/gen-ai-agent-spans.md
 40. OpenInference specification. https://github.com/Arize-ai/openinference/blob/main/spec/semantic_conventions.md
 41. Machalica et al. Predictive Test Selection. ICSE-SEIP 2019. https://arxiv.org/abs/1810.05286
-42. Fallahzadeh, Rigby. Flaky tests and historical TCP on Chrome. ICSE-SEIP 2022. https://ieeexplore.ieee.org/document/9793941
-43. Pan, Ghaleb, Briand. LTM. IEEE TSE 2024. https://arxiv.org/abs/2304.01397
-44. Pan et al. TCS/TCP using ML: an SLR. arXiv 2106.13891. https://arxiv.org/abs/2106.13891
+42. Pan, Ghaleb, Briand. LTM. IEEE TSE 2024. https://arxiv.org/abs/2304.01397
+43. Pan et al. TCS/TCP using ML: an SLR. arXiv 2106.13891. https://arxiv.org/abs/2106.13891

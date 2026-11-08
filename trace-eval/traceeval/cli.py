@@ -8,11 +8,11 @@ traceeval run --test PUB-01 [--backend hf|vllm|llm|replay]   run one case and pr
     replay: Gemma's recorded answers, no model
     (TRACEEVAL_CACHE names the file of recorded answers; with hf or vllm, new answers are added to it)
     TRACEEVAL_JUDGE=gemma|qwen picks the model that judges the cases with a rubric (default: the agents' model)
-traceeval baseline --workdir runs/exp1 --reps 3
-traceeval mutants  --workdir runs/exp1 --reps 3 [--only id ...]
-traceeval evaluate --workdir runs/exp1 --seeds 10
-traceeval report   --workdir runs/exp1
-traceeval experiment --workdir runs/exp1   (baseline + mutants + evaluate + report)
+traceeval baseline --workdir runs/gemma3 --reps 3
+traceeval mutants  --workdir runs/gemma3 --reps 3 [--only id ...]
+traceeval evaluate --workdir runs/gemma3 --seeds 10
+traceeval report   --workdir runs/gemma3
+traceeval experiment --workdir runs/gemma3   (baseline + mutants + evaluate + report)
 traceeval check <mutation id | changed copy of traceeval/sut> --history runs/gemma3 [--budget 0.2] [--backend vllm]
     check one change live with the proposed method; --history is an experiment recorded with the same model
 traceeval sdd --workdir runs/sdd [--specs FS-0101 ...] [--out docs/sdd] [--backend replay]   spec-driven demo
@@ -186,7 +186,7 @@ def main(argv=None):
     # The experiment commands share one set of options, since `experiment` runs the other four in a row; each
     # command reads only the options it needs.
     def common(sp):
-        sp.add_argument("--workdir", default="runs/exp1")
+        sp.add_argument("--workdir", default="runs/experiment")
         sp.add_argument("--reps", type=int, default=3)
         sp.add_argument("--backend", default="hf", choices=BACKENDS)
         sp.add_argument("--workers", type=int, default=0, help="cases in parallel (default: 32 for vllm/llm, else 1)")

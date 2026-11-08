@@ -65,8 +65,8 @@ def check(change: str, history_dir: Path, budget: float, backend: str):
         verdict = f"REGRESSION: {', '.join(failed)} failed"
     elif log.stop_reason == "clean":
         verdict = "no regression: the method is confident nothing broke"
-    elif failed:
-        verdict = f"undecided: {', '.join(failed)} failed, but the method stopped before it was sure"
+    elif failed:  # only tests the model fails on the original app too, which says nothing about the change
+        verdict = f"no regression found within the budget ({', '.join(failed)} fail on the original app too)"
     else:
         verdict = "no failure within the budget"
     p = f"; P(something broke) = {log.p_broken:.2f}" if log.p_broken is not None else ""

@@ -67,16 +67,15 @@ the current code before any PR is written (FS-0102, FS-0105).
 
 ## With a real model playing the agents
 
-The demo first ran on a simulator that executed the skills' procedures to the letter. The agents are now
-played by Gemma 4 E4B. Its answers are recorded (`tests/cassettes/`), so `traceeval sdd` replays them without
-a GPU. Three things changed:
+The agents are played by Gemma 4 E4B. Its answers are recorded (`tests/cassettes/`), so `traceeval sdd` replays them without
+a GPU. Three things follow from playing the agents with a real model:
 
 - **The regression line counts only cases that pass on the original app.** Gemma gets three catalog cases
   wrong on the original app (AUT-04, PUB-10, SEO-02). They would fail under every PR and say nothing about it.
 - **Four correct PRs are now rejected, and the evidence says why.**
   - FS-0101 `pr_correct` and `pr_branchy`: the code is right and the rule is still proven, but the
     stale-approval scenario fails. The agent requests the new review itself (the PR's skill prose says "ask
-    for a new review"), which the spec leaves to the author. The simulator never read the prose.
+    for a new review"), which the spec leaves to the author.
   - FS-0103 `pr_correct`: the service now refuses a schedule without a fresh link check, and in
     DS-INTENTS/i05 Gemma schedules without one, so that regression case fails.
   - FS-0104 `pr_config_70`: Gemma applies an over-long title whatever the limit (as in SEO-02), and the

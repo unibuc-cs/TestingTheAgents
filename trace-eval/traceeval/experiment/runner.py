@@ -1,7 +1,7 @@
 """Record phase of the record-then-replay protocol.
 
 baseline : run the full suite K times on the unmodified SUT with code-coverage contexts
-           -> history/baseline.jsonl (observed deps, cost, flakiness)
+           -> history/baseline.jsonl (observed deps, cost, pass rate)
 mutants  : for each mutation, materialise the variant, extract its change set, run the full
            suite K times -> history/variants/<id>.jsonl (ground-truth fault matrix)
 

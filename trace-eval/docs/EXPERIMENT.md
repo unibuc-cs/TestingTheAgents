@@ -1,8 +1,7 @@
 # Running the experiment with a real model
 
-This page explains what the experiment does now that the agents run on real models (Gemma 4 E4B, and
-Qwen3.8-27B as a second model) instead of the simulator. It covers where the models run, how the GPU server
-is wired in, and what to type. If you
+This page explains how the experiment runs the agents on real models (Gemma 4 E4B, and Qwen3.8-27B as a
+second model). It covers where the models run, how the GPU server is wired in, and what to type. If you
 feel lost, read sections 1 and 4 first; the rest you can look up when you need it.
 
 The diagrams are Mermaid; GitHub and PyCharm (with the Mermaid plugin) draw them.
@@ -46,9 +45,8 @@ flowchart LR
     S --> P["Report<br/>runs/NAME/results/report.md"]
 ```
 
-**Where this came from.** The agents used to be a simulator that executed the skills' procedures literally:
-free and reproducible, but not an LLM. It is gone (phase 2). Each agent's decisions now come from Gemma 4 E4B,
-a small open model from Google. Recording costs GPU time, which is why we use the GPU server (section 4);
+**Where the models come in.** Each agent's decisions come from a real model: Gemma 4 E4B, a small open model
+from Google, or Qwen3.8-27B. Recording costs GPU time, which is why we use the GPU server (section 4);
 replaying recorded answers is free (section 5).
 
 ## 2. What happens when one test runs
@@ -352,9 +350,9 @@ traceeval check my-sut-copy --history runs/qwen3 --backend llm                  
 ```
 
 The method picks the most informative test for its cost, the test runs on the changed app, and its outcome
-decides what runs next. A failure that does not settle the question alone is re-run once before the method
-believes it. The check stops when the method is sure either way or the budget is spent. It prints each test as
-it runs, then the verdict (`REGRESSION`, `no regression`, `undecided`, or `no failure within the budget`), the
+decides what runs next. The check stops at the first test that passed on the original app and fails now (a
+regression), when the method is sure nothing broke, or when the budget is spent. It prints each test as
+it runs, then the verdict (`REGRESSION`, `no regression`, `no regression found within the budget`, or `no failure within the budget`), the
 tokens spent and the method's probability that the change broke something.
 
 `--history` gives the method what it knows beforehand: each test's cost and the code it runs on the original
@@ -410,8 +408,7 @@ After these, the original app passed 131 of 136. Phase 4 (section 7) added three
   read the first one as an order), `not fetch.review_approved` became `fetch.review_approved is false`, and
   `len(<seo_title>) > ...` became `<seo_title> has more than ... characters`.
 - **The default agent.** The orchestrator is now told where to send a request that no specialist owns
-  (`routing.default_agent`). Before, only the simulator's keyword router knew it, and Qwen answered
-  "Hello there" itself.
+  (`routing.default_agent`). Without it, Qwen answered "Hello there" itself.
 
 Now the original app passes 133 of 136 under Gemma and 135 of 136 under Qwen. What is left are real model
 mistakes, which clearer wording did not fix:
@@ -428,8 +425,7 @@ Since a model judges the two rubric cases (phase 6), Qwen also fails SEO-07 when
 asks for. Gemma, judging the same kind of answer, lets it pass. The rubric stays strict on purpose.
 
 Gemma acts on guards that come from a tool's answer (a denied permission, a broken link), but not on guards
-it has to work out for itself (a review flag, a length). These are the kinds of slips the simulator used to
-fake on purpose. Now they come from the models themselves.
+it has to work out for itself (a review flag, a length).
 
 ## 7. Where we are
 
@@ -440,10 +436,10 @@ fake on purpose. Now they come from the models themselves.
 | — | first full recording with Gemma (`runs/gemma1`, below) | done |
 | — | second model: Qwen3.8-27B on GPU1, next to Gemma on GPU0 (`runs/qwen1`, below) | done |
 | 1 | a cache of model answers (`traceeval/llm/cache.py`, section 5); an OpenAI backend (`gpt-6-luna`) | cache done; OpenAI waits for API tokens |
-| 2 | remove the simulator (scripted slips, flakiness, synthetic tokens and latency) | done |
+| 2 | tokens and latency from the model servers' own counts | done |
 | 3 | pytest replays recorded model answers ("cassettes", `tests/cassettes/`), so tests need no GPU | done |
 | 4 | re-derive the ground truth under both models, with three repetitions (`runs/gemma2`, `runs/qwen2`, below) | done |
-| 5 | the SDD demo on Gemma ([SDD_DEMO.md](SDD_DEMO.md)); experiment 1 is now `runs/gemma2` and `runs/qwen2` (`docs/results/`); the simulated results stay in `docs/results/exp1` and `exp2_flaky` | SDD done; a real-model version of experiment 2 (flaky agents) is open |
+| 5 | the SDD demo on Gemma ([SDD_DEMO.md](SDD_DEMO.md)); the experiment's results are `runs/gemma2` and `runs/qwen2` (`docs/results/`) | done |
 | 6 | real models only: the rubric cases judged by Gemma or Qwen instead of a word match; the prototype `traceeval check` (section 5) | done |
 
 The next two subsections are the first recordings, from before phase 4 (old changes, one repetition). The
@@ -458,18 +454,18 @@ found:
 - **Original app:** 131 of 136 pass, the same five failures as in section 6.
 - **Benign changes:** none of the six breaks a test. That is what we want.
 - **Regressions:** 20 of 32 are caught by at least one test, and **12 are caught by none**. The report's sanity
-  line therefore says VIOLATED. That's expected: the 38 changes were designed and checked against the
-  simulator, and phase 4 exists to re-derive the ground truth under the model.
+  line therefore says VIOLATED. That's expected: the 38 changes were designed before a real model played the
+  agents, and phase 4 exists to re-derive the ground truth under the model.
 
 The 12 misses fall into three groups, and each needs a different fix:
 
 | why no test catches it | changes | what it means |
 |---|---|---|
-| **Only the simulator used what changed.** Keyword weights, trigger lists, intent order and the default agent drive the simulator's keyword router; Gemma routes by reading the agents' descriptions | `code_router_phrase_weight`, `prompt_publishing_triggers_removed`, `prompt_translation_intents_reordered`, `config_default_agent_publishing` | under a real model these are benign: relabel them, or replace them with changes a model does depend on |
+| **A model doesn't use what changed.** Keyword weights, trigger lists, intent order and the default agent were inputs of a keyword router the app no longer has; Gemma routes by reading the agents' descriptions | `code_router_phrase_weight`, `prompt_publishing_triggers_removed`, `prompt_translation_intents_reordered`, `config_default_agent_publishing` | under a real model these are benign: relabel them, or replace them with changes a model does depend on |
 | **Gemma does the step anyway.** The procedure step was removed, but the skill's prose or the agent's prompt still asks for it (permission check, consent check, review), or Gemma ignores the guard either way (it applies an SEO title over the limit whatever the limit is) | `skill_publish_drop_permission_check`, `skill_rollback_drop_permission_check`, `skill_governance_drop_consent`, `config_require_review_false`, `config_seo_title_20` | a real finding: the model is more robust (or more careless) than the procedure. To make them regressions again, the change must also remove the instruction from the prose |
 | **The only test that would catch it already fails on the original app** | `code_edit_keeps_review` (AUT-04), `skill_seo_drop_length_guard` (SEO-02), `skill_linkval_ignore_assets` (PUB-03; its other test, AUT-03, passes because Gemma does the step anyway) | a test that is red on the baseline can't reveal anything: fix the model's mistake (clearer skill wording) or add a test that passes on the baseline |
 
-On the 20 regressions that are caught, the strategies line up roughly as they did under the simulator:
+On the 20 regressions that are caught, the strategies line up as follows:
 
 - **20% of the full-suite tokens:** trace-based selection (`observed`) and `ir_tfidf` catch 90%.
 - **Hand-written dependencies:** `declared` catches 60%.
@@ -497,7 +493,7 @@ The two models miss different regressions:
 
 | | changes | why |
 |---|---|---|
-| **both miss** | the four simulator-only changes; `skill_publish_drop_permission_check`, `skill_governance_drop_consent`, `skill_seo_drop_length_guard` | the router changes don't matter to a model; for the skill changes, both models do the step anyway because the skill's prose still asks for it |
+| **both miss** | the four router changes; `skill_publish_drop_permission_check`, `skill_governance_drop_consent`, `skill_seo_drop_length_guard` | the router changes don't matter to a model; for the skill changes, both models do the step anyway because the skill's prose still asks for it |
 | **only Gemma misses** | `code_edit_keeps_review`, `config_require_review_false`, `config_seo_title_20`, `skill_linkval_ignore_assets`, `skill_rollback_drop_permission_check` | Gemma's own baseline failures hide some of them, and Gemma ignores some guards whatever their setting; Qwen follows the config values |
 | **only Qwen misses** | `skill_publish_drop_link_validation`, `combined_seo_keyword_limit` | Qwen validates links even when the step is gone. In SEO-07 Qwen reports the new score (70) but adds that it "dropped from 100", which satisfies the fact check "100": that check is too weak and should look at the score itself |
 
@@ -506,7 +502,7 @@ Strategies on the regressions Qwen does catch, at 20% of the full-suite tokens:
 - `ir_tfidf` catches 92%, `observed` 83% and `declared` 50%.
 - `adaptive_bayes` catches 88% while spending about 9%.
 
-The ranking is the same as under Gemma and the simulator.
+The ranking is the same as under Gemma.
 
 **What this means for phase 4:** the four router changes are benign under any model, and three skill changes
 are masked by the skills' prose under both models. Both groups need relabelling or redesigning. The rest
@@ -515,8 +511,8 @@ majority vote filters out the noise.
 
 ### Phase 4: a ground truth for real models
 
-The two recordings above showed that some of the 38 changes, and a few tests, only made sense for the
-simulator. Phase 4 fixed them and then recorded both models again, this time with three repetitions per test.
+The two recordings above showed that some of the 38 changes, and a few tests, did not fit a real model.
+Phase 4 fixed them and then recorded both models again, this time with three repetitions per test.
 
 **What changed**
 
@@ -529,7 +525,7 @@ simulator. Phase 4 fixed them and then recorded both models again, this time wit
 
 | before | now | why |
 |---|---|---|
-| `code_router_phrase_weight` | `code_delegation_truncates_answer`: the orchestrator gets only the first 40 characters of the specialist's answer | only the simulator uses the keyword router |
+| `code_router_phrase_weight` | `code_delegation_truncates_answer`: the orchestrator gets only the first 40 characters of the specialist's answer | a model doesn't use the keyword weights |
 | `prompt_publishing_triggers_removed` | `prompt_governance_consent_tool_removed`: the governance agent loses `check_consent` | a model routes by the agents' descriptions and the routing skill, not by the trigger list |
 | `prompt_translation_intents_reordered` (regression) | `benign_translation_intents_reordered` | a model picks the intent from the request, not from the order of a list |
 | `config_default_agent_publishing` | unchanged | the orchestrator is now told the default agent, so a model depends on it too |
@@ -566,22 +562,20 @@ about that model, not a bug in the testbed.
 three tests did so once each on a changed copy. Under Qwen, SEO-05 (the 60-character boundary) flips on ten
 changes and a handful of tests flip once. The majority vote absorbs all of it.
 
-**Strategies at 20% of the full-suite tokens**, on the regressions each model reveals (the simulator column is
-experiment 1, with the old changes):
+**Strategies at 20% of the full-suite tokens**, on the regressions each model reveals:
 
-| strategy | simulator | Gemma | Qwen |
-|---|---|---|---|
-| `declared` (hand-written dependencies) | 66% | 64% | 61% |
-| `observed` (dependencies from traces) | 91% | 92% | 84% |
-| `ir_tfidf` (text similarity to the diff) | 97% | 92% | 90% |
-| `adaptive_bayes` (spending) | 84% (5%) | 80% (7%) | 68% (7%) |
+| strategy | Gemma | Qwen |
+|---|---|---|
+| `declared` (hand-written dependencies) | 64% | 61% |
+| `observed` (dependencies from traces) | 92% | 84% |
+| `ir_tfidf` (text similarity to the diff) | 92% | 90% |
+| `adaptive_bayes` (spending) | 80% (5%) | 65% (6%) |
 
 - **The main claim holds under real models.** Hand-written dependencies stay near 60%, and traces recover most
   of the rest.
 - **The adaptive method is weaker under Qwen.** On regressions that only one or two tests reveal, it stops with
-  "clean" before reaching them (230 of 1085 replays). This is the limit already noted in the research plan; the
-  planned improvements (sensitivities per test, the text-similarity signal inside the model) now have real
-  data to aim at.
+  "clean" before reaching them (225 of 1085 replays). Each test's own record is now part of the method (see
+  USER_GUIDE.md §5); the text-similarity signal inside the model is the next planned improvement.
 - **Tests that are red on the original app cost the other strategies dearly.** Gemma's three failing tests fail
   on every changed copy, so a strategy that runs one of them sees a failure the change did not cause. On the
   changes that no test reveals, `full` sees such a failure in 71% of replays and `ir_tfidf` in 61% under Gemma

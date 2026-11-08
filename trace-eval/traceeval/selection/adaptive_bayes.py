@@ -6,16 +6,20 @@ In plain words
   2. For every test we estimate how likely it is to FAIL if a given component is broken ("sensitivity").
      Covering a component is weak evidence by itself, so the sensitivity is calibrated from history:
      among the tests that statically looked impacted by earlier changes of the same kind, how many
-     actually revealed the change?  It is then tilted up for tests whose own text (name, request,
-     expectations) shares vocabulary with the diff, and for tests whose author declared the dependency.
+     actually revealed the change?  That ratio is then scaled by the test's own record on earlier changes of
+     that kind that touched it: the changes it revealed over those an average impacted test would have
+     revealed.  Catching a change that broke almost everything says little; being the one test that caught a
+     subtle change says a lot.  The sensitivity is finally tilted up for tests
+     whose own text (name, request, expectations) shares vocabulary with the diff, and for tests whose
+     author declared the dependency.
   3. We run the test with the best expected information per token, update the probabilities with the
-     outcome (taking the test's baseline flakiness into account), and repeat.  After a test passes, tests
-     that behave exactly like it (same agents, tools, fault profile, dataset) count for much less.
-  4. We stop when P(something is broken) drops below eps_clean ("clean"), when a failure has pushed it
-     above 1 - eps_detect ("regression"), or when the budget is spent.  A failure that does not push it
-     that far is confirmed first: the same test runs once more before any other.  Flakiness rarely fails
-     a test twice in a row; a broken component does.  Without this, the passes that follow a real failure
-     wear the evidence down and the method runs on to the end of its budget.
+     outcome, and repeat; each test runs at most once.  A test that already fails on the original app (a
+     mistake of the model) tells nothing either way.  After a test passes, tests that behave exactly like it
+     (same agents, tools, fault profile, dataset) count for much less.
+  4. We stop with "regression" as soon as a test that passed on the original app fails: the models decode
+     greedily, so that failure shows a changed behaviour (it is what the ground truth calls revealing).  We
+     stop with "clean" when P(something is broken) drops below eps_clean, and otherwise when the budget is
+     spent or no test could change the verdict.
 """
 
 import math
@@ -65,13 +69,20 @@ class AdaptiveBayes(Strategy):
     name = "adaptive_bayes"
 
     def __init__(
-        self, eps_clean=0.05, eps_detect=0.02, max_components=8, indirect=0.02, risk_tilt=0.25, duplicate_discount=0.35
+        self,
+        eps_clean=0.05,
+        max_components=8,
+        indirect=0.02,
+        risk_tilt=0.25,
+        duplicate_discount=0.35,
+        prior_strength=2.0,
     ):
-        self.eps_clean, self.eps_detect = eps_clean, eps_detect  # stopping thresholds (step 4)
+        self.eps_clean = eps_clean  # "clean" below this P(something is broken) (step 4)
         self.max_components = max_components  # 2^k hypotheses, so k stays small
         self.indirect = indirect  # sensitivity of a test with no known link to the component
         self.risk_tilt = risk_tilt  # how much a riskier test is preferred
         self.duplicate_discount = duplicate_discount  # factor on a near-duplicate's sensitivity after a pass
+        self.prior_strength = prior_strength  # padding of a test's record (step 2): a short record moves little
 
     # ------------------------------------------------------------------ step 1: hypotheses
     def components(self, ctx):
@@ -103,15 +114,22 @@ class AdaptiveBayes(Strategy):
                 out["match"].add(t)
         return out
 
-    def calibrate(self, ctx) -> dict[str, float]:
-        """Reveal ratio per component kind, measured on the training changes (never on the one under test):
-        |revealing tests among impacted tests| / |impacted tests|.  "Coverage does not imply detection"."""
+    def calibrate(self, ctx) -> tuple[dict[str, float], dict[tuple[str, str], list[float]]]:
+        """Reveal ratios measured on the training changes (never on the one under test), per kind of
+        component and per test.  "Coverage does not imply detection".
+
+        Per kind (bucket): |revealing tests among impacted tests| / |impacted tests|, averaged over changes.
+        Per test and bucket: [changes it revealed, changes an impacted test would reveal on average], summed over
+        the training changes that impacted it through that bucket. The second number is the change's own reveal
+        rate, so revealing a change that breaks almost every test it touches adds little to a test's record."""
         sums: dict[str, list[float]] = {}
+        record: dict[tuple[str, str], list[float]] = {}
         for v in ctx.train_variants:
             change = ctx.history.changesets.get(v)
             if change is None:
                 continue
             revealing = ctx.history.revealing_tests(v)
+            touched: dict[str, set[str]] = {}  # bucket -> tests this change impacted through it
             for comp in change.components:
                 if comp.kind in ("line", "tool"):
                     continue
@@ -121,12 +139,20 @@ class AdaptiveBayes(Strategy):
                     for sub in ("line", "fn"):
                         if imp[sub]:
                             sums.setdefault(f"code:{sub}", []).append(len(revealing & imp[sub]) / len(imp[sub]))
+                            touched.setdefault(f"code:{sub}", set()).update(imp[sub])
                 elif imp["match"]:
                     sums.setdefault(_kind_key(comp), []).append(len(revealing & imp["match"]) / len(imp["match"]))
+                    touched.setdefault(_kind_key(comp), set()).update(imp["match"])
+            for bucket, tests in touched.items():  # once per change, however many of its components hit the test
+                rate = len(revealing & tests) / len(tests)  # how often an impacted test revealed this change
+                for t in tests:
+                    seen = record.setdefault((t, bucket), [0.0, 0.0])
+                    seen[0] += t in revealing
+                    seen[1] += rate
         ratios = dict(DEFAULT_REVEAL)
         for k, vals in sums.items():
             ratios[k] = max(0.01, min(0.9, sum(vals) / len(vals)))  # mean over changes, kept off 0 and 1
-        return ratios
+        return ratios, record
 
     @staticmethod
     def lexical_relevance(ctx) -> dict[str, float]:
@@ -148,12 +174,20 @@ class AdaptiveBayes(Strategy):
         mx = max(rel.values()) or 1.0
         return {t: v / mx for t, v in rel.items()}
 
-    def sensitivity(self, ctx, t, comp, lex, ratios) -> float:
+    def sensitivity(self, ctx, t, comp, lex, ratios, record) -> float:
         """P(test t fails | component comp is broken)."""
         freq = ctx.history.baseline[t].dep_frequency
         deps = set(freq)
         declared = matches(comp, ctx.catalog[t].declared_components())
         tilt = 0.5 + lex + (0.5 if declared else 0.0)  # lexical relevance [0.5, 1.5] + declared bonus
+
+        def own(bucket, ratio):
+            """The bucket's reveal ratio times this test's lift on it: the changes it revealed over the changes an
+            average impacted test would have revealed, both padded with prior_strength so that a short record
+            moves the lift little (a lift of 1 = an average test)."""
+            revealed, expected = record.get((t, bucket), (0.0, 0.0))
+            return ratio * (revealed + self.prior_strength) / (expected + self.prior_strength)
+
         # base = calibrated reveal ratio x how often the baseline runs exercised the component
         base = None
         if comp.kind == "code":
@@ -161,13 +195,13 @@ class AdaptiveBayes(Strategy):
                 freq[c.id] for c in ctx.change.components if c.kind == "line" and c.file == comp.file and c.id in deps
             ]
             if hit:
-                base = ratios["code:line"] * max(hit)
+                base = own("code:line", ratios["code:line"]) * max(hit)
             elif matches(comp, deps):
-                base = ratios["code:fn"]
+                base = own("code:fn", ratios["code:fn"])
         elif matches(comp, deps):
             # an agent field without training data of its own falls back to the ratio of its kind
             ratio = ratios.get(_kind_key(comp), ratios.get(comp.kind, 0.2))
-            base = ratio * max(freq[d] for d in deps if d in (comp.id, comp.base))
+            base = own(_kind_key(comp), ratio) * max(freq[d] for d in deps if d in (comp.id, comp.base))
         if base is not None:
             return min(0.9, max(0.02, base * tilt))
         if declared:  # declared by the test's author but never observed: half the reveal ratio
@@ -184,11 +218,12 @@ class AdaptiveBayes(Strategy):
         prior = np.ones(len(hyps))
         for j, (_comp, pi) in enumerate(comps):  # a priori the components break independently
             prior *= np.where(hyps[:, j] > 0, pi, 1 - pi)
-        # a test may fail with nothing broken (baseline flakiness); the floor keeps any failure possible
-        flaky = np.array([max(0.01, 1.0 - ctx.history.baseline_pass_rate(t)) for t in tests])
-        lex, ratios = self.lexical_relevance(ctx), self.calibrate(ctx)
+        # P(test fails with nothing broken): 1 for a test the model already fails on the original app; the floor
+        # keeps every outcome possible, so that no single result rules a hypothesis out completely
+        fails_anyway = np.array([max(0.01, 1.0 - ctx.history.baseline_pass_rate(t)) for t in tests])
+        lex, (ratios, record) = self.lexical_relevance(ctx), self.calibrate(ctx)
         S = (
-            np.array([[self.sensitivity(ctx, t, c, lex[t], ratios) for c, _ in comps] for t in tests])
+            np.array([[self.sensitivity(ctx, t, c, lex[t], ratios, record) for c, _ in comps] for t in tests])
             if k
             else np.zeros((len(tests), 0))
         )
@@ -208,7 +243,7 @@ class AdaptiveBayes(Strategy):
             "tests": tests,
             "hyps": hyps,
             "prior": prior,
-            "flaky": flaky,
+            "fails_anyway": fails_anyway,
             "S": S,
             "groups": groups,
             "group_of": {i: g for g, members in groups.items() for i in members},
@@ -218,10 +253,11 @@ class AdaptiveBayes(Strategy):
 
     # ------------------------------------------------------------------ inference helpers
     @staticmethod
-    def p_fail_matrix(S, flaky, hyps):
-        """P(test fails | hypothesis) for every test x hypothesis: 1 - (1-flaky) * prod_{broken c} (1 - S_tc).
-        A test passes only if neither flakiness nor any of the broken components makes it fail."""
-        return 1.0 - (1.0 - flaky)[:, None] * np.exp(np.log1p(-np.clip(S, 0, 0.999)) @ hyps.T)
+    def p_fail_matrix(S, fails_anyway, hyps):
+        """P(test fails | hypothesis) for every test x hypothesis:
+        1 - (1 - fails_anyway) * prod_{broken c} (1 - S_tc).  A test passes only if it would pass on the original
+        app and none of the broken components makes it fail."""
+        return 1.0 - (1.0 - fails_anyway)[:, None] * np.exp(np.log1p(-np.clip(S, 0, 0.999)) @ hyps.T)
 
     @staticmethod
     def _entropy(P):
@@ -238,57 +274,47 @@ class AdaptiveBayes(Strategy):
 
     # ------------------------------------------------------------------ steps 3 and 4: run and stop
     def run(self, ctx: SelectionContext, oracle, stopping: bool = True) -> ExecutionLog:
-        """Run tests one by one through ``oracle``. ``stopping=False`` (used by ``order``) disables both the
-        early stops and the confirmation re-run."""
+        """Run tests one by one through ``oracle``. ``stopping=False`` (used by ``order``) disables the early
+        stops."""
         log = ExecutionLog(self.name)
         m = self.model(ctx)
-        tests, hyps, cost, risk, flaky = m["tests"], m["hyps"], m["cost"], m["risk"], m["flaky"]
+        tests, hyps, cost, risk, fails_anyway = m["tests"], m["hyps"], m["cost"], m["risk"], m["fails_anyway"]
         if hyps.shape[1] == 0:  # no component to reason about
             log.stop_reason = "no_components"
             return log
         S = m["S"]
-        p_fail = self.p_fail_matrix(S, flaky, hyps)
+        p_fail = self.p_fail_matrix(S, fails_anyway, hyps)
         post = m["prior"]
-        runs_left = np.where(flaky > 0.1, 2, 1)  # flaky tests may be re-run once
+        ran = np.zeros(len(tests), dtype=bool)  # each test runs at most once: a rerun would give the same answer
         remaining = ctx.budget
-        seen_failure = False
-        confirm, confirmed = None, set()  # a failed test to re-run before any other; tests already re-run
         while True:
-            p_any = 1.0 - post[0]  # hypothesis 0 = nothing broken
-            if stopping and p_any < self.eps_clean:
+            if stopping and 1.0 - post[0] < self.eps_clean:  # hypothesis 0 = nothing broken
                 log.stop_reason = "clean"
                 break
-            if stopping and seen_failure and p_any > 1.0 - self.eps_detect:
-                log.stop_reason = "regression"
+            # best information per token, weighted by risk; tests that cannot or need not run are ruled out
+            gain = self.info_gain(post, p_fail)
+            score = gain * risk / cost
+            score[ran | (cost > remaining) | (gain <= 1e-9)] = -1.0
+            i = int(np.argmax(score))
+            if score[i] <= 0:
+                log.stop_reason = "budget" if remaining < cost.min() else "uninformative"
                 break
-            if confirm is not None and cost[confirm] <= remaining:
-                i = confirm
-            else:
-                # best information per token, weighted by risk; tests that cannot or need not run are ruled out
-                gain = self.info_gain(post, p_fail)
-                score = gain * risk / cost
-                score[(runs_left <= 0) | (cost > remaining) | (gain <= 1e-9)] = -1.0
-                i = int(np.argmax(score))
-                if score[i] <= 0:
-                    log.stop_reason = "budget" if remaining < cost.min() else "uninformative"
-                    break
-            confirm = None
             passed, spent = oracle(tests[i])
-            runs_left[i] -= 1
+            ran[i] = True
             remaining -= spent
-            seen_failure = seen_failure or not passed
-            if stopping and not passed and i not in confirmed:
-                confirm = i
-                confirmed.add(i)
             log.steps.append((tests[i], passed, spent))
             # Bayes' rule: weigh every hypothesis by the likelihood of the observed outcome
             post = post * ((1 - p_fail[i]) if passed else p_fail[i])
             post /= post.sum() or 1e-12
+            if stopping and not passed and fails_anyway[i] < 0.5:  # it passed on the original app: step 4
+                post[0] = 0.0  # a changed behaviour rules out "nothing is broken"
+                log.stop_reason = "regression"
+                break
             if passed:  # near-duplicates of a passed test are correlated evidence: discount them
                 for j in m["groups"][m["group_of"][i]]:
-                    if j != i and runs_left[j] > 0:
+                    if j != i and not ran[j]:
                         S[j] *= self.duplicate_discount
-                        p_fail[j] = self.p_fail_matrix(S[j][None, :], flaky[j : j + 1], hyps)[0]
+                        p_fail[j] = self.p_fail_matrix(S[j][None, :], fails_anyway[j : j + 1], hyps)[0]
             if remaining <= 0:
                 log.stop_reason = "budget"
                 break

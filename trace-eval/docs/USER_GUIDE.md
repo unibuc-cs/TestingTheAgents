@@ -6,7 +6,7 @@ Read the README first. This guide adds what you need to work inside the reposito
 
 ```
  test catalog ────────┐                                 ┌─ strategy picks tests from: the change set +
-                      ▼                                 │  baseline traces + costs + flakiness
+                      ▼                                 │  baseline traces + costs + pass rates
  baseline app ──► run all tests K× ──► traces, costs ───┤
                                                         ├─► "execute" = look up the recorded outcome
  changes ────► edited copies ──────► diff ─► change set ┤   of that test under that change
@@ -30,9 +30,8 @@ holds the edited copies (`variants/`), the recordings (`history/*.jsonl`) and th
   Comments, docstrings, blank lines and formatting are left out: they add no component and no diff line.
 - **Revealing test**: passes on the baseline, fails on the changed copy (majority over K repetitions).
 - **Budget**: tokens, shown as a fraction of the full-suite cost.
-- **Stop reason** (`adaptive_bayes` only): `clean`, `regression` (after a failure; a failure that does not
-  settle the question alone is first re-run once), `budget`, `uninformative` (no test left that could change
-  the verdict), `no_components` (the change set is empty, e.g. after a comment-only edit, so there is nothing
+- **Stop reason** (`adaptive_bayes` only): `clean`, `regression` (a test that passed on the original app failed), `budget`, `uninformative`
+  (no test left that could change the verdict), `no_components` (the change set is empty, e.g. after a comment-only edit, so there is nothing
   to test).
 
 ## 3. Where to look in the code (in this order)
@@ -61,7 +60,39 @@ Everything else is plumbing (loaders, tracing, report).
 - **Section 4**: APFD / APFD_c of the complete order (prioritization quality) and selection recall.
 - `replay.csv` has one row per (change, strategy, budget, seed) if you want to slice it yourself.
 
-## 5. How to extend
+## 5. How the adaptive method weighs a test
+
+For every changed part of the app (a function, a skill's procedure, a config key) and every test, the method
+estimates a **sensitivity**: the probability that the test fails if that part is broken. It runs the test that
+tells it the most per token (high sensitivity, low cost), and a passing sensitive test is strong evidence that
+nothing broke. The sensitivity is the product of four factors (`selection/adaptive_bayes.py::sensitivity`). The
+examples are for `code_retry_disabled`, a change that makes the retry helper give up after the first transient
+failure:
+
+| factor | what it is | example |
+|---|---|---|
+| kind ratio | of the tests that earlier changes of this kind touched, the fraction that caught the change, averaged over the other recorded changes | tests that ran a changed line in the 13 earlier code changes caught them 11% of the time. Tests that only called a changed function: 20%, from just four changes, almost all of it from `code_delegation_depth_zero` (the orchestrator can no longer hand work to the specialists), which breaks 106 of the 136 tests |
+| test record | the earlier changes of this kind that touched the test and that it caught, over the number an average touched test would have caught, both padded with 2 (`prior_strength`) | DS-INTENTS/i19 was expected to catch 0.78 of them and caught none: (0 + 2) / (0.78 + 2) = 0.72. PUB-12 caught one where the average was 0.23: (1 + 2) / (0.23 + 2) = 1.35 |
+| coverage | how often the test ran the changed code in its runs on the original app, from 0 to 1 | PUB-11 runs the changed line of `harness/retry.py` in every run: 1.0 |
+| tilt | word overlap between the test and the diff (0.5 to 1.5), plus 0.5 if the test's author declared the dependency | a test whose request mentions publishing gets more weight for a change to the publishing skill |
+
+A test with no known link to the changed part gets a small fixed sensitivity (`indirect`, 0.02).
+
+**Weights.** Each factor has its own knob: `prior_strength` sets how far a short record can move a test (larger
+means the record counts less), the tilt has a fixed range, and `indirect` sets the floor. The factors are not
+weighted further against each other: with 38 changes, extra weights would mostly fit noise. Measuring what each
+factor adds (an ablation) is on the roadmap.
+
+**Where the records come from.** Nothing is stored apart from the recordings. Each time the method runs, it
+recomputes the kind ratios and every test's record from the recording it is given (`runs/<name>`, or `--history`
+for `traceeval check`), from every recorded change except the one being evaluated. The records therefore grow
+when more changes are recorded: `traceeval mutants --workdir runs/<name> --only <change>` adds a change to an
+existing recording, and the next run uses it. In a team's pipeline, nightly full-suite runs would play that role:
+every change whose full-suite outcome is known becomes one more entry in the record of each test it touched.
+`traceeval check` does not add its own runs, because a check runs only a few tests, which is not enough to know
+which tests the change breaks. Records match code by line number, so record again after editing the app's code.
+
+## 6. How to extend
 
 - **Test**: add a YAML entry. `expect` supports `route_to`, `state` (`[path, op, value]` with `==`, `!=`, `len`,
   `contains`, `in`, `>=`, `<=`, `absent`, `exists`), `tools_required`, `tools_forbidden`, `tools_not_attempted`,
@@ -102,7 +133,7 @@ Everything else is plumbing (loaders, tracing, report).
   checks pass (`scoring/scorers.py::judge_answer`). `TRACEEVAL_JUDGE=gemma` or `qwen` picks the model; by default
   it is the one playing the agents. Gemma's verdicts are recorded and replayed with its other answers.
 
-## 6. Gotchas
+## 7. Gotchas
 
 - The tests replay Gemma's recorded answers (`tests/cassettes/gemma.jsonl`), each keyed by the exact request. After
   a change to anything a prompt is built from (a skill, an agent, a config value, a tool, a case), the replay
