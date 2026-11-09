@@ -261,7 +261,7 @@ below.
 | M4 | The ground truth on the current app with Gemma (`runs/gemma5`: 176 tests, 43 changes, three repetitions), its report in [results/gemma5](results/gemma5/report.md), the README's results | **done 9 Nov**; the results prose of RESEARCH_PLAN §5, EXPERIMENT §7 and USER_GUIDE §5–6 is rewritten with S1's numbers | — |
 | M6 | The live check rehearsed with `--history runs/gemma5` and its answers recorded into the cassette, so that `--backend replay` is the fallback on the day | **done 9 Nov** ([DEMO.md](DEMO.md) §4) | — |
 | M5 | The walkthrough rehearsed end to end | **done on replay 9 Nov** | — |
-| S1 | The same recording with Qwen (`runs/qwen5`, report in [results/qwen5](results/qwen5/report.md)), and the Qwen run of `traceeval properties draft` (§3.4) | **done 9 Nov**, with a finding: the recording is not a clean ground truth, because Qwen's answers change with how requests are batched (RESEARCH_PLAN §5.4); its numbers are not used | — |
+| S1 | The same recording with Qwen (`runs/qwen5`, report in [results/qwen5](results/qwen5/report.md)), and the Qwen run of `traceeval properties draft` (§3.4) | **done 9 Nov**, with a finding: the recording is not a clean ground truth, because some of Qwen's answers vary from run to run (RESEARCH_PLAN §5.4); Qwen is used as it is, and its numbers are not reported as results | — |
 
 WF2-03 (W2 with the broken page ranked first) is in the catalog as a known model mistake, after the recordings, so
 they hold 176 of the 177 tests. Gemma tells the user that the other two pages were republished when they were not:
@@ -269,10 +269,9 @@ the clearest example of the requirements' point that the answer and the trace do
 since only the checks on the final state catch it. It replays in the demo ([DEMO.md](DEMO.md) §3).
 
 Not for the demo (open, after it): re-planning after a failed step (Qwen already re-plans on its own); features as
-a coverage dimension; a tool's error paths and a setting's non-default values as coverage components; a clean
-second model (Qwen's answers vary from run to run; vLLM's batch-invariant mode, tried on 9 November, does not
-support Qwen3.8, and a batched baseline is not enough: RESEARCH_PLAN §5.4); tau2-bench as a second system under
-test.
+a coverage dimension; a tool's error paths and a setting's non-default values as coverage components; tau2-bench
+as a second system under test. Both models are used as they are served: nothing is simulated, and no test is set
+aside because its answers vary.
 
 ### 4.3 Day by day
 

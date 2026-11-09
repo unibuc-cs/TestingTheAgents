@@ -176,10 +176,10 @@ scenario. `traceeval sdd` replays it in about a minute. [SDD_DEMO.md](SDD_DEMO.m
 - *Why only Gemma's numbers?* Qwen's recording of the same app is not a clean ground truth: six of its tests answer
   differently when run 64 at a time than one at a time, so even a change that alters nothing "breaks" them. A
   larger model is not automatically a cleaner ground truth: some of Qwen's answers vary from run to run, and
-  vLLM's switch for repeatable decoding does not support Qwen3.8. The lesson for Adobe: measure the suite's flakiness under the real serving setup first (RESEARCH_PLAN
-  §5.4).
+  vLLM's switch for repeatable decoding does not support Qwen3.8. Both models are used as they are served. The
+  lesson for Adobe: measure how much the answers vary under the real serving setup first (RESEARCH_PLAN §5.4).
 - *How would this run at Adobe?* Nightly full-suite runs are the recordings the method learns from; per change,
   `traceeval check` is the selection, the order and the stop; the traces are OpenTelemetry; the catalog of
   properties maps onto DeepEval's metrics.
-- *What is next?* Re-planning after a failed step, a clean second model, and
-  tau2-bench as a second application ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4).
+- *What is next?* Re-planning after a failed step, and tau2-bench as a second application
+  ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4).

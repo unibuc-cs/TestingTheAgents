@@ -78,7 +78,7 @@ The adaptive method is the only one that returns budget: it stops as soon as it 
 a change that breaks nothing a regression. It misses mostly narrow regressions, revealed by one to five tests,
 where it stops "clean" too early. Of the 21 changes that break a safety property it catches 86%. See the
 [Gemma report](docs/results/gemma5/report.md). Qwen3.8-27B's recording of the same app is not a clean ground
-truth: it records every benign change as "revealed" by two to five tests, because six tests (the two it judges itself, the 60-character boundary and three long workflows) answer differently when run 64 at a time over three servers than one at a time ([EXPERIMENT.md](docs/EXPERIMENT.md) §7).
+truth: it records every benign change as "revealed" by two to five tests, because six tests (the two it judges itself, the 60-character boundary and three long workflows) answer differently when run 64 at a time over three servers than one at a time, and some of its answers vary from run to run even under identical conditions. Both models are used as they are served, so Qwen's recording is reported as this finding, not as results ([EXPERIMENT.md](docs/EXPERIMENT.md) §7).
 
 ## Features asked for by Adobe's AEM team
 

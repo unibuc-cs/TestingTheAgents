@@ -26,9 +26,9 @@ Ciprian Păduraru · University of Bucharest · working document, 6 October 2026
   test every mandatory property a change may affect before it calls the change clean, for under one extra test per
   change, and on this app the rule also catches a regression the method alone misses. Change sets hold code only,
   so the results are the same whether or not the code is commented. Qwen's recording of the same app is not a
-  clean ground truth: its answers change with how requests are batched (§5.4).
-- **Next.** The demo for the AEM team (`docs/AEM_ALIGNMENT.md` §4); a clean second model, since Qwen's answers vary from run to run (§5.4); then move
-  to tau2-bench as the external system under test. Real models only, decoded greedily. Paper: ASE/ISSTA/ICST framing.
+  clean ground truth: some of its answers vary from run to run (§5.4).
+- **Next.** The demo for the AEM team (`docs/AEM_ALIGNMENT.md` §4); then move to tau2-bench as the external
+  system under test. Real models only, used as they are served, decoded greedily. Paper: ASE/ISSTA/ICST framing.
 
 ---
 
@@ -254,9 +254,9 @@ text), and no variant gives a "regression" verdict on a change no test reveals.
 **Reading.** TF-IDF brings forward the one test that reveals a narrow change, and helps by up to four points for
 less spending. Without any text the method loses ten points, so text matters, but coverage and history carry most
 of the result. The testbed is textual: tests, skills and config keys share vocabulary, which favours any text
-measure (a threat noted in §8). The default stays word overlap until a clean second model's recording shows
-whether the gain holds there too (§5.4); whether TF-IDF helps as much where tests and changes are worded differently is a
-question for tau2-bench.
+measure (a threat noted in §8). The default stays word overlap until a second recording shows whether the gain
+holds there too; whether TF-IDF helps as much where tests and changes are worded differently is a question for
+tau2-bench.
 
 ### 5.3 Coverage, and mandatory properties in the method
 
@@ -297,9 +297,9 @@ against Gemma's five. The strategies' numbers on it are therefore not results. I
 exactly repeatable, does not support Qwen3.8: the server refuses it for the model's linear-attention layers ("not
 supported for GDN_ATTN"). Recording the baseline the way the changes are recorded is not enough either: with the
 no-op change, recorded exactly like the others, as the reference, seven of the eight other benign changes still
-"reveal" one to five tests, so some of Qwen's answers vary from run to run even under identical conditions. A clean
-second model needs more repetitions with the flaky tests quarantined, or a model whose serving can be made
-repeatable. The lesson for a pipeline: measure the suite's own flakiness under the serving setup the selection will
+"reveal" one to five tests, so some of Qwen's answers vary from run to run even under identical conditions. Qwen is
+used as it is served, like Gemma: its recording stands as this finding, and the results are Gemma's. The lesson for
+a pipeline: measure how much the model's answers vary from run to run under the serving setup the selection will
 run on (the no-op change does exactly that) before trusting a ground truth or a stopping rule.
 
 ---
@@ -329,13 +329,13 @@ run on (the no-op change does exactly that) before trusting a ground truth or a 
 | 2. Methods | baselines + cost-aware + predictive + adaptive Bayesian selector with stopping | done (v0.1), with the mandatory-coverage rule (§5.3); tune ε, priors, discount |
 | 3. Method improvements | (a) test-level learned sensitivities (per test × component-kind reveal history) instead of kind-level; (b) IR relevance inside the Bayesian likelihood; (c) CASPER-style slices and the Risk-Aware Adaptive Evaluation bandit as reproduced baselines | (a) done; (b) done as an option (§5.2); (c) open |
 | 4. Real LLM | ContentOps on real models (local vLLM): all variants × 3 reps under two models | done: Gemma on the current app (`runs/gemma5`); Qwen's recording of it (`runs/qwen5`) is spoiled by run-to-run variation and is not used (§5.4) |
-| 5. External SUT | tau2-bench airline adapter; 12 mutations (6 policy, 4 tool-code, 2 benign); same evaluation | after the AEM steps and a clean second model (§5.4) |
+| 5. External SUT | tau2-bench airline adapter; 12 mutations (6 policy, 4 tool-code, 2 benign); same evaluation | after the AEM steps |
 | 6. Scale/robustness | more mutations (mutation operators generated systematically: step deletion/swap/condition negation in procedures, argument swaps in adapters, config boundary values), equivalent-mutant analysis, sensitivity to K and to budget definitions (time vs. tokens), ablations of each model ingredient | with the paper |
 | 7. Paper | see §8 | drafting can start from this document and the report |
 
 A model's own mistakes and blind spots shape the ground truth: which changes a test reveals depends on the model (`docs/EXPERIMENT.md` §6 and §7). Two parts of the method come from that. Each test's own record (§3.1) exists because kind-level sensitivities let the method spend on cheap tests that merely call a changed function; stopping at the first failure of a test that passed on the original app exists because a failure the model also produces on the original app says nothing about the change.
 
-The AEM team's wish list (`docs/AEM_ALIGNMENT.md`) is being implemented step by step; its §4 is the dated plan for the demo of 12 November 2026. Done: the catalog of properties, drafted by a model from the requirements; coverage reports with the mandatory-coverage rule (§5.3); the orchestrator's planning mode (plans, hand-offs with ids, human approvals), three agents modelled on AEM's (brand, insights, optimizer) and asset search, six multi-agent workflows (campaign launch across five specialists, site optimization across four, legal takedown, localized price update, rollback of a broken release, privacy request), and trace assertions on agent and tool order. Next, in order: the remaining workflows with controlled changes aimed at them, both ground truths recorded on the current app; then a clean second model (§5.4: more repetitions with the flaky tests quarantined, or a model whose serving can be made repeatable), so that a one-off difference cannot pass for a regression; a run with an OpenAI model once API tokens are available; tau2-bench.
+The AEM team's wish list (`docs/AEM_ALIGNMENT.md`) is being implemented step by step; its §4 is the dated plan for the demo of 12 November 2026. Done: the catalog of properties, drafted by a model from the requirements; coverage reports with the mandatory-coverage rule (§5.3); the orchestrator's planning mode (plans, hand-offs with ids, human approvals), three agents modelled on AEM's (brand, insights, optimizer) and asset search, six multi-agent workflows (campaign launch across five specialists, site optimization across four, legal takedown, localized price update, rollback of a broken release, privacy request), and trace assertions on agent and tool order; ten controlled changes aimed at the workflows; workflows as a coverage dimension; the OpenTelemetry export; environment failures kept apart (`INFRA_INVALID`); both models recorded on the current app. Next: the demo; then a run with an OpenAI model once API tokens are available; tau2-bench.
 
 ---
 

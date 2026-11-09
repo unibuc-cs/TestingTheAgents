@@ -487,8 +487,8 @@ mode, which makes greedy decoding exactly repeatable, does not support Qwen3.8: 
 model's linear-attention layers ("not supported for GDN_ATTN"). Recording the baseline the way the changes are
 recorded is not enough either: with the no-op change, recorded exactly like the others, as the reference, seven of
 the eight other benign changes still "reveal" one to five tests, so some of Qwen's answers vary from run to run
-even under identical conditions. A clean second model needs more repetitions with the flaky tests quarantined, or a
-model whose serving can be made repeatable.
+even under identical conditions. Qwen is used as it is served, like Gemma: its recording stands as this finding,
+and the results are Gemma's.
 
 **Strategies at 20% of the full-suite tokens**, on the 29 regressions Gemma reveals (the full tables are in
 [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.1 and in the report):
