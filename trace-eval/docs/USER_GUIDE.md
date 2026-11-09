@@ -26,12 +26,12 @@ holds the edited copies (`variants/`), the recordings (`history/*.jsonl`) and th
 - **Property**: a behavioural requirement a test checks (`task_completion`, `safety_authorization`, ...). Every
   property is defined in the catalog of properties, `catalog/properties.yaml`, with its category, how the tests
   check it, whether it is mandatory and its threshold; a test lists the ids of the properties it checks. This
-  catalog is a feature the AEM team asked for ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md)).
+  catalog, the workflows below and the coverage report are features the AEM team asked for
+  ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md)).
 - **Plan / workflow**: a request that needs several specialists. The orchestrator writes a plan (`make_plan`),
   delegates its steps one at a time with their own instruction and the ids of earlier steps
   (`route_to_agent(agent, task, context)`), and asks a person before publishing, scheduling or taking pages down
-  (`request_approval`). The workflow tests are in `catalog/tests/workflows.yaml`; workflows are a feature the AEM
-  team asked for ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.2-3.3).
+  (`request_approval`). The workflow tests are in `catalog/tests/workflows.yaml`.
 - **Declared dependencies**: the `declared:` block a test author writes. It is deliberately incomplete.
 - **Observed dependencies**: the components the trace shows the run touched (`agent:x`, `skill:x`, `tool:x`,
   `config:key`, `code:file::function`, `line:file:n`).
@@ -62,7 +62,9 @@ Everything else is plumbing (loaders, tracing, report).
 
 ## 4. How to read the report
 
-- **Section 1** must say sanity OK. If it does not, the testbed is broken, not the strategies.
+- **Section 1**: each change with its number of revealing tests, and the sanity line. Under a real model it can
+  say VIOLATED: a regression with 0 revealing tests is one that model cannot see (§6). A benign change with
+  revealing tests means the testbed is broken.
 - **Section 2**: `detected` is the fraction of changes where at least one revealing test was run and failed.
   Compare strategies by the second table (tokens actually spent), not by the nominal budget. Selecting
   strategies run out of tests, the adaptive one stops early, and the rest always spend the whole budget.
@@ -71,8 +73,7 @@ Everything else is plumbing (loaders, tracing, report).
 - **Section 4**: APFD / APFD_c of the complete order (prioritization quality) and selection recall.
 - **Section 5**: the catalog of properties: each property's pass rate on the original app against its threshold,
   and, per strategy, the share of the properties a change breaks that its tests exercised.
-- **Section 6**: coverage, a feature the AEM team asked for ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5). First the
-  suite: per dimension (agent, skill, tool, configuration, property, execution path, risk), how many components
+- **Section 6**: coverage ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5). First the suite: per dimension (agent, skill, tool, configuration, property, execution path, risk), how many components
   the tests declare and the traces show, and what no test covers. Then each change, without the ground truth
   (`experiment/coverage.py`): the share of the changed components the executed tests exercised, the share of the
   properties the change may affect that they checked, and how often a run that found no regression tested every
@@ -101,19 +102,19 @@ A test with no known link to the changed part gets a small fixed sensitivity (`i
 **Mandatory properties (step 5).** A run that found no regression does not end before every mandatory property
 the change may affect has a test: for each one not yet checked, the method runs the cheapest test that checks it
 and passes on the original app, while the budget allows. A failure is a regression, as usual. The rule turns the
-catalog's mandatory flag into a guarantee, at almost no cost (RESEARCH_PLAN §4.4); `adaptive_bayes_nomandatory`
+catalog's mandatory flag into a guarantee, at almost no cost (RESEARCH_PLAN §5.3); `adaptive_bayes_nomandatory`
 is the method without it, an ablation.
 
 **Weights.** Each factor has its own knob: `prior_strength` sets how far a short record can move a test (larger
 means the record counts less), the tilt has a fixed range, and `indirect` sets the floor. The factors are not
-weighted further against each other: with 33 changes, extra weights would mostly fit noise. Measuring what each
-factor adds (an ablation) is on the roadmap.
+weighted further against each other: with 33 changes, extra weights would mostly fit noise. The text factor's
+ablation is in RESEARCH_PLAN §5.2; the others are on the roadmap.
 
 **Where the records come from.** Nothing is stored apart from the recordings. Each time the method runs, it
 recomputes the kind ratios and every test's record from the recording it is given (`runs/<name>`, or `--history`
 for `traceeval check`), from every recorded change except the one being evaluated. The records therefore grow
-when more changes are recorded: `traceeval mutants --workdir runs/<name> --only <change>` adds a change to an
-existing recording, and the next run uses it. In a team's pipeline, nightly full-suite runs would play that role:
+when more changes are recorded: `traceeval mutants --workdir runs/<name> --only <change> --backend <the recording's>` adds a
+change to an existing recording, and the next run uses it. In a team's pipeline, nightly full-suite runs would play that role:
 every change whose full-suite outcome is known becomes one more entry in the record of each test it touched.
 `traceeval check` does not add its own runs, because a check runs only a few tests, which is not enough to know
 which tests the change breaks. Records match code by line number, so record again after editing the app's code.
@@ -124,7 +125,8 @@ The experiment plants 33 known changes in copies of the app (`mutation/catalog.p
 strategy finds them: 26 regressions, which at least one test should reveal, and 7 benign changes, which no test
 should. Each one is in the set for a reason: a kind of change (code, skill, prompt, config), a reach (one test or
 dozens), or a trap for selection. "Revealing tests" counts the tests that pass on the original app and fail on the
-changed copy, in the recordings `runs/gemma4` / `runs/qwen4` (the current app, three repetitions).
+changed copy, in the recordings `runs/gemma4` / `runs/qwen4` (made on the app before the multi-agent workflows,
+136 tests, three repetitions).
 
 | change | what it does | why it is in the set | revealing tests (Gemma / Qwen) |
 |---|---|---|---|
@@ -170,9 +172,7 @@ changed copy, in the recordings `runs/gemma4` / `runs/qwen4` (the current app, t
 | `benign_translation_intents_reordered` | the translation agent's intents are reordered | an order a model ignores | 0 / 0 |
 
 A change that no test reveals under a model (a 0 above) is a fact about that model, not a bug in the testbed:
-the report's sanity line lists them. Five earlier changes were dropped from the set: two exact twins of other
-changes (retries disabled in code, approval removed in config), two crashes that only checked the crash
-classification (unit tests cover it), and one that broke four tests in five and so told nothing about selection.
+the report's section 1 shows it with 0. Why five earlier changes were dropped is in RESEARCH_PLAN §4.3.
 
 ## 7. How to extend
 
@@ -185,8 +185,7 @@ classification (unit tests cover it), and one that broke four tests in five and 
   requirements (skills' rules, agents, config guards, specs; not the tests), with at most 15 properties (`--max`,
   up to 20) and 5 per test (`--per-test`), and tag the tests; edit `catalog/properties.draft.yaml`, read
   `properties.draft.md`, then `traceeval properties apply`. Thresholds and the mandatory flag start from defaults
-  per category, and entries already in the catalog keep what a person wrote. Both are features the AEM team
-  asked for ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md)).
+  per category, and entries already in the catalog keep what a person wrote (unless `--fresh`).
 - **Test**: add a YAML entry. `expect` supports `route_to`, `state` (`[path, op, value]` with `==`, `!=`, `len`,
   `contains`, `in`, `>=`, `<=`, `absent`, `exists`), `tools_required`, `tools_forbidden`, `tools_not_attempted`,
   `tool_attempts`, `tool_results`, `audit`, `response_contains`, `response_excludes`, `max_steps`, `termination`,
@@ -199,7 +198,7 @@ classification (unit tests cover it), and one that broke four tests in five and 
   empty one (check `answered`). A test can also set `fixture_patch`
   and `fault_profile` (`transient_once:<tool>`, `ack_timeout_once:<tool>`, `permanent_down:<tool>`). `pytest`
   checks that the whole catalog passes on the baseline, apart from Gemma's known mistakes, on Gemma's recorded
-  answers: record the new case's answers with `TRACEEVAL_BACKEND=vllm pytest -q` (see the gotchas).
+  answers: record the new case's answers (§8).
 - **Tool errors**: a tool error the test intends (a refusal, a missing page, an injected outage) must be listed,
   e.g. `tool_errors: {unpublish_page: approval_required}`. Any other error fails the test as `tool_error:<tool>`,
   unless a later call of the same tool succeeded. A crash in tool or service code (any exception other than a
@@ -213,28 +212,13 @@ classification (unit tests cover it), and one that broke four tests in five and 
   strategies implement `run(ctx, oracle)`. Use only `ctx.change`, `ctx.catalog`, the baseline facts in
   `ctx.history` and the other changes' outcomes (`ctx.train_variants`). Add the name to `CORE` to include it
   in the default comparison.
-- **Model backends**: two models play the agents, Gemma 4 E4B and Qwen3.8-27B (see [EXPERIMENT.md](EXPERIMENT.md)).
-  - **Gemma.** `--backend hf` (the default; `pip install -e ".[hf]"`) runs it on the local GPU. `--backend vllm`
-    sends it to a vLLM server: `scripts/gpu_remote.sh setup` once, then `scripts/gpu_remote.sh up` starts it on
-    the GPU server and opens an SSH tunnel; cases then run 32 at a time (`--workers`). Both build the same
-    prompts and parse answers the same way (`traceeval/llm/chat.py`).
-  - **Qwen.** `scripts/gpu_remote.sh up qwen` serves it on the other GPU, and `--backend llm` reaches it there
-    (`pip install -e ".[llm]"`). The `llm` backend takes any other OpenAI-compatible endpoint through
-    `TRACEEVAL_LLM_BASE_URL`, `TRACEEVAL_LLM_API_KEY` and `TRACEEVAL_LLM_MODEL`.
-  - **Recorded answers.** `--backend replay` plays Gemma from its recorded answers, with no model
-    (`traceeval/llm/cache.py`). With `TRACEEVAL_CACHE=<file>`, `hf` and `vllm` answer from that file what they
-    can and add every new answer to it.
-  - **Debugging.** `TRACEEVAL_MODEL_LOG=<file>` logs every model call.
-- **Judge**: a case with a `judge: {rubric: ...}` block has its answer read by a model once its deterministic
-  checks pass (`scoring/scorers.py::judge_answer`). `TRACEEVAL_JUDGE=gemma` or `qwen` picks the model; by default
-  it is the one playing the agents. Gemma's verdicts are recorded and replayed with its other answers.
+- **Model backends, recorded answers, the judge**: see [EXPERIMENT.md](EXPERIMENT.md) §3 and §5.
 
 ## 8. Gotchas
 
-- The tests replay Gemma's recorded answers (`tests/cassettes/gemma.jsonl`), each keyed by the exact request. After
-  a change to anything a prompt is built from (a skill, an agent, a config value, a tool, a case), the replay
-  misses (`CacheMiss`): start Gemma (`scripts/gpu_remote.sh up`), run `TRACEEVAL_BACKEND=vllm pytest -q` to record
-  what is missing, and commit the cassette.
+- The tests replay Gemma's recorded answers, keyed by the exact request. After a change to anything a prompt is
+  built from (a skill, an agent, a config value, a tool, a case), the replay misses (`CacheMiss`): record the
+  missing answers with `TRACEEVAL_BACKEND=vllm pytest -q` and commit the cassette (EXPERIMENT.md §5).
 - Test texts share vocabulary with skills and config keys, which is why `ir_tfidf` is strong here.
 - `history_ml` (needs scikit-learn) and `observed_diverse` are optional. `--strategies all` includes them.
 - `runs/` is git-ignored and large (it holds line-level coverage). To keep a run, copy its `results/` into

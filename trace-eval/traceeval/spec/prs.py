@@ -538,7 +538,8 @@ PRS: list[PR] = [
             "approval window not wired into the adapters",
             [_CFG_MAX_AGE, _WF_IMPORT, _WF_APPROVE, _WF_PUBLISH, _WF_SCHEDULE, _WF_FUNCTIONS, _SKILL_PROSE],
         ),
-        "the unit-level proof holds; the stale-approval example fails (no recorded run has a stale approval for the monitor to see)",
+        "the unit-level proof holds; the stale-approval example fails, and so does the monitor, through an unrelated run "
+        "(PUB-10: Gemma schedules a page that was never approved)",
     ),
     # FS-0102 ------------------------------------------------------------------------------------
     PR(
@@ -693,7 +694,8 @@ PRS: list[PR] = [
                 ),
             ],
         ),
-        "behaviourally identical today; only the placement lint sees the duplicated constant",
+        "behaviourally identical to the correct PR; only the placement lint tells them apart (with Gemma every FS-0104 "
+        "PR also fails the title property)",
     ),
     PR(
         "FS-0104/pr_drop_guard",

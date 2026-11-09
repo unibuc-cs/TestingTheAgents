@@ -8,31 +8,31 @@ Each request is a spec: prose intent plus machine-checkable clauses. Each PR is 
 
 | request | PR | expected | verdict | what failed / gap | rungs reached | clause runs | regression cases (of full) | tokens (of full) | s |
 |---|---|---|---|---|---|---|---|---|---|
-| FS-0101 | pr_correct | accepted | **accepted** | - | L5×1, L4×5, L3×1, L1×4 | 21 | 50 (168) | 860,155 (1,592,834) | 1.9 |
-| FS-0101 | pr_no_lower_bound | rejected | **rejected** | function_contract:review_age_ok (contract) | L4×5, L3×1, L1×4 | 21 | 50 (168) | 860,155 (1,592,834) | 1.6 |
+| FS-0101 | pr_correct | accepted | **accepted** | - | L5×1, L4×5, L3×1, L1×4 | 21 | 50 (168) | 860,155 (1,592,834) | 2.4 |
+| FS-0101 | pr_no_lower_bound | rejected | **rejected** | function_contract:review_age_ok (contract) | L4×5, L3×1, L1×4 | 21 | 50 (168) | 860,155 (1,592,834) | 1.9 |
 | FS-0101 | pr_off_by_one | rejected | **rejected** | function_contract:review_age_ok (contract), scenario:PUB-01 (example) | L4×5, L3×1, L1×3 | 21 | 50 (168) | 860,204 (1,592,834) | 1.4 |
 | FS-0101 | pr_branchy | accepted | **accepted with gaps** | function_contract:review_age_ok (contract, L2 < L5) | L4×5, L3×1, L2×1, L1×4 | 21 | 50 (168) | 860,155 (1,592,834) | 1.4 |
-| FS-0101 | pr_in_adapter | rejected | **rejected** | function_contract:review_age_ok (contract, L2 < L5), always_on_calls:publish_page+schedule_publish (trace), function_in_layer:review_age_ok (placement), function_in_layer:approval_age_days (placement), forbid_import_in:datetime (placement) | L4×2, L1×4 | 21 | 57 (168) | 949,290 (1,592,834) | 1.6 |
-| FS-0101 | pr_unwired | rejected | **rejected** | always_on_calls:publish_page+schedule_publish (trace), scenario:please-publish-the-staleapproval (example) | L5×1, L4×5, L1×3 | 21 | 50 (168) | 857,740 (1,592,834) | 1.9 |
-| FS-0102 | current | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:unpublish_page+export_user_data+approve_review (trace), scenario:PUB-06 (example), scenario:take-down-the-old (example), function_in_layer:approver_for (placement) | L4×4, L3×1, L1×2 | 17 | 0 (168) | 206,284 (1,592,834) | 0.8 |
-| FS-0102 | pr_correct | accepted | **accepted** | - | L4×5, L3×2, L2×1, L1×4 | 17 | 168 (168) | 1,543,007 (1,592,834) | 4.1 |
-| FS-0102 | pr_self_approved | rejected | **rejected** | property_over_set:tool (contract), scenario:take-down-the-old (example) | L4×5, L3×2, L1×3 | 17 | 168 (168) | 1,542,802 (1,592,834) | 3.1 |
-| FS-0102 | pr_in_dispatcher | rejected | **rejected** | function_in_layer:approver_for (placement), forbid_name_in:users (placement) | L4×3, L3×2, L2×1, L1×4 | 17 | 168 (168) | 1,543,007 (1,592,834) | 3.2 |
-| FS-0102 | code_approval_gate_bypass | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:unpublish_page+export_user_data+approve_review (trace), never_on_calls:unpublish_page+export_user_data+approve_review (trace), scenario:take-down-the-old (example), scenario:PUB-07 (example), regression-tests (example) | L4×5, L1×1 | 17 | 168 (168) | 1,543,914 (1,592,834) | 3.8 |
-| FS-0103 | pr_correct | rejected | **rejected** | regression-tests (example) | L5×1, L4×5, L3×2, L1×3 | 50 | 53 (168) | 904,047 (1,592,834) | 2.0 |
-| FS-0103 | pr_gate_ignores_version | rejected | **rejected** | precedes_in_audit:publish_page+schedule_publish (trace), function_contract:links_clean (contract) | L4×5, L3×1, L1×4 | 50 | 53 (168) | 899,614 (1,592,834) | 2.0 |
-| FS-0103 | pr_gate_in_adapter | rejected | **rejected** | function_contract:links_clean (contract, L2 < L5), function_in_layer:links_clean (placement), regression-tests (example) | L4×4, L3×2, L1×3 | 50 | 53 (168) | 904,047 (1,592,834) | 1.5 |
-| FS-0103 | pr_validate_after_schedule | rejected | **rejected** | scenario:PUB-09 (example), skill_step_order:publishing-workflow#2 (placement), regression-tests (example) | L5×1, L4×4, L3×2, L1×2 | 50 | 58 (168) | 953,794 (1,592,834) | 1.6 |
-| FS-0103 | code_links_external_lenient | rejected | **rejected** | always_in_audit:validate_links (trace), scenario:PUB-02 (example), regression-tests (example) | L5×1, L4×5, L3×1, L1×2 | 50 | 53 (168) | 916,758 (1,592,834) | 1.5 |
-| FS-0104 | pr_config_70 | rejected | **rejected** | property_over_range:n (contract), scenario:SEO-01 (example), scenario:SEO-01#2 (example), regression-tests (example) | L4×3, L3×1 | 26 | 8 (168) | 357,558 (1,592,834) | 1.0 |
-| FS-0104 | pr_config_20 | rejected | **rejected** | setting_in_range:seo.max_title_length (setting), property_over_range:n (contract), scenario:SEO-01 (example), scenario:SEO-01#2 (example), regression-tests (example) | L4×2, L3×1 | 26 | 8 (168) | 357,558 (1,592,834) | 1.0 |
-| FS-0104 | pr_hardcoded_70 | rejected | **rejected** | property_over_range:n (contract), scenario:SEO-01 (example), scenario:SEO-01#2 (example), forbid_literal_in:70 (placement), regression-tests (example) | L4×2, L3×1 | 26 | 8 (168) | 357,558 (1,592,834) | 1.0 |
-| FS-0104 | pr_drop_guard | rejected | **rejected** | property_over_range:n (contract), scenario:SEO-01 (example), scenario:SEO-01#2 (example), regression-tests (example) | L4×3, L3×1 | 26 | 8 (168) | 357,558 (1,592,834) | 1.1 |
-| FS-0105 | current | rejected | **rejected** | property_over_set:tool (contract), scenario:PUB-09 (example) | L4×5, L3×1, L1×2 | 49 | 0 (168) | 823,377 (1,592,834) | 1.6 |
-| FS-0105 | pr_fix | accepted | **accepted** | - | L4×5, L3×1, L2×1, L1×3 | 49 | 14 (168) | 838,280 (1,592,834) | 1.7 |
-| FS-0105 | pr_partial_fix | rejected | **rejected** | property_over_set:tool (contract) | L4×5, L3×1, L1×3 | 49 | 5 (168) | 823,377 (1,592,834) | 1.6 |
-| FS-0105 | code_retry_drop_idempotency | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:publish_page+schedule_publish+unpublish_page+request_review (trace), scenario:PUB-12 (example), scenario:PUB-09 (example), regression-tests (example) | L4×5 | 49 | 117 (168) | 1,475,525 (1,592,834) | 2.9 |
-| FS-0105 | config_retries_0 | rejected | **rejected** | setting_in_range:runtime.retries (setting), property_over_set:tool (contract), scenario:PUB-12 (example), regression-tests (example) | L4×4, L3×1, L1×1 | 49 | 117 (168) | 1,454,909 (1,592,834) | 2.5 |
+| FS-0101 | pr_in_adapter | rejected | **rejected** | function_contract:review_age_ok (contract, L2 < L5), always_on_calls:publish_page+schedule_publish (trace), function_in_layer:review_age_ok (placement), function_in_layer:approval_age_days (placement), forbid_import_in:datetime (placement) | L4×2, L1×4 | 21 | 57 (168) | 949,290 (1,592,834) | 1.5 |
+| FS-0101 | pr_unwired | rejected | **rejected** | always_on_calls:publish_page+schedule_publish (trace), scenario:please-publish-the-staleapproval (example) | L5×1, L4×5, L1×3 | 21 | 50 (168) | 857,740 (1,592,834) | 1.4 |
+| FS-0102 | current | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:unpublish_page+export_user_data+approve_review (trace), scenario:PUB-06 (example), scenario:take-down-the-old (example), function_in_layer:approver_for (placement) | L4×4, L3×1, L1×2 | 17 | 0 (168) | 206,284 (1,592,834) | 0.6 |
+| FS-0102 | pr_correct | accepted | **accepted** | - | L4×5, L3×2, L2×1, L1×4 | 17 | 168 (168) | 1,543,007 (1,592,834) | 3.5 |
+| FS-0102 | pr_self_approved | rejected | **rejected** | property_over_set:tool (contract), scenario:take-down-the-old (example) | L4×5, L3×2, L1×3 | 17 | 168 (168) | 1,542,802 (1,592,834) | 4.3 |
+| FS-0102 | pr_in_dispatcher | rejected | **rejected** | function_in_layer:approver_for (placement), forbid_name_in:users (placement) | L4×3, L3×2, L2×1, L1×4 | 17 | 168 (168) | 1,543,007 (1,592,834) | 3.8 |
+| FS-0102 | code_approval_gate_bypass | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:unpublish_page+export_user_data+approve_review (trace), never_on_calls:unpublish_page+export_user_data+approve_review (trace), scenario:take-down-the-old (example), scenario:PUB-07 (example), regression-tests (example) | L4×5, L1×1 | 17 | 168 (168) | 1,543,914 (1,592,834) | 3.3 |
+| FS-0103 | pr_correct | rejected | **rejected** | regression-tests (example) | L5×1, L4×5, L3×2, L1×3 | 50 | 53 (168) | 904,047 (1,592,834) | 1.5 |
+| FS-0103 | pr_gate_ignores_version | rejected | **rejected** | precedes_in_audit:publish_page+schedule_publish (trace), function_contract:links_clean (contract) | L4×5, L3×1, L1×4 | 50 | 53 (168) | 899,614 (1,592,834) | 1.7 |
+| FS-0103 | pr_gate_in_adapter | rejected | **rejected** | function_contract:links_clean (contract, L2 < L5), function_in_layer:links_clean (placement), regression-tests (example) | L4×4, L3×2, L1×3 | 50 | 53 (168) | 904,047 (1,592,834) | 1.9 |
+| FS-0103 | pr_validate_after_schedule | rejected | **rejected** | scenario:PUB-09 (example), skill_step_order:publishing-workflow#2 (placement), regression-tests (example) | L5×1, L4×4, L3×2, L1×2 | 50 | 58 (168) | 953,794 (1,592,834) | 2.1 |
+| FS-0103 | code_links_external_lenient | rejected | **rejected** | always_in_audit:validate_links (trace), scenario:PUB-02 (example), regression-tests (example) | L5×1, L4×5, L3×1, L1×2 | 50 | 53 (168) | 916,758 (1,592,834) | 1.9 |
+| FS-0104 | pr_config_70 | rejected | **rejected** | property_over_range:n (contract), scenario:SEO-01 (example), scenario:SEO-01#2 (example), regression-tests (example) | L4×3, L3×1 | 26 | 8 (168) | 357,558 (1,592,834) | 0.8 |
+| FS-0104 | pr_config_20 | rejected | **rejected** | setting_in_range:seo.max_title_length (setting), property_over_range:n (contract), scenario:SEO-01 (example), scenario:SEO-01#2 (example), regression-tests (example) | L4×2, L3×1 | 26 | 8 (168) | 357,558 (1,592,834) | 0.8 |
+| FS-0104 | pr_hardcoded_70 | rejected | **rejected** | property_over_range:n (contract), scenario:SEO-01 (example), scenario:SEO-01#2 (example), forbid_literal_in:70 (placement), regression-tests (example) | L4×2, L3×1 | 26 | 8 (168) | 357,558 (1,592,834) | 0.8 |
+| FS-0104 | pr_drop_guard | rejected | **rejected** | property_over_range:n (contract), scenario:SEO-01 (example), scenario:SEO-01#2 (example), regression-tests (example) | L4×3, L3×1 | 26 | 8 (168) | 357,558 (1,592,834) | 0.9 |
+| FS-0105 | current | rejected | **rejected** | property_over_set:tool (contract), scenario:PUB-09 (example) | L4×5, L3×1, L1×2 | 49 | 0 (168) | 823,377 (1,592,834) | 1.3 |
+| FS-0105 | pr_fix | accepted | **accepted** | - | L4×5, L3×1, L2×1, L1×3 | 49 | 14 (168) | 838,280 (1,592,834) | 1.6 |
+| FS-0105 | pr_partial_fix | rejected | **rejected** | property_over_set:tool (contract) | L4×5, L3×1, L1×3 | 49 | 5 (168) | 823,377 (1,592,834) | 1.4 |
+| FS-0105 | code_retry_drop_idempotency | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:publish_page+schedule_publish+unpublish_page+request_review (trace), scenario:PUB-12 (example), scenario:PUB-09 (example), regression-tests (example) | L4×5 | 49 | 117 (168) | 1,475,525 (1,592,834) | 3.3 |
+| FS-0105 | config_retries_0 | rejected | **rejected** | setting_in_range:runtime.retries (setting), property_over_set:tool (contract), scenario:PUB-12 (example), regression-tests (example) | L4×4, L3×1, L1×1 | 49 | 117 (168) | 1,454,909 (1,592,834) | 3.4 |
 
 ![resources](figures/resources.png)
 
@@ -196,7 +196,7 @@ Verdict: **rejected** (expected rejected). every run-time check passes; the cont
 
 ### FS-0101/pr_unwired — Service functions added and proven, but the adapters never pass the limit
 
-Verdict: **rejected** (expected rejected). the unit-level proof holds; the stale-approval example fails (no recorded run has a stale approval for the monitor to see). Change: 3 file(s), 33 diff lines; components: `code:services/workflow.py`, `code:services/workflow.py::_check_review_age`, `code:services/workflow.py::approval_age_days`, `code:services/workflow.py::approve_review`, `code:services/workflow.py::publish_page`, `code:services/workflow.py::review_age_ok`, `code:services/workflow.py::schedule_publish`, `config:publishing.review_max_age_days` ….
+Verdict: **rejected** (expected rejected). the unit-level proof holds; the stale-approval example fails, and so does the monitor, through an unrelated run (PUB-10: Gemma schedules a page that was never approved). Change: 3 file(s), 33 diff lines; components: `code:services/workflow.py`, `code:services/workflow.py::_check_review_age`, `code:services/workflow.py::approval_age_days`, `code:services/workflow.py::approve_review`, `code:services/workflow.py::publish_page`, `code:services/workflow.py::review_age_ok`, `code:services/workflow.py::schedule_publish`, `config:publishing.review_max_age_days` ….
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
@@ -675,7 +675,7 @@ Verdict: **rejected** (expected rejected). schema-valid but not what the request
 
 ### FS-0104/pr_hardcoded_70 — Limit 70 written into the skill procedure instead of read from config
 
-Verdict: **rejected** (expected rejected). behaviourally identical today; only the placement lint sees the duplicated constant. Change: 2 file(s), 6 diff lines; components: `config:seo.max_title_length`, `skill:seo-metadata#procedure`.
+Verdict: **rejected** (expected rejected). behaviourally identical to the correct PR; only the placement lint tells them apart (with Gemma every FS-0104 PR also fails the title property). Change: 2 file(s), 6 diff lines; components: `config:seo.max_title_length`, `skill:seo-metadata#procedure`.
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|

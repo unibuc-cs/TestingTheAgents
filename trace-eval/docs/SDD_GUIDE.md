@@ -97,7 +97,7 @@ Expressions (`where`, `ensures`) are Python expressions over a small vocabulary:
 also when a step of a plan received it), `title_of_length(n)`, `first_case_calling(tool)`,
 `baseline_run(test_id)`; `event.<field>` for the call or audit entry being checked and `run.<field>` for
 the run (all in `traceeval/spec/context.py`). A new template takes ten lines in the catalog. A new
-helper is a function in `context.py`.
+helper is a function in `context.py`, added to `CheckContext.env` and described in `draft.py`'s `HELPERS`.
 
 ## 4. How a spec gets written: model drafts, person confirms
 
@@ -183,7 +183,7 @@ whether to simplify the code, add a proof backend, or accept L2.
 | SpecGen, AutoSpec (2024) | LLM generates JML / ACSL contracts for existing Java / C code, refined until a verifier accepts them | they describe what the *code already does* (code → spec), not what a *request wants*; function-level only; verifier languages for Java/C, while this system is Python, prompts and YAML |
 | Hypothesis ghostwriter | writes property-based test skeletons from a function's signature (round-trip, idempotence, equivalence) | properties are generic, not derived from a requirement; function-level; a person still has to make them meaningful |
 | ArchUnit, import-linter, Semgrep rule packs | assert structural rules: layers, dependency direction, forbidden imports, naming | static only and written by developers; nothing about behaviour, settings, examples or run-time evidence; no link to a change request |
-| Dafny, Verus, F*, Lean, Alloy, TLA+ (the note's Q1) | whole-program or model proofs | the system would have to be rewritten in the proof language; agents, prompts and skills have no counterpart there. Here, proofs are confined to pure functions (via Z3) and the rest is monitored or tested |
+| Dafny, Verus, F*, Lean, Alloy, TLA+ | whole-program or model proofs | the system would have to be rewritten in the proof language; agents, prompts and skills have no counterpart there. Here, proofs are confined to pure functions (via Z3) and the rest is monitored or tested |
 | Spec Kit, Kiro-style "spec-driven" agent workflows | prose specs that guide a coding agent | prose only: nothing is machine-checked, so there is no evidence and no rung |
 
 This layer takes something from each and puts it behind one catalog and one evidence record: nl2spec's
@@ -206,5 +206,6 @@ current code does not have, so a PR that silently removes a function shows up.
 
 *What does "proven" prove?* That the function satisfies its post-condition for every input in the stated
 domain. It does not prove that the function is called. The trace rule and the scenarios check that. The
-demo has a PR that passes the proof and fails the stale-approval scenario; the trace rule does not catch it,
-because no recorded run has a stale approval.
+demo has a PR that passes the proof and fails the stale-approval scenario. No recorded run has a stale approval,
+so the trace rule catches it only through an unrelated run: PUB-10, where Gemma schedules a page that was never
+approved.

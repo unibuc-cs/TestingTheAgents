@@ -17,10 +17,10 @@ The repository has moved on since the τ²-bench paper: `pyproject.toml` says `n
 
 ```bash
 tau2 run --domain retail \
-  --agent-llm openai/Muse-Glimmer-30B \
-  --agent-llm-args '{"temperature":0.0,"api_base":"http://127.0.0.1:8000/v1","api_key":"EMPTY"}' \
-  --user-llm  openai/Muse-Glimmer-30B \
-  --user-llm-args  '{"temperature":0.0,"api_base":"http://127.0.0.1:8000/v1","api_key":"EMPTY"}' \
+  --agent-llm openai/<served model name> \
+  --agent-llm-args '{"temperature":0.0,"api_base":"<TRACEEVAL_LLM_BASE_URL>","api_key":"EMPTY"}' \
+  --user-llm  openai/<served model name> \
+  --user-llm-args  '{"temperature":0.0,"api_base":"<TRACEEVAL_LLM_BASE_URL>","api_key":"EMPTY"}' \
   --task-ids 0 1 2 --num-trials 3 --max-steps 60 --max-concurrency 4 --save-to my_run
 ```
 
@@ -57,14 +57,14 @@ tau2 run --domain retail \
 
 Per message (`src/tau2/data_model/message.py`): `timestamp`, `cost`, `usage = {"completion_tokens", "prompt_tokens"}`, `generation_time_seconds`, `turn_idx`, `tool_calls[ToolCall{id, name, arguments, requestor}]`; `ToolMessage{id, content, requestor, error, turn_idx, timestamp}`. Per task run: `start_time`, `end_time`, `duration`, `agent_cost`, `user_cost`. Cost uses `litellm.completion_cost`; for unknown local model names it returns `0.0`, so for vLLM rely on `usage` tokens, not `cost`. `--verbose-logs` writes per-call request/response JSON (`llm_debug/*.json`).
 
-## Adapter design for TRACE-Eval (`traceeval/sut_adapters/tau2/`, phase 2)
+## Adapter design for TRACE-Eval (planned: `traceeval/sut_adapters/tau2/`, roadmap phase 5)
 
 1. **Materialise SUT:** clone at a pinned commit; `uv sync`; `cp -r data/ <workdir>/data_variant/`; `export TAU2_DATA_DIR=<workdir>/data_variant`. For tool mutations use a per-variant checkout (`git worktree add <workdir>/src_variant <commit>`) and run that worktree's `uv run tau2 ...`.
-2. **Controlled mutations:** policy → edit `data_variant/tau2/domains/<d>/policy.md` (telecom: `main_policy.md` / `tech_support_manual.md`); tools → patch `src/tau2/domains/<d>/tools.py`; task/config → `tasks.json` / `split_tasks.json`; DB → `db.json` / `db.toml`. Our mutation catalogue format (`traceeval/mutation/`) is a list of textual patch operators with `expect_found` assertions, so the same mechanism applies.
+2. **Controlled mutations:** policy → edit `data_variant/tau2/domains/<d>/policy.md` (telecom: `main_policy.md` / `tech_support_manual.md`); tools → patch `src/tau2/domains/<d>/tools.py`; task/config → `tasks.json` / `split_tasks.json`; DB → `db.json` / `db.toml`. Our mutation catalogue (`traceeval/mutation/catalog.py`) is a list of literal-anchor edits (replace, delete_line, delete_block, append, custom) whose operators raise when an anchor is missing, so the same mechanism applies.
 3. **Change set:** unified diff between baseline and variant trees; map `policy.md` sections → tasks via `description.relevant_policies`; `tools.py` function names → tasks whose `evaluation_criteria.actions[].name` references them (declared) and, better, to tasks whose baseline traces called them (observed, from `messages[].tool_calls`); `db.*` keys → tasks whose `actions[].arguments` reference touched IDs. `coverage` dynamic contexts on `src/tau2/domains/<d>/tools.py` during the baseline run give an empirical function→task map (same mechanism as in the primary SUT).
-4. **Execute:** `run_domain(TextRunConfig(domain, task_ids=selected, num_trials=N, llm_agent="openai/<m>", llm_args_agent={"temperature":0,"api_base":"http://127.0.0.1:8000/v1","api_key":"EMPTY"}, llm_user=..., llm_args_user={...}, max_steps=..., max_concurrency≤10, seed=S, save_to=f"{variant}_{hash}"))`; set `DEFAULT_LLM_NL_ASSERTIONS` to the local model for retail (or use airline to avoid the judge); `--auto-resume` for restarts.
-5. **Parse into TRACE-Eval history records:** for each `results.simulations[i]`: `test_id=task_id`, `rep=trial`, `passed=is_successful(reward_info.reward)`, `reward_breakdown`, `tokens=Σ msg.usage` over agent messages (and separately the user model's messages), `latency=duration`, `tool_calls=[(tc.name, tc.arguments, tool_msg.error)]`, `termination_reason`. pass^k with `pass_hat_k`.
-6. **Token budget planning:** each agent turn re-sends policy (≈1.6–2k tokens) + tool schemas + full history, so prompt tokens grow roughly quadratically per task run; expect on the order of 50k–200k prompt tokens per retail/airline task run on the agent side plus a similar order for the user model (an order-of-magnitude placeholder; calibrate it from `usage` on the first local run). With a local vLLM this is free in money but sets wall-clock: e.g. 50 airline tasks × 20 mutations × 3 trials = 3,000 simulations.
+4. **Execute:** `run_domain(TextRunConfig(domain, task_ids=selected, num_trials=N, llm_agent="openai/<m>", llm_args_agent={"temperature":0,"api_base":<TRACEEVAL_LLM_BASE_URL>,"api_key":"EMPTY"}, llm_user=..., llm_args_user={...}, max_steps=..., max_concurrency≤10, seed=S, save_to=f"{variant}_{hash}"))`; set `DEFAULT_LLM_NL_ASSERTIONS` to the local model for retail (or use airline to avoid the judge); `--auto-resume` for restarts.
+5. **Parse into TRACE-Eval history records:** for each `results.simulations[i]`: `test_id=task_id`, `rep=trial`, `passed=is_successful(reward_info.reward)`, `reward_breakdown`, `tokens=Σ msg.usage` over agent messages (and separately the user model's messages), `latency_ms=duration·1000`, `tools=[tc.name ...]`, `termination`, and `deps`, the observed component ids every trace-based strategy reads (`tool:<name>` from the tool calls, `code:<file>::<fn>` from coverage contexts on `tools.py`), as in `experiment/executor.py`. pass^k with `pass_hat_k`.
+6. **Token budget planning:** each agent turn re-sends policy (≈1.6–2k tokens) + tool schemas + full history, so prompt tokens grow roughly quadratically per task run; expect on the order of 50k–200k prompt tokens per retail/airline task run on the agent side plus a similar order for the user model (an order-of-magnitude placeholder; calibrate it from `usage` on the first local run). With a local vLLM this is free in money but sets wall-clock: e.g. 50 airline tasks × (12 mutations + the baseline) × 3 trials = 1,950 simulations.
 
 **Recommended first tau2 experiment:** airline domain (no NL-assertion judge, 50 tasks, `["DB","COMMUNICATE"]` reward), local vLLM for agent and user, 3 trials, ~12 mutations (6 policy edits, 4 tool-code edits, 2 benign), baseline first to measure pass^k and flakiness; the TRACE-Eval replay evaluator then runs unchanged on the parsed history.
 

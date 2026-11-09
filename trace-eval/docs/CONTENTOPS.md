@@ -39,10 +39,6 @@ needs several, plans the steps and hands them over one at a time. A specialist f
 Every tool call it makes passes through the dispatcher. The tools pass the work on to the services, which
 change the data and write the audit log.*
 
-```
-request --> orchestrator --> one specialist, or a plan of several --> their skills --> tools --> services --> data
-```
-
 Each layer is a folder or file you can open:
 
 | Layer | What it is | Open it |
@@ -51,10 +47,10 @@ Each layer is a folder or file you can open:
 | Skills | One `SKILL.md` per skill: a `Procedure` block with the steps to follow, plus rules in plain prose. Two skills are shared by several agents | [`sut/skills/`](../traceeval/sut/skills/) |
 | Tools | Thin adapters. Each has a name, a kind (`read`, `write` or `guarded`) and a parameter schema. The orchestrator also has a control tool, `route_to_agent`, and two of its own, `make_plan` and `request_approval` | [`sut/tools/`](../traceeval/sut/tools/) |
 | Services | The business logic: pages, versions and assets; review, publish, schedule and unpublish; links; SEO; roles and permissions; consent, export, audit and approvals; translation; brand guidelines; analytics and the site audit | [`sut/services/`](../traceeval/sut/services/) |
-| Data | An in-memory copy of a JSON file with the users, pages, assets, consents, brand guidelines, analytics, approver and audit log, plus a memory of idempotency keys | [`fixtures/base.json`](../traceeval/sut/fixtures/base.json), [`services/state.py`](../traceeval/sut/services/state.py) |
+| Data | An in-memory copy of a JSON file with the users, pages, assets, consents, translation jobs, brand guidelines, analytics, approver and audit log, plus a memory of idempotency keys | [`fixtures/base.json`](../traceeval/sut/fixtures/base.json), [`services/state.py`](../traceeval/sut/services/state.py) |
 | Harness | What runs the agents: the agent loop, the dispatcher that every tool call passes through, the skill loader, fault injection and retries | [`sut/harness/`](../traceeval/sut/harness/) |
 | Settings | The step budgets (per agent and per request), retries, idempotency keys, disabled and guarded tools, the default agent, the review and scheduling switches, SEO limits, default languages and the slow-page limit | [`config/runtime.yaml`](../traceeval/sut/config/runtime.yaml) |
-| Backends | What makes the decisions: a model. Gemma 4 E4B by default (on the local GPU, on a GPU server, or replayed from its recorded answers), or any OpenAI-compatible endpoint that supports tool calling | [`harness/backends/`](../traceeval/sut/harness/backends/) |
+| Backends | What makes the decisions: a model, behind an OpenAI-style chat client. Gemma 4 E4B by default (on the local GPU, on a GPU server, or replayed from its recorded answers), or any OpenAI-compatible endpoint that supports tool calling | [`harness/backends/`](../traceeval/sut/harness/backends/), [`traceeval/llm/chat.py`](../traceeval/llm/chat.py) |
 
 ## The agents, and how they work together
 
@@ -63,8 +59,8 @@ Agents do not chat with each other. The only hand-off is the orchestrator passin
 which skill to follow and what to do next, happens inside a single agent.
 
 The orchestrator is the front door. It reads the request and looks at every specialist's description and
-trigger words. A request one specialist owns is delegated exactly once; when no trigger word matches, it
-goes to the default agent named in the settings, which is `authoring`. A request that needs several
+trigger words. A request one specialist owns is delegated exactly once; when no specialist owns it, it goes
+to the default agent named in the settings, which is `authoring`. A request that needs several
 specialists gets a plan, as in AEM's Agent Orchestrator: the orchestrator writes the steps down
 (`make_plan`), then delegates them one at a time, each with its own instruction (`task`) and the values it
 needs (`context`: the ids earlier steps reported). Before a step that publishes, schedules or takes pages
@@ -87,12 +83,14 @@ Click an agent to see its definition, or a skill to read its procedure:
 | [insights](../traceeval/sut/agents/insights.yaml) | how pages perform: views, bounce rate, conversions, and the best or worst pages of a section | [data-insights](../traceeval/sut/skills/data-insights/SKILL.md) | `get_page_metrics` |
 | [optimizer](../traceeval/sut/agents/optimizer.yaml) | site health checks (broken links, images without alt text, missing descriptions, slow pages) and alt texts | [site-optimization](../traceeval/sut/skills/site-optimization/SKILL.md) | `audit_site`, `fix_alt_text`, `check_permission` |
 
-† A *guarded* tool. The dispatcher refuses the call unless the request carries an approval token, but it
-only checks that a token is there, not whose it is. The services behind `approve_review` and
-`export_user_data` check the rest: the token must belong to the approving user, and that user's role must
-allow the action. `unpublish_page` gets no such check, so any token will do (but a protected page never goes
-down). The last three agents, and asset search, are modelled on AEM's Brand Governance, Data Insights, Site
+The last three agents, and asset search, are modelled on AEM's Brand Governance, Data Insights, Site
 Optimization and Content Advisor agents ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md)).
+
+† A *guarded* tool. The dispatcher refuses the call unless the request carries an approval token, but it
+only checks that a token is there, not whose it is. The services check the rest: `approve_review` needs the
+named reviewer's own token and a role that may approve; `export_user_data` needs the requesting user's own token
+and the `export_data` permission. `unpublish_page` gets no such check, so any token will do (but a protected
+page never goes down).
 
 ### The shared skills
 
@@ -123,7 +121,33 @@ agent that includes it. Test selection has to follow that ripple.
 
 ### One request, step by step
 
-![One run of a case, end to end](figures/guide_2_run.png)
+```mermaid
+sequenceDiagram
+    participant C as case PUB-01
+    participant E as executor
+    participant R as runtime
+    participant B as backend (the model)
+    participant D as dispatcher
+    participant T as tool, service, state
+    participant REC as recorder
+    C->>E: request + context {user_id: bob, page_id: p4}
+    E->>R: run(orchestrator)
+    R->>REC: run.start, agent.start, skill.load
+    R->>B: next_action
+    B-->>R: route_to_agent(publishing)
+    Note over R: loads publishing-workflow and the skills it includes
+    loop until the model answers (it follows the procedure, written out as numbered steps)
+        B-->>R: tool call (get_page, check_permission, validate_links, publish_page)
+        R->>D: call(tool, args, ctx)
+        D->>T: gates, retry with idempotency key, fault injection
+        T-->>D: result or error
+        D->>REC: tool.call event
+        D-->>B: the result, added to the conversation
+    end
+    B-->>R: final message "Published p4 ..."
+    E->>E: score expectations, observed deps, coverage
+    E-->>C: record (passed, checks, tokens, deps, events, state)
+```
 
 *Bob asks: "Please publish the welcome page". The executor starts the orchestrator, which routes the
 request to publishing. The publishing agent follows its procedure: fetch the page, check the permission,
@@ -138,12 +162,9 @@ usually nothing below the skill catches the mistake.
 **The harness, on every tool call.** The dispatcher refuses a call when the tool does not exist, when the
 settings have switched it off, when this agent is not allowed to use it, when it is guarded and the request
 has no approval token, or when the arguments do not fit. A call that gets through runs with fault
-injection, and transient failures are retried. Write tools get an idempotency key, so the services that
-honour it do not repeat a change when a retry follows a lost acknowledgement. The key comes from what the
-call does: the request, the tool, its arguments, and how often that same call has already gone through in
-this request. An agent that repeats a failed write therefore gets the same key and cannot apply it twice.
-The same write made on purpose after the first one went through gets a new key. Every run gets the same
-keys. Every call leaves a `tool.call` event in the trace. Around the dispatcher, the agent loop limits how
+injection, and transient failures are retried. Write tools get an idempotency key derived from the request,
+the tool, its arguments and how often that call has already gone through, so a retry, or a failed write the
+agent repeats, is not applied twice by the services that honour the key. Every call leaves a `tool.call` event in the trace. Around the dispatcher, the agent loop limits how
 many steps each agent may take and how many the whole request may take (delegations count too), and how
 deep delegation may go. The code is in
 [`dispatcher.py`](../traceeval/sut/harness/dispatcher.py) and [`runtime.py`](../traceeval/sut/harness/runtime.py).

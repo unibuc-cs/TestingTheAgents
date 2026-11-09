@@ -77,7 +77,7 @@ Fault-injection work usable as ground-truth generators or contrast:
 
 - **pass^k** (τ-bench): P(all k trials succeed).
 - **ReliabilityBench** (above); **Beyond pass@1: A Reliability Science Framework for Long-Horizon LLM Agents** (Khanal, Tao, Zhou; arXiv 2603.29231, 2026): Reliability Decay Curve, Variance Amplification Factor.
-- **Adding Error Bars to Evals** (Miller, Anthropic; arXiv 2411.00640, 2024): CLT SEs, clustered SEs, paired comparisons, power analysis. For us: paired per-test V0/V1 comparison and power-based run budgeting.
+- **Adding Error Bars to Evals** (Miller, Anthropic; arXiv 2411.00640, 2024): CLT SEs, clustered SEs, paired comparisons, power analysis. For us: the paired per-test V0/V1 comparison behind the majority-vote ground truth.
 - **On Randomness in Agentic Evals** (Bjarnason, Silva, Monperrus, KTH; arXiv 2602.07150, 2026): single-run pass@1 varies 2.2–6.0 pp; SD > 1.5 pp even at temperature 0.
 - **When Agents Disagree With Themselves** (Mehta; arXiv 2602.11619, 2026): behavioral consistency as an uncertainty signal.
 - **FAQ** (above) for anytime-valid CIs. **[unverified]** arXiv 2511.10661, 2608.22659.
@@ -93,7 +93,7 @@ Fault-injection work usable as ground-truth generators or contrast:
 1. **Diff-to-test impact mapping is absent.** CASPER is change-aware only via post-change behavioral drift; GBV-PD needs gradients. No work maps a concrete edit (skill file, prompt, tool schema, harness code, config) to the tests whose traces touched the changed component, which would be the agent analogue of coverage-/IR-based RTS. Trace spans (`execute_tool`, skill loads, config reads) are an untapped coverage proxy.
 2. **Cost model is token/time, not test count.** Agent tests have 10–100× cost variance; cost-cognizant APFD_c with token/latency costs and budget-aware stopping has not been applied to agent evals.
 3. **Nondeterminism-aware selection.** Allocating *runs* and *tests* jointly under a budget with anytime-valid stopping is open. Risk-Aware Adaptive Evaluation does bandit run allocation but is change-blind.
-4. **No mutation-based ground truth.** Existing injectors perturb runtime (LLM responses, tool latency); none mutates the *artifacts under change* (skills/prompts/harness/config) to seed regressions for measuring a selector's detection rate. This is both the main methodological contribution and the main credibility risk: reviewers will ask whether mutants resemble real regressions, so pair them with real version histories.
+4. **No mutation-based ground truth.** Existing injectors perturb runtime (LLM responses, tool latency); none mutates the *artifacts under change* (skills/prompts/harness/config) to seed regressions for measuring a selector's detection rate. This is the testbed's main methodological addition (the method is the contribution, RESEARCH_PLAN §1) and its main credibility risk: reviewers will ask whether mutants resemble real regressions, so pair them with real version histories.
 5. **Multi-SUT evaluation.** CASPER has one domain; τ²-bench, AppWorld, SkillsBench, Terminal-Bench, AgentDojo offer deterministic verifiers for cross-domain validation.
 
 ## Closest competitors (ranked)
@@ -109,9 +109,7 @@ Fault-injection work usable as ground-truth generators or contrast:
 
 ## Venues and framing
 
-- **ICSE / FSE / ASE / ISSTA:** regression test selection & prioritization for LLM-based systems: trace-coverage RTS, APFD_c with token cost, mutation analysis as ground truth, RQ-driven evaluation vs. CASPER/random/mid-range/IRT. ASE is a natural fit (AgentChaos appeared there). ISSTA favours the mutation/oracle angle.
-- **ICST / ISSRE:** adequacy of mutants, stopping rules.
-- **NeurIPS D&B / EMNLP:** a benchmark + protocol ("RegressionBench": seeded skill/prompt/harness mutants across τ²/AppWorld/SkillsBench with cost-bounded detection metrics) plus a released trace dataset.
+See RESEARCH_PLAN §8. ASE is a natural fit (AgentChaos appeared there); ISSTA favours the mutation/oracle angle.
 
 ## References
 

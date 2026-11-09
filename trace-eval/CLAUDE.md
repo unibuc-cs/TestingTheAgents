@@ -9,8 +9,8 @@ systems. Read `README.md` (5 minutes), then `docs/USER_GUIDE.md` only when you n
 uv venv --python 3.12 .venv         # the project venv (git-ignored); use .venv/Scripts/python on Windows
 pip install -e ".[dev,ml]"          # or: uv pip install --python .venv -e ".[dev,ml]" ruff
 pytest -q                           # ~60 s; must stay green; replays Gemma's recorded answers (tests/cassettes/)
-ruff check traceeval tests --select E,F,W,I,B --line-length 120
-ruff format traceeval tests --line-length 120   # see "Gotchas" before formatting sut/
+ruff check traceeval tests          # rules and line length come from pyproject.toml
+ruff format traceeval tests         # see "Gotchas" before formatting sut/
 traceeval experiment --backend vllm --workdir runs/gemma4 --reps 3   # full experiment, Gemma on the GPU server, ~30 min
 traceeval experiment --backend llm --workdir runs/qwen4 --reps 3     # the same with Qwen (scripts/gpu_remote.sh up qwen)
 traceeval check code_retry_drop_idempotency --history runs/gemma4   # the prototype: one change, live
@@ -25,9 +25,10 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
 
 ## Layout (one line each)
 
-- `traceeval/sut/` — the system under test (agents, skills, tools, services, harness, config). Copied and
-  mutated by the experiment: **relative imports only**, no imports from `traceeval.*` outside `sut`.
-- `traceeval/catalog/` — eval cases (YAML) and loader.
+- `traceeval/sut/` — the system under test (agents, skills, tools, services, harness, config; docs/CONTENTOPS.md).
+  Copied and mutated by the experiment: **relative imports only**, no imports from `traceeval.*` outside `sut`.
+- `traceeval/catalog/` — eval cases (YAML: `tests/`, `datasets/`), the catalog of properties (`properties.yaml`)
+  and the loader; `extract.py` drafts the catalog of properties with a model.
 - `traceeval/tracing/` — trace recorder, coverage contexts.
 - `traceeval/scoring/` — deterministic scorers, and the model judge for cases with a rubric (`TRACEEVAL_JUDGE`).
 - `traceeval/mutation/` — controlled changes (patch operators), change-set extraction.
@@ -45,19 +46,21 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
 
 - Every module starts with a docstring stating its role; keep that when adding modules.
 - Component identifiers are shared between change sets and dependencies
-  (`code:<file>::<fn>`, `line:<file>:<n>`, `tool:`, `skill:<name>#procedure|#prose`, `agent:<name>.<field>`,
-  `config:<key>`); do not invent parallel schemes.
+  (`code:<file>::<fn>`, `code:<file>`, `line:<file>:<n>`, `tool:`, `skill:<name>#procedure|#prose|#meta`,
+  `agent:<name>.<field>`, `config:<key>`, `fixture:<name>`; property sources may also cite `spec:<id>`); do not
+  invent parallel schemes.
 - Strategies may use only baseline history, change sets and *other* variants' outcomes (`ctx.train_variants`);
   never the variant under evaluation.
 - Change sets hold code only: comments, docstrings, blank lines and formatting add no component and no diff
   line (`mutation/changeset.py`), so no strategy and no probability may depend on them.
-- Mutation operators assert their anchors; a new mutation must be revealed by ≥ 1 test if labelled a regression
-  and by none if labelled benign (the report's sanity line checks this).
+- Mutation operators assert their anchors; a new mutation labelled a regression must be revealed by ≥ 1 test under
+  at least one model, and one labelled benign by none (the report's section 1 gives the counts).
 - A test's `properties` must be ids from `traceeval/catalog/properties.yaml` (the catalog of properties, a
   feature the AEM team asked for; see docs/AEM_ALIGNMENT.md); add a property there before using it.
 - Keep the catalog passing on the baseline, apart from Gemma's known mistakes (`KNOWN_MODEL_MISTAKES` in
   `tests/test_sut.py`).
-- Derive seeds from names with a stable hash (`zlib.crc32`), never `hash()`: str hashes are salted per process,
+- Derive seeds from names with a stable function of their characters (`experiment/evaluate.py` sums the
+  character codes), never `hash()`: str hashes are salted per process,
   so runs would differ from one process to the next. Hypothesis searches run with `derandomize=True` for the
   same reason. Idempotency keys are derived from the operation (request id, tool, arguments, earlier
   successes of that call; `sut/harness/dispatcher.py`), never random.

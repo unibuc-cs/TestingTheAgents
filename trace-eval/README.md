@@ -60,15 +60,16 @@ what each test costs and which code it runs.
    harmless changes, whether the adaptive one stops at the right moment, and the coverage of the suite and of each
    change.
 
-Main results, with Gemma and with Qwen3.8-27B playing the agents (three repetitions per test; recorded on the app as
-it was before the multi-agent workflows, with 136 tests, and recorded again once they are complete): hand-written
+## Main results
+
+With Gemma and with Qwen3.8-27B playing the agents (three repetitions per test; recorded on the app as it was
+before the multi-agent workflows, with 136 tests, and recorded again once they are complete): hand-written
 dependencies catch 62–71% of regressions. Trace-based selection catches 88–90% within a budget of 20% of the
-full-suite tokens. The adaptive method catches 81–83% while spending 5% of those tokens. Under Gemma it never calls a change that breaks nothing a regression; under Qwen it does in 8% of the replays
-of benign changes, when a test that passed all three times on the original app failed once in three runs
-on the changed copy (Qwen's answers are not perfectly repeatable on a busy server).
-Gemma misses five of the 26 regressions, because it ignores the guards they touch either way; Qwen misses two.
-See the [Gemma](docs/results/gemma4/report.md) and [Qwen](docs/results/qwen4/report.md) reports and
-[docs/EXPERIMENT.md](docs/EXPERIMENT.md).
+full-suite tokens. The adaptive method catches 81–83% while spending 5% of those tokens. Under Gemma it never
+calls a change that breaks nothing a regression; under Qwen it does in 8% of the replays of benign changes
+([EXPERIMENT.md](docs/EXPERIMENT.md)). Under Gemma, no test reveals five of the 26 regressions (the model ignores
+the guards they touch either way); under Qwen, two. See the [Gemma](docs/results/gemma4/report.md) and
+[Qwen](docs/results/qwen4/report.md) reports.
 
 ## Features asked for by Adobe's AEM team
 
@@ -79,10 +80,10 @@ up in [docs/AEM_ALIGNMENT.md](docs/AEM_ALIGNMENT.md) with the plan and status):
 |---|---|
 | **Catalog of properties** with categories, how each is checked, mandatory flags and thresholds ([`properties.yaml`](traceeval/catalog/properties.yaml)); reports give pass rates against thresholds and the share of affected properties each strategy covered | done |
 | **Drafting the catalog with a model** from the requirements only (skills' rules, agents, config guards, specs), within fixed limits, for people to edit (`traceeval properties draft`, then `apply`) | done; the Qwen run comes with the GPU work |
-| **Coverage** from several angles: of the suite per dimension (agents, skills, tools, config, properties, execution paths, risk; declared and observed, with what no test covers), and of each change (changed components exercised, affected properties checked), in the report and in `traceeval check` | done; workflows join with them |
-| **Mandatory properties in the method**: a check that found no regression does not end before every mandatory property the change may affect has a test | done (step 5 of `adaptive_bayes`) |
+| **Coverage** from several angles: of the suite per dimension (agents, skills, tools, config, properties, execution paths, risk; declared and observed, with what no test covers), and of each change (changed components exercised, affected properties checked), in the report and in `traceeval check` | done; workflows become a dimension in step 3 |
+| **Mandatory properties in the method**: a run that found no regression does not end before every mandatory property the change may affect has a test, while the budget allows | done (`adaptive_bayes`) |
 | Test selection, prioritization and stopping under a token budget | done (`adaptive_bayes`, `traceeval check`) |
-| Per-test metadata: agents, skills, tools, config, risk, cost, history (declared and observed) | done |
+| Per-test metadata: agents, skills, tools, config, risk, cost, history (declared and observed) | done; workflows in step 3 |
 | Trace assertions: final state, required and forbidden tools, attempts, audit, step limit, agent order, tool order | done |
 | Workflows: one prompt that runs 2–5 agents: the orchestrator plans, passes each step its instruction and the ids of earlier steps, asks a person before publishing, scheduling or taking pages down, and stops at a failed step | planning, hand-offs and approvals done; W1 (campaign launch, five agents) and W3 (legal takedown) done; W2, W4–W6 planned |
 | New agents modelled on AEM's: brand governance, data insights, site optimization, and asset search in the assets agent | done |
@@ -109,6 +110,5 @@ it, or with [docs/SDD_DEMO.md](docs/SDD_DEMO.md) for the results. The report is 
 - [docs/related_work.md](docs/related_work.md), [docs/tau2_integration.md](docs/tau2_integration.md): literature positioning, and tau2-bench as a second system under test.
 - [CLAUDE.md](CLAUDE.md): conventions for coding agents working in the repo.
 
-Status: prototype v0.1. The agents and the judge run on real models only: Gemma 4 E4B, locally or on the GPU
-server, and Qwen3.8-27B through the `llm` backend ([docs/EXPERIMENT.md](docs/EXPERIMENT.md)). An OpenAI backend is
-planned. The tau2-bench adapter is designed but not implemented.
+Status: prototype v0.1. The agents and the judge run on real models only. Running OpenAI's models through the
+`llm` backend waits for API tokens. The tau2-bench adapter is designed but not implemented.
