@@ -313,7 +313,8 @@ belong to the model (§5.1); under Qwen every regression is revealed, but so is 
 4. Metrics:
    - change coverage, which needs no ground truth (`experiment/coverage.py`): the share of the changed components
      the executed tests exercised, the share of the properties the change may affect that they checked, whether
-     every affected mandatory property got a test, and the share of the affected workflows they ran;
+     every affected mandatory property got a test, and the shares of the affected workflows they ran, of the
+     affected features they reached and of the refusals in the changed code they reached;
    - property coverage: of the properties a change breaks, those its selected tests exercise;
    - detection (≥ 1 revealing test executed and failed), recall of revealing tests, tokens actually spent, cost
      to first detection, false alarms, safety recall, stop reason and stop correctness;

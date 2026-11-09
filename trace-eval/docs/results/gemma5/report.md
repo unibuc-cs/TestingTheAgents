@@ -189,18 +189,44 @@ Coverage of the affected properties (those of a change's revealing tests) by the
 
 ## 6. Coverage
 
-Coverage of the test suite: per dimension, how many components the tests declare and the traces show, and what no test covers (a workflow is declared by the tests that name it and observed when a run delegates to exactly its agents in order; execution paths are the distinct agent and tool sequences; risk lists tests per level):
+Coverage of the test suite: per dimension, how many components the tests declare and the traces show, and what no test covers. A feature (`catalog/features.yaml`) is covered by the tests that declare or call one of its tools. A tool error path is a place in the code where a tool call is refused, reached when a run executes it. A workflow is declared by the tests that name it and observed when a run delegates to exactly its agents in order. Execution paths are the distinct agent and tool sequences; risk lists tests per level.
 
 | dimension | components | declared | observed | not covered |
 |---|---|---|---|---|
 | agent | 11 | 11 | 11 |  |
+| feature | 19 | 18 | 19 |  |
 | skill | 13 | 12 | 13 |  |
 | tool | 32 | 30 | 31 | get_asset |
+| tool error path | 31 |  | 13 | harness/dispatcher.py:60 Dispatcher.call unknown_tool, harness/dispatcher.py:63 Dispatcher.call tool_disabled, harness/dispatcher.py:66 Dispatcher.call tool_not_available, harness/dispatcher.py:77 Dispatcher.call invalid_arguments, harness/runtime.py:188 Runtime._delegate unknown_agent, harness/runtime.py:191 Runtime._delegate invalid_arguments, harness/runtime.py:195 Runtime._delegate max_delegation_depth, services/governance.py:39 export_user_data approval_required ... |
 | configuration | 13 | 9 | 13 |  |
 | property | 15 | 15 | 15 |  |
 | workflow | 6 | 6 | 6 |  |
 | execution path | 77 |  | 77 |  |
 | risk | 4 | 4 | 4 | critical 30, high 75, low 22, medium 49 |
+
+Tests per feature (observed: the recorded tests that call one of its tools):
+
+| feature | tests |
+|---|---|
+| show a page | 72 |
+| create or edit a page | 24 |
+| request and approve a page's review | 25 |
+| publish a page | 19 |
+| schedule a page | 5 |
+| take a page down | 7 |
+| check a page's links | 52 |
+| set a page's SEO metadata | 23 |
+| translate a page | 13 |
+| upload, find and attach assets | 14 |
+| check pages against the brand rules and find the pages that use a term | 12 |
+| run a site health check and fix alt text | 4 |
+| read page analytics | 5 |
+| roll a page back to an earlier version | 6 |
+| answer a privacy request (consent, data export) and show the audit history | 11 |
+| refuse what the user may not do | 106 |
+| hand a request to the specialist that owns it | 149 |
+| plan a request that needs several specialists | 14 |
+| ask a person before publishing, scheduling or taking pages down | 13 |
 
 Change coverage over every change, without the ground truth: the share of the changed components the executed tests exercised, and the share of the properties the change may affect (`coverage.py`) that they checked.
 
@@ -251,6 +277,18 @@ Affected workflows run (the workflows of the tests that exercised a changed comp
 | observed | 0.04 | 0.23 | 0.45 | 0.60 | 0.67 | 0.79 | 1.00 |
 | cost_aware | 0.22 | 0.31 | 0.48 | 0.63 | 0.74 | 0.80 | 1.00 |
 | adaptive_bayes | 0.03 | 0.13 | 0.18 | 0.20 | 0.20 | 0.20 | 0.20 |
+
+Affected features reached (the features with a tool or a part the change touches), over the changes that affect one:
+
+| strategy | 2% | 5% | 10% | 20% | 30% | 50% | 100% |
+|---|---|---|---|---|---|---|---|
+| full | 0.13 | 0.30 | 0.36 | 0.40 | 0.72 | 0.93 | 1.00 |
+| random | 0.36 | 0.60 | 0.80 | 0.94 | 0.98 | 1.00 | 1.00 |
+| declared | 0.58 | 0.63 | 0.66 | 0.67 | 0.69 | 0.69 | 0.69 |
+| ir_tfidf | 0.85 | 0.93 | 0.94 | 0.98 | 1.00 | 1.00 | 1.00 |
+| observed | 0.74 | 0.79 | 0.91 | 1.00 | 1.00 | 1.00 | 1.00 |
+| cost_aware | 0.84 | 0.86 | 0.96 | 0.98 | 1.00 | 1.00 | 1.00 |
+| adaptive_bayes | 0.80 | 0.87 | 0.89 | 0.89 | 0.89 | 0.89 | 0.89 |
 
 ## How to read this
 

@@ -39,7 +39,7 @@ repository, in its parent folder: `Agent_Test_Prioritization_Requirements.md`, `
 | plans, data passed between agents, approvals, re-planning | **done**: the orchestrator plans (`make_plan`), gives each step its own instruction and the ids of the earlier steps, and asks a person before publishing, scheduling or taking pages down (`request_approval`) | re-planning after a failed step: our routing skill says stop; Qwen re-plans on its own (WF1-02, WF5-02; [EXPERIMENT.md](EXPERIMENT.md) §6). Planned in §4.2 |
 | workflows as a coverage dimension | **done**: `catalog/workflows.yaml` lists the six; the report shows the workflows no test covers, declared (named by a test) and observed (a recorded run delegates to exactly its agents, in order), and the change coverage gives the share of the affected workflows the executed tests ran | — |
 | a catalog of properties with categories and thresholds | **done**: `traceeval/catalog/properties.yaml`, pass rates against thresholds and property coverage in the report; a model can draft it from the requirements, for people to edit (`traceeval properties draft`; Qwen's draft in §3.4) | — |
-| coverage over agents, skills, tools, config, properties, workflows, paths, risk (declared, observed, required) | **done**: suite coverage per dimension and change coverage per strategy in the report and in `traceeval check`; the method tests every mandatory property a change may affect (§3.5) | features as a dimension; tool error paths and non-default settings as their own components. Planned in §4.1 |
+| coverage over agents, features, skills, tools, tool error paths, config, properties, workflows, paths, risk (declared, observed, required) | **done**: suite coverage per dimension and change coverage per strategy in the report and in `traceeval check`; the method tests every mandatory property a change may affect (§3.5) | settings at a non-default value as components of their own (§4.1) |
 | per-test metadata (agents, skills, tools, workflow, risk, cost, history) | yes (declared + observed + history; a workflow test names its workflow) | — |
 | trace assertions | yes: final state, required and forbidden tools, attempts, audit, step limit, termination, agent order and tool order (`agents_in_order`, `tools_in_order`) | — |
 | budgets and early stopping | yes (`adaptive_bayes`, `traceeval check`) | — |
@@ -174,13 +174,20 @@ of its components at least one test covers, declared and observed, and the list 
 | dimension | covered when | gap it shows |
 |---|---|---|
 | agent | a test runs it | an agent no test reaches |
+| feature | a test declares or calls one of its tools (`catalog/features.yaml` lists 19, each with its tools and the skills, agents, settings and code it is made of) | a capability the user sees that no test exercises; the report also counts the tests per feature, which shows the thinly tested ones |
 | skill | a test loads it | instructions no test exercises |
 | tool | a test calls it (every tool the app registers counts, called or not) | an untested tool |
+| tool error path | a run executes it. An error path is a place in the code where a tool call is refused: a `raise` of one of the errors of `sut/services/errors.py`, or an error result the dispatcher writes out. They are found by reading the code | a refusal no test provokes |
 | configuration | a test reads the key | a setting whose effect nothing checks |
 | property | a test checks it | an untested requirement; an untested mandatory one is a release risk |
 | workflow | a test names it (declared), or a recorded run delegates to exactly its agents in order (observed) | a workflow no test runs |
 | execution path | the distinct agent and tool sequences the traces show | counted, not a share |
 | risk | the tests per risk level | an unprotected critical feature |
+
+On Gemma's recording every feature has a test; the thinnest are the site health check (four tests), scheduling and
+page analytics (five each). The tests reach 13 of the 31 places where a tool refuses. No test asks for the data of
+a person the platform does not know, has a service refuse a user for a missing role, schedules a page while
+scheduling is switched off, or sends the dispatcher an unknown tool or malformed arguments.
 
 **2. Change coverage: for one change and one strategy, how much of what the change touches the executed tests
 cover.** Computed without the ground truth, at the moment the strategy stops ("coverage achieved before stopping",
@@ -192,7 +199,16 @@ requirements section 8.1), so `traceeval check` prints it after its verdict:
   app;
 - whether every affected mandatory property got a test;
 - the share of the affected workflows (those of the tests that exercised a changed component) the executed tests
-  ran.
+  ran;
+- the share of the affected features they reached. A change affects the features with a tool or a part it
+  touches; 35 of the 43 changes affect one. A change to code that every feature runs through, such as the agent
+  loop or the retries, affects none in particular;
+- the share of the refusals in the changed code they reached, for a change to a function that can refuse a tool
+  call. `traceeval check` names the ones no executed test reached.
+
+On Gemma's recording, at a budget of 20% of the suite's tokens, the tests the adaptive method runs reach 89% of the
+affected features: it stops once it is confident. The trace-based strategy (`observed`) reaches all of them, for
+five times the tokens.
 
 The replay also measures it against the ground truth: the properties of the revealing tests (`property_coverage`,
 report section 5).
@@ -235,43 +251,18 @@ down): covering a change is not revealing it, the case the method is built for.
 The demo on Thursday 12 November 2026 shows the testbed, the features of section 3 and the method on Gemma's
 recording, with one change checked live ([DEMO.md](DEMO.md)). Everything it needs is in place and rehearsed.
 
-Two items of section 2 are open: finer coverage (features, tool error paths, settings at a non-default value) and
-re-planning after a failed step. They differ in what they cost. Coverage is computed from what the recordings
-already hold, so most of it needs no new recording. Re-planning changes the orchestrator's instructions, which
-every recorded answer depends on, so both models have to be recorded again.
+Two items of section 2 are open: settings at a non-default value as coverage components, and re-planning after a
+failed step. Both change what the recordings must hold. The first adds cases, and the second changes the
+orchestrator's instructions, which every recorded answer depends on. They therefore go together, into one new
+recording of both models.
 
-### 4.1 Finer coverage
+### 4.1 Settings at a non-default value
 
-Adobe's requirements (section 6) list nine dimensions of coverage, and the report has seven of them. The AEM team
-suggested coverage per feature, where a change to a feature may touch skills, harness code and configuration.
-Three additions close the gap.
-
-**Features.** A feature is a capability the user sees: create or edit a page, publish after review, schedule,
-take a page down, set the SEO metadata, translate, attach an image, find assets, check a page against the brand
-rules, run a site health check, read page analytics, roll back a page, export a person's data. A new
-`catalog/features.yaml` lists them, each with the components it is made of (its tools, the skills that drive them,
-the settings that change them), in the same form as `workflows.yaml`. A test covers a feature when its metadata
-names one of those components (declared) or a recorded run calls one of its tools (observed). A change affects the
-features whose components it touches, which is known before any test runs. The report gets a feature row in the
-suite coverage, and `traceeval check` prints the share of the affected features the executed tests reached and
-names the others. A model can draft the list from the skills and tools for a person to edit, as it drafts the
-catalog of properties (`catalog/extract.py`); a hand-written first version is enough to start.
-
-**Tool error paths.** A tool can refuse in several ways: the page does not exist, the user lacks the permission,
-the approval token is missing, the input breaks a rule. Each refusal is a line in the code that raises one of the
-errors of `sut/services/errors.py`, and each becomes a component of its own, named by its function and error code.
-The list comes from scanning the code, the observed coverage from the line coverage the baseline already records,
-and the declared coverage from the tests' `expect.tool_errors`. On Gemma's recording the tests reach 12 of the 24
-places where a tool refuses. No test, for example, asks for the data of a person the platform does not know, or
-schedules a page while scheduling is switched off. `traceeval check` then names the refusals in the changed code
-that no executed test reached.
-
-**Settings at a non-default value.** A setting counts as covered when a test reads it, but every test runs with
-the defaults, so what happens with `publishing.require_review: false` or `publishing.allow_scheduling: false` is
-never checked. A case gets an optional `config:` block, applied like `fixture_patch`, and the other value of each
-on/off or list setting becomes a component of its own (`config:publishing.require_review=false`). A few new cases
-cover them. The existing cases do not change, so their recorded answers stay valid; only the new cases are
-recorded.
+A setting counts as covered when a test reads it, but every test runs with the defaults, so what happens with
+`publishing.require_review: false` or `publishing.allow_scheduling: false` is never checked. A case gets an
+optional `config:` block, applied like `fixture_patch`, and the other value of each on/off or list setting becomes
+a component of its own (`config:publishing.require_review=false`). A few new cases cover them. The existing cases
+do not change, so their recorded answers stay valid; only the new cases are recorded.
 
 ### 4.2 Re-planning after a failed step
 
@@ -305,8 +296,6 @@ the plan starts from them.
 
 | step | changes the application | new recording | when |
 |---|---|---|---|
-| features as a coverage dimension | no | none: Gemma's recording as it is | before the demo if wanted, otherwise first after it |
-| tool error paths as components | no | none | with the features |
 | settings at a non-default value | no: new cases only | the new cases | with re-planning |
 | re-planning after a failed step | yes: the routing skill, one setting, `make_plan` | everything, Gemma first and Qwen last | after the demo |
 | tau2-bench as a second application | no | its own | after re-planning |

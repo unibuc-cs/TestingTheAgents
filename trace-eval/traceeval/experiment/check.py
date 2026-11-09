@@ -23,7 +23,15 @@ from traceeval.mutation import compute_changeset, get_mutation, materialize_vari
 from traceeval.selection import SelectionContext, get_strategy
 from traceeval.sut import SUT_ROOT
 
-from .coverage import affected_properties, affected_workflows, change_coverage
+from .coverage import (
+    affected_error_paths,
+    affected_features,
+    affected_properties,
+    affected_workflows,
+    change_coverage,
+    features,
+    tools_called,
+)
 from .executor import run_case
 from .history import History
 from .sutloader import load_sut
@@ -95,8 +103,9 @@ def check(change: str, history_dir: Path, budget: float, backend: str):
 
 
 def _print_coverage(cs, executed, history, catalog):
-    """The change coverage of the executed tests, the affected properties no executed test checks, and the
-    affected workflows no executed test ran."""
+    """The change coverage of the executed tests, and what of the change they left out: the affected properties no
+    executed test checks, the affected workflows and features none of them ran, and the refusals in the changed code
+    none of them reached."""
     props = load_properties()
     affected = affected_properties(cs, history, catalog, props)
     workflows = affected_workflows(cs, history, catalog)
@@ -108,6 +117,11 @@ def _print_coverage(cs, executed, history, catalog):
         parts.append(f"{cov['affected_property_coverage']:.0%} of the {len(affected)} affected properties checked")
     if cov["affected_workflow_coverage"] is not None:
         parts.append(f"{cov['affected_workflow_coverage']:.0%} of the {len(workflows)} affected workflows run")
+    feats, paths = affected_features(cs), affected_error_paths(cs)
+    if cov["affected_feature_coverage"] is not None:
+        parts.append(f"{cov['affected_feature_coverage']:.0%} of the {len(feats)} affected features reached")
+    if cov["error_path_coverage"] is not None:
+        parts.append(f"{cov['error_path_coverage']:.0%} of the {len(paths)} refusals in the changed code reached")
     if parts:
         print("coverage: " + ", ".join(parts))
     checked = {p for t in executed for p in catalog[t].properties}
@@ -117,3 +131,11 @@ def _print_coverage(cs, executed, history, catalog):
     ran = {catalog[t].workflow for t in executed if catalog[t].workflow}
     if workflows - ran:
         print("workflows not run: " + ", ".join(sorted(workflows - ran)))
+    called = tools_called(history, executed)
+    unreached = sorted(features()[f].name for f in feats if not features()[f].tool_ids() & called)
+    if unreached:
+        print("features not reached: " + "; ".join(unreached))
+    deps = set().union(*(history.deps(t) for t in executed)) if executed else set()
+    missed = [str(p) for p in paths if not p.reached(deps)]
+    if missed:
+        print("refusals in the changed code not reached: " + "; ".join(missed))

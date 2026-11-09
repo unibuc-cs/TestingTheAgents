@@ -1,19 +1,29 @@
 """Tests for mutations, change-set extraction, metrics and strategies (small end-to-end run)."""
 
+import ast
 import random
 
 import pytest
+import yaml
 
-from traceeval.catalog import load_catalog, load_properties
+from traceeval.catalog import load_catalog, load_features, load_properties
 from traceeval.experiment.check import check
-from traceeval.experiment.coverage import _crosses, affected_properties, suite_coverage
+from traceeval.experiment.coverage import (
+    _crosses,
+    _registered_tools,
+    affected_error_paths,
+    affected_features,
+    affected_properties,
+    error_paths,
+    suite_coverage,
+)
 from traceeval.experiment.evaluate import evaluate, make_oracle
 from traceeval.experiment.history import History
 from traceeval.experiment.metrics import apfd, apfdc
 from traceeval.experiment.runner import record_baseline, record_mutants
 from traceeval.experiment.sutloader import copy_sut
 from traceeval.mutation import MUTATIONS, get_mutation, materialize_variant
-from traceeval.mutation.changeset import _python_components, _yaml_code_lines
+from traceeval.mutation.changeset import ChangedComponent, ChangeSet, _flatten, _python_components, _yaml_code_lines
 from traceeval.selection import SelectionContext, get_strategy
 from traceeval.sut import SUT_ROOT
 
@@ -88,6 +98,40 @@ def test_a_run_covers_a_workflow_when_it_delegates_to_exactly_its_chain():
     assert not _crosses(run("authoring", "translation"), w4)
 
 
+def test_every_part_of_a_feature_exists_in_the_app():
+    tools = _registered_tools(SUT_ROOT) | {"route_to_agent"}
+    skills = {d.name for d in (SUT_ROOT / "skills").iterdir() if d.is_dir()}
+    agents = {f.stem for f in (SUT_ROOT / "agents").glob("*.yaml")}
+    config = set(_flatten(yaml.safe_load((SUT_ROOT / "config" / "runtime.yaml").read_text(encoding="utf-8"))))
+    for f in load_features().values():
+        assert f.tools and set(f.tools) <= tools, f.id
+        for part in f.parts:
+            kind, name = part.split(":", 1)
+            if kind == "code":
+                file, _, function = name.partition("::")
+                tree = ast.parse((SUT_ROOT / file).read_text(encoding="utf-8"))
+                defined = {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.ClassDef))}
+                assert not function or set(function.split(".")) <= defined, part
+            else:
+                assert name in {"skill": skills, "agent": agents, "config": config}[kind], part
+
+
+def test_a_change_affects_the_features_and_the_refusals_it_touches():
+    def change(*ids):
+        return ChangeSet("v", components=[ChangedComponent(i, i.split(":", 1)[0], "") for i in ids])
+
+    assert affected_features(change("config:publishing.allow_scheduling")) == {"schedule"}
+    assert {"routing", "planning", "approval"} <= affected_features(change("skill:routing#prose"))
+    assert "brand" in affected_features(change("code:services/brand.py::check_page"))  # a function of a part's file
+    assert affected_features(change("code:harness/retry.py::with_retry")) == set()  # shared by every feature
+    paths = {(p.file, p.function, p.code) for p in error_paths()}
+    assert ("tools/publish_tools.py", "schedule_publish", "validation_error") in paths  # a raise
+    assert ("harness/dispatcher.py", "Dispatcher.call", "approval_required") in paths  # an error result written out
+    assert not {code for _, _, code in paths} & {"tool_crash", "control_tool"}  # neither is a refusal
+    hit = affected_error_paths(change("code:services/governance.py::export_user_data"))
+    assert {p.code for p in hit} == {"approval_required", "not_found"}
+
+
 def test_apfd_metrics():
     order = ["a", "b", "c", "d"]
     assert apfd(order, {"a"}) == pytest.approx(1 - 1 / 4 + 1 / 8)
@@ -125,7 +169,12 @@ def test_small_end_to_end_experiment(tmp_path, capsys):
     # coverage: the suite by dimension, and each run's change coverage (no ground truth needed)
     props = load_properties()
     rows = {r["dimension"]: r for r in suite_coverage(h, catalog, props, SUT_ROOT)}
-    assert {"agent", "skill", "tool", "configuration", "property", "workflow", "execution path", "risk"} <= set(rows)
+    dims = {"agent", "feature", "skill", "tool", "tool error path", "configuration", "property", "workflow"}
+    assert dims | {"execution path", "risk"} <= set(rows)
+    assert (
+        rows["feature"]["observed"] > 0
+        and 0 < rows["tool error path"]["observed"] < rows["tool error path"]["components"]
+    )
     assert rows["property"]["not covered"] == [] and rows["skill"]["observed"] > 0
     # every workflow a test names counts as declared, and a recorded run delegates to exactly W3's chain (brand, then
     # publishing); only the workflows no test names may be listed as not covered
@@ -133,6 +182,7 @@ def test_small_end_to_end_experiment(tmp_path, capsys):
     assert rows["workflow"]["declared"] == len(named) and rows["workflow"]["observed"] >= 1
     assert not named & set(rows["workflow"]["not covered"])
     columns = {"component_coverage", "affected_property_coverage", "mandatory_covered", "affected_workflow_coverage"}
+    columns |= {"affected_feature_coverage", "error_path_coverage"}
     assert columns <= set(df.columns)
     benign = h.changesets["benign_skill_prose_reflow"]
     assert any(props[p].mandatory for p in affected_properties(benign, h, catalog, props))

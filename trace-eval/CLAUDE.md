@@ -29,8 +29,8 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
 - `traceeval/sut/` — the system under test (agents, skills, tools, services, harness, config; docs/CONTENTOPS.md).
   Copied and mutated by the experiment: **relative imports only**, no imports from `traceeval.*` outside `sut`.
 - `traceeval/catalog/` — eval cases (YAML: `tests/`, `datasets/`), the catalog of properties (`properties.yaml`),
-  the multi-agent workflows (`workflows.yaml`) and the loader; `extract.py` drafts the catalog of properties with a
-  model.
+  the multi-agent workflows (`workflows.yaml`), the features (`features.yaml`) and the loader; `extract.py` drafts
+  the catalog of properties with a model.
 - `traceeval/tracing/` — trace recorder, coverage contexts, OpenTelemetry export (`otel.py`).
 - `traceeval/scoring/` — deterministic scorers, and the model judge for cases with a rubric (`TRACEEVAL_JUDGE`).
 - `traceeval/mutation/` — controlled changes (patch operators), change-set extraction.
@@ -57,9 +57,11 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
   line (`mutation/changeset.py`), so no strategy and no probability may depend on them.
 - Mutation operators assert their anchors; a new mutation labelled a regression must be revealed by ≥ 1 test under
   at least one model, and one labelled benign by none (the report's section 1 gives the counts).
-- A test's `properties` must be ids from `traceeval/catalog/properties.yaml` (the catalog of properties, a
-  feature the AEM team asked for; see docs/AEM_ALIGNMENT.md); add a property there before using it. A test that runs
-  a multi-agent workflow end to end names it (`workflow: W1`), an id from `traceeval/catalog/workflows.yaml`.
+- A test's `properties` must be ids from `traceeval/catalog/properties.yaml` (the catalog of properties, a feature
+  the AEM team asked for; see docs/AEM_ALIGNMENT.md); add a property there before using it. A test that runs a
+  multi-agent workflow end to end names it (`workflow: W1`), an id from `traceeval/catalog/workflows.yaml`. A
+  feature in `traceeval/catalog/features.yaml` lists its parts as component ids; a new tool, skill or setting users
+  would see belongs to a feature.
 - Keep the catalog passing on the baseline, apart from Gemma's known mistakes (`KNOWN_MODEL_MISTAKES` in
   `tests/test_sut.py`).
 - Derive seeds from names with a stable function of their characters (`experiment/evaluate.py` sums the

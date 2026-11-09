@@ -3,27 +3,37 @@
 Two levels:
 
 - **Suite coverage** (``suite_coverage``): how well the tests cover the application before any change. For each
-  dimension of Adobe's requirements (agent, skill, tool, configuration, property, workflow, execution path, risk),
-  the share of its components that at least one test covers, declared (the tests' metadata) and observed (the
-  recorded traces), and what no test covers.
+  dimension of Adobe's requirements (agent, feature, skill, tool, tool error path, configuration, property,
+  workflow, execution path, risk), the share of its components that at least one test covers, declared (the tests'
+  metadata) and observed (the recorded traces), and what no test covers.
 - **Change coverage** (``change_coverage``): for one change and the tests a strategy ran, how much of what the change
   touches they cover. It needs no ground truth, so it can be reported live: the changed components the tests
-  exercised, the affected properties they checked, whether every affected mandatory property got a test, and the
-  affected workflows they ran.
+  exercised, the affected properties they checked, whether every affected mandatory property got a test, the
+  affected workflows they ran, the affected features they reached, and the refusals in the changed code they
+  reached.
 
 The properties a change may affect (``affected_properties``) are known before running anything: those whose
 sources (in the catalog of properties) the change touches, and those of the tests that exercised a changed
 component on the original app. The workflows it may affect (``affected_workflows``) are those of the same tests.
+The features it affects (``affected_features``) are those with a tool or a part it touches (``features.yaml``).
+
+A tool error path (``ErrorPath``) is one place where the application refuses a tool call, found by reading the code
+(``error_paths``); a test reaches it when its run executes that statement, which the baseline's line coverage
+records.
 """
 
+import ast
 import re
+from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 import yaml
 
-from traceeval.catalog import load_workflows
+from traceeval.catalog import load_features, load_workflows
 from traceeval.mutation.changeset import _flatten
 from traceeval.selection.base import matches
+from traceeval.sut import SUT_ROOT
 
 
 def changed_components(change) -> list:
@@ -51,12 +61,43 @@ def affected_workflows(change, history, catalog) -> set[str]:
     return {catalog[t].workflow for t in linked_tests(change, history) if t in catalog and catalog[t].workflow}
 
 
+@lru_cache(maxsize=1)
+def features():
+    """The features of ``catalog/features.yaml``, read once."""
+    return load_features()
+
+
+def touches(change, components: set[str]) -> bool:
+    """Does the change touch one of ``components``? A sub-component counts for its component (``skill:x#prose`` for
+    ``skill:x``, ``agent:x.tools`` for ``agent:x``), and a function for its file (``code:<file>::f`` for
+    ``code:<file>``)."""
+    return any(
+        c.id in components or c.base in components or c.id.split("::", 1)[0] in components for c in change.components
+    )
+
+
+def affected_features(change) -> set[str]:
+    """The features a change affects: those with a tool or a part it touches. Known from the change alone."""
+    return {f.id for f in features().values() if touches(change, f.components())}
+
+
+def tools_called(history, tests) -> set[str]:
+    """The tools (``tool:<name>``) the tests' baseline runs called. A delegation is recorded as a route, not as a
+    tool call, so a run with a route counts as calling ``route_to_agent``."""
+    deps = set().union(*(history.deps(t) for t in tests)) if tests else set()
+    out = {d for d in deps if d.startswith("tool:")}
+    if any(r.get("routes") for t in tests for r in history.baseline[t].runs):
+        out.add("tool:route_to_agent")
+    return out
+
+
 def change_coverage(
     change, executed, history, catalog, props, affected: set | None = None, affected_wf: set | None = None
 ) -> dict:
-    """What the executed tests cover of the change: shares of the changed components, of the affected properties
-    and of the affected workflows, and whether every affected mandatory property has at least one executed test.
-    ``affected`` and ``affected_wf`` may be passed when they are already known (they depend on the change only)."""
+    """What the executed tests cover of the change: shares of the changed components, of the affected properties,
+    of the affected workflows, of the affected features and of the refusals in the changed code, and whether every
+    affected mandatory property has at least one executed test. ``affected`` and ``affected_wf`` may be passed when
+    they are already known (they depend on the change only)."""
     comps = changed_components(change)
     deps = set().union(*(history.deps(t) for t in executed)) if executed else set()
     checked = {p for t in executed if t in catalog for p in catalog[t].properties}
@@ -64,11 +105,16 @@ def change_coverage(
     mandatory = {p for p in affected if p in props and props[p].mandatory}
     workflows = affected_wf if affected_wf is not None else affected_workflows(change, history, catalog)
     ran = {catalog[t].workflow for t in executed if t in catalog and catalog[t].workflow}
+    feats, called = affected_features(change), tools_called(history, executed)
+    reached = {f for f in feats if features()[f].tool_ids() & called}
+    paths = affected_error_paths(change)
     return {
         "component_coverage": (sum(matches(c, deps) for c in comps) / len(comps)) if comps else None,
         "affected_property_coverage": (len(affected & checked) / len(affected)) if affected else None,
         "mandatory_covered": mandatory <= checked,
         "affected_workflow_coverage": (len(workflows & ran) / len(workflows)) if workflows else None,
+        "affected_feature_coverage": (len(reached) / len(feats)) if feats else None,
+        "error_path_coverage": (sum(p.reached(deps) for p in paths) / len(paths)) if paths else None,
     }
 
 
@@ -80,6 +126,84 @@ def _crosses(run: dict, agents: list[str]) -> bool:
     one's tests."""
     first_seen = list(dict.fromkeys(target for _, target in run.get("routes", [])))
     return first_seen == list(agents)
+
+
+@dataclass(frozen=True)
+class ErrorPath:
+    """One place where the application refuses a tool call: a statement of ``file`` (lines ``first`` to ``last``)
+    in ``function`` that raises one of the errors of ``services/errors.py`` or writes out an error result. ``code``
+    is the error the agent receives (``not_found``, ``permission_denied``, ``approval_required``, ...)."""
+
+    file: str
+    first: int
+    last: int
+    function: str
+    code: str
+
+    def reached(self, deps: set[str]) -> bool:
+        """Did a run with these dependencies execute the statement (any of its lines, as the line coverage has them)?"""
+        return any(f"line:{self.file}:{n}" in deps for n in range(self.first, self.last + 1))
+
+    def __str__(self) -> str:
+        return f"{self.file}:{self.first} {self.function} {self.code}"
+
+
+# A crash is not a refusal, and control_tool is the stub route_to_agent returns if a model ever called it as a plain
+# tool (the runtime handles it); neither is a way a tool turns a request down.
+_NOT_REFUSALS = {"tool_crash", "control_tool"}
+
+
+@lru_cache(maxsize=4)
+def error_paths(sut_dir: Path = SUT_ROOT) -> tuple[ErrorPath, ...]:
+    """Every place in the application's code where a tool call is refused, found by reading the code: a ``raise`` of
+    one of the errors of ``services/errors.py`` (its ``code``), or an error result written out as a literal
+    (``{"error": "<code>", ...}``, the dispatcher's gates)."""
+    codes = {}  # error class -> the code the agent receives
+    for node in ast.parse((sut_dir / "services" / "errors.py").read_text(encoding="utf-8")).body:
+        if isinstance(node, ast.ClassDef):
+            for stmt in node.body:
+                if isinstance(stmt, ast.Assign) and getattr(stmt.targets[0], "id", "") == "code":
+                    codes[node.name] = stmt.value.value
+    out = []
+    for path in sorted(sut_dir.rglob("*.py")):
+        rel = path.relative_to(sut_dir).as_posix()
+        for function, stmt in _statements(ast.parse(path.read_text(encoding="utf-8"))):
+            code = _refusal(stmt, codes)
+            if code and code not in _NOT_REFUSALS:
+                out.append(ErrorPath(rel, stmt.lineno, stmt.end_lineno, function, code))
+    return tuple(out)
+
+
+def _statements(node, prefix=""):
+    """(qualified function name, statement) for every simple statement inside a function, named the way the change
+    sets name functions (``Class.method``, ``outer.inner``)."""
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            yield from _statements(child, f"{prefix}{child.name}.")
+        elif isinstance(child, (ast.Raise, ast.Assign, ast.Return, ast.Expr)):
+            if prefix:
+                yield prefix[:-1], child
+        elif isinstance(child, ast.stmt):  # if, for, with, try: the statements in their bodies
+            yield from _statements(child, prefix)
+
+
+def _refusal(stmt, codes: dict[str, str]) -> str | None:
+    """The error code a statement refuses with, or None."""
+    if isinstance(stmt, ast.Raise) and isinstance(stmt.exc, ast.Call) and isinstance(stmt.exc.func, ast.Name):
+        return codes.get(stmt.exc.func.id)
+    for node in ast.walk(stmt):
+        if isinstance(node, ast.Dict):
+            for key, value in zip(node.keys, node.values, strict=True):
+                if getattr(key, "value", None) == "error" and isinstance(getattr(value, "value", None), str):
+                    return value.value
+    return None
+
+
+def affected_error_paths(change, sut_dir: Path = SUT_ROOT) -> list[ErrorPath]:
+    """The refusals in the code a change touches: in a changed function, or anywhere in a file changed outside its
+    functions."""
+    ids = {c.id for c in change.components}
+    return [p for p in error_paths(sut_dir) if f"code:{p.file}::{p.function}" in ids or f"code:{p.file}" in ids]
 
 
 def suite_coverage(history, catalog, props, sut_dir: Path) -> list[dict]:
@@ -112,6 +236,33 @@ def suite_coverage(history, catalog, props, sut_dir: Path) -> list[dict]:
                 "not covered": sorted(set(universe) - dec - obs),
             }
         )
+    # A feature is covered when a test declares or calls one of its tools (features.yaml).
+    feats = features()
+    dec = {f.id for f in feats.values() if f.tool_ids() & declared}
+    obs = {f.id for f in feats.values() if f.tool_ids() & observed}
+    rows.insert(
+        1,
+        {
+            "dimension": "feature",
+            "components": len(feats),
+            "declared": len(dec),
+            "observed": len(obs),
+            "not covered": sorted(feats[f].name for f in set(feats) - dec - obs),
+        },
+    )
+    # A tool error path is observed when a baseline run executed it. A test's expect.tool_errors names a tool and an
+    # error code, not the statement that refuses, so there is no declared form.
+    paths = error_paths(sut_dir)
+    rows.insert(
+        4,
+        {
+            "dimension": "tool error path",
+            "components": len(paths),
+            "declared": None,
+            "observed": sum(p.reached(observed) for p in paths),
+            "not covered": [str(p) for p in paths if not p.reached(observed)],
+        },
+    )
     # A property is covered when a test lists it. There is no observed form: a trace cannot show which
     # requirement a test checked, so the declared and observed counts are the same number on purpose.
     tested = {p for c in catalog.values() for p in c.properties}

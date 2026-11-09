@@ -84,16 +84,20 @@ Everything else is plumbing (loaders, tracing, report).
 - Section 5 covers the catalog of properties: each property's pass rate on the original app against its
   threshold and, per strategy, the share of the properties a change breaks that the strategy's tests exercised.
 - Section 6 measures coverage ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5).
-  - First the suite. For each dimension (agent, skill, tool, configuration, property, workflow, execution path,
-    risk), it shows how many components the tests declare and the traces show, and what no test covers. A
-    workflow is declared by the tests that name it, and observed when a run delegates to exactly its agents, in
-    order.
-  - Then each change, without the ground truth (`experiment/coverage.py`): the share of the changed components
-    the executed tests exercised, the share of the properties the change may affect that they checked, how often
-    a run that found no regression tested every affected mandatory property, and the share of the affected
-    workflows they ran. The properties a change may affect are those whose `sources` it touches and those of the
-    tests that ran a changed component on the original app. The workflows it may affect are those of the same
-    tests. `traceeval check` prints the same figures.
+  - First the suite. For each dimension (agent, feature, skill, tool, tool error path, configuration, property,
+    workflow, execution path, risk), it shows how many components the tests declare and the traces show, and
+    what no test covers. A feature (`catalog/features.yaml`) is covered by the tests that declare or call one of
+    its tools, and a table counts the tests per feature. A tool error path is a place in the code where a tool
+    call is refused, reached when a run executes it. A workflow is declared by the tests that name it, and
+    observed when a run delegates to exactly its agents, in order.
+  - Then each change, without the ground truth (`experiment/coverage.py`): the share of the changed components the
+    executed tests exercised, the share of the properties the change may affect that they checked, how often a run
+    that found no regression tested every affected mandatory property, the share of the affected workflows they
+    ran, and the share of the affected features they reached. The properties a change may affect are those whose
+    `sources` it touches and those of the tests that ran a changed component on the original app. The workflows it
+    may affect are those of the same tests. The features it affects are those with a tool or a part it touches.
+    `traceeval check` prints the same figures, and names the refusals in the changed code that no executed test
+    reached.
 - `replay.csv` has one row per (change, strategy, budget, seed), for slicing the results yourself.
 
 ## 5. How the adaptive method weighs a test
@@ -246,6 +250,10 @@ some candidate changes were left out of the set.
   `catalog/workflows.yaml`, which lists each workflow with the chain of specialists its plan delegates to, so add
   the entry there first. The coverage report then shows the workflow as covered once a test names it and a
   recorded run delegates to exactly its agents, in order.
+- **Feature**: a capability users see goes into `catalog/features.yaml`, with the tools that carry it out and the
+  other components it is made of (`skill:`, `agent:`, `config:`, `code:<file>` or `code:<file>::<function>`).
+  A test then covers it by calling one of its tools, and a change affects it by touching a tool or a part.
+  `pytest` checks that every part exists in the app.
 - **Tool errors**: a tool error the test intends (a refusal, a missing page, an injected outage) must be listed,
   for example `tool_errors: {unpublish_page: approval_required}`. Any other error fails the test as
   `tool_error:<tool>`, unless a later call of the same tool succeeded. A crash in tool or service code (any

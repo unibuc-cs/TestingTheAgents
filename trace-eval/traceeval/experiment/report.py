@@ -198,7 +198,7 @@ def _coverage_section(workdir, history, df) -> list[str]:
     needs no ground truth)."""
     from traceeval.sut import SUT_ROOT
 
-    from .coverage import suite_coverage
+    from .coverage import features, suite_coverage, tools_called
 
     sut_dir = workdir / "variants" / "baseline" / "sut"
     cases = {c.id: c for c in load_catalog()}
@@ -214,11 +214,21 @@ def _coverage_section(workdir, history, df) -> list[str]:
         "## 6. Coverage",
         "",
         "Coverage of the test suite: per dimension, how many components the tests declare and the traces show, and "
-        "what no test covers (a workflow is declared by the tests that name it and observed when a run delegates to "
-        "exactly its agents in order; execution paths are the distinct agent and tool sequences; risk lists tests per "
-        "level):",
+        "what no test covers. A feature (`catalog/features.yaml`) is covered by the tests that declare or call one of "
+        "its tools. A tool error path is a place in the code where a tool call is refused, reached when a run executes "
+        "it. A workflow is declared by the tests that name it and observed when a run delegates to exactly its agents "
+        "in order. Execution paths are the distinct agent and tool sequences; risk lists tests per level.",
         "",
         *table,
+        "",
+        "Tests per feature (observed: the recorded tests that call one of its tools):",
+        "",
+        "| feature | tests |",
+        "|---|---|",
+        *(
+            f"| {f.name} | {sum(1 for t in history.baseline if f.tool_ids() & tools_called(history, [t]))} |"
+            for f in features().values()
+        ),
         "",
     ]
     if "component_coverage" in df:
@@ -250,6 +260,12 @@ def _coverage_section(workdir, history, df) -> list[str]:
                 _by_budget(df, "affected_workflow_coverage"),
                 "",
             ]
+        out += _optional_table(
+            df,
+            "affected_feature_coverage",
+            "Affected features reached (the features with a tool or a part the change touches), over the changes that "
+            "affect one:",
+        )
     return out
 
 

@@ -4,7 +4,8 @@ Every item becomes an ``EvalCase``. Dataset items inherit the dataset's agent, c
 dependencies, risk and properties, and carry ``dataset`` = the dataset id so that selectors can
 reason about "subsets of eval datasets". The properties a case checks must be in the catalog of properties
 (``properties.yaml``), loaded as ``Property``; the workflow a case runs end to end (``workflow: W1``) must be in
-``workflows.yaml``, loaded as ``Workflow``."""
+``workflows.yaml``, loaded as ``Workflow``. The features of the application, the unit of coverage the AEM team
+suggested, are in ``features.yaml``, loaded as ``Feature``."""
 
 import json
 from dataclasses import dataclass, field
@@ -98,6 +99,26 @@ class Workflow:
     agents: list[str]
 
 
+@dataclass
+class Feature:
+    """One feature of the application (an entry of ``features.yaml``): a capability the user sees. ``tools`` carry
+    it out, so a test covers it when it declares or calls one of them; ``parts`` are the other components it is
+    made of (skill:, agent:, config:, code: ids), so a change that touches a tool or a part affects it."""
+
+    id: str
+    name: str
+    tools: list[str]
+    parts: list[str] = field(default_factory=list)
+
+    def tool_ids(self) -> set[str]:
+        """Its tools as component ids (``tool:<name>``): a test that declares or calls one covers the feature."""
+        return {f"tool:{t}" for t in self.tools}
+
+    def components(self) -> set[str]:
+        """Every component id the feature is made of: its tools and its parts."""
+        return self.tool_ids() | set(self.parts)
+
+
 def _load_yaml(path: Path):
     with open(path, encoding="utf-8") as fh:  # the same text on every platform, so the cache keys agree
         return yaml.safe_load(fh)
@@ -111,6 +132,11 @@ def load_properties(root: Path | str = CATALOG_ROOT) -> dict[str, Property]:
 def load_workflows(root: Path | str = CATALOG_ROOT) -> dict[str, Workflow]:
     """The multi-agent workflows, by id."""
     return {w["id"]: Workflow(**w) for w in _load_yaml(Path(root) / "workflows.yaml")}
+
+
+def load_features(root: Path | str = CATALOG_ROOT) -> dict[str, Feature]:
+    """The features of the application, by id."""
+    return {f["id"]: Feature(**f) for f in _load_yaml(Path(root) / "features.yaml")}
 
 
 def load_catalog(root: Path | str = CATALOG_ROOT) -> list[EvalCase]:

@@ -1,0 +1,112 @@
+# The features of ContentOps (docs/AEM_ALIGNMENT.md, section 3.5): the capabilities a user sees, the unit of
+# coverage the AEM team suggested. `tools` are the tools that carry out the feature: a test covers the feature when
+# its metadata declares one of them (declared) or a recorded run calls one of them (observed). `parts` are the
+# other components the feature is made of, in the component ids of change sets (skill:, agent:, config:,
+# code:<file> or code:<file>::<function>): a change affects the feature when it touches one of its tools or parts.
+# Code that every feature runs through (the agent loop, the retries, the step budgets) is in no feature: a change
+# there affects no feature in particular.
+
+- id: page_view
+  name: show a page
+  tools: [get_page]
+  parts: [code:services/repository.py::get_page]
+
+- id: page_authoring
+  name: create or edit a page
+  tools: [create_page, update_page_content]
+  parts: [skill:page-authoring, agent:authoring, code:services/repository.py::create_page,
+          code:services/repository.py::update_page_content, code:services/repository.py::_extract_links]
+
+- id: review
+  name: request and approve a page's review
+  tools: [request_review, approve_review]
+  parts: [config:publishing.require_review, code:services/workflow.py::request_review,
+          code:services/workflow.py::approve_review]
+
+- id: publish
+  name: publish a page
+  tools: [publish_page]
+  parts: [skill:publishing-workflow, agent:publishing, config:publishing.require_review,
+          code:services/workflow.py::publish_page]
+
+- id: schedule
+  name: schedule a page
+  tools: [schedule_publish]
+  parts: [skill:publishing-workflow, config:publishing.allow_scheduling, code:services/workflow.py::schedule_publish]
+
+- id: takedown
+  name: take a page down
+  tools: [unpublish_page]
+  parts: [skill:publishing-workflow, config:tools.requires_approval, code:services/workflow.py::unpublish_page]
+
+- id: link_check
+  name: check a page's links
+  tools: [validate_links]
+  parts: [skill:link-validation, code:services/links.py]
+
+- id: seo
+  name: set a page's SEO metadata
+  tools: [get_seo_report, set_page_metadata]
+  parts: [skill:seo-metadata, agent:seo, config:seo.max_title_length, config:seo.require_description,
+          code:services/seo.py, code:services/repository.py::set_page_metadata]
+
+- id: translation
+  name: translate a page
+  tools: [create_translation_job, get_translation_status]
+  parts: [skill:translation, agent:translation, config:translation.default_locales, code:services/translation.py]
+
+- id: assets
+  name: upload, find and attach assets
+  tools: [upload_asset, search_assets, get_asset, attach_asset]
+  parts: [skill:asset-management, agent:assets, code:services/repository.py::upload_asset,
+          code:services/repository.py::search_assets, code:services/repository.py::get_asset,
+          code:services/repository.py::attach_asset]
+
+- id: brand
+  name: check pages against the brand rules and find the pages that use a term
+  tools: [check_brand_policy, get_brand_guidelines, search_pages]
+  parts: [skill:brand-governance, agent:brand, code:services/brand.py, code:services/repository.py::search_pages]
+
+- id: site_health
+  name: run a site health check and fix alt text
+  tools: [audit_site, fix_alt_text]
+  parts: [skill:site-optimization, agent:optimizer, config:optimizer.max_load_ms, code:services/site.py::audit_site,
+          code:services/repository.py::set_alt_text]
+
+- id: analytics
+  name: read page analytics
+  tools: [get_page_metrics]
+  parts: [skill:data-insights, agent:insights, code:services/site.py::page_metrics, code:services/site.py::_metrics]
+
+- id: rollback
+  name: roll a page back to an earlier version
+  tools: [rollback_page, list_versions]
+  parts: [skill:rollback, agent:maintenance, code:services/repository.py::rollback_page,
+          code:services/repository.py::list_versions]
+
+- id: privacy
+  name: answer a privacy request (consent, data export) and show the audit history
+  tools: [check_consent, export_user_data, get_audit_log]
+  parts: [skill:governance-ops, agent:governance, code:services/governance.py::check_consent,
+          code:services/governance.py::export_user_data, code:services/governance.py::get_audit_log]
+
+- id: permissions
+  name: refuse what the user may not do
+  tools: [check_permission]
+  parts: [skill:governance-checks, code:services/permissions.py, code:services/governance.py::check_permission]
+
+- id: routing
+  name: hand a request to the specialist that owns it
+  tools: [route_to_agent]
+  parts: [skill:routing, agent:orchestrator, config:routing.default_agent, code:harness/runtime.py::Runtime._delegate]
+
+- id: planning
+  name: plan a request that needs several specialists
+  tools: [make_plan]
+  parts: [skill:routing, agent:orchestrator, code:harness/runtime.py::Runtime._delegate]
+
+- id: approval
+  name: ask a person before publishing, scheduling or taking pages down
+  tools: [request_approval]
+  parts: [skill:routing, config:tools.requires_approval, code:services/governance.py::request_approval,
+          code:harness/dispatcher.py::Dispatcher._needs_approval]

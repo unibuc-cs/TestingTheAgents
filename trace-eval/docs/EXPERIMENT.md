@@ -381,9 +381,11 @@ The check prints each test as it runs, and then:
   `no failure within the budget`, or `nothing to test` for a change that touches no code;
 - the tokens and seconds spent;
 - the method's probability that the change broke something;
-- the change coverage: the share of the changed components the tests exercised, the share of the properties
-  the change may affect that they checked, and the affected properties left unchecked (marked when
-  mandatory).
+- the change coverage: the share of the changed components the tests exercised, of the properties the change
+  may affect that they checked, of the affected workflows they ran, of the affected features they reached and
+  of the refusals in the changed code they reached;
+- what they left out: the affected properties left unchecked (marked when mandatory), the workflows not run, the
+  features not reached and the refusals not reached.
 
 `--history` gives the method what it knows beforehand: each test's cost, the code it runs on the original
 app, and how the other changes showed up in the tests. Record the history with the same model, and record it

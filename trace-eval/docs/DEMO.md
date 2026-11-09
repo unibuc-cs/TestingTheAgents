@@ -17,6 +17,7 @@ ls runs/gemma5/variants                 # the recording of the current app, for 
 
 Open these in the editor: `docs/CONTENTOPS.md` (the figure), `traceeval/catalog/tests/publishing.yaml` (PUB-01),
 `traceeval/catalog/tests/workflows.yaml` (WF3-01), `traceeval/catalog/properties.yaml`,
+`traceeval/catalog/features.yaml`,
 `docs/results/gemma5/report.md` and its figures, and `docs/sdd/report.md`.
 
 ## 1. The question (2 minutes)
@@ -115,6 +116,7 @@ skill_routing_drop_approval: changed skill:routing#prose
   WF3-03                 FAIL required:request_approval,response~not approved,tool_error:unpublish_page  14,708 tokens
 REGRESSION: WF3-03 failed
 3 runs, 25,111 tokens (1% of the suite), 22 s (the whole suite takes about 361 s, one test at a time); P(something broke) = 1.00
+coverage: 100% of the changed components exercised, 27% of the 15 affected properties checked, 17% of the 6 affected workflows run, 100% of the 3 affected features reached
 ```
 
 WF3-03 is the legal takedown in which the person refuses the approval. Without the rule, the orchestrator skips
@@ -128,11 +130,12 @@ Then a change that breaks nothing:
 traceeval check benign_skill_prose_reflow --history runs/gemma5 --budget 0.2     # live
 ```
 
-It ends with "no regression: the method is confident nothing broke" after nine tests and 4% of the suite's
-tokens, with P(something broke) = 0.04. Before it ends, it has run a test of every mandatory property the change
-may affect, because the catalog's `mandatory` flag acts as a stopping rule. The coverage lines in the output are
-the change coverage the requirements ask for: changed components exercised, affected properties checked and
-affected workflows run.
+It ends with "no regression: the method is confident nothing broke" after nine tests and 4% of the suite's tokens,
+with P(something broke) = 0.04. Before it ends, it has run a test of every mandatory property the change may
+affect, because the catalog's `mandatory` flag acts as a stopping rule. The coverage lines in the output are the
+change coverage the requirements ask for: changed components exercised, affected properties checked, affected
+workflows run and affected features reached. The features are the unit the AEM team suggested: this change affects
+three (publish, schedule, take a page down), and the nine tests reached all three.
 
 If the GPU server is down, run both checks with `--backend replay`. The rehearsal's answers are recorded, so the
 same tests run with the same outcomes, and the timings read 0 seconds. If the server stops answering during a
@@ -155,8 +158,9 @@ current app:
   never calls a benign change a regression.
 - Section 5 lists the catalog of properties, each with its category, mandatory flag, threshold and pass rate.
 - Section 6 gives the coverage of the suite per dimension and the change coverage per strategy. The dimensions
-  are agents, skills, tools, configuration, properties, workflows, execution paths and risk, each declared and
-  observed, with what no test covers.
+  are agents, features, skills, tools, tool error paths, configuration, properties, workflows, execution paths
+  and risk, each declared and observed, with what no test covers. Every feature has a test, but the tests reach
+  only 13 of the 31 places where a tool refuses: a gap no other dimension shows.
 
 Mention one finding: the mandatory-coverage rule is what catches `skill_publish_drop_link_validation`. Without
 the rule, the method calls that change clean. With it, the method must test the mandatory "no broken publish"
