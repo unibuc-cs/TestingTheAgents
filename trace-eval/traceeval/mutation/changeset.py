@@ -229,15 +229,20 @@ def _yaml_code_lines(source: str) -> list[tuple[int, str]]:
     """(line number, text) of every line of ``source`` that holds YAML data; comments and blank lines are
     left out. A '#' opens a comment only outside the scanner's tokens, so a '#' inside a quoted or block
     scalar (a system prompt, say) is kept."""
+    # The scanner's tokens say where the YAML data is: a '#' that falls inside a token (a quoted string, a
+    # block scalar such as a system prompt) is content, not a comment. Each span is (line, column) of a
+    # token's start and end, 1-based lines, so that it can be compared with a position as a tuple.
     try:
         spans = [
             (t.start_mark.line + 1, t.start_mark.column, t.end_mark.line + 1, t.end_mark.column)
             for t in yaml.scan(source)
         ]
     except yaml.YAMLError:
-        spans = []
+        spans = []  # a variant that does not scan: every '#' outside a token position is still a comment
 
     def opens_comment(n: int, line: str, col: int) -> bool:
+        # YAML's rule: a comment starts at a '#' that is at the start of the line or follows a space, and that
+        # is not inside a token.
         return (col == 0 or line[col - 1] in " \t") and not any((a, b) <= (n, col) < (c, d) for a, b, c, d in spans)
 
     code = []

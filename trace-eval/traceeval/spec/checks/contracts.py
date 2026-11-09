@@ -94,12 +94,15 @@ def _function_contract(clause, ctx) -> ClauseResult:
     # L5: symbolic execution + solver ----------------------------------------------------------
     proof = _prove(fn, names, clause["inputs"], assume, ensures, bool(clause.get("probe_outside_domain")))
     details.extend(proof["notes"])
+    # How the two results combine: the solver's answer, when it has one, sets the rung to L5 whether it proved
+    # the contract or refuted it (a refutation at L5 is still a fail). A function the solver could not translate
+    # (a branch, a loop, a call) stays at L2 with the property test's verdict, and the summary says why.
     if proof["proved"] or proof["counterexample"]:
         rung = "L5"  # the solver had the last word, either way
     if proof["counterexample"]:
         status = "fail"
     if proof["gap"] and status == "pass":
-        status = "gap"
+        status = "gap"  # proven inside `assume`, but the post-condition fails outside it: the spec is too narrow
     summary = _summary(status, rung, proof, cost["examples"], found_by_test)
     return ClauseResult(clause.id, "contract", rung, status, summary, details, cost)
 

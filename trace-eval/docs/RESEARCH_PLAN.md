@@ -2,7 +2,7 @@
 
 **Change-aware, cost-bounded selection, prioritization and stopping of tests and evals for LLM agent systems**
 
-Ciprian Păduraru · University of Bucharest · working document, 6 October 2026, updated 8 November 2026 · status: prototype v0.1 running on real models, results in `docs/results/gemma4/report.md` and `docs/results/qwen4/report.md`
+Ciprian Păduraru · University of Bucharest · working document, 6 October 2026, updated 9 November 2026 · status: prototype v0.1 running on real models, results in `docs/results/gemma5/report.md` (Qwen's recording of the current app follows)
 
 ---
 
@@ -15,18 +15,18 @@ Ciprian Păduraru · University of Bucharest · working document, 6 October 2026
   token in a Bayesian model whose sensitivities are calibrated from history, and stop when the probability of a
   regression is low. The method is `adaptive_bayes`; six baselines run alongside it.
 - **Testbed.** A small multi-agent app (`traceeval/sut`) whose agents are played by a real model (Gemma 4 E4B, and
-  Qwen3.8-27B as a second model), 168 tests and 33 controlled changes applied as file edits (7 of them benign);
-  the results below were recorded on the app before the multi-agent workflows, with 136 tests.
+  Qwen3.8-27B as a second model), 177 tests and 43 controlled changes applied as file edits (9 of them benign).
   Full-suite runs with three repetitions give the ground truth, and strategies are compared by offline replay.
-- **Results so far (§5.1).** Hand-written dependencies catch 62–71% of regressions. Trace-based selection catches
-  88–90% within a budget of 20% of the full-suite tokens. The adaptive method catches 81–83% while spending 5% of
-  those tokens. Unlike the other strategies it does not take the tests a model already fails for regressions;
-  under Qwen it still gives a false "regression" verdict in 8% of the replays of benign changes, where a test
-  failed once in three runs. TF-IDF over the diff is a strong baseline (75–81% at 5%). Change sets hold code only, so the results are the same whether or not the code is
-  commented. A mandatory-coverage rule (§5.3) makes the method test every mandatory property a change may affect
-  before it calls the change clean, while the budget allows, for 0.06 extra tests per change.
-- **Next.** The remaining AEM alignment steps (`docs/AEM_ALIGNMENT.md` §4: the other workflows and changes aimed at
-  them, both ground truths recorded on the new app, an OpenTelemetry export); make Qwen's answers exactly repeatable (vLLM's batch-invariant mode), so that one run is proof again; then move
+- **Results (§5, Gemma on the current app).** Hand-written dependencies catch 61% of the regressions. Trace-based
+  selection catches 86% within a budget of 20% of the full-suite tokens, TF-IDF over the diff 92%. The adaptive
+  method catches 76% at a 5% budget and 79% at 20% while spending under 3% of the tokens, and 86% of the changes
+  that break a safety property. Unlike the other strategies it does not take the tests a model already fails for
+  regressions: no false "regression" verdict on any change no test reveals. Its weakness is narrow regressions,
+  revealed by one to five tests, where it can stop "clean" too early. A mandatory-coverage rule (§5.3) makes it
+  test every mandatory property a change may affect before it calls the change clean, for under one extra test per
+  change, and on this app the rule also catches a regression the method alone misses. Change sets hold code only,
+  so the results are the same whether or not the code is commented. Qwen's recording of the same app follows.
+- **Next.** The demo for the AEM team (`docs/AEM_ALIGNMENT.md` §4) and Qwen's recording of the current app; make Qwen's answers exactly repeatable (vLLM's batch-invariant mode), so that one run is proof again; then move
   to tau2-bench as the external system under test. Real models only, decoded greedily. Paper: ASE/ISSTA/ICST framing.
 
 ---
@@ -41,9 +41,9 @@ This plan merges five earlier inputs into one research design and one runnable t
 |---|---|---|
 | System under test (SUT) | A purpose-built mini content-operations platform ("ContentOps": pages, assets, publishing, SEO, translation, governance, rollback) is the primary SUT. tau2-bench, with the local vLLM model playing both the agent and the user, is the second SUT (designed, not yet implemented; see `docs/tau2_integration.md`). | The primary SUT gives a multi-agent structure with shared components built in on purpose (the hard case Georgiana described) and full control over mutations. Its agents run on a local model, and recorded answers make reruns free and exact. tau2-bench adds external validity. |
 | Agent runtime | Pure Python harness with an OpenAI-compatible LLM backend; Pi is not used in the prototype. | Shortest path. The harness code must itself be mutable and instrumentable (coverage contexts). A Pi adapter remains possible later. |
-| Observability | Own trace recorder with an OpenTelemetry-compatible event model (agent/skill/tool/config/llm spans) rather than Phoenix/OpenInference as a dependency. | No services in the loop; an OTel exporter is a small addition. |
+| Observability | Own trace recorder with an OpenTelemetry-compatible event model (agent/skill/tool/config/llm events) and an OTLP JSON exporter (`tracing/otel.py`), rather than Phoenix/OpenInference as a dependency. | No services in the loop; the export needs no dependency. |
 | Oracles | Deterministic (final state, tool trajectories, audit log, response substrings); an LLM judge only for explicitly marked answer-quality properties, executed after deterministic checks pass, by Gemma or Qwen against the case's rubric. | Regression tracking must not depend on judge noise (docx report §"LLM-as-a-judge bottleneck"). |
-| Ground truth | Mutation analysis: 33 controlled changes, benign ones included, applied as file edits. The selectors see only the diff. | Needed to measure detection rate against a known answer, and to measure wasted budget. |
+| Ground truth | Mutation analysis: 43 controlled changes, benign ones included, applied as file edits. The selectors see only the diff. | Needed to measure detection rate against a known answer, and to measure wasted budget. |
 | Evaluation | Record-then-replay: run the full suite once per variant, evaluate all strategies offline. | Decouples method development (thousands of replays) from execution cost (one recording per variant). |
 
 ---
@@ -146,24 +146,27 @@ A `SKILL.md` has front matter, prose, and a `## Procedure` YAML block that the m
 
 ### 4.2 Eval catalog
 
-94 scenario tests (publishing 23, authoring 14, assets/SEO 18, translation/governance/maintenance/orchestration 21, brand/insights/optimizer 12, and 6 workflow tests: W1 campaign launch across five specialists and W3 legal takedown across two, each with two variants where the plan must stop) and two dataset-style evals (50 routing items, prompt → expected delegation, run in route-only mode; 24 intent items, prompt → expected tool invocation). Each case defines an agent entry point, request, context slots, fixture (+ optional patch), fault profile (`healthy`, `transient_once:<tool>`, `ack_timeout_once:<tool>`, `permanent_down:<tool>`), risk (critical/high/medium/low → severity 4/3/2/1), properties (ids from the catalog of properties, e.g. `task_completion`, `correct_routing`, `workflow_completion`, `safety_*`, `resilience_*`), declared dependencies, expectations (state assertions, required/forbidden tools, attempt counts, audit counts, response substrings, step limits, termination, agent and tool order) and, for two cases, a judge rubric. The catalog of properties (`traceeval/catalog/properties.yaml`) gives each property a category, the ways it is checked, a mandatory flag (the safety properties are release blockers) and a threshold; a model can draft it from the requirements (`docs/AEM_ALIGNMENT.md` §3.4). Coverage over the requirements' dimensions, declared and observed, is reported for the suite (what no test covers) and for each change (§4.4, §5.3; §3.5 there).
+103 scenario tests (publishing 23, authoring 14, assets/SEO 18, translation/governance/maintenance/orchestration 21, brand/insights/optimizer 12, and 15 workflow tests: W1 campaign launch across five specialists, W2 site optimization across four, W3 legal takedown, W4 localized price update, W5 rollback of a broken release and W6 privacy request across two or three, each with variants where the plan must stop) and two dataset-style evals (50 routing items, prompt → expected delegation, run in route-only mode; 24 intent items, prompt → expected tool invocation). Each case defines an agent entry point, request, context slots, fixture (+ optional patch), fault profile (`healthy`, `transient_once:<tool>`, `ack_timeout_once:<tool>`, `permanent_down:<tool>`), risk (critical/high/medium/low → severity 4/3/2/1), properties (ids from the catalog of properties, e.g. `task_completion`, `correct_routing`, `workflow_completion`, `safety_*`, `resilience_*`), declared dependencies, expectations (state assertions, required/forbidden tools, attempt counts, audit counts, response substrings, step limits, termination, agent and tool order), for the workflow tests the workflow they run end to end (`traceeval/catalog/workflows.yaml` lists the six with their chains of specialists) and, for two cases, a judge rubric. The catalog of properties (`traceeval/catalog/properties.yaml`) gives each property a category, the ways it is checked, a mandatory flag (the safety properties are release blockers) and a threshold; a model can draft it from the requirements (`docs/AEM_ALIGNMENT.md` §3.4). Coverage over the requirements' dimensions, declared and observed, is reported for the suite (what no test covers) and for each change (§4.4, §5.3; §3.5 there).
 
-### 4.3 Controlled changes (33)
+### 4.3 Controlled changes (43)
 
 | Category | Count | Examples |
 |---|---|---|
-| code (tool adapters, services, harness) | 6 | argument-mapping bug in `set_page_metadata`; retry drops idempotency keys; approval gate bypass; external links treated as reachable; shared `get_page` reports the wrong review flag; edits keep approvals |
-| runtime | 2 | termination six steps early; the delegated answer cut to 40 characters |
-| skill | 9 | publishing skill drops link validation / permission check; authoring drops metadata; translation hard-codes en-US; rollback drops its permission check (the service still refuses); rollback restores the latest version; shared link-validation tolerates broken assets; governance drops the consent check; SEO drops the title-length guard |
+| code (tool adapters, services, harness) | 10 | argument-mapping bug in `set_page_metadata`; retry drops idempotency keys; approval gate bypass; external links treated as reachable; shared `get_page` reports the wrong review flag; edits keep approvals; the insights ranking sorted the wrong way; page search and the brand check case-sensitive; the site audit ignores alt text |
+| runtime | 3 | termination six steps early; the delegated answer cut to 40 characters; a delegation drops the ids of earlier steps |
+| skill | 11 | publishing skill drops link validation / permission check; authoring drops metadata; translation hard-codes en-US; rollback drops its permission check (the service still refuses); rollback restores the latest version; shared link-validation tolerates broken assets; governance drops the consent check; SEO drops the title-length guard; the routing skill no longer asks for approval; the routing skill drops the brand gate |
 | prompt / agent definition | 2 | SEO loses a tool; governance loses `check_consent` |
-| configuration | 6 | validate_links disabled; review not required; step budget 5; retries 0; title limit 20; default agent changed |
+| configuration | 7 | validate_links disabled; review not required; step budget 5; retries 0; title limit 20; default agent changed; no approval needed to take a page down |
 | combined | 1 | keyword-count rule in code + very low limit in config (each alone harmless) |
-| benign | 7 | prose reflow; comment/docstring edit (AST-equivalent); local-variable renames; config comments/ordering; new unused tool; orchestrator prompt wording; translation intents re-ordered |
+| benign | 9 | prose reflow; comment/docstring edit (AST-equivalent); local-variable renames; config comments/ordering; new unused tool; orchestrator prompt wording; translation intents re-ordered; brand skill prose reworded; routing guidance reordered |
 
-This is the set as revised for real models (phase 4 in `docs/EXPERIMENT.md`). Five were dropped afterwards: two exact twins of other
-changes (retries disabled in code, approval removed in config), two crashes that only exercised the crash
-classification, and delegation depth zero, which broke four tests in five and so told nothing about selection.
-The results in §5 use the remaining 33; `docs/USER_GUIDE.md` §6 explains each change and why it is in the set.
+The set is written for real models: a change has to touch an input a model acts on (keyword weights, trigger
+lists and the order of an agent's intents are not), and a removed step has to go from the procedure and from the
+prose, or the model does the step anyway. Candidates that told nothing about selection were left out: exact twins
+of other changes, crashes that only exercised the crash classification, and a change that broke most of the
+suite. Ten changes aimed at the multi-agent workflows (the orchestrator's approval and brand rules, the hand-off
+of ids between steps, the services behind the AEM-style agents, two benign ones) joined on 9 November 2026.
+`docs/USER_GUIDE.md` §6 explains each of the 43 and why it is in the set.
 
 The report checks a sanity property of the testbed: every regression-inducing change is revealed by ≥ 1 test, and no benign change is revealed by any test. Under Gemma five regressions and under Qwen two are revealed by no test, for reasons that belong to the model (§5.1).
 
@@ -172,120 +175,111 @@ The report checks a sanity property of the testbed: every regression-inducing ch
 1. `baseline`: full suite × K with coverage contexts, giving observed dependencies, cost and pass rates.
 2. `mutants`: for each change, copy the SUT, apply the edit, extract the change set and run the full suite × K, giving the fault matrix.
 3. `evaluate`: for every (change, strategy, budget ∈ {2,5,10,20,30,50,100}% of full-suite tokens, seed), the strategy selects from the baseline facts and the change set only. Each execution is answered from the recorded runs of that variant (a random repetition supplies the outcome and cost). Adaptive strategies interact sequentially.
-4. Metrics: change coverage without the ground truth (the share of the changed components the executed tests exercised, the share of the properties the change may affect that they checked, whether every affected mandatory property got a test; `experiment/coverage.py`), property coverage (of the properties a change breaks, those its selected tests exercise), detection (≥ 1 revealing test executed and failed), recall of revealing tests, tokens actually spent, cost to first detection, false alarms, safety recall, stop reason and stop correctness; APFD and APFD_c of the complete prioritized order; selection recall and selected-subset cost.
+4. Metrics: change coverage without the ground truth (the share of the changed components the executed tests exercised, the share of the properties the change may affect that they checked, whether every affected mandatory property got a test, the share of the affected workflows they ran; `experiment/coverage.py`), property coverage (of the properties a change breaks, those its selected tests exercise), detection (≥ 1 revealing test executed and failed), recall of revealing tests, tokens actually spent, cost to first detection, false alarms, safety recall, stop reason and stop correctness; APFD and APFD_c of the complete prioritized order; selection recall and selected-subset cost.
 
 ---
 
 ## 5. Results
 
-### 5.1 Gemma and Qwen (`runs/gemma4`, `runs/qwen4`: the app before the multi-agent workflows, with the model judge; 136 cases × 3 reps baseline, 33 variants × 3 reps, 5 replay seeds)
+### 5.1 Gemma on the current app (`runs/gemma5`: 176 tests × 3 reps baseline, 43 changes × 3 reps, with the model judge, 5 replay seeds)
 
-The agents are played by Gemma 4 E4B and by Qwen3.8-27B, served with vLLM on a GPU server
-(`docs/EXPERIMENT.md`). The ground truth belongs to the model:
+The agents are played by Gemma 4 E4B, served with vLLM on a GPU server (`docs/EXPERIMENT.md`); Qwen3.8-27B's
+recording of the same app follows. The ground truth belongs to the model:
 
-- **Original app:** 133 of 136 tests pass under Gemma, 134 of 136 under Qwen. The failures are model mistakes
-  that clearer wording did not fix (Gemma schedules a page without an approved review, requests a review nobody
-  asked for, and applies an over-long SEO title; Qwen counts a 60-character title as 61), and Qwen's own judge
-  failing its SEO-07 answer under the strict rubric.
-- **Regressions:** Gemma reveals 21 of the 26: it does not act on guards it has to work out for itself (a review
-  flag, a length), so it behaves the same, wrongly, with or without the five changes to those guards. Qwen
-  reveals 24: the combined keyword change has a single test, SEO-07, which its judge already fails on the
-  original app, and Qwen validates links even when the publishing skill no longer asks.
-- **Benign changes:** none of the seven fails a test under either model.
+- **Original app:** 170 of 176 tests pass. The six failures are model mistakes that clearer wording did not fix
+  (`docs/EXPERIMENT.md` §6): Gemma schedules a page without an approved review (PUB-10, and in the campaign launch
+  WF1-01), requests a review nobody asked for (AUT-04), applies an over-long SEO title (SEO-02), goes on to
+  publishing after a failed link check (WF5-02) and stops a whole plan after a refused export that the other steps
+  do not depend on (WF6-02). Its three runs of each test always agreed.
+- **Regressions:** 29 of the 34 are revealed. Gemma does not act on guards it has to work out for itself (a review
+  flag, a length), and stops at a broken asset reference even when the skill says it does not block, so it behaves
+  the same, wrongly, with or without the five changes to those guards.
+- **Benign changes:** none of the nine fails a test. Across all 43 changes, the three runs disagreed on only five
+  (change, test) pairs; the majority vote absorbs them.
 
-Detection of the regressions each model reveals (21 under Gemma, 24 under Qwen), vs. nominal budget, and tokens
-actually spent. Each cell is Gemma / Qwen:
+Detection of the 29 regressions Gemma reveals, by nominal budget, and tokens actually spent:
 
-| strategy | 5% | 10% | 20% | 50% | 100% | spent @20% | spent @100% | waste on benign @100% |
+| strategy | 5% | 10% | 20% | 50% | 100% | spent @20% | spent @100% | spent on benign @100% |
 |---|---|---|---|---|---|---|---|---|
-| full (catalog order) | 0.10 / 0.08 | 0.19 / 0.21 | 0.48 / 0.46 | 0.71 / 0.75 | 1.00 / 1.00 | 0.20 / 0.20 | 0.98 / 0.99 | 1.00 / 1.00 |
-| random | 0.18 / 0.15 | 0.33 / 0.33 | 0.53 / 0.53 | 0.83 / 0.80 | 1.00 / 1.00 | 0.20 / 0.20 | 0.98 / 0.99 | 0.99 / 0.99 |
-| declared | 0.71 / 0.58 | 0.71 / 0.62 | 0.71 / 0.62 | 0.71 / 0.62 | 0.71 / 0.62 | 0.08 / 0.06 | 0.10 / 0.08 | 0.07 / 0.13 |
-| ir_tfidf | 0.81 / 0.75 | 0.81 / 0.83 | 0.90 / 0.92 | 1.00 / 1.00 | 1.00 / 1.00 | 0.20 / 0.20 | 0.98 / 0.99 | 0.99 / 0.99 |
-| observed | 0.52 / 0.54 | 0.62 / 0.58 | 0.90 / 0.88 | 0.95 / 0.96 | 1.00 / 1.00 | 0.15 / 0.15 | 0.46 / 0.45 | 0.23 / 0.20 |
-| cost_aware | 0.52 / 0.54 | 0.62 / 0.58 | 0.86 / 0.88 | 0.95 / 0.96 | 1.00 / 1.00 | 0.20 / 0.20 | 0.98 / 0.99 | 0.99 / 0.99 |
-| adaptive_bayes | 0.67 / 0.61 | 0.81 / 0.73 | 0.81 / 0.83 | 0.90 / 0.83 | 0.90 / 0.83 | 0.05 / 0.05 | 0.06 / 0.05 | 0.39 / 0.28 |
+| full (catalog order) | 0.14 | 0.21 | 0.34 | 0.90 | 0.99 | 0.20 | 0.98 | 1.00 |
+| random | 0.21 | 0.33 | 0.52 | 0.84 | 0.99 | 0.20 | 0.98 | 1.00 |
+| declared | 0.55 | 0.55 | 0.61 | 0.61 | 0.61 | 0.07 | 0.10 | 0.13 |
+| ir_tfidf | 0.70 | 0.71 | 0.92 | 0.99 | 0.99 | 0.20 | 0.98 | 0.99 |
+| observed | 0.62 | 0.69 | 0.86 | 0.86 | 0.99 | 0.15 | 0.49 | 0.32 |
+| cost_aware | 0.59 | 0.62 | 0.83 | 0.86 | 0.99 | 0.20 | 0.98 | 0.99 |
+| adaptive_bayes | 0.76 | 0.79 | 0.79 | 0.83 | 0.83 | 0.03 | 0.03 | 0.20 |
 
-APFD_c of the full prioritized order (Gemma / Qwen): random 0.48/0.43, full 0.55/0.56, adaptive 0.78/0.80,
-ir_tfidf 0.79/0.79, cost_aware 0.81/0.83, observed 0.81/0.83 (selection recall 1.00 at about half of the suite
-cost), declared 0.82/0.78 (selection recall 0.60/0.48). Cost to first detection: declared 0.02, ir 0.03–0.04,
-adaptive 0.03–0.04, observed 0.06, cost_aware 0.06–0.07, random 0.15–0.16 of the full suite.
+APFD_c of the full prioritized order: random 0.53, full 0.57, declared 0.76 (selection recall 0.53), ir_tfidf 0.77,
+cost_aware 0.78, observed 0.79 (selection recall 1.00 at half the suite's cost), adaptive 0.81. Cost to first
+detection: adaptive 0.017, declared 0.025, ir_tfidf 0.04, observed 0.05, cost_aware 0.06, random 0.14, full 0.19 of
+the full suite. Time spent follows tokens closely (the report's section 2).
 
 **Reading.**
-- *RQ1/RQ2.* Declared metadata caps detection at 71% (Gemma) and 62% (Qwen), because shared skills reached through
-  `include`, harness code and most configuration keys are not declared. Observed dependencies recover full
-  selection recall and reach 88–90% within a 20% budget. The main argument for trace-informed selection holds
-  under real models.
-- *RQ3.* Informed strategies raise APFD_c from about 0.45 (random) to 0.78–0.83; declared ranks well but selects
-  only part of the revealing tests (selection recall 0.48–0.60), observed and cost-aware ranking select them all.
-- *RQ4.* The adaptive method again is the only one that returns budget: 81% (Gemma) and 83% (Qwen) detection for
-  5% of the tokens, 5–6% at full budget. It stops at the first failure of a test that passed on the original
-  app, and each test's own record (§3.1) brings the revealing test forward (on the earlier set of 38 changes it
-  found regressions 3–15% sooner than kind-level sensitivities). Its ceiling is lower under Qwen (0.83 against
-  0.90 from a 50% budget up), because Qwen reveals more regressions that only one or two tests catch, and on those
-  the method stops "clean" before reaching them (70 of 840 replays on regressions, 50 of 735 under Gemma).
-- *Red tests on the original app.* Gemma's three failing tests fail on every changed copy too, so a strategy that
-  runs one of them sees a failure the change did not cause. On the changes that no test reveals, `full` sees such
-  a failure in 71% of replays and `ir_tfidf` in 58% under Gemma (63% and 41% under Qwen). The adaptive method
-  discounts a test by its failures on the original app. Under Gemma it gives no "regression" verdict on a change
-  that no test reveals (0 of 420 replays). Under Qwen it does in 24 of 315: 20 on two benign changes, where a
-  test that passed all three times on the original app failed once in three runs on the changed copy (PUB-07,
-  ORC-01), and 4 on the combined change. Qwen's three runs disagreed on 34 (change, test) pairs here, against
-  15 in `runs/qwen2`: this time its requests alternated between two servers, and one failing run is then not
-  proof. Exactly repeatable decoding (vLLM's batch-invariant mode) would remove the cause.
-- *IR.* TF-IDF over the diff is still the strongest prioritizer at small budgets (81%/75% at 5%).
+- *RQ1/RQ2.* Declared metadata caps detection at 61%, because shared skills reached through `include`, harness code
+  and most configuration keys are not declared. Observed dependencies recover full selection recall and reach 86%
+  within a 20% budget. The main argument for trace-informed selection holds.
+- *RQ3.* Informed strategies raise APFD_c from 0.53 (random) to 0.76–0.81; the adaptive method's order is the best,
+  and it finds the first regression soonest.
+- *RQ4.* The adaptive method is the only one that returns budget: 76% of the regressions at a 5% budget and 79% at
+  20%, for under 3% of the tokens. Its ceiling is 83%: on narrow regressions, revealed by one to five tests, it can
+  stop "clean" before reaching them (145 of 1,015 replays of regressions). The changes it misses at a 20% budget are
+  the delegation that drops the ids of earlier steps, the agent loop that stops six steps early, retries without
+  idempotency keys, the routing skill without its brand gate, the authoring skill without its metadata step, and the
+  combined change, which runs out of budget.
+- *Critical regressions.* Of the 21 changes that break a safety property, the adaptive method catches 86% from a 10%
+  budget on, `observed` 81% and TF-IDF 98% at 20% (spending the whole 20%).
+- *Red tests on the original app.* Gemma's six failing tests fail on every changed copy too, so a strategy that runs
+  one sees a failure the change did not cause. On the 14 changes no test reveals, `full` sees such a failure in 71%
+  of replays, `ir_tfidf` in 70% and `cost_aware` in 91%. The adaptive method discounts a test by its failures on the
+  original app and gives no "regression" verdict on any of them (0 of 490 replays).
+- *IR.* TF-IDF over the diff is the strongest selector at 20% (92%) but spends the whole budget; at 5% the adaptive
+  method leads (76% against 70%).
 
 ### 5.2 Text in the method: an option (roadmap 3(b))
 
 The method's text signal (the tilt in §3.1) can be word overlap (the default), the TF-IDF similarity of the
-`ir_tfidf` strategy (`adaptive_bayes_tfidf`), or nothing (`adaptive_bayes_notext`, an ablation). Detected and
-spent at a 20% budget, on the recordings of §5.1 (5 seeds):
+`ir_tfidf` strategy (`adaptive_bayes_tfidf`), or nothing (`adaptive_bayes_notext`, an ablation). Detected and spent
+on the Gemma recording of §5.1 (5 seeds):
 
-| recording | overlap (default) | TF-IDF | no text | `ir_tfidf` alone |
+| budget | overlap (default) | TF-IDF | no text | `ir_tfidf` alone |
 |---|---|---|---|---|
-| gemma4 | 0.81 (4.9%) | 0.86 (4.5%) | 0.71 (6.7%) | 0.90 (20%) |
-| qwen4 | 0.83 (5.0%) | 0.83 (4.3%) | 0.75 (6.2%) | 0.92 (20%) |
+| 5% | 0.76 (2.1%) | 0.79 (2.0%) | 0.62 (2.4%) | 0.70 (5%) |
+| 20% | 0.79 (2.9%) | 0.83 (2.4%) | 0.69 (3.5%) | 0.92 (20%) |
+| 50% | 0.83 (2.9%) | 0.83 (2.4%) | 0.69 (4.5%) | 0.99 (50%) |
 
-At a 50% budget the default reaches 0.83–0.90 and the TF-IDF variant 0.88–0.95, still for under 6% of the
-suite. The TF-IDF variant stops correctly most often (0.89, against 0.86 for the default and 0.77 without text).
-Under Gemma no variant gives a "regression" verdict on a change that no test reveals; under Qwen they do in 17
-(default), 33 (TF-IDF) and 12 (no text) of 225 replays, all from the one-off failures described in §5.1.
+The TF-IDF variant also stops correctly most often (0.88 at 20%, against 0.86 for the default and 0.79 without
+text), and no variant gives a "regression" verdict on a change no test reveals.
 
-**Reading.** TF-IDF brings forward the one test that reveals a narrow change, and helps under Gemma (+5 points);
-under Qwen it equals the default at a 20% budget. It also runs the tests whose text is closest to the change
-first, and under Qwen those include the tests with one-off failures, hence its extra false verdicts. Without any
-text the method loses 8–10 points, so text matters, but coverage and history carry most of the result. The
-testbed is textual: tests, skills and config keys share vocabulary, which favours any text measure (a threat noted
-in §8). Whether TF-IDF helps as much where tests and changes are worded differently is a question for tau2-bench,
-so the default stays word overlap and TF-IDF stays an option.
+**Reading.** TF-IDF brings forward the one test that reveals a narrow change, and helps by up to four points for
+less spending. Without any text the method loses ten points, so text matters, but coverage and history carry most
+of the result. The testbed is textual: tests, skills and config keys share vocabulary, which favours any text
+measure (a threat noted in §8). The default stays word overlap until the second model's recording shows whether
+the gain holds there too; whether TF-IDF helps as much where tests and changes are worded differently is a
+question for tau2-bench.
 
 ### 5.3 Coverage, and mandatory properties in the method
 
 Coverage is a metric the AEM team asked for (`docs/AEM_ALIGNMENT.md` §3.5); the report's section 6 gives it for the
-suite and for each change. In the recordings (the app before the workflows) every agent, skill, setting and
-property had a test; three tools had none under Gemma and two under Qwen (`approve_review` and `search_pages`,
-which the workflow tests now call, and `get_asset`). The declared metadata missed two skills and two settings that
-the traces show in use.
+suite and for each change. On the current app every agent, skill, setting, property and workflow has a test; one
+tool, `get_asset`, has none. The declared metadata misses one skill and four settings that the traces show in use.
 
-Change coverage needs no ground truth. Observed, cost-aware and TF-IDF selection exercise 96% of the changed
-components at any budget (one change touches code no test runs). The adaptive method reaches the same 96% but
-checks about half of the properties a change may affect (0.52–0.55, against 0.83–0.85 for `observed` at a 20%
-budget), because it stops at the first real failure or as soon as it is confident. That is the point of stopping,
-but it would also let the method call a change clean with a mandatory property untested.
+Change coverage needs no ground truth. Observed, cost-aware and TF-IDF selection and the adaptive method all
+exercise 97% of the changed components at a 20% budget (one change touches code no test runs). The adaptive method
+checks about half of the properties a change may affect (0.50, against 0.83 for `observed`), because it stops at
+the first real failure or as soon as it is confident. That is the point of stopping, but it would also let the
+method call a change clean with a mandatory property untested.
 
 Step 5 of the method (on by default; `adaptive_bayes_nomandatory` is the ablation) closes that hole. A run that
 found no regression does not end before every mandatory property the change may affect has a test, the cheapest
-that checks it and passes on the original app, while the budget allows. At a 20% budget, among the runs without a
-regression:
+that checks it and passes on the original app, while the budget allows. At a 20% budget:
 
-| recording | all affected mandatory properties tested, without / with the rule | extra tests per change | detection, verdicts |
+| recording | runs without a regression that tested every affected mandatory property, without / with the rule | extra tests per change | detection without / with the rule |
 |---|---|---|---|
-| gemma4 | 0.81 / 0.94 | 0.06 | unchanged |
-| qwen4 | 0.82 / 1.00 | 0.06 | unchanged |
+| gemma5 | 0.33 / 0.90 | 0.8 | 0.76 / 0.79 |
 
-The rule never found a regression the method had missed and never caused a false verdict. On this testbed it is a
-guarantee rather than a detector: the method's own choice of tests already covered most mandatory properties.
-Below a 10% budget it often cannot afford the extra test.
+On this app the rule is also a detector: it catches `skill_publish_drop_link_validation`, which the method alone
+calls clean. Before ending, the method must test the mandatory "no broken publish" property, and that test fails.
+The rule never caused a false verdict. Below a 10% budget it often cannot afford the extra test.
 
 ---
 
@@ -294,7 +288,7 @@ Below a 10% budget it often cannot afford the extra test.
 - **ContentOps on real models** (done, `docs/EXPERIMENT.md`): Gemma 4 E4B (`--backend vllm`, or `hf` on a local
   GPU) and Qwen3.8-27B (`--backend llm`, or any other OpenAI-compatible endpoint) run on the GPU server: two GPUs
   directly, plus two through SLURM on the same machine (`TRACEEVAL_SITE=hpc`), and one run can spread its requests
-  over several servers. A 33-variant × 3-rep recording of the 168 tests is about 17k runs (timings in
+  over several servers. A 43-variant × 3-rep recording of the 176 tests is about 23k runs (timings in
   `docs/EXPERIMENT.md` §7). Every answer can be recorded (`traceeval/llm/cache.py`), so a rerun costs nothing and
   the test suite replays Gemma's answers without a GPU. A run with an OpenAI model, through the `llm` backend,
   waits for API tokens.
@@ -313,22 +307,14 @@ Below a 10% budget it often cannot afford the extra test.
 | 1. Testbed | SUT, catalog, tracing, mutations, change sets, record/replay, metrics, report, CLI, tests | done (v0.1) |
 | 2. Methods | baselines + cost-aware + predictive + adaptive Bayesian selector with stopping | done (v0.1), with the mandatory-coverage rule (§5.3); tune ε, priors, discount |
 | 3. Method improvements | (a) test-level learned sensitivities (per test × component-kind reveal history) instead of kind-level; (b) IR relevance inside the Bayesian likelihood; (c) CASPER-style slices and the Risk-Aware Adaptive Evaluation bandit as reproduced baselines | (a) done; (b) done as an option (§5.2); (c) open |
-| 4. Real LLM | ContentOps on real models (local vLLM): all variants × 3 reps under two models | done: Gemma and Qwen (`docs/EXPERIMENT.md`) |
+| 4. Real LLM | ContentOps on real models (local vLLM): all variants × 3 reps under two models | done: Gemma on the current app (`runs/gemma5`); Qwen's recording of it follows (`docs/EXPERIMENT.md`) |
 | 5. External SUT | tau2-bench airline adapter; 12 mutations (6 policy, 4 tool-code, 2 benign); same evaluation | after the AEM steps and repeatable decoding |
 | 6. Scale/robustness | more mutations (mutation operators generated systematically: step deletion/swap/condition negation in procedures, argument swaps in adapters, config boundary values), equivalent-mutant analysis, sensitivity to K and to budget definitions (time vs. tokens), ablations of each model ingredient | with the paper |
 | 7. Paper | see §8 | drafting can start from this document and the report |
 
-Phase 4 showed that a model's own mistakes and blind spots shape the ground truth: which changes a test reveals depends on the model (`docs/EXPERIMENT.md`, phase 4).
+A model's own mistakes and blind spots shape the ground truth: which changes a test reveals depends on the model (`docs/EXPERIMENT.md` §6 and §7). Two parts of the method come from that. Each test's own record (§3.1) exists because kind-level sensitivities let the method spend on cheap tests that merely call a changed function; stopping at the first failure of a test that passed on the original app exists because a failure the model also produces on the original app says nothing about the change.
 
-The prototype (`traceeval check`, §6) ran live on four changes under each model, from recordings of the app at the time (`runs/gemma3`, `runs/qwen3`, one repetition). It caught a skill regression with its first test, called a harmless prompt rewording clean, and found nothing for a hand edit that no test covers. The weak case was the retry change: the method first spent on cheap tests that merely call the changed function, and ran out of budget undecided. That led to item 3(a), each test's own record, together with stopping at the first failure of a test that passed on the original app. Replayed on the same recordings, the retry change now ends "regression" after 17 tests (8.9% of the suite) under Gemma and 11 (5.9%) under Qwen. The new recordings also show that the ground truth moves with the app and the judge: under Qwen, three regressions revealed in `runs/qwen2` were not revealed in `runs/qwen3`, one because the strict model judge now fails SEO-07 on the original app.
-
-Calibration fixes after 3(b): on the two agent-definition changes, every test of the agent reached the 0.9 sensitivity cap, and two passing tests ended the run "clean". Kind ratios are now padded like the test records, and an agent's tool or skill list that only lost items reaches only the tests that used them (§3.1). Both changes are now caught by the first test, and detection at a 20% budget rose from 76% to 81% (Gemma) and from 65% to 73% (Qwen) at the same spend.
-
-The ground truth was then re-recorded on the app of that time (before the workflows) with the model judge and three repetitions (`runs/gemma4`, `runs/qwen4`, §5.1): Gemma's matches the first recording, Qwen's loses two regressions (its strict judge, and links it checks anyway), and Qwen's runs disagree more often.
-
-The AEM team's wish list (`docs/AEM_ALIGNMENT.md`) is now being implemented step by step. Done: the catalog of properties, drafted by a model from the requirements; coverage reports with the mandatory-coverage rule (§5.3); the orchestrator's planning mode (plans, hand-offs with ids, human approvals), three agents modelled on AEM's (brand, insights, optimizer) and asset search, the first two multi-agent workflows (campaign launch across five specialists, legal takedown), and trace assertions on agent and tool order. Next: the remaining workflows with about eight controlled changes aimed at them, the recording of both ground truths on the new app, and an OpenTelemetry export.
-
-Immediate next steps, in order: the AEM alignment steps; exactly repeatable decoding for Qwen (vLLM's batch-invariant mode), so that a one-off difference cannot pass for a regression; a run with an OpenAI model once API tokens are available; tau2-bench.
+The AEM team's wish list (`docs/AEM_ALIGNMENT.md`) is being implemented step by step; its §4 is the dated plan for the demo of 12 November 2026. Done: the catalog of properties, drafted by a model from the requirements; coverage reports with the mandatory-coverage rule (§5.3); the orchestrator's planning mode (plans, hand-offs with ids, human approvals), three agents modelled on AEM's (brand, insights, optimizer) and asset search, six multi-agent workflows (campaign launch across five specialists, site optimization across four, legal takedown, localized price update, rollback of a broken release, privacy request), and trace assertions on agent and tool order. Next, in order: the remaining workflows with controlled changes aimed at them, both ground truths recorded on the current app; then exactly repeatable decoding for Qwen (vLLM's batch-invariant mode), so that a one-off difference cannot pass for a regression; a run with an OpenAI model once API tokens are available; tau2-bench.
 
 ---
 
@@ -336,7 +322,7 @@ Immediate next steps, in order: the AEM alignment steps; exactly repeatable deco
 
 **Working title.** TRACE-Eval: change-aware, cost-bounded regression test selection for LLM agent systems.
 
-**Abstract (draft).** Agent platforms ship dozens of agents assembled from skills, prompts, tools, harness code and configuration, and verify them with tests and statistical evals whose cost is dominated by tokens. After a change, teams either re-run everything or guess. We formulate selection, prioritization and budget-aware stopping of agent tests as one problem and propose a method that (i) extracts a change set from the diff at the granularity of code lines, skill procedures, agent-definition fields and configuration keys, (ii) maps it to tests through dependencies *observed* in execution traces rather than declared metadata, (iii) ranks tests by expected information per token in a Bayesian model whose sensitivities are calibrated from history, and (iv) stops when the posterior probability of a regression is low. We evaluate on a testbed with a working multi-agent application whose agents are played by two open models (a small and a mid-size one), 136 tests/eval items, and 33 controlled changes with a mutation-based ground truth derived per model. Declared dependencies miss 29–38% of the regressions; trace-informed selection finds 88–90% of them within 20% of the full-suite tokens. The adaptive method detects 81–83% for 5% of the tokens, returns most of the budget on benign changes, and, unlike the other strategies, does not mistake the tests the model already fails for regressions.
+**Abstract (draft).** Agent platforms ship dozens of agents assembled from skills, prompts, tools, harness code and configuration, and verify them with tests and statistical evals whose cost is dominated by tokens. After a change, teams either re-run everything or guess. We formulate selection, prioritization and budget-aware stopping of agent tests as one problem and propose a method that (i) extracts a change set from the diff at the granularity of code lines, skill procedures, agent-definition fields and configuration keys, (ii) maps it to tests through dependencies *observed* in execution traces rather than declared metadata, (iii) ranks tests by expected information per token in a Bayesian model whose sensitivities are calibrated from history, and (iv) stops when the posterior probability of a regression is low. We evaluate on a testbed with a working multi-agent application, including multi-agent workflows, whose agents are played by open models (a small one, and a mid-size one as a second), 177 tests and eval items, and 43 controlled changes with a mutation-based ground truth derived per model. Declared dependencies miss 39% of the regressions; trace-informed selection finds 86% of them within 20% of the full-suite tokens. The adaptive method detects 79% for 3% of the tokens, returns most of the budget on benign changes, and, unlike the other strategies, does not mistake the tests the model already fails for regressions.
 
 **Outline.** 1 Introduction (motivation from AEM-scale platforms; nightly batch + PR use; three sub-problems) · 2 Background and related work (RTS/TCP; efficient LLM evaluation; agent benchmarks; fault injection; CASPER as closest work) · 3 Problem formulation and models (§1–2) · 4 Method (§3.1) · 5 Testbed (§4) · 6 Evaluation (RQ1–RQ4 + ablations + LLM/tau2 external validity) · 7 Threats to validity (synthetic mutants vs. real regressions; two models, greedy decoding, and a ground truth that depends on the model; single primary domain; calibration leakage controlled by leave-one-change-out; textual testbed favouring IR) · 8 Conclusion.
 

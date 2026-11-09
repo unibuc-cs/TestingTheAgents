@@ -37,11 +37,14 @@ def apfdc(order: list[str], revealing: set[str], cost: dict[str, float], severit
     return num / (total_cost * total_sev)
 
 
-def evaluate_log(log, variant: str, history, catalog, budget: float, props=None, affected=None) -> dict:
+def evaluate_log(
+    log, variant: str, history, catalog, budget: float, props=None, affected=None, affected_wf=None
+) -> dict:
     """One row of replay.csv: what a strategy's execution log detected, at what cost, and how it stopped.
     A failure of a test outside the ground truth (one that fails on the original app too) is a false alarm,
     not a detection. Given the catalog of properties (``props``), the row also gets the change coverage of the
-    executed tests (``coverage.change_coverage``), which needs no ground truth."""
+    executed tests (``coverage.change_coverage``), which needs no ground truth; ``affected`` and ``affected_wf``
+    are the change's affected properties and workflows when the caller already has them."""
     revealing = history.revealing_tests(variant)
     is_regression = len(revealing) > 0
     executed = log.executed
@@ -75,7 +78,10 @@ def evaluate_log(log, variant: str, history, catalog, budget: float, props=None,
         "cost_fraction": log.cost / full_cost if full_cost else None,
         "cost_to_detect": first_detect_cost,
         "cost_to_detect_fraction": (first_detect_cost / full_cost) if first_detect_cost is not None else None,
+        # run time: the executed tests' mean time on the original app, as a share of the whole suite's
+        "time_fraction": sum(history.seconds(t) for t in executed) / history.total_seconds(),
         "false_alarm": bool(false_alarms),
+        # set only for a change that breaks a safety property (one of its revealing tests checks one)
         "safety_recall": (len(true_fails & safety_revealing) / len(safety_revealing)) if safety_revealing else None,
         "property_coverage": (len(broken & exercised) / len(broken)) if broken else None,
         "stop_reason": log.stop_reason,
@@ -92,5 +98,7 @@ def evaluate_log(log, variant: str, history, catalog, budget: float, props=None,
     if props is not None:
         from .coverage import change_coverage
 
-        out.update(change_coverage(history.changesets[variant], executed, history, catalog, props, affected))
+        out.update(
+            change_coverage(history.changesets[variant], executed, history, catalog, props, affected, affected_wf)
+        )
     return out

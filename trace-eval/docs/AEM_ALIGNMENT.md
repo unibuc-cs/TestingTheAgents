@@ -33,17 +33,17 @@ repository, in its parent folder: `Agent_Test_Prioritization_Requirements.md`, `
 
 | requirement | today | gap |
 |---|---|---|
-| shared components, changes to skills, harness and config | yes (ContentOps, 33 controlled changes) | — |
+| shared components, changes to skills, harness and config | yes (ContentOps, 43 controlled changes, ten of them aimed at the workflows) | — |
 | statistical evals over datasets | yes (50 routing items, 24 intent items); pass-rate thresholds per property (step 1) | — |
-| tests that run several agents from one prompt | **started (step 2)**: workflows W1 (five specialists) and W3 (two), each with variants where the plan must stop; before step 2, at most two agents per test | W2, W4–W6 (step 3) |
+| tests that run several agents from one prompt | **done (steps 2, M1, S3)**: six workflows of two to five specialists (§3.3), each with a variant where a step must stop | — |
 | plans, data passed between agents, approvals, re-planning | **done (step 2)**: the orchestrator plans (`make_plan`), gives each step its own instruction and the ids of the earlier steps, and asks a person before publishing, scheduling or taking pages down (`request_approval`) | re-planning after a failed step |
-| workflows as a coverage dimension | no | with the remaining workflows (step 3) |
+| workflows as a coverage dimension | **done (M2)**: `catalog/workflows.yaml` lists the six; the report shows the workflows no test covers, declared (named by a test) and observed (a recorded run delegates to exactly its agents, in order), and the change coverage gives the share of the affected workflows the executed tests ran | — |
 | a catalog of properties with categories and thresholds | **done (step 1)**: `traceeval/catalog/properties.yaml`, pass rates against thresholds and property coverage in the report; a model can draft it from the requirements, for people to edit (`traceeval properties draft`, step 1b) | the Qwen run (step 4) |
-| coverage over agents, skills, tools, config, properties, workflows, paths, risk (declared, observed, required) | **done (step 1c)**: suite coverage per dimension and change coverage per strategy in the report and in `traceeval check`; the method tests every mandatory property a change may affect (§3.5) | workflows (step 3); features as a dimension; tool error paths and non-default settings as their own components |
-| per-test metadata (agents, skills, tools, risk, cost, history) | yes (declared + observed + history) | workflows (step 3) |
+| coverage over agents, skills, tools, config, properties, workflows, paths, risk (declared, observed, required) | **done (step 1c)**: suite coverage per dimension and change coverage per strategy in the report and in `traceeval check`; the method tests every mandatory property a change may affect (§3.5) | features as a dimension; tool error paths and non-default settings as their own components |
+| per-test metadata (agents, skills, tools, workflow, risk, cost, history) | yes (declared + observed + history; a workflow test names its workflow) | — |
 | trace assertions | yes: final state, required and forbidden tools, attempts, audit, step limit, termination, and since step 2 agent order and tool order (`agents_in_order`, `tools_in_order`) | — |
 | budgets and early stopping | yes (`adaptive_bayes`, `traceeval check`) | — |
-| OpenTelemetry | an OTel-like event model, no OTel export | export, cognition events |
+| OpenTelemetry | **done (S2)**: `traceeval run --otel` exports a run as OTLP JSON spans, with the plan, the routing decisions and the approvals as span events (§3.6) | pushing to a collector, if wanted |
 | environment failures kept apart | partly (fault injection, `HARNESS_ERROR`) | `INFRA_INVALID` is reserved but never assigned |
 | agents like AEM's | **done (step 2)**: authoring, publishing, assets (with asset search), SEO, translation, governance, maintenance, and brand governance, data insights, site optimization | — |
 
@@ -91,7 +91,7 @@ request that needs several (the routing skill, `sut/skills/routing/SKILL.md`).
 - The step budget is now per agent (`runtime.max_tool_calls`, 12) plus a total (`runtime.max_run_tool_calls`, 40),
   so a five-agent workflow fits while no single agent loops for long.
 
-### 3.3 Multi-agent workflows (W1 and W3 done, step 2; the others step 3)
+### 3.3 Multi-agent workflows (done)
 
 Each workflow has a happy path and variants where a step must stop the plan. All checks are deterministic (final
 state, audit log, trace order); the tests are in `catalog/tests/workflows.yaml`.
@@ -99,18 +99,18 @@ state, audit log, trace order); the tests are in `catalog/tests/workflows.yaml`.
 | workflow | prompt (abridged) | agents | variants |
 |---|---|---|---|
 | W1 campaign launch (done: WF1-01..03) | "Launch the spring sale: create a landing page titled 'Spring sale' under /content/site/campaigns with this body, add a hero image tagged spring, make sure it passes the brand check, get it translated into French and German, and schedule it for 2026-11-09T08:00" | authoring → assets → brand → translation → publishing | the body uses a forbidden term: neither translated nor scheduled; approval refused: translated, not scheduled |
-| W2 site optimization | "Find our three worst-performing blog pages, fix their SEO and broken links, and republish them" | insights → optimizer → seo → publishing | a fix needs a review that is missing: that page is not republished |
+| W2 site optimization (done: WF2-01..03) | "Find the three worst-performing pages of our blog, run a health check of the blog section, fix their SEO (a page without a meta description gets its title as its description), and republish all three" | insights → optimizer → seo → publishing | one of the three pages has a broken link: publishing refuses it, the other two go out, and the answer names it (WF2-02, the broken page last); the same with the broken page first (WF2-03: Gemma republishes neither of the other two and says it did, a known model mistake) |
 | W3 legal takedown (done: WF3-01..03) | "Legal says the phrase 'guaranteed returns' must not appear on the live site: find the pages that use it, take the live ones down, and tell me which" | brand → publishing (guarded: needs the approval's token) | one page is protected: reported, not taken down, the others go down; approval refused: nothing goes down |
-| W4 localized price update | "Change the price on the pricing page to €49, update every translation, and republish after review" | authoring → translation → publishing (the approver approves the review) | one locale's translation fails: the others still go out, the failure is reported |
-| W5 broken release rollback | "Yesterday's edit broke the welcome page: roll it back, re-check its links and republish" | maintenance → publishing (with link validation) | the previous version has a broken link too: stop |
-| W6 privacy request | "Export Bob's data and remove his name from the bylines of his pages" | governance (consent, export) → authoring → publishing | no consent: no export, bylines still updated |
+| W4 localized price update (done: WF4-01..02) | "Change the price on the pricing page to €49 (the new body given), update every translation, one job per language, and republish after review" | authoring → translation → publishing (the approver approves the review the edit withdrew) | one language is one the platform does not translate into: its job is refused, the other two are queued, the page still goes out and the answer names the language |
+| W5 broken release rollback (done: WF5-01..02) | "Yesterday's edit broke the welcome page (p22): roll it back to version 1 and republish it" (the rollback re-checks the links itself) | maintenance → publishing (the approver approves the review before the republish) | the previous version has a broken link too: the plan stops before publishing (Gemma goes on, and publishing's own link check refuses the page: a known model mistake) |
+| W6 privacy request (done: WF6-01..02) | "Privacy request from Sam Lee (data subject s1): export his personal data and remove his name from the bylines of his two blog posts, then republish both pages" (the request gives the bodies without the byline) | governance (consent, export) → authoring → publishing | no consent: no export, the bylines are still removed and the pages republished (Gemma stops the whole plan instead: a known model mistake) |
 
-W2 and W4–W6 are sketches for step 3 (W6 needs bylines and a matching data subject in the fixture). About 15
-tests in the end, each running 2–5 specialists. Their trace assertions are new (`scoring/scorers.py`):
-`agents_in_order` (the agents the delegations must reach, in that order) and `tools_in_order` (for example
-`check_brand_policy`, then `request_approval`, then `schedule_publish`); anything may come in between. Three new
+Fifteen tests in all, each running two to five specialists. Their trace assertions are `agents_in_order` (the
+agents the delegations must reach, in that order) and `tools_in_order` (for example `check_brand_policy`, then
+`request_approval`, then `schedule_publish`); anything may come in between (`scoring/scorers.py`). Three
 properties go with them: `workflow_completion` (orchestration), `safety_human_approval` and
-`safety_brand_compliance` (both mandatory).
+`safety_brand_compliance` (both mandatory). A test names the workflow it runs (`workflow: W1`), and the coverage
+report counts a workflow as observed when a recorded run delegates to exactly its chain of agents.
 
 ### 3.4 A catalog of properties (done, step 1)
 
@@ -138,13 +138,25 @@ failure), efficiency, quality (of the answer). The report then gives, per strate
 it covered, and per property, the pass rate against its threshold. The categories map onto DeepEval's metrics
 (task completion, tool correctness, G-Eval for the judged ones), so the catalog could later drive DeepEval.
 
-**Drafting the catalog with a model (step 1b; the code is done, its Qwen run is in step 4).**
+**Drafting the catalog with a model (step 1b, done).**
 `traceeval properties draft` asks Qwen for the catalog from the requirements only (the skills' rules, the agents'
 definitions, the configuration guards and the specs; not the tests), then tags each test with the properties its
 expectations check. The code enforces the limits (at most 15 properties by default and never more than 20, at most
 5 per test) and the fixed lists of categories and ways of checking. Each property cites its sources as component
 ids, which maps a change to the properties it affects without the ground truth; thresholds and the mandatory flag
 start from defaults per category. A person edits the draft and applies it ([USER_GUIDE.md](USER_GUIDE.md) §7).
+
+Qwen's draft from the requirements alone (`--fresh`) is in [properties/draft_qwen/](properties/draft_qwen/), with
+its answers, so `traceeval properties draft --fresh --replay docs/properties/draft_qwen/answers.json` reproduces
+it without a model. The catalog is good: fifteen properties, each traced to the skill, configuration key or spec
+that states it, nine of them safety properties and so mandatory, and finer-grained than the hand-written catalog
+(the review gate, the asset licence, the SEO title limit and the default languages are properties of their own).
+It also finds a requirement no test checks: the 30-day approval window, which only spec FS-0101 states, since
+that feature is not built. The tags are weaker: 38 of the 104 tests and datasets get only the routing property,
+because every request passes the orchestrator, while 32 of the 36 that the hand-written tags mark as checking a
+mandatory property get one too. Asked to extend the existing catalog instead, Qwen keeps its fifteen properties,
+adds sources to three, and tags 86 of 104 with `correct_routing`, finding only 19 of those 36. The model is a good
+first author of the catalog; the tags need the person's review the workflow already asks for.
 
 ### 3.5 Coverage from several angles (done, step 1c)
 
@@ -164,7 +176,7 @@ of its components at least one test covers, declared and observed, and the list 
 | tool | a test calls it (every tool the app registers counts, called or not) | an untested tool |
 | configuration | a test reads the key | a setting whose effect nothing checks |
 | property | a test checks it | an untested requirement; an untested mandatory one is a release risk |
-| workflow (step 3) | a test runs it end to end | a workflow no test crosses |
+| workflow | a test names it (declared), or a recorded run delegates to exactly its agents in order (observed) | a workflow no test runs |
 | execution path | the distinct agent and tool sequences the traces show | counted, not a share |
 | risk | the tests per risk level | an unprotected critical feature |
 
@@ -177,7 +189,8 @@ requirements section 8.1), so `traceeval check` prints it after its verdict:
   catalog of properties) it touches and the properties of the tests that ran a changed component on the original
   app;
 - whether every affected mandatory property got a test;
-- affected workflows and critical-risk tests join with step 3.
+- the share of the affected workflows (those of the tests that exercised a changed component) the executed tests
+  ran.
 
 The replay also measures it against the ground truth: the properties of the revealing tests (`property_coverage`,
 report section 5).
@@ -189,39 +202,112 @@ mandatory property the change may affect has a test, the cheapest that checks it
 while the budget allows. It costs about one extra test in sixteen changes and leaves detection unchanged
 (results in [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.3); `adaptive_bayes_nomandatory` is the method without it.
 
-### 3.6 OpenTelemetry (planned, step 5)
+### 3.6 OpenTelemetry export (done, S2)
 
-The trace recorder already writes agent, skill, tool, config and model events. A small exporter would write each
-run as OpenTelemetry spans (OTLP JSON: one span per agent, skill, tool call and model call, with tokens and
-latency as attributes), with the plan, routing decisions and approvals as span events: the "cognition events"
-Adobe mentioned. No new dependency is needed for the JSON form.
+`traceeval run --test <id> --otel trace.json` writes the run's trace as OpenTelemetry spans in OTLP JSON, the
+form an OpenTelemetry collector accepts on `/v1/traces` (`traceeval/tracing/otel.py`, no new dependency). The
+root span covers the run (test, run id, variant, backend, termination, steps, token totals). Under it, each
+agent turn is an `invoke_agent` span, nested by delegation, and each tool call (`execute_tool`), model call
+(`chat`, with its tokens) and skill load (`load_skill`, with name, version and digest) is a child of the agent
+turn that made it. Names and attributes follow the OpenTelemetry GenAI semantic conventions where they apply
+(`gen_ai.operation.name`, `gen_ai.agent.name`, `gen_ai.tool.name`, `gen_ai.usage.*`, `error.type`); the rest
+are under `traceeval.*`. The "cognition events" Adobe mentioned are span events on the agent span: `plan` (the
+goal and steps of a `make_plan` call), `route` (each delegation with its target, task, status and reason),
+`approval` (whether the step was approved, and by whom) and `consult` (the specialist definitions the
+orchestrator read to choose). A refused tool call carries `error.type`; a crashed one also has status ERROR.
+Span and trace ids are derived from the run id and the event index, so the same run always exports the same
+ids; a record kept with `keep_state=True` holds the events and the start time, and `to_otlp` exports it later.
 
-### 3.7 New controlled changes (planned, step 3)
+### 3.7 Controlled changes aimed at the workflows (done, M3)
 
-About eight, so that the workflows matter for selection: the routing skill drops "brand check before publishing";
-the orchestrator's instruction no longer passes ids between steps; the brand check becomes case-sensitive (misses
-"Guaranteed"); the insights service sorts the wrong way (best pages instead of worst); approval no longer required
-for unpublishing in workflows; the optimizer's audit ignores alt text; plus two benign ones (brand guideline
-wording, reordered routing guidance).
+Ten changes, so that the workflows matter for selection: eight regressions and two benign ones, each checked
+under Gemma ([USER_GUIDE.md](USER_GUIDE.md) §6 lists them with the tests that reveal each). The orchestrator's
+approval rule, removed from the routing skill, is revealed by nine tests across all four workflows; the brand gate
+and the hand-off of ids between steps by the W1 and W2 tests; the insights ranking and the page search by their
+single-agent tests and by W2 and W3. Three regressions are revealed by no workflow test although a workflow runs
+the changed code (the audit's alt-text rule, the brand check's letter case, the approval gate on taking pages
+down): covering a change is not revealing it, the case the method is built for. Two candidates were dropped
+because Gemma does the step anyway: rewording the instruction to pass ids (it passes them regardless), and removing
+the brand rule alone (the request asks for the check and the stop-at-a-failed-check rule still holds).
 
-## 4. The plan: done, and what is left
+## 4. The plan for the demo (Thursday 12 November 2026)
 
-Done: (1) the catalog of properties; (1b) drafting it with a model (the code; its Qwen run is in step 4);
-(1c) coverage reports and the mandatory-coverage rule; (2) the planning mode, the three new agents and asset
-search, workflows W1 and W3, the order assertions, and the test suite's recorded answers re-recorded with Gemma on
-the new app (it fails one new test, WF1-01; [EXPERIMENT.md](EXPERIMENT.md) §6).
+Updated Monday 9 November 2026. The demo shows the AEM team the prototype: the testbed, the features of section
+3 and the proposed method, on the replayed recordings and with one change checked live.
 
-Left, in order:
+### 4.1 Done
 
-- **(3)** Workflows W2, W4–W6; workflows as a coverage dimension and in the per-test metadata; about eight
-  controlled changes aimed at the workflows (§3.7). No GPU apart from a Gemma round on the new tests and the
-  cassette.
-- **(4)** Recording on the GPUs (about an hour on three): both ground truths, Gemma first and Qwen last, and the
-  reports regenerated; the Qwen run of `traceeval properties draft`.
-- **(5)** The OpenTelemetry export (§3.6). No GPU.
+| step | what |
+|---|---|
+| 1, 1b, 1c | the catalog of properties; drafting it with a model (its Qwen run is S1 below); coverage reports and the mandatory-coverage rule |
+| 2 | the planning mode, the three new agents and asset search, the order assertions |
+| M1, S3 | all six workflows as tests, each with a variant where a step must stop (§3.3), recorded with Gemma |
+| M2 | workflows as a coverage dimension and in the per-test metadata |
+| M3 | ten controlled changes aimed at the workflows, checked under Gemma (§3.7) |
+| M5 | the demo walkthrough, [DEMO.md](DEMO.md), drafted |
+| S2 | the OpenTelemetry export (§3.6) |
+| report | the time each strategy spends and how many of the critical regressions (the changes that break a safety property) it catches, next to the tokens: efficiency and effectiveness measures of the requirements, section 8.1 |
 
-Open, not scheduled: re-planning after a failed step; features as a coverage dimension; a tool's error paths and
-a setting's non-default values as coverage components; assigning `INFRA_INVALID` to runs the environment broke.
+The test suite passes on Gemma's recorded answers (177 cases; seven are Gemma's known mistakes,
+[EXPERIMENT.md](EXPERIMENT.md) §6), and `traceeval sdd` replays with every verdict as expected. The application is
+frozen: a change to a skill, an agent, a config value, a tool result or a case now invalidates the recordings
+below.
+
+### 4.2 Left before the demo, in order
+
+| # | task | state | model |
+|---|---|---|---|
+| M4 | The ground truth on the current app with Gemma (`runs/gemma5`: 176 tests, 43 changes, three repetitions), its report in [results/gemma5](results/gemma5/report.md), the README's results | **done 9 Nov**; the results prose of RESEARCH_PLAN §5, EXPERIMENT §7 and USER_GUIDE §5–6 is rewritten with S1's numbers | — |
+| M6 | The live check rehearsed with `--history runs/gemma5` and its answers recorded into the cassette, so that `--backend replay` is the fallback on the day | **done 9 Nov** ([DEMO.md](DEMO.md) §4) | — |
+| M5 | The walkthrough rehearsed end to end | **done on replay 9 Nov**; once more with the Qwen report | — |
+| S1 | The same recording with Qwen (`runs/qwen5`), its report in `results/qwen5`, `results/qwen4` removed; the Qwen run of `traceeval properties draft` is done (§3.4) | recording since 9 November, evening | Qwen |
+
+WF2-03 (W2 with the broken page ranked first) is in the catalog as a known model mistake, after the recordings, so
+they hold 176 of the 177 tests. Gemma tells the user that the other two pages were republished when they were not:
+the clearest example of the requirements' point that the answer and the trace do not prove the state changed,
+since only the checks on the final state catch it. It replays in the demo ([DEMO.md](DEMO.md) §3).
+
+Not for the demo (open, after it): re-planning after a failed step; features as a coverage dimension; a tool's
+error paths and a setting's non-default values as coverage components; assigning `INFRA_INVALID` to runs the
+environment broke; exactly repeatable decoding for Qwen (vLLM's batch-invariant mode); tau2-bench as a second
+system under test.
+
+### 4.3 Day by day
+
+Four GPUs are available, and the vLLM environments on both accounts are set up: GPU0 and GPU1 on fmi0
+(`scripts/gpu_remote.sh up gemma|qwen`) and two through SLURM on the same machine (`TRACEEVAL_SITE=hpc
+scripts/gpu_remote.sh up qwen`, ports 18110 and 18111; [EXPERIMENT.md](EXPERIMENT.md) §4). The two recordings run
+side by side: Gemma on fmi0's GPU0, Qwen on fmi0's GPU1 and on the two SLURM GPUs. The Qwen servers are listed
+together in `TRACEEVAL_LLM_BASE_URL`, the cluster's twice since it serves a copy on each of its two GPUs, and the
+run uses `--workers 64`. Only the `mutants` step gains from more servers: the `baseline` step runs one case at a
+time, because it records code coverage.
+
+| day | work | GPUs |
+|---|---|---|
+| Mon 9 Nov | the review of the code and the documents; M1, M2, M3, S2, S3 and the draft of M5; M4 and S1 started in the evening | all four |
+| Tue 10 Nov | the reports of M4 and S1 written into the documents; the Qwen draft of the catalog of properties; M6; M5 rehearsed | all four until S1 ends, then Gemma |
+| Wed 11 Nov | buffer: anything M4 or S1 showed; a last pass over the documents | Gemma if needed; `down` on both sites at the end |
+| Thu 12 Nov | the demo; Gemma up an hour before for the live check, with `--backend replay` as the fallback | Gemma |
+
+### 4.4 Risks
+
+- **Some workflow cases are red under Gemma on the original app**, and so cannot reveal a change under Gemma:
+  WF1-01 (it schedules the launch page after requesting a review, as in PUB-10), WF5-02 (it goes on to publishing
+  after the rollback's link check failed; publishing's own check refuses the page) and WF6-02 (it stops the whole
+  plan after a refused export, although the byline edits do not depend on it). In the demo, say so: they show that
+  the ground truth belongs to the model, and WF5-02 shows defence in depth at work. Qwen's recording shows whether
+  a larger model gets them right.
+- **Gemma does not go on with the other pages when one fails inside a step.** With the broken page ranked first,
+  it sends all three pages to publishing in one step, publishing stops at the broken link, and the orchestrator
+  neither republishes the other two nor says so (it claims it did). WF2-02 has the broken page last, so it passes;
+  the variant with it first is WF2-03, a known model mistake (§4.2).
+- **A one-off difference between runs.** A benign change that a single failing run reveals, or a regression no
+  test reveals, shows as VIOLATED on the report's sanity line. Three repetitions and the majority vote absorb most
+  of it; a change that still shows it is either explained in the report (a model fact) or recorded again on its
+  own (`traceeval mutants --only <id>`).
+- **The GPUs are shared, and SLURM does not see what runs outside it.** fmi0 and the SLURM node are the same
+  machine. Check `scripts/gpu_remote.sh status` on both sites before every `up`, run `down` on both sites when
+  done, and never use fmi0's GPU 2. A recording needs the PC awake: a tunnel that drops stops it.
 
 Sources: [Overview of agents in AEM](https://experienceleague.adobe.com/en/docs/experience-manager-cloud-service/content/ai-in-aem/agents/overview),
 [Agentic AI in Experience Cloud](https://experienceleague.adobe.com/en/docs/core-services/interface/features/agentic-ai?lang=en),

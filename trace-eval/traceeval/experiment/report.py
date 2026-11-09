@@ -151,6 +151,14 @@ def _by_budget(df, value, fmt="{:.2f}"):
     return _table(t, fmt)
 
 
+def _optional_table(df, value, title, fmt="{:.2f}") -> list[str]:
+    """A titled table by budget, or nothing when the replay has no such column (a replay made by an older version)
+    or no value in it (no change breaks a safety property, say)."""
+    if value not in df or df[value].isna().all():
+        return []
+    return [title, "", _by_budget(df.dropna(subset=[value]).astype({value: float}), value, fmt), ""]
+
+
 def _properties_section(history, reg) -> list[str]:
     """Section 5: every property of the catalog with its tests' pass rate on the original app against its
     threshold, and how much of the properties a change breaks each strategy exercised."""
@@ -206,7 +214,9 @@ def _coverage_section(workdir, history, df) -> list[str]:
         "## 6. Coverage",
         "",
         "Coverage of the test suite: per dimension, how many components the tests declare and the traces show, and "
-        "what no test covers (execution paths are the distinct agent and tool sequences; risk lists tests per level):",
+        "what no test covers (a workflow is declared by the tests that name it and observed when a run delegates to "
+        "exactly its agents in order; execution paths are the distinct agent and tool sequences; risk lists tests per "
+        "level):",
         "",
         *table,
         "",
@@ -232,6 +242,14 @@ def _coverage_section(workdir, history, df) -> list[str]:
             _by_budget(open_runs, "mandatory_covered"),
             "",
         ]
+        # a recording made before the workflow tests existed affects no workflow: the table is then left out
+        if "affected_workflow_coverage" in df and df["affected_workflow_coverage"].notna().any():
+            out += [
+                "Affected workflows run (the workflows of the tests that exercised a changed component):",
+                "",
+                _by_budget(df, "affected_workflow_coverage"),
+                "",
+            ]
     return out
 
 
@@ -288,6 +306,18 @@ def write_report(workdir: Path) -> Path:
         "",
         _by_budget(reg, "cost_fraction", "{:.3f}"),
         "",
+        *_optional_table(
+            reg,
+            "time_fraction",
+            "Time spent on those changes (fraction of the full suite's run time, from each test's mean time on the "
+            "original app):",
+            "{:.3f}",
+        ),
+        *_optional_table(
+            reg[reg.safety_recall.notna()],  # the changes one of whose revealing tests checks a safety property
+            "detected",
+            "Critical regressions: the same detection rate, over the changes that break a safety property only:",
+        ),
         "![detection vs cost](figures/detection_vs_cost.png)",
         "",
         "Cost until the first true detection (fraction of the full suite, detected cases only):",

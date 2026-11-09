@@ -165,6 +165,10 @@ class AdaptiveBayes(Strategy):
             for bucket, tests in touched.items():  # once per change, however many of its components hit the test
                 rate = len(revealing & tests) / len(tests)  # how often an impacted test revealed this change
                 for t in tests:
+                    # The test's record on this bucket: [changes it revealed, changes an average impacted test
+                    # would have revealed]. A change that broke most of the tests it touched adds nearly 1 to
+                    # both numbers, so revealing it is no distinction; a change that only this test caught adds 1
+                    # to the first and little to the second, which is what raises the test's lift later.
                     seen = record.setdefault((t, bucket), [0.0, 0.0])
                     seen[0] += t in revealing
                     seen[1] += rate

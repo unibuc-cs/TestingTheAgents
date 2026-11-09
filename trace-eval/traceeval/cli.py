@@ -2,18 +2,20 @@
 
 traceeval catalog                         list eval cases
 traceeval mutations                       list controlled changes
-traceeval run --test PUB-01 [--backend hf|vllm|llm|replay]   run one case and print the record
+traceeval run --test PUB-01 [--backend hf|vllm|llm|replay] [--otel trace.json]   run one case, print the record
     hf: Gemma on the local GPU; vllm: Gemma on the GPU server (scripts/gpu_remote.sh up gemma); llm: Qwen on
     the GPU server (scripts/gpu_remote.sh up qwen), or any OpenAI-compatible endpoint (TRACEEVAL_LLM_*);
     replay: Gemma's recorded answers, no model
     (TRACEEVAL_CACHE names the file of recorded answers; with hf or vllm, new answers are added to it)
     TRACEEVAL_JUDGE=gemma|qwen picks the model that judges the cases with a rubric (default: the agents' model)
-traceeval baseline --workdir runs/gemma4 --reps 3
-traceeval mutants  --workdir runs/gemma4 --reps 3 [--only id ...]
-traceeval evaluate --workdir runs/gemma4 --seeds 10
-traceeval report   --workdir runs/gemma4
-traceeval experiment --workdir runs/gemma4   (baseline + mutants + evaluate + report)
-traceeval check <mutation id | changed copy of traceeval/sut> --history runs/gemma4 [--budget 0.2] [--backend vllm]
+    --otel also writes the run's trace as OpenTelemetry spans, in OTLP JSON (agents, tools, model calls, skills;
+    plan, routing, approvals and consulted agents as span events)
+traceeval baseline --workdir runs/gemma5 --reps 3
+traceeval mutants  --workdir runs/gemma5 --reps 3 [--only id ...]
+traceeval evaluate --workdir runs/gemma5 --seeds 10
+traceeval report   --workdir runs/gemma5
+traceeval experiment --workdir runs/gemma5   (baseline + mutants + evaluate + report)
+traceeval check <mutation id | changed copy of traceeval/sut> --history runs/gemma5 [--budget 0.2] [--backend vllm]
     check one change live with the proposed method; --history is an experiment recorded with the same model;
     prints the verdict and the change coverage
 traceeval properties draft [--max 15] [--per-test 5] [--fresh] [--replay a.json] [--save-response a.json]
@@ -48,7 +50,7 @@ def cmd_catalog(args):
     from traceeval.catalog import load_catalog
 
     for c in load_catalog():
-        print(f"{c.id:22s} {c.risk:8s} {c.agent:13s} {c.fault_profile:30s} {c.name}")
+        print(f"{c.id:22s} {c.risk:8s} {c.agent:13s} {c.workflow or '':4s} {c.fault_profile:30s} {c.name}")
 
 
 def cmd_mutations(args):
@@ -66,11 +68,17 @@ def cmd_run(args):
 
     case = {c.id: c for c in load_catalog()}[args.test]
     sut = load_sut(Path(args.sut_dir) if args.sut_dir else SUT_ROOT)
-    # With --backend llm the endpoint and model are the backend's defaults (Qwen, or TRACEEVAL_LLM_*).
-    rec = run_case(sut, case, backend=args.backend, config_overrides=_parse_overrides(args.set))
-    # The observed dependencies and covered functions are long lists, left out of the printout.
-    keep = {k: v for k, v in rec.items() if k not in ("deps", "code_functions")}
-    print(json.dumps(keep, indent=1, default=str))
+    # With --backend llm the endpoint and model are the backend's defaults (Qwen, or TRACEEVAL_LLM_*). An export
+    # needs the trace's events, which keep_state adds to the record.
+    overrides = _parse_overrides(args.set)
+    rec = run_case(sut, case, backend=args.backend, config_overrides=overrides, keep_state=bool(args.otel))
+    # The observed dependencies, covered functions, states and events are long, left out of the printout.
+    hidden = ("deps", "code_functions", "initial_state", "final_state", "events")
+    print(json.dumps({k: v for k, v in rec.items() if k not in hidden}, indent=1, default=str))
+    if args.otel:
+        from traceeval.tracing.otel import write_otlp
+
+        print(f"OpenTelemetry trace (OTLP JSON): {write_otlp(args.otel, rec)}", file=sys.stderr)
 
 
 def cmd_baseline(args):
@@ -202,6 +210,7 @@ def main(argv=None):
     r.add_argument("--backend", default="hf", choices=BACKENDS)
     r.add_argument("--sut-dir", default=None)
     r.add_argument("--set", action="append", help="config override key=value (JSON value)")
+    r.add_argument("--otel", metavar="PATH", help="write the run's trace as OpenTelemetry spans (OTLP JSON) to PATH")
     r.set_defaults(fn=cmd_run)
 
     # The experiment commands share one set of options, since `experiment` runs the other four in a row; each
@@ -230,7 +239,7 @@ def main(argv=None):
 
     ck = sub.add_parser("check")
     ck.add_argument("change", help="a mutation id (see traceeval mutations) or a changed copy of traceeval/sut")
-    ck.add_argument("--history", required=True, help="an experiment recorded with the same model, e.g. runs/gemma4")
+    ck.add_argument("--history", required=True, help="an experiment recorded with the same model, e.g. runs/gemma5")
     ck.add_argument("--budget", type=float, default=0.2, help="at most this fraction of the full suite's tokens")
     ck.add_argument("--backend", default="vllm", choices=BACKENDS, help="who plays the agents (default: vllm, Gemma)")
     ck.set_defaults(fn=cmd_check)

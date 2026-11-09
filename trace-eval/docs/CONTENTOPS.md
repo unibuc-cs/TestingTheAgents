@@ -25,6 +25,13 @@ They talk to the platform in plain language. Some requests from the test catalog
 - "Which three blog posts got the fewest views?"
 - "Launch the spring sale: create a landing page, add a hero image tagged spring, make sure it passes the brand
   check, get it translated into French and German, and schedule it" (five specialists, one after the other)
+- "Find the three worst-performing pages of our blog, run a health check of the blog section, fix their SEO,
+  and republish all three" (four specialists)
+- "Change the price on the pricing page to €49, update every translation, one job per language, and republish
+  it after review" (three specialists)
+- "Yesterday's edit broke the welcome page: roll it back to version 1 and republish it" (two specialists)
+- "Privacy request from Sam Lee: export his personal data, remove his name from the bylines of his two blog
+  posts, then republish both pages" (three specialists)
 
 The platform answers in prose and, when the request calls for it, changes its data: pages with their
 versions, links and metadata; assets; translation jobs; and an audit log that records every change. It also

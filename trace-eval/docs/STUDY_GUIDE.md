@@ -29,9 +29,9 @@ and `traceeval/sut/harness/dispatcher.py` (where every tool call is governed and
 ### 1.2 The earlier work in one paragraph
 
 After a change (a skill, a prompt, harness code, a config key), which of the cases should run and
-when can we stop? The 33 mutations give the ground truth (which change breaks which case), and the
+when can we stop? The 43 mutations give the ground truth (which change breaks which case), and the
 baseline traces give observed dependencies. The strategies in `traceeval/selection/` rank cases under a
-token budget and are compared by replaying recorded outcomes (`docs/results/gemma4/report.md`). The SDD
+token budget and are compared by replaying recorded outcomes (`docs/results/gemma5/report.md`). The SDD
 layer reuses the executor, the catalog, the recorder with coverage, the mutation machinery, the
 change-set extraction and the `observed` selection.
 
@@ -39,7 +39,8 @@ change-set extraction and the `observed` selection.
 
 ### 2.1 Conceptually
 
-The direction note asks for a spec that machines can check (and prove where possible), an up-to-date
+The direction note on spec-driven development (the request this layer answers; it is kept outside the
+repository) asks for a spec that machines can check (and prove where possible), an up-to-date
 product model that drives generation and verification, generation of only the needed code in the right
 place, and an evidence record. The testbed already had the raw material for three of the four.
 

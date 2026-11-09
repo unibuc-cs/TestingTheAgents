@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from traceeval.catalog import load_catalog, load_properties
+from traceeval.catalog import load_catalog, load_properties, load_workflows
 from traceeval.experiment.executor import run_case
 from traceeval.experiment.sutloader import copy_sut, load_sut
 from traceeval.scoring import score_case
@@ -34,6 +34,9 @@ def cases():
 def test_catalog_loads_without_duplicates(cases):
     assert len(cases) > 100
     assert "PUB-01" in cases and "DS-ROUTING/r01" in cases
+    # a workflow test names the workflow it runs end to end; the ids come from workflows.yaml
+    assert cases["WF1-01"].workflow == "W1" and cases["WF3-02"].workflow == "W3" and cases["PUB-01"].workflow is None
+    assert {"W1", "W2", "W3", "W4", "W5", "W6"} <= set(load_workflows())
 
 
 def test_skill_parsing_exposes_procedure():
@@ -43,9 +46,11 @@ def test_skill_parsing_exposes_procedure():
 
 
 # Gemma's own mistakes on the original app (docs/EXPERIMENT.md, section 6): it ignores guards it has to work
-# out for itself; in WF1-01, as in PUB-10, it schedules a page whose review is not approved. Every other case
-# must pass.
-KNOWN_MODEL_MISTAKES = ["AUT-04", "PUB-10", "SEO-02", "WF1-01"]
+# out for itself; in WF1-01, as in PUB-10, it schedules a page whose review is not approved; in WF2-03 it says it
+# republished two pages it never published; in WF5-02 it goes on to the publishing step after the rollback's link
+# check failed (publishing's own link check then refuses); in WF6-02 it stops the whole plan after the refused
+# export, although the byline edits do not depend on it. Every other case must pass.
+KNOWN_MODEL_MISTAKES = ["AUT-04", "PUB-10", "SEO-02", "WF1-01", "WF2-03", "WF5-02", "WF6-02"]
 
 
 class ScriptedClient:

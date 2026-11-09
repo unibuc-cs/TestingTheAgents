@@ -91,6 +91,14 @@ class History:
     def total_cost(self) -> float:
         return sum(self.cost(t) for t in self.baseline)
 
+    def seconds(self, test_id: str) -> float:
+        """Expected run time of a test: its mean wall time over the baseline runs, which run one case at a time, so
+        that no other run's load is in it."""
+        return statistics.fmean(r["latency_ms"] for r in self.baseline[test_id].runs) / 1000
+
+    def total_seconds(self) -> float:
+        return sum(self.seconds(t) for t in self.baseline)
+
     def deps(self, test_id: str) -> set[str]:
         return self.baseline[test_id].deps
 

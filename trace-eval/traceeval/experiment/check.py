@@ -23,7 +23,7 @@ from traceeval.mutation import compute_changeset, get_mutation, materialize_vari
 from traceeval.selection import SelectionContext, get_strategy
 from traceeval.sut import SUT_ROOT
 
-from .coverage import affected_properties, change_coverage
+from .coverage import affected_properties, affected_workflows, change_coverage
 from .executor import run_case
 from .history import History
 from .sutloader import load_sut
@@ -43,10 +43,12 @@ def check(change: str, history_dir: Path, budget: float, backend: str):
         else:
             sut_dir, cs = materialize_variant(get_mutation(change), Path(tmp))
         sut = load_sut(sut_dir)
+        seconds = [0.0]  # wall time of the tests run so far
 
         def oracle(test_id: str) -> tuple[bool, float]:
             """Run the test now, on the changed app, with the real model."""
             rec = run_case(sut, catalog[test_id], backend=backend, variant=cs.variant)
+            seconds[0] += rec["latency_ms"] / 1000
             outcome = "pass" if rec["passed"] else f"FAIL {','.join(rec['failed_checks']) or rec['classification']}"
             print(f"  {test_id:22s} {outcome:40s} {rec['tokens']:>7,} tokens", flush=True)
             return rec["passed"], float(rec["tokens"])
@@ -64,7 +66,10 @@ def check(change: str, history_dir: Path, budget: float, backend: str):
         sut.unload()
 
     failed = sorted({t for t, ok, _ in log.steps if not ok})
-    spent = f"{len(log.steps)} runs, {log.cost:,.0f} tokens ({log.cost / history.total_cost():.0%} of the suite)"
+    spent = (
+        f"{len(log.steps)} runs, {log.cost:,.0f} tokens ({log.cost / history.total_cost():.0%} of the suite), "
+        f"{seconds[0]:.0f} s (the whole suite takes about {history.total_seconds():.0f} s, one test at a time)"
+    )
     if log.stop_reason == "no_components":
         verdict = "nothing to test: the change touches no code"
     elif log.stop_reason == "regression":
@@ -82,18 +87,25 @@ def check(change: str, history_dir: Path, budget: float, backend: str):
 
 
 def _print_coverage(cs, executed, history, catalog):
-    """The change coverage of the executed tests, and the affected properties no executed test checks."""
+    """The change coverage of the executed tests, the affected properties no executed test checks, and the
+    affected workflows no executed test ran."""
     props = load_properties()
     affected = affected_properties(cs, history, catalog, props)
-    cov = change_coverage(cs, executed, history, catalog, props, affected)
+    workflows = affected_workflows(cs, history, catalog)
+    cov = change_coverage(cs, executed, history, catalog, props, affected, workflows)
     parts = []
     if cov["component_coverage"] is not None:
         parts.append(f"{cov['component_coverage']:.0%} of the changed components exercised")
     if cov["affected_property_coverage"] is not None:
         parts.append(f"{cov['affected_property_coverage']:.0%} of the {len(affected)} affected properties checked")
+    if cov["affected_workflow_coverage"] is not None:
+        parts.append(f"{cov['affected_workflow_coverage']:.0%} of the {len(workflows)} affected workflows run")
     if parts:
         print("coverage: " + ", ".join(parts))
     checked = {p for t in executed for p in catalog[t].properties}
     missing = [p + (" (mandatory)" if props[p].mandatory else "") for p in sorted(affected - checked)]
     if missing:
         print("not checked: " + ", ".join(missing))
+    ran = {catalog[t].workflow for t in executed if catalog[t].workflow}
+    if workflows - ran:
+        print("workflows not run: " + ", ".join(sorted(workflows - ran)))

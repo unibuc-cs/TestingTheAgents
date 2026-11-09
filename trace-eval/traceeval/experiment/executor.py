@@ -69,8 +69,9 @@ def run_case(
     "replay" (Gemma's recorded answers, no model; ``traceeval/llm/cache.py``) or "llm" (an OpenAI-compatible
     endpoint, by default Qwen on the GPU server, configured by ``llm_settings``); None means
     ``default_backend()``. ``llm_client`` replaces the model client, e.g. with a scripted one in tests.
-    ``fault_profile`` overrides the case's own profile; ``keep_state`` adds the initial fixture and the final
-    state to the record (used by the spec layer's trace monitors, too large for histories). A case with a
+    ``fault_profile`` overrides the case's own profile; ``keep_state`` adds the initial fixture, the final state
+    and the trace's events to the record (used by the spec layer's trace monitors and by the OpenTelemetry
+    export, ``tracing/otel.py``; too large for histories). A case with a
     ``judge`` block is judged by the model ``TRACEEVAL_JUDGE`` names (``llm/chat.py::judge_client``)."""
     backend = backend or default_backend()
     tracer = TraceRecorder(test_id=case.id, run_id=f"{variant}:{case.id}:{rep}", variant=variant, backend=backend)
@@ -165,6 +166,9 @@ def run_case(
         record["initial_state"] = initial
         record["final_state"] = final_state
         record["events"] = trace["events"]
+        # With the events, what an OpenTelemetry export of the run needs (tracing/otel.py::to_otlp).
+        record["run_id"] = trace["run_id"]
+        record["started_at"] = trace["started_at"]
     return record
 
 

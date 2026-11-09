@@ -172,7 +172,7 @@ class Servers:
     and each call goes to the next server in turn, so one run can use the GPUs of several machines (fmi0 and the
     SLURM cluster, ``scripts/gpu_remote.sh``). Decoding is greedy, so the servers give the same answers up to the
     rare one-off difference that batching causes; spreading a run over servers makes those somewhat more frequent
-    (Qwen: docs/EXPERIMENT.md, "Re-recorded on the current app")."""
+    (Qwen: docs/EXPERIMENT.md §7)."""
 
     def __init__(self, urls: str, model_id: str, api_key: str = "EMPTY"):
         from openai import OpenAI
@@ -264,6 +264,8 @@ def judge_client(backend: str):
     name = os.environ.get("TRACEEVAL_JUDGE") or ("qwen" if backend == "llm" else "gemma")
     if name not in ("gemma", "qwen"):
         raise ValueError(f"TRACEEVAL_JUDGE must be gemma or qwen, not {name!r}")
+    # Qwen always judges on the llm backend's servers. Gemma judges through the engine that plays the agents
+    # (so that a replay finds its verdicts in the cassette); when Qwen plays them, Gemma's vLLM server is used.
     engine = "llm" if name == "qwen" else (backend if backend in ("hf", "vllm", "replay") else "vllm")
     client = shared_client(engine)
     return client, client.model_id

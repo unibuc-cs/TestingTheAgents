@@ -3,16 +3,17 @@
 Two levels:
 
 - **Suite coverage** (``suite_coverage``): how well the tests cover the application before any change. For each
-  dimension of Adobe's requirements (agent, skill, tool, configuration, property, execution path, risk), the share
-  of its components that at least one test covers, declared (the tests' metadata) and observed (the recorded
-  traces), and what no test covers. Workflows join as a dimension in step 3 of docs/AEM_ALIGNMENT.md.
+  dimension of Adobe's requirements (agent, skill, tool, configuration, property, workflow, execution path, risk),
+  the share of its components that at least one test covers, declared (the tests' metadata) and observed (the
+  recorded traces), and what no test covers.
 - **Change coverage** (``change_coverage``): for one change and the tests a strategy ran, how much of what the change
   touches they cover. It needs no ground truth, so it can be reported live: the changed components the tests
-  exercised, the affected properties they checked, and whether every affected mandatory property got a test.
+  exercised, the affected properties they checked, whether every affected mandatory property got a test, and the
+  affected workflows they ran.
 
 The properties a change may affect (``affected_properties``) are known before running anything: those whose
 sources (in the catalog of properties) the change touches, and those of the tests that exercised a changed
-component on the original app.
+component on the original app. The workflows it may affect (``affected_workflows``) are those of the same tests.
 """
 
 import re
@@ -20,6 +21,7 @@ from pathlib import Path
 
 import yaml
 
+from traceeval.catalog import load_workflows
 from traceeval.mutation.changeset import _flatten
 from traceeval.selection.base import matches
 
@@ -43,20 +45,41 @@ def affected_properties(change, history, catalog, props) -> set[str]:
     return by_source | by_tests
 
 
-def change_coverage(change, executed, history, catalog, props, affected: set | None = None) -> dict:
-    """What the executed tests cover of the change: shares of the changed components and of the affected
-    properties, and whether every affected mandatory property has at least one executed test. ``affected`` may be
-    passed when it is already known (it depends on the change only)."""
+def affected_workflows(change, history, catalog) -> set[str]:
+    """The workflows a change may affect: those of the tests that exercised a changed component on the original
+    app (a workflow test names its workflow, ``workflow: W1``)."""
+    return {catalog[t].workflow for t in linked_tests(change, history) if t in catalog and catalog[t].workflow}
+
+
+def change_coverage(
+    change, executed, history, catalog, props, affected: set | None = None, affected_wf: set | None = None
+) -> dict:
+    """What the executed tests cover of the change: shares of the changed components, of the affected properties
+    and of the affected workflows, and whether every affected mandatory property has at least one executed test.
+    ``affected`` and ``affected_wf`` may be passed when they are already known (they depend on the change only)."""
     comps = changed_components(change)
     deps = set().union(*(history.deps(t) for t in executed)) if executed else set()
     checked = {p for t in executed if t in catalog for p in catalog[t].properties}
     affected = affected if affected is not None else affected_properties(change, history, catalog, props)
     mandatory = {p for p in affected if p in props and props[p].mandatory}
+    workflows = affected_wf if affected_wf is not None else affected_workflows(change, history, catalog)
+    ran = {catalog[t].workflow for t in executed if t in catalog and catalog[t].workflow}
     return {
         "component_coverage": (sum(matches(c, deps) for c in comps) / len(comps)) if comps else None,
         "affected_property_coverage": (len(affected & checked) / len(affected)) if affected else None,
         "mandatory_covered": mandatory <= checked,
+        "affected_workflow_coverage": (len(workflows & ran) / len(workflows)) if workflows else None,
     }
+
+
+def _crosses(run: dict, agents: list[str]) -> bool:
+    """Did the run delegate to exactly ``agents``, in that order? A run of a plan delegates once per step, so the
+    targets of its routes are the specialists in the order they ran; a step repeated for several pages delegates to
+    the same specialist again, which is why only the first delegation to each counts. An in-order subsequence would
+    not do: a workflow whose chain is part of a longer one (W4 inside W1) would then count as run by the longer
+    one's tests."""
+    first_seen = list(dict.fromkeys(target for _, target in run.get("routes", [])))
+    return first_seen == list(agents)
 
 
 def suite_coverage(history, catalog, props, sut_dir: Path) -> list[dict]:
@@ -89,6 +112,8 @@ def suite_coverage(history, catalog, props, sut_dir: Path) -> list[dict]:
                 "not covered": sorted(set(universe) - dec - obs),
             }
         )
+    # A property is covered when a test lists it. There is no observed form: a trace cannot show which
+    # requirement a test checked, so the declared and observed counts are the same number on purpose.
     tested = {p for c in catalog.values() for p in c.properties}
     rows.append(
         {
@@ -99,6 +124,23 @@ def suite_coverage(history, catalog, props, sut_dir: Path) -> list[dict]:
             "not covered": sorted(set(props) - tested),
         }
     )
+    # A workflow is declared by the tests that name it and observed when a baseline run delegates to exactly its
+    # agents in order; the universe is workflows.yaml, so a workflow no test runs yet shows up as not covered.
+    workflows = load_workflows()
+    named = {c.workflow for c in catalog.values() if c.workflow}
+    runs = [r for s in history.baseline.values() for r in s.runs]
+    crossed = {w.id for w in workflows.values() if any(_crosses(r, w.agents) for r in runs)}
+    rows.append(
+        {
+            "dimension": "workflow",
+            "components": len(workflows),
+            "declared": len(named & set(workflows)),
+            "observed": len(crossed),
+            "not covered": sorted(set(workflows) - named - crossed),
+        }
+    )
+    # An execution path is one distinct sequence of agents and tool calls seen in a baseline run. Paths are
+    # counted, not covered: there is no universe of "all paths" to compare against.
     paths = {
         tuple(r.get("agents", [])) + ("|",) + tuple(r.get("tools", []))
         for s in history.baseline.values()
@@ -113,9 +155,10 @@ def suite_coverage(history, catalog, props, sut_dir: Path) -> list[dict]:
             "not covered": [],
         }
     )
-    risks = {}
+    risks = {}  # the recorded tests per risk level (a case added after the recording is not in it)
     for c in catalog.values():
-        risks[c.risk] = risks.get(c.risk, 0) + 1
+        if c.id in history.baseline:
+            risks[c.risk] = risks.get(c.risk, 0) + 1
     rows.append(
         {
             "dimension": "risk",

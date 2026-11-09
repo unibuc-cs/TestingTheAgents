@@ -19,11 +19,11 @@ To study that, the repo has four things:
   specialist at a time. Each agent follows a skill (a `SKILL.md` with a step-by-step procedure) and calls tools. The app's data (pages, users, reviews) lives in memory, so a test
   can't damage anything, and the harness can inject faults such as a tool that fails once.
   See [CONTENTOPS.md](CONTENTOPS.md).
-- **Tests.** 168 cases: scenario tests in [`traceeval/catalog/tests/`](../traceeval/catalog/tests/) and dataset
+- **Tests.** 177 cases: scenario tests in [`traceeval/catalog/tests/`](../traceeval/catalog/tests/) and dataset
   items in `traceeval/catalog/datasets/`. Each gives a request
   ("Please publish the welcome page") and checks the outcome: was the page published, which tools were
   called, which facts the answer reports.
-- **Changes.** 33 controlled edits in [`traceeval/mutation/catalog.py`](../traceeval/mutation/catalog.py),
+- **Changes.** 43 controlled edits in [`traceeval/mutation/catalog.py`](../traceeval/mutation/catalog.py),
   each labelled *regression* (it should break something) or *benign* (it should not). Example:
   `config_seo_title_20` lowers the SEO title limit from 60 to 20 characters.
 - **Selection strategies.** In [`traceeval/selection/`](../traceeval/selection/), they decide which tests
@@ -132,7 +132,7 @@ model. The `--backend` option picks who plays the agents:
 |---|---|---|
 | `hf` (default) | Gemma in this Python process, on your local GPU (RTX 4090), one call at a time | a quick look at one case, no server needed |
 | `vllm` | Gemma served by vLLM on the GPU server (GPU0), reached through an SSH tunnel; many calls at once | recording experiments with Gemma |
-| `llm` | an OpenAI-compatible endpoint: by default Qwen on the GPU server (GPU1), or the one named by `TRACEEVAL_LLM_BASE_URL` and `TRACEEVAL_LLM_MODEL` | recording experiments with Qwen; later OpenAI's `gpt-6-luna` (phase 1) |
+| `llm` | an OpenAI-compatible endpoint: by default Qwen on the GPU server (GPU1), or the one named by `TRACEEVAL_LLM_BASE_URL` and `TRACEEVAL_LLM_MODEL` | recording experiments with Qwen; later an OpenAI model |
 | `replay` | Gemma's recorded answers, no model (`tests/cassettes/gemma.jsonl`, or the file named by `TRACEEVAL_CACHE`) | the test suite and the SDD demo; running a recorded experiment again |
 
 The two models are wired in slightly differently:
@@ -215,13 +215,13 @@ scripts/gpu_remote.sh status    # GPU memory, and for each model: server, tunnel
 
 # Gemma
 traceeval run --test PUB-01 --backend vllm                              # one case, to check
-traceeval experiment --backend vllm --workdir runs/gemma4 --reps 3      # the whole recording
-traceeval check code_retry_drop_idempotency --history runs/gemma4       # one change, live (section 5)
+traceeval experiment --backend vllm --workdir runs/gemma5 --reps 3      # the whole recording
+traceeval check skill_routing_drop_approval --history runs/gemma5       # one change, live (section 5)
 
 # Qwen (in another terminal, at the same time if you like)
 traceeval run --test PUB-01 --backend llm
-traceeval experiment --backend llm --workdir runs/qwen4 --reps 3
-traceeval check code_retry_drop_idempotency --history runs/qwen4 --backend llm
+traceeval experiment --backend llm --workdir runs/qwen5 --reps 3
+traceeval check skill_routing_drop_approval --history runs/qwen5 --backend llm
 
 scripts/gpu_remote.sh down      # stop both servers and close the tunnels: frees the GPUs
 scripts/gpu_remote.sh down qwen # or just one of them
@@ -264,12 +264,14 @@ their GPUs anyway. That happened on the first try, so check `TRACEEVAL_SITE=hpc 
 and, if needed, ask the cluster's admin which GPUs are free.
 
 To use both sites in one run, list both servers, separated by commas. Each request goes to the next server in
-turn (`traceeval/llm/chat.py::Servers`). Decoding is greedy, so the servers give the same answers up to rare
-one-off differences, which a split run makes somewhat more frequent (see "Re-recorded before the workflows"):
+turn (`traceeval/llm/chat.py::Servers`), so a server listed twice gets twice the requests: list the cluster's
+server twice when it holds a copy of the model on each of its two GPUs. Decoding is greedy, so the servers give
+the same answers up to rare one-off differences, which a split run makes somewhat more frequent (section 7):
 
 ```bash
-export TRACEEVAL_LLM_BASE_URL=http://127.0.0.1:18101/v1,http://127.0.0.1:18111/v1   # Qwen on fmi0 and on the cluster
-traceeval experiment --backend llm --workdir runs/qwen4 --reps 3 --workers 64
+# Qwen on fmi0's GPU1 and on the cluster's two GPUs: a third of the requests to fmi0, two thirds to the cluster
+export TRACEEVAL_LLM_BASE_URL=http://127.0.0.1:18101/v1,http://127.0.0.1:18111/v1,http://127.0.0.1:18111/v1
+traceeval experiment --backend llm --workdir runs/qwen5 --reps 3 --workers 64
 ```
 
 For Gemma the variable is `TRACEEVAL_VLLM_URL` (ports 18100 and 18110).
@@ -307,7 +309,7 @@ any vLLM flags it needs) and its name to `PRESETS`.
 ## 5. Running an experiment
 
 ```bash
-traceeval experiment --backend vllm --workdir runs/gemma4 --reps 3
+traceeval experiment --backend vllm --workdir runs/gemma5 --reps 3
 ```
 
 This runs four steps: `baseline`, `mutants`, `evaluate` and `report`. You can also run them one at a time
@@ -315,11 +317,11 @@ with the same options.
 
 - **`baseline`** runs every test on the original app, one test at a time. It records code coverage per test,
   and coverage can only follow one test at a time in a process.
-- **`mutants`** makes a changed copy of the app for each change (in `runs/gemma4/variants/`) and runs every
+- **`mutants`** makes a changed copy of the app for each change (in `runs/gemma5/variants/`) and runs every
   test on it, 32 tests at a time (`--workers`), because the vLLM server handles many requests at once.
   With the local `hf` engine it stays at 1.
 - **`evaluate`** replays the strategies on the recordings; it makes no model calls.
-- **`report`** writes `runs/gemma4/results/report.md`. Its first section is the sanity check: every
+- **`report`** writes `runs/gemma5/results/report.md`. Its first section is the sanity check: every
   regression must be revealed by at least one test, and no benign change by any.
 
 `--reps 1` is good for a first look. For a ground truth you'll rely on, use `--reps 3`: greedy decoding on
@@ -337,7 +339,15 @@ What ends up in the work folder (git-ignored; copy `results/` into `docs/results
 one JSON line: which agent, the last message it got, Gemma's raw answer, tokens and seconds.
 
 ```bash
-TRACEEVAL_MODEL_LOG=runs/gemma4/model_calls.jsonl traceeval run --test PUB-02 --backend vllm
+TRACEEVAL_MODEL_LOG=runs/gemma5/model_calls.jsonl traceeval run --test PUB-02 --backend vllm
+```
+
+**Exporting a run's trace.** `--otel trace.json` on `traceeval run` writes the run's trace as OpenTelemetry
+spans in OTLP JSON ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.6): the run, each agent turn nested by delegation,
+each tool call, model call and skill load, with the plan, the delegations and the approvals as span events.
+
+```bash
+traceeval run --test WF3-01 --backend replay --otel runs/otel/wf3-01.json
 ```
 
 ### Checking one change live (the prototype)
@@ -347,8 +357,8 @@ tests run live by the model instead of looked up in a recording
 ([`traceeval/experiment/check.py`](../traceeval/experiment/check.py)).
 
 ```bash
-traceeval check code_retry_drop_idempotency --history runs/gemma4 --budget 0.2    # a change from the catalog
-traceeval check my-sut-copy --history runs/qwen4 --backend llm                    # a changed copy of traceeval/sut
+traceeval check skill_routing_drop_approval --history runs/gemma5 --budget 0.2    # a change from the catalog
+traceeval check my-sut-copy --history runs/qwen5 --backend llm                    # a changed copy of traceeval/sut
 ```
 
 The method picks the most informative test for its cost, the test runs on the changed app, and its outcome
@@ -356,7 +366,7 @@ decides what runs next. The check stops at the first test that passed on the ori
 regression), when the method is sure nothing broke, or when the budget is spent. Before it ends without a
 regression, every mandatory property the change may affect gets a test while the budget allows. It prints each test as
 it runs, then the verdict (`REGRESSION`, `no regression`, `no regression found within the budget`, `no failure within the budget`, or `nothing to test` for a change that touches no code), the
-tokens spent, the method's probability that the change broke something, and the change coverage: the share of
+tokens and seconds spent, the method's probability that the change broke something, and the change coverage: the share of
 the changed components the tests exercised, the share of the properties the change may affect that they checked,
 and the affected properties left unchecked (marked when mandatory).
 
@@ -387,183 +397,95 @@ TRACEEVAL_CACHE=tests/cassettes/gemma.jsonl traceeval sdd --backend vllm --worke
 scripts/gpu_remote.sh down
 ```
 
-## 6. What we changed to make Gemma work, and why
+## 6. What a real model gets wrong, and how the prompts and checks allow for it
 
-The first full run of Gemma on the original app passed 92 of 136 tests, and most failures were not about
-the app at all:
+A model does not follow a skill the way a script would. The prompts and the checks are written for that:
 
-- **Gemma called step names as tools.** The skills' procedures were shown to it as raw YAML (`say:`,
-  `include: governance-checks`), and it tried to call `say` and `governance-checks`. Now the procedure is
-  written out as numbered sentences, with included skills expanded and config values filled in.
-- **Tool results were in the wrong place.** Gemma was trained with each tool result attached to the model
-  turn that asked for it, not as a separate message. [`chat.py`](../traceeval/llm/chat.py) now converts the
-  conversation to that form.
-- **Tests checked wording.** Checks like "the answer contains *broken*" fail a model that says "invalid"
-  instead. We dropped the 33 wording checks. A test now checks a phrase only when it is a fact the answer
-  has to report: a job id, a URL, which link is broken.
-- **Empty answers.** Sometimes Gemma ends without a word. The backend now asks once ("Reply to the user
-  now..."), and a new check, `answered`, fails a run that still ends with an empty answer.
+- **Procedures are plain steps.** A skill's `## Procedure` block is shown to the model as numbered sentences,
+  with included skills written out and settings filled in (section 2). Shown as raw YAML, Gemma tried to call
+  `say` and `governance-checks` as tools.
+- **Conditions are spelled out.** `If <request_review> is given and true:` rather than `If <request_review>:`
+  (which reads as an order), `fetch.review_approved is false` rather than `not ...`, and `<seo_title> has more
+  than 60 characters` rather than `len(...) > ...`.
+- **Tool results sit on the model turn.** Gemma was trained with each tool result attached to the turn that
+  asked for it; [`chat.py`](../traceeval/llm/chat.py) converts the conversation to that form.
+- **Checks look for facts, not wording.** A test checks a phrase only when it is a fact the answer has to report
+  (a job id, a path, which link is broken); "the answer contains *broken*" would fail a model that says
+  "invalid".
+- **An empty answer gets one reminder.** When the model ends without a word, the backend asks once for the
+  answer the step prepared, and the `answered` check fails a run that still ends empty.
+- **The orchestrator is told the rules it would otherwise improvise:** where a request goes that no specialist
+  owns (`routing.default_agent`; without it Qwen answered "Hello there" itself), that every request is delegated
+  and a specialist's answer goes to the user as it is, and that a plan is only for parts owned by different
+  specialists. An approval is held by the runtime for the steps after it: asked to copy it into each step,
+  Gemma kept the token and dropped the approver.
 
-After these, the original app passed 131 of 136. Phase 4 (section 7) added three more fixes:
-
-- **The answer after an empty reply.** At a failed link check Gemma stopped without a word, and the reminder
-  made it summarise without saying which link. The reminder now asks for the answer the step prepared, so
-  PUB-02 and PUB-03 pass.
-- **Conditions spelled out.** `If <request_review>:` became `If <request_review> is given and true:` (Gemma
-  read the first one as an order), `not fetch.review_approved` became `fetch.review_approved is false`, and
-  `len(<seo_title>) > ...` became `<seo_title> has more than ... characters`.
-- **The default agent.** The orchestrator is now told where to send a request that no specialist owns
-  (`routing.default_agent`). Without it, Qwen answered "Hello there" itself.
-
-After phase 4 the original app (then 136 tests) passed 133 under Gemma and 135 under Qwen. What was left are
-real model mistakes, which clearer wording did not fix:
+What is left are the models' own mistakes, which clearer wording does not fix. On the original app Gemma passes
+170 of the 176 recorded tests; WF2-03, added after the recording, is a seventh. Qwen's mistakes below come from its
+recording of the app before the workflows; its recording of the current app follows
+([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4):
 
 | case | model | what goes wrong |
 |---|---|---|
 | PUB-10 | Gemma | it requests the review, as it should, and then schedules the page anyway |
+| WF1-01 | Gemma | the same in the campaign launch: it schedules the launch page after requesting a review instead of having the approver approve it |
+| WF2-03 | Gemma | in the site optimization with the broken page ranked first, it sends all three pages to publishing in one step, publishing stops at the broken page, and it tells the user that the other two were republished when they were not; only the checks on the final state catch it |
+| WF5-02 | Gemma | in the rollback workflow, after the restored version fails its link check, it still sends the page to publishing, without an approval; publishing's own link check refuses it, so the page stays down |
+| WF6-02 | Gemma | in the privacy workflow, after the export is refused for lack of consent, it stops the whole plan, although the byline edits do not depend on the export; it claims nothing false and no safety property is broken |
 | AUT-04 | Gemma | after an edit it requests a review nobody asked for |
 | SEO-02 | Gemma | it applies an 83-character title over the 60-character limit |
 | SEO-05 | Qwen | it counts the 60-character title as 61 and refuses it |
+| SEO-07 | Qwen | its own judge fails its answer: "Updated SEO metadata on p1; SEO score is now 100" does not say that the keywords were applied, which the rubric asks for. Gemma, judging the same kind of answer, lets it pass. The rubric stays strict on purpose |
 
-Since a model judges the two rubric cases (phase 6), Qwen also fails SEO-07 when it judges its own answer:
-"Updated SEO metadata on p1; SEO score is now 100" does not say that the keywords were applied, which the rubric
-asks for. Gemma, judging the same kind of answer, lets it pass. The rubric stays strict on purpose.
+The pattern: Gemma acts on guards that come from a tool's answer (a denied permission, a broken link), but not
+on guards it has to work out for itself (a review flag, a length), and in a plan it does not judge well which
+steps depend on a failed one. Gemma's cases are listed in `KNOWN_MODEL_MISTAKES` (`tests/test_sut.py`): the test
+suite expects them to fail and every other case to pass. A test the model fails on the original app cannot reveal
+a change, which is also why some changes have no revealing test (section 7).
 
-Gemma acts on guards that come from a tool's answer (a denied permission, a broken link), but not on guards
-it has to work out for itself (a review flag, a length).
+## 7. The recordings
 
-**With the multi-agent workflows** (phase 8), the new tests took one more round of the same kind. The
-orchestrator is told that every request is delegated and that a specialist's answer goes to the user as it is
-(it had started to answer greetings itself and to paraphrase away facts), and that a plan is only for parts owned
-by different specialists. The asset search ranks matches instead of requiring every word of the query. An
-approval is held by the runtime for the steps after it: asked to copy it into each step, Gemma kept the token and
-dropped the approver. Gemma now passes 164 of 168: the three cases above, and WF1-01, where, as in PUB-10, it
-schedules the launch page after requesting a review instead of having the approver approve it.
+The results in `docs/results/gemma5/` come from `runs/gemma5`: Gemma on the current app, 176 tests, 43 changes,
+three repetitions, with the model judge. It took about an hour on fmi0's GPU0: 18 minutes for the baseline, one
+test at a time, and about a minute per change with 64 tests at a time. Qwen's recording of the same app runs on
+fmi0's GPU1 and the two SLURM GPUs (section 4) and is added when it ends.
 
-## 7. Where we are
-
-| phase | what | status |
-|---|---|---|
-| 0 | measure Gemma on the original app; make prompts and checks fit a real model | done |
-| — | GPU server: `scripts/gpu_remote.sh`, `--backend vllm`, parallel runs | done |
-| — | first full recording with Gemma (`runs/gemma1`, below) | done |
-| — | second model: Qwen3.8-27B on GPU1, next to Gemma on GPU0 (`runs/qwen1`, below) | done |
-| 1 | a cache of model answers (`traceeval/llm/cache.py`, section 5); an OpenAI backend (`gpt-6-luna`) | cache done; OpenAI waits for API tokens |
-| 2 | tokens and latency from the model servers' own counts | done |
-| 3 | pytest replays recorded model answers ("cassettes", `tests/cassettes/`), so tests need no GPU | done |
-| 4 | re-derive the ground truth under both models, with three repetitions (`runs/gemma2`, `runs/qwen2`, below) | done |
-| 5 | the SDD demo on Gemma ([SDD_DEMO.md](SDD_DEMO.md)) | done |
-| 6 | real models only: the rubric cases judged by Gemma or Qwen instead of a word match; the prototype `traceeval check` (section 5) | done |
-| 7 | re-recorded with the model judge, on the app before the workflows (`runs/gemma4`, `runs/qwen4`, below) | done |
-| 8 | the app grows towards AEM's: a planning orchestrator with approvals, three new agents, multi-agent workflows ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md)); the test suite's recorded answers re-recorded with Gemma | in progress; the ground truths are recorded again when the workflows are complete |
-
-### The first recordings (before phase 4)
-
-The first full recordings (`runs/gemma1`, `runs/qwen1`: 38 changes, one repetition) showed that the changes,
-designed before a real model played the agents, did not all fit one: Gemma caught 20 of 32 regressions and Qwen
-23. Some changes touched inputs no model uses (keyword weights, trigger lists, the order of intents); in others
-the model did the removed step anyway, because the skill's prose still asked for it; and some could only be
-caught by a test the model already failed on the original app. Phase 4 fixed the changes and the tests. The
-strategies already ranked the same way: at 20% of the tokens, trace-based selection and `ir_tfidf` caught about
-90%, hand-written dependencies 50–60%.
-
-### Phase 4: a ground truth for real models
-
-The two recordings above showed that some of the 38 changes, and a few tests, did not fit a real model.
-Phase 4 fixed them and then recorded both models again, this time with three repetitions per test.
-
-**What changed**
-
-- **The app's prompts:** the three fixes at the end of section 6 (the reply reminder, conditions spelled out,
-  the default agent).
-- **Two tests:** AST-07 now lets the model look the missing asset up (`get_asset: not_found` is allowed).
-  SEO-07 checks the score in the last SEO report (a new kind of check, `tool_results`) rather than only
-  looking for "100" in the answer.
-- **The changes:** still 38, now 31 regressions and 7 benign. Five were dropped later as redundant
-  ([USER_GUIDE.md](USER_GUIDE.md) §6); the results below are for the remaining 33 (26 regressions).
-
-| before | now | why |
-|---|---|---|
-| `code_router_phrase_weight` | `code_delegation_truncates_answer`: the orchestrator gets only the first 40 characters of the specialist's answer | a model doesn't use the keyword weights |
-| `prompt_publishing_triggers_removed` | `prompt_governance_consent_tool_removed`: the governance agent loses `check_consent` | a model routes by the agents' descriptions and the routing skill, not by the trigger list |
-| `prompt_translation_intents_reordered` (regression) | `benign_translation_intents_reordered` | a model picks the intent from the request, not from the order of a list |
-| `config_default_agent_publishing` | unchanged | the orchestrator is now told the default agent, so a model depends on it too |
-| `skill_publish_drop_permission_check`, `skill_rollback_drop_permission_check` | also remove the sentence in the prose, and the shared permission skill from the agent | with only the procedure step gone, both models still checked the permission |
-| `skill_governance_drop_consent`, `skill_seo_drop_length_guard`, `skill_linkval_ignore_assets` | also change the prose | the prose still asked for the step |
-
-**Results**
-
-`runs/gemma2` took about half an hour. `runs/qwen2` took about an hour and a half: the baseline on GPU1,
-then the changes on a copy of Qwen on each GPU (`TRACEEVAL_GPUS=0,1`, `--workers 64`), once Gemma was done.
-
-| | Gemma 4 E4B | Qwen3.8-27B |
-|---|---|---|
-| original app | 133 of 136 pass | 135 of 136 pass |
-| regressions caught | 21 of 26 | 26 of 26 |
-| benign changes that fail a test | none | none |
-| sanity line of the report | VIOLATED (the five below) | OK |
-
-Qwen catches every regression, so the changes and the tests are now sound for a model that follows its
-instructions. Gemma misses five, for one reason: it doesn't act on a guard it has to work out for itself, so it
-behaves the same (wrongly) with or without the change.
-
-| change | why Gemma can't see it |
+| | Gemma 4 E4B |
 |---|---|
-| `config_require_review_false`, `code_edit_keeps_review` | Gemma schedules a page without an approved review anyway (PUB-10), and requests a review nobody asked for after an edit (AUT-04) |
-| `config_seo_title_20`, `skill_seo_drop_length_guard` | Gemma applies an over-long title whatever the limit (SEO-02) |
-| `skill_linkval_ignore_assets` | Gemma stops at a broken asset reference even when the skill says it doesn't block |
+| original app | 170 of 176 pass |
+| regressions revealed | 29 of 34 |
+| benign changes that fail a test | none of 9 |
+| sanity line of the report | VIOLATED (the five below) |
 
-We keep them as they are. The ground truth belongs to a model, and a change that a model can't see is a fact
-about that model, not a bug in the testbed.
+The changes no test reveals belong to the model, not to the testbed, and they stay in the set:
 
-**Repetitions.** Under Gemma, no test gave different verdicts in its three repetitions on the original app, and
-three tests did so once each on a changed copy. Under Qwen, SEO-05 (the 60-character boundary) flips on ten
-changes and a handful of tests flip once. The majority vote absorbs all of it.
+| change | why no test reveals it under Gemma |
+|---|---|
+| `config_require_review_false`, `code_edit_keeps_review` | it schedules a page without an approved review anyway (PUB-10), and requests a review nobody asked for after an edit (AUT-04) |
+| `config_seo_title_20`, `skill_seo_drop_length_guard` | it applies an over-long title whatever the limit (SEO-02) |
+| `skill_linkval_ignore_assets` | it stops at a broken asset reference even when the skill says it does not block |
 
-**Strategies at 20% of the full-suite tokens**, on the regressions each model reveals:
+**Repetitions.** Gemma's three runs of each test agreed on the original app, and disagreed on only five (change,
+test) pairs over all 43 changes; the majority vote absorbs them. Qwen is more sensitive to how requests are
+batched together, and splitting a run over several servers makes one-off differences more frequent (section 3).
+The majority vote keeps the ground truth clean, but the adaptive method stops at the first failure of a test that
+passed on the original app, so a one-off failure can give a false "regression" verdict. vLLM 0.31 has a
+batch-invariant mode that makes greedy decoding exactly repeatable; a later Qwen recording should use it.
 
-| strategy | Gemma | Qwen |
+**Strategies at 20% of the full-suite tokens**, on the 29 regressions Gemma reveals (the full tables are in
+[RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.1 and in the report):
+
+| strategy | detected | tokens spent |
 |---|---|---|
-| `declared` (hand-written dependencies) | 71% | 65% |
-| `observed` (dependencies from traces) | 90% | 85% |
-| `ir_tfidf` (text similarity to the diff) | 90% | 88% |
-| `adaptive_bayes` (spending) | 81% (5%) | 73% (6%) |
+| `declared` (hand-written dependencies) | 61% | 7% |
+| `observed` (dependencies from traces) | 86% | 15% |
+| `ir_tfidf` (text similarity to the diff) | 92% | 20% |
+| `adaptive_bayes` (the proposed method) | 79% | 3% |
 
-- **The main claim holds under real models.** Hand-written dependencies stay at 65–71%, and traces recover most
-  of the rest.
-- **The adaptive method is weaker under Qwen.** On regressions that only one or two tests reveal, it stops with
-  "clean" before reaching them (115 of 910 replays). Each test's own record is now part of the method (see
-  USER_GUIDE.md §5), and so is text similarity (RESEARCH_PLAN §5.2).
-- **Tests that are red on the original app cost the other strategies dearly.** Gemma's three failing tests fail
-  on every changed copy, so a strategy that runs one of them sees a failure the change did not cause. On the
-  changes that no test reveals, `full` sees such a failure in 71% of replays and `ir_tfidf` in 58% under Gemma
-  (56% and 16% under Qwen). `adaptive_bayes` discounts a test by its failures on the original app and gives no
-  "regression" verdict on any of these changes.
-
-### Re-recorded before the workflows (`runs/gemma4`, `runs/qwen4`)
-
-After the changes since phase 4 (the model judge, 33 changes, the new stopping rule), both models were recorded
-again with three repetitions, each on one GPU through SLURM (`TRACEEVAL_SITE=hpc`). Qwen's changes also ran on a
-second Qwen server on fmi0's GPU0, with the requests alternating between the two. Gemma took about 40 minutes,
-Qwen about two hours. These are the results in `docs/results/`.
-
-| | Gemma 4 E4B | Qwen3.8-27B |
-|---|---|---|
-| original app | 133 of 136 pass | 134 of 136 pass (SEO-05, and SEO-07 failed by Qwen's own judge) |
-| regressions caught | 21 of 26 | 24 of 26 |
-| benign changes that fail a test | none | none |
-
-- **Gemma** gives the same ground truth as before: two changes differ by one test each.
-- **Qwen** misses two regressions. `combined_seo_keyword_limit` has a single test, SEO-07, which Qwen's strict
-  judge already fails on the original app. Under `skill_publish_drop_link_validation`, Qwen validates the links
-  even though the step is gone.
-- **Qwen's runs disagree more often.** 34 (change, test) pairs got different outcomes in their three runs, against
-  15 in `runs/qwen2` and 1–2 under Gemma. Both servers run the same vLLM and torch versions: Qwen is sensitive to
-  how requests are batched together, and splitting them over two servers doubled the effect. The majority vote
-  keeps the ground truth clean, but the adaptive method stops at the first failure of a test that passed on the
-  original app, so a one-off failure under a benign change gives a false "regression" verdict (20 of 245 replays
-  of benign changes). vLLM 0.31 has a batch-invariant mode that makes greedy decoding exactly repeatable; the next
-  Qwen recording should use it.
+Hand-written dependencies miss what shared skills, harness code and configuration keys reach; traces recover most
+of it. The adaptive method returns most of the budget, and it discounts a test by its failures on the original
+app: the other strategies see those failures as if the change had caused them (`full` in 71% of its replays on
+the changes no test reveals, `ir_tfidf` in 70%, the adaptive method in none).
 
 ## 8. Where to look in the code
 

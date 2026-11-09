@@ -3,7 +3,8 @@
 Every item becomes an ``EvalCase``. Dataset items inherit the dataset's agent, context, declared
 dependencies, risk and properties, and carry ``dataset`` = the dataset id so that selectors can
 reason about "subsets of eval datasets". The properties a case checks must be in the catalog of properties
-(``properties.yaml``), loaded as ``Property``."""
+(``properties.yaml``), loaded as ``Property``; the workflow a case runs end to end (``workflow: W1``) must be in
+``workflows.yaml``, loaded as ``Workflow``."""
 
 import json
 from dataclasses import dataclass, field
@@ -32,6 +33,7 @@ class EvalCase:
     expect: dict = field(default_factory=dict)
     judge: dict | None = None
     dataset: str | None = None
+    workflow: str | None = None  # the multi-agent workflow this case runs end to end (an id of workflows.yaml)
 
     @property
     def severity(self) -> float:
@@ -63,6 +65,7 @@ class EvalCase:
                 self.request,
                 json.dumps(self.context, default=str),
                 " ".join(self.properties),
+                self.workflow or "",
                 json.dumps(self.declared),
             ]
         )
@@ -84,14 +87,30 @@ class Property:
     sources: list[str] = field(default_factory=list)
 
 
+@dataclass
+class Workflow:
+    """One multi-agent workflow (an entry of ``workflows.yaml``): the chain of specialists a plan for it delegates
+    to, in order. A test names the workflow it runs end to end; a run covers it when it delegates to exactly these
+    agents, in this order (repeated delegations to a step's agent allowed)."""
+
+    id: str
+    name: str
+    agents: list[str]
+
+
 def _load_yaml(path: Path):
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:  # the same text on every platform, so the cache keys agree
         return yaml.safe_load(fh)
 
 
 def load_properties(root: Path | str = CATALOG_ROOT) -> dict[str, Property]:
     """The catalog of properties, by id."""
     return {p["id"]: Property(**p) for p in _load_yaml(Path(root) / "properties.yaml")}
+
+
+def load_workflows(root: Path | str = CATALOG_ROOT) -> dict[str, Workflow]:
+    """The multi-agent workflows, by id."""
+    return {w["id"]: Workflow(**w) for w in _load_yaml(Path(root) / "workflows.yaml")}
 
 
 def load_catalog(root: Path | str = CATALOG_ROOT) -> list[EvalCase]:
@@ -114,6 +133,7 @@ def load_catalog(root: Path | str = CATALOG_ROOT) -> list[EvalCase]:
                     declared=dict(raw.get("declared", {})),
                     expect=dict(raw.get("expect", {})),
                     judge=raw.get("judge"),
+                    workflow=raw.get("workflow"),
                 )
             )
     for path in sorted((root / "datasets").glob("*.yaml")):
@@ -152,4 +172,7 @@ def load_catalog(root: Path | str = CATALOG_ROOT) -> list[EvalCase]:
     unknown = sorted({p for c in cases for p in c.properties} - set(load_properties(root)))
     if unknown:
         raise ValueError(f"properties missing from properties.yaml: {unknown}")
+    unknown = sorted({c.workflow for c in cases if c.workflow} - set(load_workflows(root)))
+    if unknown:
+        raise ValueError(f"workflows missing from workflows.yaml: {unknown}")
     return cases

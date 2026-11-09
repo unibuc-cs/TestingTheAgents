@@ -1,6 +1,6 @@
 # Spec-driven development: evidence report
 
-5 change requests, 25 pull requests, 168 recorded baseline runs (47,279 tokens of source in 59 files).
+5 change requests, 25 pull requests, 177 recorded baseline runs (47,369 tokens of source in 59 files).
 
 Each request is a spec: prose intent plus machine-checkable clauses. Each PR is a variant of the system. The clauses are checked, the change-affected regression tests are run, and the result is an evidence record with the assurance rung reached per clause (L0 reviewed, L1 example-tested, L2 property-tested, L3 monitored, L4 statically checked, L5 proven).
 
@@ -8,31 +8,31 @@ Each request is a spec: prose intent plus machine-checkable clauses. Each PR is 
 
 | request | PR | expected | verdict | what failed / gap | rungs reached | clause runs | regression cases (of full) | tokens (of full) | s |
 |---|---|---|---|---|---|---|---|---|---|
-| FS-0101 | pr_correct | accepted | **accepted** | - | L5×1, L4×5, L3×1, L1×4 | 21 | 50 (168) | 860,155 (1,592,834) | 2.4 |
-| FS-0101 | pr_no_lower_bound | rejected | **rejected** | function_contract:review_age_ok (contract) | L4×5, L3×1, L1×4 | 21 | 50 (168) | 860,155 (1,592,834) | 1.9 |
-| FS-0101 | pr_off_by_one | rejected | **rejected** | function_contract:review_age_ok (contract), scenario:PUB-01 (example) | L4×5, L3×1, L1×3 | 21 | 50 (168) | 860,204 (1,592,834) | 1.4 |
-| FS-0101 | pr_branchy | accepted | **accepted with gaps** | function_contract:review_age_ok (contract, L2 < L5) | L4×5, L3×1, L2×1, L1×4 | 21 | 50 (168) | 860,155 (1,592,834) | 1.4 |
-| FS-0101 | pr_in_adapter | rejected | **rejected** | function_contract:review_age_ok (contract, L2 < L5), always_on_calls:publish_page+schedule_publish (trace), function_in_layer:review_age_ok (placement), function_in_layer:approval_age_days (placement), forbid_import_in:datetime (placement) | L4×2, L1×4 | 21 | 57 (168) | 949,290 (1,592,834) | 1.5 |
-| FS-0101 | pr_unwired | rejected | **rejected** | always_on_calls:publish_page+schedule_publish (trace), scenario:please-publish-the-staleapproval (example) | L5×1, L4×5, L1×3 | 21 | 50 (168) | 857,740 (1,592,834) | 1.4 |
-| FS-0102 | current | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:unpublish_page+export_user_data+approve_review (trace), scenario:PUB-06 (example), scenario:take-down-the-old (example), function_in_layer:approver_for (placement) | L4×4, L3×1, L1×2 | 17 | 0 (168) | 206,284 (1,592,834) | 0.6 |
-| FS-0102 | pr_correct | accepted | **accepted** | - | L4×5, L3×2, L2×1, L1×4 | 17 | 168 (168) | 1,543,007 (1,592,834) | 3.5 |
-| FS-0102 | pr_self_approved | rejected | **rejected** | property_over_set:tool (contract), scenario:take-down-the-old (example) | L4×5, L3×2, L1×3 | 17 | 168 (168) | 1,542,802 (1,592,834) | 4.3 |
-| FS-0102 | pr_in_dispatcher | rejected | **rejected** | function_in_layer:approver_for (placement), forbid_name_in:users (placement) | L4×3, L3×2, L2×1, L1×4 | 17 | 168 (168) | 1,543,007 (1,592,834) | 3.8 |
-| FS-0102 | code_approval_gate_bypass | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:unpublish_page+export_user_data+approve_review (trace), never_on_calls:unpublish_page+export_user_data+approve_review (trace), scenario:take-down-the-old (example), scenario:PUB-07 (example), regression-tests (example) | L4×5, L1×1 | 17 | 168 (168) | 1,543,914 (1,592,834) | 3.3 |
-| FS-0103 | pr_correct | rejected | **rejected** | regression-tests (example) | L5×1, L4×5, L3×2, L1×3 | 50 | 53 (168) | 904,047 (1,592,834) | 1.5 |
-| FS-0103 | pr_gate_ignores_version | rejected | **rejected** | precedes_in_audit:publish_page+schedule_publish (trace), function_contract:links_clean (contract) | L4×5, L3×1, L1×4 | 50 | 53 (168) | 899,614 (1,592,834) | 1.7 |
-| FS-0103 | pr_gate_in_adapter | rejected | **rejected** | function_contract:links_clean (contract, L2 < L5), function_in_layer:links_clean (placement), regression-tests (example) | L4×4, L3×2, L1×3 | 50 | 53 (168) | 904,047 (1,592,834) | 1.9 |
-| FS-0103 | pr_validate_after_schedule | rejected | **rejected** | scenario:PUB-09 (example), skill_step_order:publishing-workflow#2 (placement), regression-tests (example) | L5×1, L4×4, L3×2, L1×2 | 50 | 58 (168) | 953,794 (1,592,834) | 2.1 |
-| FS-0103 | code_links_external_lenient | rejected | **rejected** | always_in_audit:validate_links (trace), scenario:PUB-02 (example), regression-tests (example) | L5×1, L4×5, L3×1, L1×2 | 50 | 53 (168) | 916,758 (1,592,834) | 1.9 |
-| FS-0104 | pr_config_70 | rejected | **rejected** | property_over_range:n (contract), scenario:SEO-01 (example), scenario:SEO-01#2 (example), regression-tests (example) | L4×3, L3×1 | 26 | 8 (168) | 357,558 (1,592,834) | 0.8 |
-| FS-0104 | pr_config_20 | rejected | **rejected** | setting_in_range:seo.max_title_length (setting), property_over_range:n (contract), scenario:SEO-01 (example), scenario:SEO-01#2 (example), regression-tests (example) | L4×2, L3×1 | 26 | 8 (168) | 357,558 (1,592,834) | 0.8 |
-| FS-0104 | pr_hardcoded_70 | rejected | **rejected** | property_over_range:n (contract), scenario:SEO-01 (example), scenario:SEO-01#2 (example), forbid_literal_in:70 (placement), regression-tests (example) | L4×2, L3×1 | 26 | 8 (168) | 357,558 (1,592,834) | 0.8 |
-| FS-0104 | pr_drop_guard | rejected | **rejected** | property_over_range:n (contract), scenario:SEO-01 (example), scenario:SEO-01#2 (example), regression-tests (example) | L4×3, L3×1 | 26 | 8 (168) | 357,558 (1,592,834) | 0.9 |
-| FS-0105 | current | rejected | **rejected** | property_over_set:tool (contract), scenario:PUB-09 (example) | L4×5, L3×1, L1×2 | 49 | 0 (168) | 823,377 (1,592,834) | 1.3 |
-| FS-0105 | pr_fix | accepted | **accepted** | - | L4×5, L3×1, L2×1, L1×3 | 49 | 14 (168) | 838,280 (1,592,834) | 1.6 |
-| FS-0105 | pr_partial_fix | rejected | **rejected** | property_over_set:tool (contract) | L4×5, L3×1, L1×3 | 49 | 5 (168) | 823,377 (1,592,834) | 1.4 |
-| FS-0105 | code_retry_drop_idempotency | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:publish_page+schedule_publish+unpublish_page+request_review (trace), scenario:PUB-12 (example), scenario:PUB-09 (example), regression-tests (example) | L4×5 | 49 | 117 (168) | 1,475,525 (1,592,834) | 3.3 |
-| FS-0105 | config_retries_0 | rejected | **rejected** | setting_in_range:runtime.retries (setting), property_over_set:tool (contract), scenario:PUB-12 (example), regression-tests (example) | L4×4, L3×1, L1×1 | 49 | 117 (168) | 1,454,909 (1,592,834) | 3.4 |
+| FS-0101 | pr_correct | accepted | **accepted** | - | L5×1, L4×5, L3×1, L1×4 | 27 | 58 (177) | 1,206,911 (2,024,392) | 2.2 |
+| FS-0101 | pr_no_lower_bound | rejected | **rejected** | function_contract:review_age_ok (contract) | L4×5, L3×1, L1×4 | 27 | 58 (177) | 1,206,911 (2,024,392) | 1.7 |
+| FS-0101 | pr_off_by_one | rejected | **rejected** | function_contract:review_age_ok (contract), scenario:PUB-01 (example) | L4×5, L3×1, L1×3 | 27 | 58 (177) | 1,206,960 (2,024,392) | 1.8 |
+| FS-0101 | pr_branchy | accepted | **accepted with gaps** | function_contract:review_age_ok (contract, L2 < L5) | L4×5, L3×1, L2×1, L1×4 | 27 | 58 (177) | 1,206,911 (2,024,392) | 2.1 |
+| FS-0101 | pr_in_adapter | rejected | **rejected** | function_contract:review_age_ok (contract, L2 < L5), always_on_calls:publish_page+schedule_publish (trace), function_in_layer:review_age_ok (placement), function_in_layer:approval_age_days (placement), forbid_import_in:datetime (placement) | L4×2, L1×4 | 27 | 65 (177) | 1,296,046 (2,024,392) | 2.0 |
+| FS-0101 | pr_unwired | rejected | **rejected** | always_on_calls:publish_page+schedule_publish (trace), scenario:please-publish-the-staleapproval (example) | L5×1, L4×5, L1×3 | 27 | 58 (177) | 1,204,496 (2,024,392) | 1.8 |
+| FS-0102 | current | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:unpublish_page+export_user_data+approve_review (trace), scenario:PUB-06 (example), scenario:take-down-the-old (example), function_in_layer:approver_for (placement) | L4×4, L3×1, L1×2 | 21 | 0 (177) | 422,446 (2,024,392) | 0.8 |
+| FS-0102 | pr_correct | accepted | **accepted** | - | L4×5, L3×2, L2×1, L1×4 | 21 | 177 (177) | 1,888,121 (2,024,392) | 3.8 |
+| FS-0102 | pr_self_approved | rejected | **rejected** | property_over_set:tool (contract), scenario:take-down-the-old (example) | L4×5, L3×2, L1×3 | 21 | 177 (177) | 1,887,916 (2,024,392) | 3.8 |
+| FS-0102 | pr_in_dispatcher | rejected | **rejected** | function_in_layer:approver_for (placement), forbid_name_in:users (placement) | L4×3, L3×2, L2×1, L1×4 | 21 | 177 (177) | 1,888,121 (2,024,392) | 4.2 |
+| FS-0102 | code_approval_gate_bypass | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:unpublish_page+export_user_data+approve_review (trace), never_on_calls:unpublish_page+export_user_data+approve_review (trace), scenario:take-down-the-old (example), scenario:PUB-07 (example), regression-tests (example) | L4×5, L1×1 | 21 | 177 (177) | 1,889,028 (2,024,392) | 4.2 |
+| FS-0103 | pr_correct | rejected | **rejected** | regression-tests (example) | L5×1, L4×5, L3×2, L1×3 | 58 | 61 (177) | 1,325,501 (2,024,392) | 2.0 |
+| FS-0103 | pr_gate_ignores_version | rejected | **rejected** | precedes_in_audit:publish_page+schedule_publish (trace), function_contract:links_clean (contract) | L4×5, L3×1, L1×4 | 58 | 61 (177) | 1,321,068 (2,024,392) | 1.8 |
+| FS-0103 | pr_gate_in_adapter | rejected | **rejected** | function_contract:links_clean (contract, L2 < L5), function_in_layer:links_clean (placement), regression-tests (example) | L4×4, L3×2, L1×3 | 58 | 61 (177) | 1,325,501 (2,024,392) | 1.8 |
+| FS-0103 | pr_validate_after_schedule | rejected | **rejected** | scenario:PUB-09 (example), skill_step_order:publishing-workflow#2 (placement), regression-tests (example) | L5×1, L4×4, L3×2, L1×2 | 58 | 66 (177) | 1,366,480 (2,024,392) | 2.0 |
+| FS-0103 | code_links_external_lenient | rejected | **rejected** | always_in_audit:validate_links (trace), scenario:PUB-02 (example), regression-tests (example) | L5×1, L4×5, L3×1, L1×2 | 58 | 61 (177) | 1,342,783 (2,024,392) | 2.3 |
+| FS-0104 | pr_config_70 | rejected | **rejected** | property_over_range:n (contract), always_on_calls:set_page_metadata (trace), scenario:SEO-01#2 (example) | L4×3, L1×2 | 43 | 11 (177) | 845,638 (2,024,392) | 1.5 |
+| FS-0104 | pr_config_20 | rejected | **rejected** | setting_in_range:seo.max_title_length (setting), property_over_range:n (contract), always_on_calls:set_page_metadata (trace), scenario:SEO-01#2 (example) | L4×2, L1×2 | 43 | 11 (177) | 887,359 (2,024,392) | 1.3 |
+| FS-0104 | pr_hardcoded_70 | rejected | **rejected** | property_over_range:n (contract), always_on_calls:set_page_metadata (trace), scenario:SEO-01#2 (example), forbid_literal_in:70 (placement) | L4×2, L1×2 | 43 | 11 (177) | 852,753 (2,024,392) | 1.4 |
+| FS-0104 | pr_drop_guard | rejected | **rejected** | property_over_range:n (contract), always_on_calls:set_page_metadata (trace), scenario:SEO-01#2 (example) | L4×3, L1×2 | 43 | 11 (177) | 852,746 (2,024,392) | 1.3 |
+| FS-0105 | current | rejected | **rejected** | property_over_set:tool (contract), scenario:PUB-09 (example) | L4×5, L3×1, L1×2 | 55 | 0 (177) | 1,168,490 (2,024,392) | 1.5 |
+| FS-0105 | pr_fix | accepted | **accepted** | - | L4×5, L3×1, L2×1, L1×3 | 55 | 18 (177) | 1,183,393 (2,024,392) | 1.6 |
+| FS-0105 | pr_partial_fix | rejected | **rejected** | property_over_set:tool (contract) | L4×5, L3×1, L1×3 | 55 | 5 (177) | 1,168,490 (2,024,392) | 1.4 |
+| FS-0105 | code_retry_drop_idempotency | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:publish_page+schedule_publish+unpublish_page+request_review (trace), scenario:PUB-12 (example), scenario:PUB-09 (example), regression-tests (example) | L4×5 | 55 | 126 (177) | 1,820,638 (2,024,392) | 3.3 |
+| FS-0105 | config_retries_0 | rejected | **rejected** | setting_in_range:runtime.retries (setting), property_over_set:tool (contract), scenario:PUB-12 (example), regression-tests (example) | L4×4, L3×1, L1×1 | 55 | 126 (177) | 1,800,022 (2,024,392) | 3.4 |
 
 ![resources](figures/resources.png)
 
@@ -40,8 +40,8 @@ Each request is a spec: prose intent plus machine-checkable clauses. Each PR is 
 
 | | without a spec (today) | with the spec (this run) |
 |---|---|---|
-| context handed to the coding agent | the repository: 47,279 tokens, 59 files | the brief: 4,463–9,393 tokens (12% of the repo on average) |
-| checks per PR | full suite: 168 runs, 1,592,834 agent tokens | clause checks: 17–50 runs; change-selected regression cases: 0–168 of 168 (37% on average; a harness change selects most of the suite, a config change a few cases); 58% of the full-suite tokens in total |
+| context handed to the coding agent | the repository: 47,369 tokens, 59 files | the brief: 4,463–9,393 tokens (12% of the repo on average) |
+| checks per PR | full suite: 177 runs, 2,024,392 agent tokens | clause checks: 21–58 runs; change-selected regression cases: 0–177 of 177 (38% on average; a harness change selects most of the suite, a config change a few cases); 64% of the full-suite tokens in total |
 | what the checks say | pass/fail of example tests (L1) | per clause: 1 at L5, 20 at L4, 5 at L3, 3 at L2, 15 at L1 over the accepted PRs |
 | when a PR is wrong | a test fails, somewhere | the failing clause names the rule, the counterexample or the misplaced code |
 
@@ -80,7 +80,7 @@ Read 5 files, ~4,463 tokens (9% of the repository):
 - `skills/publishing-workflow/SKILL.md` — call: publish_page, call: request_review, call: schedule_publish
 - `tools/publish_tools.py` — publish_page, request_review, schedule_publish
 
-Checks that will run: setting_in_range:publishing.review_max_age_days (setting, 0 runs), function_contract:review_age_ok (contract, 0 runs, 300 examples + proof), always_on_calls:publish_page+schedule_publish (trace, 18 runs), scenario:please-publish-the-staleapproval (example, 1 runs), scenario:PUB-01 (example, 1 runs), scenario:PUB-01#2 (example, 1 runs), function_in_layer:review_age_ok (placement, 0 runs), function_in_layer:approval_age_days (placement, 0 runs), forbid_import_in:datetime (placement, 0 runs), forbid_literal_in:30 (placement, 0 runs). Recorded runs in scope: 18 of 168.
+Checks that will run: setting_in_range:publishing.review_max_age_days (setting, 0 runs), function_contract:review_age_ok (contract, 0 runs, 300 examples + proof), always_on_calls:publish_page+schedule_publish (trace, 24 runs), scenario:please-publish-the-staleapproval (example, 1 runs), scenario:PUB-01 (example, 1 runs), scenario:PUB-01#2 (example, 1 runs), function_in_layer:review_age_ok (placement, 0 runs), function_in_layer:approval_age_days (placement, 0 runs), forbid_import_in:datetime (placement, 0 runs), forbid_literal_in:30 (placement, 0 runs). Recorded runs in scope: 24 of 177.
 
 ### FS-0101/pr_correct — Add the 30-day approval window (config + service + adapters + skill prose)
 
@@ -90,7 +90,7 @@ Verdict: **accepted** (expected accepted). rule in the service layer, limit in c
 |---|---|---|---|---|---|
 | setting_in_range:publishing.review_max_age_days | setting | L4 | L4 | pass | publishing.review_max_age_days = 30 |
 | function_contract:review_age_ok | contract | L5 | L5 | pass | proven for all inputs in the stated domain (solver: unsat) |
-| always_on_calls:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 18 runs |
+| always_on_calls:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 24 runs |
 | scenario:please-publish-the-staleapproval | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-01 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-01#2 | example | L1 | L1 | pass | expected outcome observed |
@@ -98,7 +98,7 @@ Verdict: **accepted** (expected accepted). rule in the service layer, limit in c
 | function_in_layer:approval_age_days | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_import_in:datetime | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_literal_in:30 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 50 of 168 catalog cases selected by observed dependencies (3 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 58 of 177 catalog cases selected by observed dependencies (5 failing on the baseline, not run); all pass |
 
 ### FS-0101/pr_no_lower_bound — Same, but `age_days <= max_age_days` (no lower bound)
 
@@ -108,7 +108,7 @@ Verdict: **rejected** (expected rejected). a future-dated approval (negative age
 |---|---|---|---|---|---|
 | setting_in_range:publishing.review_max_age_days | setting | L4 | L4 | pass | publishing.review_max_age_days = 30 |
 | function_contract:review_age_ok | contract | L5 | L5 | FAIL | counterexample found (property test and solver) |
-| always_on_calls:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 18 runs |
+| always_on_calls:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 24 runs |
 | scenario:please-publish-the-staleapproval | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-01 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-01#2 | example | L1 | L1 | pass | expected outcome observed |
@@ -116,7 +116,7 @@ Verdict: **rejected** (expected rejected). a future-dated approval (negative age
 | function_in_layer:approval_age_days | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_import_in:datetime | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_literal_in:30 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 50 of 168 catalog cases selected by observed dependencies (3 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 58 of 177 catalog cases selected by observed dependencies (5 failing on the baseline, not run); all pass |
 
 - counterexample {'age_days': -1, 'max_age_days': 1, 'result': True}: 'result == (0 <= age_days <= max_age_days)' is false
 - solver counterexample: {'age_days': -1, 'max_age_days': 1}
@@ -129,7 +129,7 @@ Verdict: **rejected** (expected rejected). an approval exactly 30 days old is re
 |---|---|---|---|---|---|
 | setting_in_range:publishing.review_max_age_days | setting | L4 | L4 | pass | publishing.review_max_age_days = 30 |
 | function_contract:review_age_ok | contract | L5 | L5 | FAIL | counterexample found (property test and solver) |
-| always_on_calls:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 18 runs |
+| always_on_calls:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 24 runs |
 | scenario:please-publish-the-staleapproval | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-01 | example | L1 | L1 | FAIL | failed checks: state:pages.p4.status, required:publish_page, audit:publish_page, tool_error:publish_page |
 | scenario:PUB-01#2 | example | L1 | L1 | pass | expected outcome observed |
@@ -137,7 +137,7 @@ Verdict: **rejected** (expected rejected). an approval exactly 30 days old is re
 | function_in_layer:approval_age_days | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_import_in:datetime | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_literal_in:30 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 50 of 168 catalog cases selected by observed dependencies (3 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 58 of 177 catalog cases selected by observed dependencies (5 failing on the baseline, not run); all pass |
 
 - counterexample {'age_days': 1, 'max_age_days': 1, 'result': False}: 'result == (0 <= age_days <= max_age_days)' is false
 - solver counterexample: {'age_days': 1, 'max_age_days': 1}
@@ -155,7 +155,7 @@ Verdict: **accepted with gaps** (expected accepted). behaviourally correct, but 
 |---|---|---|---|---|---|
 | setting_in_range:publishing.review_max_age_days | setting | L4 | L4 | pass | publishing.review_max_age_days = 30 |
 | function_contract:review_age_ok | contract | L2 | L5 | gap | holds on 300 generated examples; no proof: line 3 is a If; only assignments and a return are translated; reached L2, L5 required |
-| always_on_calls:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 18 runs |
+| always_on_calls:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 24 runs |
 | scenario:please-publish-the-staleapproval | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-01 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-01#2 | example | L1 | L1 | pass | expected outcome observed |
@@ -163,7 +163,7 @@ Verdict: **accepted with gaps** (expected accepted). behaviourally correct, but 
 | function_in_layer:approval_age_days | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_import_in:datetime | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_literal_in:30 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 50 of 168 catalog cases selected by observed dependencies (3 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 58 of 177 catalog cases selected by observed dependencies (5 failing on the baseline, not run); all pass |
 
 - 300 examples, no counterexample
 
@@ -175,7 +175,7 @@ Verdict: **rejected** (expected rejected). every run-time check passes; the cont
 |---|---|---|---|---|---|
 | setting_in_range:publishing.review_max_age_days | setting | L4 | L4 | pass | publishing.review_max_age_days = 30 |
 | function_contract:review_age_ok | contract | L2 | L5 | FAIL | services/workflow.py::review_age_ok does not exist |
-| always_on_calls:publish_page+schedule_publish | trace | L3 | L3 | FAIL | 1 violation(s) in 18 runs |
+| always_on_calls:publish_page+schedule_publish | trace | L3 | L3 | FAIL | 1 violation(s) in 24 runs |
 | scenario:please-publish-the-staleapproval | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-01 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-01#2 | example | L1 | L1 | pass | expected outcome observed |
@@ -183,9 +183,9 @@ Verdict: **rejected** (expected rejected). every run-time check passes; the cont
 | function_in_layer:approval_age_days | placement | L4 | L4 | FAIL | approval_age_days is not defined in services/workflow.py |
 | forbid_import_in:datetime | placement | L4 | L4 | FAIL | tools/publish_tools.py imports datetime (line 7) |
 | forbid_literal_in:30 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 57 of 168 catalog cases selected by observed dependencies (3 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 65 of 177 catalog cases selected by observed dependencies (5 failing on the baseline, not run); all pass |
 
-- 18 runs in scope, 18 matching events checked
+- 24 runs in scope, 28 matching events checked
 - PUB-10: {'kind': 'tool.call', 'tool': 'schedule_publish', 'args': {'at': '2026-11-02T08:00:00Z', 'page_id': 'p5'}, 'status': 'ok', 'idempotency_key': 'idem-4c970e3bf6', '_error': 'ValueError: page p5 has no recorded approval date'}
 - define {'function': 'review_age_ok', 'in': 'services/workflow.py'}
 - review_age_ok is not defined in services/workflow.py
@@ -202,7 +202,7 @@ Verdict: **rejected** (expected rejected). the unit-level proof holds; the stale
 |---|---|---|---|---|---|
 | setting_in_range:publishing.review_max_age_days | setting | L4 | L4 | pass | publishing.review_max_age_days = 30 |
 | function_contract:review_age_ok | contract | L5 | L5 | pass | proven for all inputs in the stated domain (solver: unsat) |
-| always_on_calls:publish_page+schedule_publish | trace | L3 | L3 | FAIL | 1 violation(s) in 18 runs |
+| always_on_calls:publish_page+schedule_publish | trace | L3 | L3 | FAIL | 1 violation(s) in 24 runs |
 | scenario:please-publish-the-staleapproval | example | L1 | L1 | FAIL | failed checks: state:pages.p11.status, audit:publish_refused, audit:publish_page, response~30 days, response~new review |
 | scenario:PUB-01 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-01#2 | example | L1 | L1 | pass | expected outcome observed |
@@ -210,9 +210,9 @@ Verdict: **rejected** (expected rejected). the unit-level proof holds; the stale
 | function_in_layer:approval_age_days | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_import_in:datetime | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_literal_in:30 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 50 of 168 catalog cases selected by observed dependencies (3 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 58 of 177 catalog cases selected by observed dependencies (5 failing on the baseline, not run); all pass |
 
-- 18 runs in scope, 18 matching events checked
+- 24 runs in scope, 28 matching events checked
 - PUB-10: {'kind': 'tool.call', 'tool': 'schedule_publish', 'args': {'at': '2026-11-02T08:00:00Z', 'page_id': 'p5'}, 'status': 'ok', 'idempotency_key': 'idem-4c970e3bf6', '_error': 'ValueError: page p5 has no recorded approval date'}
 - case inline: 'Please publish the stale-approval page' -> 'Published p11 at /content/site/blog/stale-approval.'
 - failed check state:pages.p11.status: pages.p11.status == 'draft' (actual 'published')
@@ -257,7 +257,7 @@ Read 9 files, ~9,393 tokens (20% of the repository):
 - `tools/governance_tools.py` — export_user_data
 - `tools/publish_tools.py` — approve_review, unpublish_page
 
-Checks that will run: setting_contains:tools.requires_approval (setting, 0 runs), property_over_set:tool (contract, 2 runs), always_on_calls:unpublish_page+export_user_data+approve_review (trace, 12 runs), never_on_calls:unpublish_page+export_user_data+approve_review (trace, 12 runs), scenario:PUB-06 (example, 1 runs), scenario:take-down-the-old (example, 1 runs), scenario:PUB-07 (example, 1 runs), function_in_layer:approver_for (placement, 0 runs), function_in_layer:Dispatcher._needs_approval (placement, 0 runs), forbid_name_in:users (placement, 0 runs), forbid_literal_in:tools.requires_approval (placement, 0 runs). Recorded runs in scope: 12 of 168.
+Checks that will run: setting_contains:tools.requires_approval (setting, 0 runs), property_over_set:tool (contract, 2 runs), always_on_calls:unpublish_page+export_user_data+approve_review (trace, 16 runs), never_on_calls:unpublish_page+export_user_data+approve_review (trace, 16 runs), scenario:PUB-06 (example, 1 runs), scenario:take-down-the-old (example, 1 runs), scenario:PUB-07 (example, 1 runs), function_in_layer:approver_for (placement, 0 runs), function_in_layer:Dispatcher._needs_approval (placement, 0 runs), forbid_name_in:users (placement, 0 runs), forbid_literal_in:tools.requires_approval (placement, 0 runs). Recorded runs in scope: 16 of 177.
 
 ### FS-0102/current — The current gate: any non-empty token passes and nobody is recorded
 
@@ -267,8 +267,8 @@ Verdict: **rejected** (expected rejected). the spec exposes a weakness of the cu
 |---|---|---|---|---|---|
 | setting_contains:tools.requires_approval | setting | L4 | L4 | pass | tools.requires_approval = ['approve_review', 'export_user_data', 'unpublish_page'] |
 | property_over_set:tool | contract | L2 | L2 | FAIL | counterexample found |
-| always_on_calls:unpublish_page+export_user_data+approve_review | trace | L3 | L3 | FAIL | 10 violation(s) in 12 runs |
-| never_on_calls:unpublish_page+export_user_data+approve_review | trace | L3 | L3 | pass | holds over 12 runs |
+| always_on_calls:unpublish_page+export_user_data+approve_review | trace | L3 | L3 | FAIL | 16 violation(s) in 16 runs |
+| never_on_calls:unpublish_page+export_user_data+approve_review | trace | L3 | L3 | pass | holds over 16 runs |
 | scenario:PUB-06 | example | L1 | L1 | FAIL | failed checks: audit:approval_used |
 | scenario:take-down-the-old | example | L1 | L1 | FAIL | failed checks: state:pages.p7.status, forbidden:unpublish_page, audit:unpublish_page, response~approval |
 | scenario:PUB-07 | example | L1 | L1 | pass | expected outcome observed |
@@ -276,11 +276,11 @@ Verdict: **rejected** (expected rejected). the spec exposes a weakness of the cu
 | function_in_layer:Dispatcher._needs_approval | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:users | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_literal_in:tools.requires_approval | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 0 of 168 catalog cases selected by observed dependencies; all pass |
+| regression-tests | example | L1 | L1 | pass | 0 of 177 catalog cases selected by observed dependencies; all pass |
 
 - enumerated 2 values ['unpublish_page', 'export_user_data']
 - tool='unpublish_page' (case PUB-06, fault healthy): post-condition false
-- 12 runs in scope, 10 matching events checked
+- 16 runs in scope, 16 matching events checked
 - PUB-06: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-9cea4a58ee'}
 - PUB-22: {'kind': 'tool.call', 'tool': 'approve_review', 'args': {'page_id': 'p5', 'reviewer_id': 'carol'}, 'status': 'ok', 'idempotency_key': 'idem-b1aada4ffa'}
 - GOV-01: {'kind': 'tool.call', 'tool': 'export_user_data', 'args': {'subject_id': 's1'}, 'status': 'ok', 'idempotency_key': 'idem-cfda60aed2'}
@@ -304,8 +304,8 @@ Verdict: **accepted** (expected accepted). 2 files: the lookup is a permissions-
 |---|---|---|---|---|---|
 | setting_contains:tools.requires_approval | setting | L4 | L4 | pass | tools.requires_approval = ['approve_review', 'export_user_data', 'unpublish_page'] |
 | property_over_set:tool | contract | L2 | L2 | pass | holds over 2 runs |
-| always_on_calls:unpublish_page+export_user_data+approve_review | trace | L3 | L3 | pass | holds over 12 runs |
-| never_on_calls:unpublish_page+export_user_data+approve_review | trace | L3 | L3 | pass | holds over 12 runs |
+| always_on_calls:unpublish_page+export_user_data+approve_review | trace | L3 | L3 | pass | holds over 16 runs |
+| never_on_calls:unpublish_page+export_user_data+approve_review | trace | L3 | L3 | pass | holds over 16 runs |
 | scenario:PUB-06 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:take-down-the-old | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-07 | example | L1 | L1 | pass | expected outcome observed |
@@ -313,7 +313,7 @@ Verdict: **accepted** (expected accepted). 2 files: the lookup is a permissions-
 | function_in_layer:Dispatcher._needs_approval | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:users | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_literal_in:tools.requires_approval | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 168 of 168 catalog cases selected by observed dependencies (4 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 177 of 177 catalog cases selected by observed dependencies (7 failing on the baseline, not run); all pass |
 
 ### FS-0102/pr_self_approved — Same, but an unknown token falls back to 'approved by the caller'
 
@@ -323,8 +323,8 @@ Verdict: **rejected** (expected rejected). the property and an example catch the
 |---|---|---|---|---|---|
 | setting_contains:tools.requires_approval | setting | L4 | L4 | pass | tools.requires_approval = ['approve_review', 'export_user_data', 'unpublish_page'] |
 | property_over_set:tool | contract | L2 | L2 | FAIL | counterexample found |
-| always_on_calls:unpublish_page+export_user_data+approve_review | trace | L3 | L3 | pass | holds over 12 runs |
-| never_on_calls:unpublish_page+export_user_data+approve_review | trace | L3 | L3 | pass | holds over 12 runs |
+| always_on_calls:unpublish_page+export_user_data+approve_review | trace | L3 | L3 | pass | holds over 16 runs |
+| never_on_calls:unpublish_page+export_user_data+approve_review | trace | L3 | L3 | pass | holds over 16 runs |
 | scenario:PUB-06 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:take-down-the-old | example | L1 | L1 | FAIL | failed checks: state:pages.p7.status, forbidden:unpublish_page, audit:unpublish_page, audit:approval_used, response~approval |
 | scenario:PUB-07 | example | L1 | L1 | pass | expected outcome observed |
@@ -332,7 +332,7 @@ Verdict: **rejected** (expected rejected). the property and an example catch the
 | function_in_layer:Dispatcher._needs_approval | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:users | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_literal_in:tools.requires_approval | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 168 of 168 catalog cases selected by observed dependencies (4 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 177 of 177 catalog cases selected by observed dependencies (7 failing on the baseline, not run); all pass |
 
 - enumerated 2 values ['unpublish_page', 'export_user_data']
 - tool='unpublish_page' (case PUB-06, fault healthy): post-condition false
@@ -351,8 +351,8 @@ Verdict: **rejected** (expected rejected). every run-time check passes; the harn
 |---|---|---|---|---|---|
 | setting_contains:tools.requires_approval | setting | L4 | L4 | pass | tools.requires_approval = ['approve_review', 'export_user_data', 'unpublish_page'] |
 | property_over_set:tool | contract | L2 | L2 | pass | holds over 2 runs |
-| always_on_calls:unpublish_page+export_user_data+approve_review | trace | L3 | L3 | pass | holds over 12 runs |
-| never_on_calls:unpublish_page+export_user_data+approve_review | trace | L3 | L3 | pass | holds over 12 runs |
+| always_on_calls:unpublish_page+export_user_data+approve_review | trace | L3 | L3 | pass | holds over 16 runs |
+| never_on_calls:unpublish_page+export_user_data+approve_review | trace | L3 | L3 | pass | holds over 16 runs |
 | scenario:PUB-06 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:take-down-the-old | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-07 | example | L1 | L1 | pass | expected outcome observed |
@@ -360,7 +360,7 @@ Verdict: **rejected** (expected rejected). every run-time check passes; the harn
 | function_in_layer:Dispatcher._needs_approval | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:users | placement | L4 | L4 | FAIL | harness/dispatcher.py uses users (line 59) |
 | forbid_literal_in:tools.requires_approval | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 168 of 168 catalog cases selected by observed dependencies (4 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 177 of 177 catalog cases selected by observed dependencies (7 failing on the baseline, not run); all pass |
 
 - define {'function': 'approver_for', 'in': 'services/permissions.py'}
 - approver_for is not defined in services/permissions.py
@@ -375,8 +375,8 @@ Verdict: **rejected** (expected rejected). monitor: a guarded call succeeded wit
 |---|---|---|---|---|---|
 | setting_contains:tools.requires_approval | setting | L4 | L4 | pass | tools.requires_approval = ['approve_review', 'export_user_data', 'unpublish_page'] |
 | property_over_set:tool | contract | L2 | L2 | FAIL | counterexample found |
-| always_on_calls:unpublish_page+export_user_data+approve_review | trace | L3 | L3 | FAIL | 1 violation(s) in 12 runs |
-| never_on_calls:unpublish_page+export_user_data+approve_review | trace | L3 | L3 | FAIL | 1 violation(s) in 12 runs |
+| always_on_calls:unpublish_page+export_user_data+approve_review | trace | L3 | L3 | FAIL | 1 violation(s) in 16 runs |
+| never_on_calls:unpublish_page+export_user_data+approve_review | trace | L3 | L3 | FAIL | 1 violation(s) in 16 runs |
 | scenario:PUB-06 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:take-down-the-old | example | L1 | L1 | FAIL | failed checks: state:pages.p7.status, forbidden:unpublish_page, audit:unpublish_page, audit:approval_used, response~approval |
 | scenario:PUB-07 | example | L1 | L1 | FAIL | failed checks: state:pages.p7.status, forbidden:unpublish_page, audit:unpublish_page |
@@ -384,13 +384,13 @@ Verdict: **rejected** (expected rejected). monitor: a guarded call succeeded wit
 | function_in_layer:Dispatcher._needs_approval | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:users | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_literal_in:tools.requires_approval | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | FAIL | 168 of 168 catalog cases selected by observed dependencies (4 failing on the baseline, not run); failed: ['PUB-07'] |
+| regression-tests | example | L1 | L1 | FAIL | 177 of 177 catalog cases selected by observed dependencies (7 failing on the baseline, not run); failed: ['PUB-07'] |
 
 - enumerated 2 values ['unpublish_page', 'export_user_data']
 - tool='unpublish_page' (case PUB-06, fault healthy): post-condition false
-- 12 runs in scope, 11 matching events checked
+- 16 runs in scope, 17 matching events checked
 - PUB-07: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-9cea4a58ee'}
-- 12 runs in scope, 14 matching events checked
+- 16 runs in scope, 20 matching events checked
 - PUB-07: {'kind': 'tool.call', 'tool': 'unpublish_page', 'args': {'page_id': 'p7'}, 'status': 'ok', 'idempotency_key': 'idem-9cea4a58ee'}
 - case inline: 'Take down the old news page' -> 'Unpublished p7 (/content/site/blog/old-news).'
 - failed check state:pages.p7.status: pages.p7.status == 'published' (actual 'draft')
@@ -441,7 +441,7 @@ Read 5 files, ~4,783 tokens (10% of the repository):
 - `skills/publishing-workflow/SKILL.md` — call: publish_page, call: schedule_publish, call: unpublish_page
 - `tools/publish_tools.py` — publish_page, schedule_publish, unpublish_page, validate_links
 
-Checks that will run: precedes_in_audit:publish_page+schedule_publish (trace, 18 runs), always_in_audit:validate_links (trace, 45 runs), function_contract:links_clean (contract, 0 runs, 200 examples + proof), scenario:PUB-02 (example, 1 runs), scenario:PUB-09 (example, 1 runs), scenario:PUB-01 (example, 1 runs), function_in_layer:links_clean (placement, 0 runs), function_in_layer:validate_links (placement, 0 runs), forbid_name_in:link_check (placement, 0 runs), skill_step_order:publishing-workflow (placement, 0 runs), skill_step_order:publishing-workflow#2 (placement, 0 runs). Recorded runs in scope: 47 of 168.
+Checks that will run: precedes_in_audit:publish_page+schedule_publish (trace, 24 runs), always_in_audit:validate_links (trace, 53 runs), function_contract:links_clean (contract, 0 runs, 200 examples + proof), scenario:PUB-02 (example, 1 runs), scenario:PUB-09 (example, 1 runs), scenario:PUB-01 (example, 1 runs), function_in_layer:links_clean (placement, 0 runs), function_in_layer:validate_links (placement, 0 runs), forbid_name_in:link_check (placement, 0 runs), skill_step_order:publishing-workflow (placement, 0 runs), skill_step_order:publishing-workflow#2 (placement, 0 runs). Recorded runs in scope: 55 of 177.
 
 ### FS-0103/pr_correct — Stamp each validation on the page (links service); publish and schedule refuse without a clean stamp for the current version (workflow service)
 
@@ -449,8 +449,8 @@ Verdict: **rejected** (expected rejected). 2 files: the rule moves from the skil
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
-| precedes_in_audit:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 18 runs |
-| always_in_audit:validate_links | trace | L3 | L3 | pass | holds over 45 runs |
+| precedes_in_audit:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 24 runs |
+| always_in_audit:validate_links | trace | L3 | L3 | pass | holds over 53 runs |
 | function_contract:links_clean | contract | L5 | L5 | pass | proven for all inputs in the stated domain (solver: unsat) |
 | scenario:PUB-02 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-09 | example | L1 | L1 | pass | expected outcome observed |
@@ -460,7 +460,7 @@ Verdict: **rejected** (expected rejected). 2 files: the rule moves from the skil
 | forbid_name_in:link_check | placement | L4 | L4 | pass | 1 rules hold |
 | skill_step_order:publishing-workflow | placement | L4 | L4 | pass | 1 rules hold |
 | skill_step_order:publishing-workflow#2 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | FAIL | 53 of 168 catalog cases selected by observed dependencies (3 failing on the baseline, not run); failed: ['DS-INTENTS/i02', 'DS-INTENTS/i05'] |
+| regression-tests | example | L1 | L1 | FAIL | 61 of 177 catalog cases selected by observed dependencies (5 failing on the baseline, not run); failed: ['DS-INTENTS/i02', 'DS-INTENTS/i05'] |
 
 - DS-INTENTS/i02
 - DS-INTENTS/i05
@@ -471,8 +471,8 @@ Verdict: **rejected** (expected rejected). no recorded scenario edits a page aft
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
-| precedes_in_audit:publish_page+schedule_publish | trace | L3 | L3 | FAIL | 2 violation(s) in 18 runs |
-| always_in_audit:validate_links | trace | L3 | L3 | pass | holds over 45 runs |
+| precedes_in_audit:publish_page+schedule_publish | trace | L3 | L3 | FAIL | 2 violation(s) in 24 runs |
+| always_in_audit:validate_links | trace | L3 | L3 | pass | holds over 53 runs |
 | function_contract:links_clean | contract | L5 | L5 | FAIL | counterexample found (solver) |
 | scenario:PUB-02 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-09 | example | L1 | L1 | pass | expected outcome observed |
@@ -482,9 +482,9 @@ Verdict: **rejected** (expected rejected). no recorded scenario edits a page aft
 | forbid_name_in:link_check | placement | L4 | L4 | pass | 1 rules hold |
 | skill_step_order:publishing-workflow | placement | L4 | L4 | pass | 1 rules hold |
 | skill_step_order:publishing-workflow#2 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 53 of 168 catalog cases selected by observed dependencies (3 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 61 of 177 catalog cases selected by observed dependencies (5 failing on the baseline, not run); all pass |
 
-- 18 runs in scope, 18 matching audit checked
+- 24 runs in scope, 28 matching audit checked
 - DS-INTENTS/i02: {'seq': 2, 'action': 'publish_page', 'page_id': 'p4', 'idempotency_key': 'idem-0f84112a6c'}
 - DS-INTENTS/i05: {'seq': 1, 'action': 'schedule_publish', 'page_id': 'p4'}
 - 200 examples, no counterexample
@@ -496,8 +496,8 @@ Verdict: **rejected** (expected rejected). every run-time check passes; the cont
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
-| precedes_in_audit:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 18 runs |
-| always_in_audit:validate_links | trace | L3 | L3 | pass | holds over 45 runs |
+| precedes_in_audit:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 24 runs |
+| always_in_audit:validate_links | trace | L3 | L3 | pass | holds over 53 runs |
 | function_contract:links_clean | contract | L2 | L5 | FAIL | services/workflow.py::links_clean does not exist |
 | scenario:PUB-02 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-09 | example | L1 | L1 | pass | expected outcome observed |
@@ -507,7 +507,7 @@ Verdict: **rejected** (expected rejected). every run-time check passes; the cont
 | forbid_name_in:link_check | placement | L4 | L4 | pass | 1 rules hold |
 | skill_step_order:publishing-workflow | placement | L4 | L4 | pass | 1 rules hold |
 | skill_step_order:publishing-workflow#2 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | FAIL | 53 of 168 catalog cases selected by observed dependencies (3 failing on the baseline, not run); failed: ['DS-INTENTS/i02', 'DS-INTENTS/i05'] |
+| regression-tests | example | L1 | L1 | FAIL | 61 of 177 catalog cases selected by observed dependencies (5 failing on the baseline, not run); failed: ['DS-INTENTS/i02', 'DS-INTENTS/i05'] |
 
 - define {'function': 'links_clean', 'in': 'services/workflow.py'}
 - links_clean is not defined in services/workflow.py
@@ -520,8 +520,8 @@ Verdict: **rejected** (expected rejected). the service gate holds (nothing unval
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
-| precedes_in_audit:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 18 runs |
-| always_in_audit:validate_links | trace | L3 | L3 | pass | holds over 45 runs |
+| precedes_in_audit:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 24 runs |
+| always_in_audit:validate_links | trace | L3 | L3 | pass | holds over 53 runs |
 | function_contract:links_clean | contract | L5 | L5 | pass | proven for all inputs in the stated domain (solver: unsat) |
 | scenario:PUB-02 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-09 | example | L1 | L1 | FAIL | failed checks: state:pages.p4.status, state:pages.p4.link_check.broken, required:validate_links, required:schedule_publish, audit:validate_links, audit:schedule_publish |
@@ -531,7 +531,7 @@ Verdict: **rejected** (expected rejected). the service gate holds (nothing unval
 | forbid_name_in:link_check | placement | L4 | L4 | pass | 1 rules hold |
 | skill_step_order:publishing-workflow | placement | L4 | L4 | pass | 1 rules hold |
 | skill_step_order:publishing-workflow#2 | placement | L4 | L4 | FAIL | skill publishing-workflow: {'include': 'link-validation'} comes after {'call': 'schedule_publish'} |
-| regression-tests | example | L1 | L1 | FAIL | 58 of 168 catalog cases selected by observed dependencies (3 failing on the baseline, not run); failed: ['DS-INTENTS/i02', 'DS-INTENTS/i05', 'DS-INTENTS/i06', 'PUB-09', 'PUB-15'] |
+| regression-tests | example | L1 | L1 | FAIL | 66 of 177 catalog cases selected by observed dependencies (5 failing on the baseline, not run); failed: ['DS-INTENTS/i02', 'DS-INTENTS/i05', 'DS-INTENTS/i06', 'PUB-09', 'PUB-15', 'WF2-02'] |
 
 - case PUB-09: 'Schedule the welcome page for 2026-11-01T09:00:00Z' -> 'The welcome page (p4) has been scheduled for 2026-11-01T09:00:00Z.'
 - failed check state:pages.p4.status: pages.p4.status == 'scheduled' (actual 'draft')
@@ -547,6 +547,7 @@ Verdict: **rejected** (expected rejected). the service gate holds (nothing unval
 - DS-INTENTS/i06
 - PUB-09
 - PUB-15
+- WF2-02
 
 ### FS-0103/code_links_external_lenient — Correct PR plus a later change: validate_links treats every external URL as reachable
 
@@ -554,8 +555,8 @@ Verdict: **rejected** (expected rejected). ordering and the gate hold; the indep
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
-| precedes_in_audit:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 18 runs |
-| always_in_audit:validate_links | trace | L3 | L3 | FAIL | 6 violation(s) in 45 runs |
+| precedes_in_audit:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 24 runs |
+| always_in_audit:validate_links | trace | L3 | L3 | FAIL | 8 violation(s) in 53 runs |
 | function_contract:links_clean | contract | L5 | L5 | pass | proven for all inputs in the stated domain (solver: unsat) |
 | scenario:PUB-02 | example | L1 | L1 | FAIL | failed checks: state:pages.p2.status, forbidden:publish_page, response~old.example.com/gone |
 | scenario:PUB-09 | example | L1 | L1 | pass | expected outcome observed |
@@ -565,9 +566,9 @@ Verdict: **rejected** (expected rejected). ordering and the gate hold; the indep
 | forbid_name_in:link_check | placement | L4 | L4 | pass | 1 rules hold |
 | skill_step_order:publishing-workflow | placement | L4 | L4 | pass | 1 rules hold |
 | skill_step_order:publishing-workflow#2 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | FAIL | 53 of 168 catalog cases selected by observed dependencies (3 failing on the baseline, not run); failed: ['AUT-02', 'AUT-07', 'DS-INTENTS/i02', 'DS-INTENTS/i05', 'DS-INTENTS/i21', 'MNT-05', 'PUB-02', 'PUB-21'] |
+| regression-tests | example | L1 | L1 | FAIL | 61 of 177 catalog cases selected by observed dependencies (5 failing on the baseline, not run); failed: ['AUT-02', 'AUT-07', 'DS-INTENTS/i02', 'DS-INTENTS/i05', 'DS-INTENTS/i21', 'MNT-05', 'PUB-02', 'PUB-21'] |
 
-- 45 runs in scope, 45 matching audit checked
+- 53 runs in scope, 77 matching audit checked
 - AUT-02: {'seq': 4, 'action': 'validate_links', 'page_id': 'p100', 'broken': 0}
 - AUT-07: {'seq': 2, 'action': 'validate_links', 'page_id': 'p1', 'broken': 0}
 - PUB-02: {'seq': 1, 'action': 'validate_links', 'page_id': 'p2', 'broken': 0}
@@ -612,7 +613,7 @@ Read 5 files, ~5,937 tokens (13% of the repository):
 - `skills/seo-metadata/SKILL.md` — call: set_page_metadata
 - `tools/content_tools.py` — set_page_metadata
 
-Checks that will run: setting_in_range:seo.max_title_length (setting, 0 runs), property_over_range:n (contract, 60 runs), always_on_calls:set_page_metadata (trace, 21 runs), scenario:SEO-01 (example, 1 runs), scenario:SEO-01#2 (example, 1 runs), forbid_literal_in:70 (placement, 0 runs), forbid_literal_in:60 (placement, 0 runs). Recorded runs in scope: 21 of 168.
+Checks that will run: setting_in_range:seo.max_title_length (setting, 0 runs), property_over_range:n (contract, 60 runs), always_on_calls:set_page_metadata (trace, 24 runs), scenario:SEO-01 (example, 1 runs), scenario:SEO-01#2 (example, 1 runs), forbid_literal_in:70 (placement, 0 runs), forbid_literal_in:60 (placement, 0 runs). Recorded runs in scope: 24 of 177.
 
 ### FS-0104/pr_config_70 — Raise the SEO title limit to 70 (configuration only, 0 code lines)
 
@@ -622,26 +623,20 @@ Verdict: **rejected** (expected rejected). nothing to generate: a setting change
 |---|---|---|---|---|---|
 | setting_in_range:seo.max_title_length | setting | L4 | L4 | pass | seo.max_title_length = 70 |
 | property_over_range:n | contract | L2 | L2 | FAIL | counterexample found |
-| always_on_calls:set_page_metadata | trace | L3 | L3 | pass | holds over 21 runs |
-| scenario:SEO-01 | example | L1 | L1 | FAIL | failed checks: harness |
-| scenario:SEO-01#2 | example | L1 | L1 | FAIL | failed checks: harness |
+| always_on_calls:set_page_metadata | trace | L3 | L3 | FAIL | 1 violation(s) in 24 runs |
+| scenario:SEO-01 | example | L1 | L1 | pass | expected outcome observed |
+| scenario:SEO-01#2 | example | L1 | L1 | FAIL | failed checks: state:pages.p4.metadata.title, forbidden:set_page_metadata |
 | forbid_literal_in:70 | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_literal_in:60 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | FAIL | 8 of 168 catalog cases selected by observed dependencies (1 failing on the baseline, not run); failed: ['SEO-01', 'SEO-03', 'SEO-04', 'SEO-05', 'SEO-06', 'SEO-07', 'SEO-08'] |
+| regression-tests | example | L1 | L1 | pass | 11 of 177 catalog cases selected by observed dependencies (2 failing on the baseline, not run); all pass |
 
-- 3 generated scenarios
-- n=1 (case SEO-01, fault healthy): post-condition false; failed checks ['harness']
-- case SEO-01: 'Improve the SEO metadata of the welcome post' -> ''
-- failed check harness: Traceback (most recent call last):   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\traceeval\experiment\executor.py", line 108, in run_case     run = runtime.run(case.agent, case.request, dict(case.context))           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\runs\sdd\variants\FS-0104_pr_config_70\sut\harness\runtime.py", line 101, in run     message = self._run_agent(agent_name, request, ctx, depth=0)               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\runs\sdd\variants\FS-0104_pr_config_70\sut\harness\runtime.py", line 150, in _run_agent     action = backend.next_action()              ^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\runs\sdd\variants\FS-0104_pr_config_70\sut\harness\backends\llm_openai.py", line 156, in next_action     resp = self.client.chat.completions.create(**kwargs)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\traceeval\llm\cache.py", line 57, in create     raise CacheMiss( traceeval.llm.cache.CacheMiss: no recorded answer for this request in C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\tests\cassettes\gemma.jsonl; record it with a model (--backend vllm or hf with TRACEEVAL_CACHE=C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\tests\cassettes\gemma.jsonl) 
-- case SEO-01: 'Improve the SEO metadata of the welcome post' -> ''
-- failed check harness: Traceback (most recent call last):   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\traceeval\experiment\executor.py", line 108, in run_case     run = runtime.run(case.agent, case.request, dict(case.context))           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\runs\sdd\variants\FS-0104_pr_config_70\sut\harness\runtime.py", line 101, in run     message = self._run_agent(agent_name, request, ctx, depth=0)               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\runs\sdd\variants\FS-0104_pr_config_70\sut\harness\runtime.py", line 150, in _run_agent     action = backend.next_action()              ^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\runs\sdd\variants\FS-0104_pr_config_70\sut\harness\backends\llm_openai.py", line 156, in next_action     resp = self.client.chat.completions.create(**kwargs)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\traceeval\llm\cache.py", line 57, in create     raise CacheMiss( traceeval.llm.cache.CacheMiss: no recorded answer for this request in C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\tests\cassettes\gemma.jsonl; record it with a model (--backend vllm or hf with TRACEEVAL_CACHE=C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\tests\cassettes\gemma.jsonl) 
-- SEO-01
-- SEO-03
-- SEO-04
-- SEO-05
-- SEO-06
-- SEO-07
-- SEO-08
+- 17 generated scenarios
+- n=71 (case SEO-01, fault healthy): post-condition false; failed checks ['state:pages.p4.metadata.title']
+- 24 runs in scope, 23 matching events checked
+- SEO-02: {'kind': 'tool.call', 'tool': 'set_page_metadata', 'args': {'description': 'Long.', 'keywords': ['long'], 'page_id': 'p6', 'title': 'An exceptionally long and verbose SEO title that search engines will truncate badly'}, 'status': 'ok', 'idempotency_key': 'idem-7b6476d174'}
+- case SEO-01: 'Improve the SEO metadata of the welcome post' -> 'The proposed title has 71 characters, above the limit of 70; no change applied.'
+- failed check state:pages.p4.metadata.title: pages.p4.metadata.title == 'Welcome post' (actual 'Example title Example title Example title Example title Example title E')
+- failed check forbidden:set_page_metadata: ok tools: ['check_permission', 'get_page', 'get_seo_report', 'set_page_metadata']
 
 ### FS-0104/pr_config_20 — Limit set to 20 instead of 70
 
@@ -651,27 +646,24 @@ Verdict: **rejected** (expected rejected). schema-valid but not what the request
 |---|---|---|---|---|---|
 | setting_in_range:seo.max_title_length | setting | L4 | L4 | FAIL | seo.max_title_length = 20; seo.max_title_length = 20, this request requires 70 |
 | property_over_range:n | contract | L2 | L2 | FAIL | counterexample found |
-| always_on_calls:set_page_metadata | trace | L3 | L3 | pass | holds over 21 runs |
-| scenario:SEO-01 | example | L1 | L1 | FAIL | failed checks: harness |
-| scenario:SEO-01#2 | example | L1 | L1 | FAIL | failed checks: harness |
+| always_on_calls:set_page_metadata | trace | L3 | L3 | FAIL | 3 violation(s) in 24 runs |
+| scenario:SEO-01 | example | L1 | L1 | pass | expected outcome observed |
+| scenario:SEO-01#2 | example | L1 | L1 | FAIL | failed checks: state:pages.p4.metadata.title, forbidden:set_page_metadata, response~20 |
 | forbid_literal_in:70 | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_literal_in:60 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | FAIL | 8 of 168 catalog cases selected by observed dependencies (1 failing on the baseline, not run); failed: ['SEO-01', 'SEO-03', 'SEO-04', 'SEO-05', 'SEO-06', 'SEO-07', 'SEO-08'] |
+| regression-tests | example | L1 | L1 | pass | 11 of 177 catalog cases selected by observed dependencies (2 failing on the baseline, not run); all pass |
 
 - seo.max_title_length = 20, this request requires 70
-- 3 generated scenarios
-- n=1 (case SEO-01, fault healthy): post-condition false; failed checks ['harness']
-- case SEO-01: 'Improve the SEO metadata of the welcome post' -> ''
-- failed check harness: Traceback (most recent call last):   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\traceeval\experiment\executor.py", line 108, in run_case     run = runtime.run(case.agent, case.request, dict(case.context))           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\runs\sdd\variants\FS-0104_pr_config_20\sut\harness\runtime.py", line 101, in run     message = self._run_agent(agent_name, request, ctx, depth=0)               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\runs\sdd\variants\FS-0104_pr_config_20\sut\harness\runtime.py", line 150, in _run_agent     action = backend.next_action()              ^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\runs\sdd\variants\FS-0104_pr_config_20\sut\harness\backends\llm_openai.py", line 156, in next_action     resp = self.client.chat.completions.create(**kwargs)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\traceeval\llm\cache.py", line 57, in create     raise CacheMiss( traceeval.llm.cache.CacheMiss: no recorded answer for this request in C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\tests\cassettes\gemma.jsonl; record it with a model (--backend vllm or hf with TRACEEVAL_CACHE=C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\tests\cassettes\gemma.jsonl) 
-- case SEO-01: 'Improve the SEO metadata of the welcome post' -> ''
-- failed check harness: Traceback (most recent call last):   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\traceeval\experiment\executor.py", line 108, in run_case     run = runtime.run(case.agent, case.request, dict(case.context))           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\runs\sdd\variants\FS-0104_pr_config_20\sut\harness\runtime.py", line 101, in run     message = self._run_agent(agent_name, request, ctx, depth=0)               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\runs\sdd\variants\FS-0104_pr_config_20\sut\harness\runtime.py", line 150, in _run_agent     action = backend.next_action()              ^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\runs\sdd\variants\FS-0104_pr_config_20\sut\harness\backends\llm_openai.py", line 156, in next_action     resp = self.client.chat.completions.create(**kwargs)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\traceeval\llm\cache.py", line 57, in create     raise CacheMiss( traceeval.llm.cache.CacheMiss: no recorded answer for this request in C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\tests\cassettes\gemma.jsonl; record it with a model (--backend vllm or hf with TRACEEVAL_CACHE=C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\tests\cassettes\gemma.jsonl) 
-- SEO-01
-- SEO-03
-- SEO-04
-- SEO-05
-- SEO-06
-- SEO-07
-- SEO-08
+- 17 generated scenarios
+- n=21 (case SEO-01, fault healthy): post-condition false; failed checks ['state:pages.p4.metadata.title']
+- 24 runs in scope, 24 matching events checked
+- SEO-02: {'kind': 'tool.call', 'tool': 'set_page_metadata', 'args': {'description': 'Long.', 'keywords': ['long'], 'page_id': 'p6', 'title': 'An exceptionally long and verbose SEO title that search engines will truncate badly'}, 'status': 'ok', 'idempotency_key': 'idem-7b6476d174'}
+- SEO-05: {'kind': 'tool.call', 'tool': 'set_page_metadata', 'args': {'description': 'First post.', 'keywords': ['welcome'], 'page_id': 'p4', 'title': 'Welcome to Example - the first post on our brand new blog!!!'}, 'status': 'ok', 'idempotency_key': 'idem-a3ed7b0e91'}
+- SEO-08: {'kind': 'tool.call', 'tool': 'set_page_metadata', 'args': {'page_id': 'p4', 'title': 'Welcome to the Example blog'}, 'status': 'ok', 'idempotency_key': 'idem-8596182658'}
+- case SEO-01: 'Improve the SEO metadata of the welcome post' -> 'Updated SEO metadata on p4; SEO score is now 70.'
+- failed check state:pages.p4.metadata.title: pages.p4.metadata.title == 'Welcome post' (actual 'Example title Example')
+- failed check forbidden:set_page_metadata: ok tools: ['check_permission', 'get_page', 'get_seo_report', 'set_page_metadata']
+- failed check response~20: message: 'Updated SEO metadata on p4; SEO score is now 70.'
 
 ### FS-0104/pr_hardcoded_70 — Limit 70 written into the skill procedure instead of read from config
 
@@ -681,28 +673,22 @@ Verdict: **rejected** (expected rejected). behaviourally identical to the correc
 |---|---|---|---|---|---|
 | setting_in_range:seo.max_title_length | setting | L4 | L4 | pass | seo.max_title_length = 70 |
 | property_over_range:n | contract | L2 | L2 | FAIL | counterexample found |
-| always_on_calls:set_page_metadata | trace | L3 | L3 | pass | holds over 21 runs |
-| scenario:SEO-01 | example | L1 | L1 | FAIL | failed checks: harness |
-| scenario:SEO-01#2 | example | L1 | L1 | FAIL | failed checks: harness |
+| always_on_calls:set_page_metadata | trace | L3 | L3 | FAIL | 1 violation(s) in 24 runs |
+| scenario:SEO-01 | example | L1 | L1 | pass | expected outcome observed |
+| scenario:SEO-01#2 | example | L1 | L1 | FAIL | failed checks: state:pages.p4.metadata.title, forbidden:set_page_metadata |
 | forbid_literal_in:70 | placement | L4 | L4 | FAIL | skills/seo-metadata/SKILL.md hard-codes 70 |
 | forbid_literal_in:60 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | FAIL | 8 of 168 catalog cases selected by observed dependencies (1 failing on the baseline, not run); failed: ['SEO-01', 'SEO-03', 'SEO-04', 'SEO-05', 'SEO-06', 'SEO-07', 'SEO-08'] |
+| regression-tests | example | L1 | L1 | pass | 11 of 177 catalog cases selected by observed dependencies (2 failing on the baseline, not run); all pass |
 
-- 3 generated scenarios
-- n=1 (case SEO-01, fault healthy): post-condition false; failed checks ['harness']
-- case SEO-01: 'Improve the SEO metadata of the welcome post' -> ''
-- failed check harness: Traceback (most recent call last):   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\traceeval\experiment\executor.py", line 108, in run_case     run = runtime.run(case.agent, case.request, dict(case.context))           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\runs\sdd\variants\FS-0104_pr_hardcoded_70\sut\harness\runtime.py", line 101, in run     message = self._run_agent(agent_name, request, ctx, depth=0)               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\runs\sdd\variants\FS-0104_pr_hardcoded_70\sut\harness\runtime.py", line 150, in _run_agent     action = backend.next_action()              ^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\runs\sdd\variants\FS-0104_pr_hardcoded_70\sut\harness\backends\llm_openai.py", line 156, in next_action     resp = self.client.chat.completions.create(**kwargs)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\traceeval\llm\cache.py", line 57, in create     raise CacheMiss( traceeval.llm.cache.CacheMiss: no recorded answer for this request in C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\tests\cassettes\gemma.jsonl; record it with a model (--backend vllm or hf with TRACEEVAL_CACHE=C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\tests\cassettes\gemma.jsonl) 
-- case SEO-01: 'Improve the SEO metadata of the welcome post' -> ''
-- failed check harness: Traceback (most recent call last):   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\traceeval\experiment\executor.py", line 108, in run_case     run = runtime.run(case.agent, case.request, dict(case.context))           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\runs\sdd\variants\FS-0104_pr_hardcoded_70\sut\harness\runtime.py", line 101, in run     message = self._run_agent(agent_name, request, ctx, depth=0)               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\runs\sdd\variants\FS-0104_pr_hardcoded_70\sut\harness\runtime.py", line 150, in _run_agent     action = backend.next_action()              ^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\runs\sdd\variants\FS-0104_pr_hardcoded_70\sut\harness\backends\llm_openai.py", line 156, in next_action     resp = self.client.chat.completions.create(**kwargs)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\traceeval\llm\cache.py", line 57, in create     raise CacheMiss( traceeval.llm.cache.CacheMiss: no recorded answer for this request in C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\tests\cassettes\gemma.jsonl; record it with a model (--backend vllm or hf with TRACEEVAL_CACHE=C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\tests\cassettes\gemma.jsonl) 
+- 17 generated scenarios
+- n=71 (case SEO-01, fault healthy): post-condition false; failed checks ['state:pages.p4.metadata.title']
+- 24 runs in scope, 23 matching events checked
+- SEO-02: {'kind': 'tool.call', 'tool': 'set_page_metadata', 'args': {'description': 'Long.', 'keywords': ['long'], 'page_id': 'p6', 'title': 'An exceptionally long and verbose SEO title that search engines will truncate badly'}, 'status': 'ok', 'idempotency_key': 'idem-7b6476d174'}
+- case SEO-01: 'Improve the SEO metadata of the welcome post' -> 'The proposed title has 71 characters, above the limit of 70; no change applied.'
+- failed check state:pages.p4.metadata.title: pages.p4.metadata.title == 'Welcome post' (actual 'Example title Example title Example title Example title Example title E')
+- failed check forbidden:set_page_metadata: ok tools: ['check_permission', 'get_page', 'get_seo_report', 'set_page_metadata']
 - forbid_literal {'value': 70, 'in': ['tools', 'services', 'skills']}
 - skills/seo-metadata/SKILL.md hard-codes 70
-- SEO-01
-- SEO-03
-- SEO-04
-- SEO-05
-- SEO-06
-- SEO-07
-- SEO-08
 
 ### FS-0104/pr_drop_guard — Limit raised to 70 but the skill's length guard deleted
 
@@ -712,26 +698,20 @@ Verdict: **rejected** (expected rejected). property over titles of every length 
 |---|---|---|---|---|---|
 | setting_in_range:seo.max_title_length | setting | L4 | L4 | pass | seo.max_title_length = 70 |
 | property_over_range:n | contract | L2 | L2 | FAIL | counterexample found |
-| always_on_calls:set_page_metadata | trace | L3 | L3 | pass | holds over 21 runs |
-| scenario:SEO-01 | example | L1 | L1 | FAIL | failed checks: harness |
-| scenario:SEO-01#2 | example | L1 | L1 | FAIL | failed checks: harness |
+| always_on_calls:set_page_metadata | trace | L3 | L3 | FAIL | 1 violation(s) in 24 runs |
+| scenario:SEO-01 | example | L1 | L1 | pass | expected outcome observed |
+| scenario:SEO-01#2 | example | L1 | L1 | FAIL | failed checks: state:pages.p4.metadata.title, forbidden:set_page_metadata |
 | forbid_literal_in:70 | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_literal_in:60 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | FAIL | 8 of 168 catalog cases selected by observed dependencies (1 failing on the baseline, not run); failed: ['SEO-01', 'SEO-03', 'SEO-04', 'SEO-05', 'SEO-06', 'SEO-07', 'SEO-08'] |
+| regression-tests | example | L1 | L1 | pass | 11 of 177 catalog cases selected by observed dependencies (2 failing on the baseline, not run); all pass |
 
-- 3 generated scenarios
-- n=1 (case SEO-01, fault healthy): post-condition false; failed checks ['harness']
-- case SEO-01: 'Improve the SEO metadata of the welcome post' -> ''
-- failed check harness: Traceback (most recent call last):   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\traceeval\experiment\executor.py", line 108, in run_case     run = runtime.run(case.agent, case.request, dict(case.context))           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\runs\sdd\variants\FS-0104_pr_drop_guard\sut\harness\runtime.py", line 101, in run     message = self._run_agent(agent_name, request, ctx, depth=0)               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\runs\sdd\variants\FS-0104_pr_drop_guard\sut\harness\runtime.py", line 150, in _run_agent     action = backend.next_action()              ^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\runs\sdd\variants\FS-0104_pr_drop_guard\sut\harness\backends\llm_openai.py", line 156, in next_action     resp = self.client.chat.completions.create(**kwargs)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\traceeval\llm\cache.py", line 57, in create     raise CacheMiss( traceeval.llm.cache.CacheMiss: no recorded answer for this request in C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\tests\cassettes\gemma.jsonl; record it with a model (--backend vllm or hf with TRACEEVAL_CACHE=C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\tests\cassettes\gemma.jsonl) 
-- case SEO-01: 'Improve the SEO metadata of the welcome post' -> ''
-- failed check harness: Traceback (most recent call last):   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\traceeval\experiment\executor.py", line 108, in run_case     run = runtime.run(case.agent, case.request, dict(case.context))           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\runs\sdd\variants\FS-0104_pr_drop_guard\sut\harness\runtime.py", line 101, in run     message = self._run_agent(agent_name, request, ctx, depth=0)               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\runs\sdd\variants\FS-0104_pr_drop_guard\sut\harness\runtime.py", line 150, in _run_agent     action = backend.next_action()              ^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\runs\sdd\variants\FS-0104_pr_drop_guard\sut\harness\backends\llm_openai.py", line 156, in next_action     resp = self.client.chat.completions.create(**kwargs)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   File "C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\traceeval\llm\cache.py", line 57, in create     raise CacheMiss( traceeval.llm.cache.CacheMiss: no recorded answer for this request in C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\tests\cassettes\gemma.jsonl; record it with a model (--backend vllm or hf with TRACEEVAL_CACHE=C:\Users\cipri\OneDrive - University of Bucharest, Faculty of Mathematics and Computer Science\FMI\Adobe\_TEsting\trace-eval\tests\cassettes\gemma.jsonl) 
-- SEO-01
-- SEO-03
-- SEO-04
-- SEO-05
-- SEO-06
-- SEO-07
-- SEO-08
+- 17 generated scenarios
+- n=71 (case SEO-01, fault healthy): post-condition false; failed checks ['state:pages.p4.metadata.title']
+- 24 runs in scope, 28 matching events checked
+- SEO-02: {'kind': 'tool.call', 'tool': 'set_page_metadata', 'args': {'description': 'Long.', 'keywords': ['long'], 'page_id': 'p6', 'title': 'An exceptionally long and verbose SEO title that search engines will truncate badly'}, 'status': 'ok', 'idempotency_key': 'idem-7b6476d174'}
+- case SEO-01: 'Improve the SEO metadata of the welcome post' -> 'Updated SEO metadata on p4; SEO score is now 70.'
+- failed check state:pages.p4.metadata.title: pages.p4.metadata.title == 'Welcome post' (actual 'Example title Example title Example title Example title Example title E')
+- failed check forbidden:set_page_metadata: ok tools: ['check_permission', 'get_page', 'get_seo_report', 'set_page_metadata']
 
 ## FS-0105: A retried publishing write never duplicates its effect
 
@@ -763,7 +743,7 @@ Read 6 files, ~4,938 tokens (10% of the repository):
 - `skills/publishing-workflow/SKILL.md` — call: approve_review, call: publish_page, call: request_review, call: schedule_publish, call: unpublish_page
 - `tools/publish_tools.py` — approve_review, publish_page, request_review, schedule_publish, unpublish_page
 
-Checks that will run: setting_in_range:runtime.retries (setting, 0 runs), setting_equals:runtime.idempotency_keys (setting, 0 runs), property_over_set:tool (contract, 5 runs), always_on_calls:publish_page+schedule_publish+unpublish_page+request_review (trace, 42 runs), scenario:PUB-12 (example, 1 runs), scenario:PUB-09 (example, 1 runs), function_in_layer:with_retry (placement, 0 runs), forbid_name_in:TransientError (placement, 0 runs), forbid_name_in:with_retry (placement, 0 runs). Recorded runs in scope: 42 of 168.
+Checks that will run: setting_in_range:runtime.retries (setting, 0 runs), setting_equals:runtime.idempotency_keys (setting, 0 runs), property_over_set:tool (contract, 5 runs), always_on_calls:publish_page+schedule_publish+unpublish_page+request_review (trace, 48 runs), scenario:PUB-12 (example, 1 runs), scenario:PUB-09 (example, 1 runs), function_in_layer:with_retry (placement, 0 runs), forbid_name_in:TransientError (placement, 0 runs), forbid_name_in:with_retry (placement, 0 runs). Recorded runs in scope: 48 of 177.
 
 ### FS-0105/current — Specify 'retried publishing writes never duplicate' against the current code
 
@@ -774,13 +754,13 @@ Verdict: **rejected** (expected rejected). the spec finds a latent defect: sched
 | setting_in_range:runtime.retries | setting | L4 | L4 | pass | runtime.retries = 2 |
 | setting_equals:runtime.idempotency_keys | setting | L4 | L4 | pass | runtime.idempotency_keys = True |
 | property_over_set:tool | contract | L2 | L2 | FAIL | counterexample found |
-| always_on_calls:publish_page+schedule_publish+unpublish_page+request_review | trace | L3 | L3 | pass | holds over 42 runs |
+| always_on_calls:publish_page+schedule_publish+unpublish_page+request_review | trace | L3 | L3 | pass | holds over 48 runs |
 | scenario:PUB-12 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-09 | example | L1 | L1 | FAIL | failed checks: audit:schedule_publish |
 | function_in_layer:with_retry | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:TransientError | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:with_retry | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 0 of 168 catalog cases selected by observed dependencies; all pass |
+| regression-tests | example | L1 | L1 | pass | 0 of 177 catalog cases selected by observed dependencies; all pass |
 
 - enumerated 5 values ['approve_review', 'publish_page', 'request_review', 'schedule_publish', 'unpublish_page']
 - tool='approve_review' (case PUB-22, fault ack_timeout_once:approve_review): post-condition false; failed checks ['audit:approve_review']
@@ -798,13 +778,13 @@ Verdict: **accepted** (expected accepted). 2 files: the three services honour th
 | setting_in_range:runtime.retries | setting | L4 | L4 | pass | runtime.retries = 2 |
 | setting_equals:runtime.idempotency_keys | setting | L4 | L4 | pass | runtime.idempotency_keys = True |
 | property_over_set:tool | contract | L2 | L2 | pass | holds over 5 runs |
-| always_on_calls:publish_page+schedule_publish+unpublish_page+request_review | trace | L3 | L3 | pass | holds over 42 runs |
+| always_on_calls:publish_page+schedule_publish+unpublish_page+request_review | trace | L3 | L3 | pass | holds over 48 runs |
 | scenario:PUB-12 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-09 | example | L1 | L1 | pass | expected outcome observed |
 | function_in_layer:with_retry | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:TransientError | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:with_retry | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 14 of 168 catalog cases selected by observed dependencies (2 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 18 of 177 catalog cases selected by observed dependencies (2 failing on the baseline, not run); all pass |
 
 ### FS-0105/pr_partial_fix — Same fix, but unpublish_page forgotten
 
@@ -815,13 +795,13 @@ Verdict: **rejected** (expected rejected). quantifying over the skill's write to
 | setting_in_range:runtime.retries | setting | L4 | L4 | pass | runtime.retries = 2 |
 | setting_equals:runtime.idempotency_keys | setting | L4 | L4 | pass | runtime.idempotency_keys = True |
 | property_over_set:tool | contract | L2 | L2 | FAIL | counterexample found |
-| always_on_calls:publish_page+schedule_publish+unpublish_page+request_review | trace | L3 | L3 | pass | holds over 42 runs |
+| always_on_calls:publish_page+schedule_publish+unpublish_page+request_review | trace | L3 | L3 | pass | holds over 48 runs |
 | scenario:PUB-12 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-09 | example | L1 | L1 | pass | expected outcome observed |
 | function_in_layer:with_retry | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:TransientError | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:with_retry | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 5 of 168 catalog cases selected by observed dependencies (2 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 5 of 177 catalog cases selected by observed dependencies (2 failing on the baseline, not run); all pass |
 
 - enumerated 5 values ['approve_review', 'publish_page', 'request_review', 'schedule_publish', 'unpublish_page']
 - tool='approve_review' (case PUB-22, fault ack_timeout_once:approve_review): post-condition false; failed checks ['audit:approve_review']
@@ -836,13 +816,13 @@ Verdict: **rejected** (expected rejected). monitor: successful writes without a 
 | setting_in_range:runtime.retries | setting | L4 | L4 | pass | runtime.retries = 2 |
 | setting_equals:runtime.idempotency_keys | setting | L4 | L4 | pass | runtime.idempotency_keys = True |
 | property_over_set:tool | contract | L2 | L2 | FAIL | counterexample found |
-| always_on_calls:publish_page+schedule_publish+unpublish_page+request_review | trace | L3 | L3 | FAIL | 45 violation(s) in 42 runs |
+| always_on_calls:publish_page+schedule_publish+unpublish_page+request_review | trace | L3 | L3 | FAIL | 59 violation(s) in 48 runs |
 | scenario:PUB-12 | example | L1 | L1 | FAIL | failed checks: audit:publish_page |
 | scenario:PUB-09 | example | L1 | L1 | FAIL | failed checks: audit:schedule_publish |
 | function_in_layer:with_retry | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:TransientError | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:with_retry | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | FAIL | 117 of 168 catalog cases selected by observed dependencies (4 failing on the baseline, not run); failed: ['AST-06', 'AUT-09', 'AUT-11', 'PUB-12', 'TRN-06'] |
+| regression-tests | example | L1 | L1 | FAIL | 126 of 177 catalog cases selected by observed dependencies (7 failing on the baseline, not run); failed: ['AST-06', 'AUT-09', 'AUT-11', 'PUB-12', 'TRN-06'] |
 
 - enumerated 5 values ['approve_review', 'publish_page', 'request_review', 'schedule_publish', 'unpublish_page']
 - tool='approve_review' (case PUB-22, fault ack_timeout_once:approve_review): post-condition false; failed checks ['audit:approve_review']
@@ -850,7 +830,7 @@ Verdict: **rejected** (expected rejected). monitor: successful writes without a 
 - tool='request_review' (case AUT-01, fault ack_timeout_once:request_review): post-condition false
 - tool='schedule_publish' (case PUB-09, fault ack_timeout_once:schedule_publish): post-condition false
 - tool='unpublish_page' (case PUB-06, fault ack_timeout_once:unpublish_page): post-condition false
-- 42 runs in scope, 45 matching events checked
+- 48 runs in scope, 59 matching events checked
 - AUT-01: {'kind': 'tool.call', 'tool': 'request_review', 'args': {'page_id': 'p100'}, 'status': 'ok', 'idempotency_key': None}
 - AUT-04: {'kind': 'tool.call', 'tool': 'request_review', 'args': {'page_id': 'p4'}, 'status': 'ok', 'idempotency_key': None}
 - AUT-06: {'kind': 'tool.call', 'tool': 'request_review', 'args': {'page_id': 'p100'}, 'status': 'ok', 'idempotency_key': None}
@@ -875,13 +855,13 @@ Verdict: **rejected** (expected rejected). setting clause (static) and the prope
 | setting_in_range:runtime.retries | setting | L4 | L4 | FAIL | runtime.retries = 0; runtime.retries = 0 is below the minimum 1 |
 | setting_equals:runtime.idempotency_keys | setting | L4 | L4 | pass | runtime.idempotency_keys = True |
 | property_over_set:tool | contract | L2 | L2 | FAIL | counterexample found |
-| always_on_calls:publish_page+schedule_publish+unpublish_page+request_review | trace | L3 | L3 | pass | holds over 42 runs |
+| always_on_calls:publish_page+schedule_publish+unpublish_page+request_review | trace | L3 | L3 | pass | holds over 48 runs |
 | scenario:PUB-12 | example | L1 | L1 | FAIL | failed checks: tool_error:publish_page |
 | scenario:PUB-09 | example | L1 | L1 | pass | expected outcome observed |
 | function_in_layer:with_retry | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:TransientError | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:with_retry | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | FAIL | 117 of 168 catalog cases selected by observed dependencies (4 failing on the baseline, not run); failed: ['AST-06', 'AUT-08', 'AUT-09', 'AUT-11', 'PUB-11', 'PUB-12', 'PUB-13', 'TRN-06'] |
+| regression-tests | example | L1 | L1 | FAIL | 126 of 177 catalog cases selected by observed dependencies (7 failing on the baseline, not run); failed: ['AST-06', 'AUT-08', 'AUT-09', 'AUT-11', 'PUB-11', 'PUB-12', 'PUB-13', 'TRN-06'] |
 
 - runtime.retries = 0 is below the minimum 1
 - enumerated 5 values ['approve_review', 'publish_page', 'request_review', 'schedule_publish', 'unpublish_page']

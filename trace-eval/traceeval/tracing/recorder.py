@@ -8,7 +8,7 @@ normalised trace document with the dependency information the selectors consume:
     termination reason
 
 The SUT code each test executed is not part of the trace: ``codecov`` measures it and the runner adds it
-to the run's record.
+to the run's record. ``otel`` exports a trace as OpenTelemetry spans.
 """
 
 import time
@@ -27,6 +27,9 @@ class TraceRecorder:
     backend: str = ""
     events: list[dict] = field(default_factory=list)
     started: float = field(default_factory=time.perf_counter)
+    # The same moment on the wall clock (epoch seconds): the origin of the events' times in an export
+    # (tracing/otel.py). Nothing else reads it, so the runs stay comparable.
+    started_at: float = field(default_factory=time.time)
 
     def event(self, kind: str, **attrs):
         """Append one event; ``t`` is the time since the recorder was created, in seconds."""
@@ -96,5 +99,6 @@ class TraceRecorder:
             "steps": end.get("steps"),
             "termination": end.get("termination"),
             "final_message": end.get("message", ""),
+            "started_at": self.started_at,
             "events": self.events,
         }

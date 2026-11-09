@@ -269,11 +269,16 @@ def apply(root: Path = CATALOG_ROOT) -> dict:
     header = "\n".join(line for line in old[: next((i for i, s in enumerate(old) if s.startswith("-")), 0)])
     body = yaml.safe_dump(doc["properties"], sort_keys=False, width=110)
     target.write_text((header.rstrip() + "\n\n" if header.strip() else "") + body, encoding="utf-8")
+    # The test files are rewritten line by line rather than through a YAML dump, so that their comments and
+    # layout survive. Two conventions make that safe: every test starts with "- id: X" at column 0 (a dataset
+    # file has one top-level "id: X"), and a properties line is always written on one line as "properties: [...]".
+    # The current id is remembered until the next one, and its properties line is replaced when the draft tags it.
     tags, written = doc.get("tags", {}), 0
     for path in sorted((root / "tests").glob("*.yaml")) + sorted((root / "datasets").glob("*.yaml")):
         lines, current = path.read_text(encoding="utf-8").split("\n"), None
         for i, line in enumerate(lines):
             m = re.match(r"^(?:- )?id: (\S+)", line)
+            # Only a test's own id counts: an indented "- id:" inside an expectation block is not a test.
             if m and (line.startswith("- ") or path.parent.name == "datasets"):
                 current = m.group(1)
             hit = re.match(r"^(\s*)properties: \[.*\]$", line)

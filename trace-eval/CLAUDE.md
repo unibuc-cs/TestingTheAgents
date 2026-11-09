@@ -11,9 +11,10 @@ pip install -e ".[dev,ml]"          # or: uv pip install --python .venv -e ".[de
 pytest -q                           # ~60 s; must stay green; replays Gemma's recorded answers (tests/cassettes/)
 ruff check traceeval tests          # rules and line length come from pyproject.toml
 ruff format traceeval tests         # see "Gotchas" before formatting sut/
-traceeval experiment --backend vllm --workdir runs/gemma4 --reps 3   # full experiment, Gemma on the GPU server, ~30 min
-traceeval experiment --backend llm --workdir runs/qwen4 --reps 3     # the same with Qwen (scripts/gpu_remote.sh up qwen)
-traceeval check code_retry_drop_idempotency --history runs/gemma4   # the prototype: one change, live
+traceeval experiment --backend vllm --workdir runs/gemma5 --reps 3   # full experiment, Gemma on the GPU server, about an hour
+traceeval experiment --backend llm --workdir runs/qwen5 --reps 3     # the same with Qwen (scripts/gpu_remote.sh up qwen)
+traceeval check skill_routing_drop_approval --history runs/gemma5   # the prototype: one change, live
+traceeval run --test PUB-01 --backend replay --otel trace.json   # one case; its trace as OpenTelemetry spans
 traceeval sdd --workdir runs/sdd                                 # spec-driven development demo, replayed
 traceeval properties draft [--fresh] | apply                     # a model drafts the catalog of properties; you edit
 TRACEEVAL_BACKEND=vllm pytest -q    # record the answers the cassette lacks (Gemma up on the GPU server)
@@ -27,9 +28,10 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
 
 - `traceeval/sut/` — the system under test (agents, skills, tools, services, harness, config; docs/CONTENTOPS.md).
   Copied and mutated by the experiment: **relative imports only**, no imports from `traceeval.*` outside `sut`.
-- `traceeval/catalog/` — eval cases (YAML: `tests/`, `datasets/`), the catalog of properties (`properties.yaml`)
-  and the loader; `extract.py` drafts the catalog of properties with a model.
-- `traceeval/tracing/` — trace recorder, coverage contexts.
+- `traceeval/catalog/` — eval cases (YAML: `tests/`, `datasets/`), the catalog of properties (`properties.yaml`),
+  the multi-agent workflows (`workflows.yaml`) and the loader; `extract.py` drafts the catalog of properties with a
+  model.
+- `traceeval/tracing/` — trace recorder, coverage contexts, OpenTelemetry export (`otel.py`).
 - `traceeval/scoring/` — deterministic scorers, and the model judge for cases with a rubric (`TRACEEVAL_JUDGE`).
 - `traceeval/mutation/` — controlled changes (patch operators), change-set extraction.
 - `traceeval/selection/` — `strategies.py` baselines, `adaptive_bayes.py` the proposed method (two text variants and
@@ -56,7 +58,8 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
 - Mutation operators assert their anchors; a new mutation labelled a regression must be revealed by ≥ 1 test under
   at least one model, and one labelled benign by none (the report's section 1 gives the counts).
 - A test's `properties` must be ids from `traceeval/catalog/properties.yaml` (the catalog of properties, a
-  feature the AEM team asked for; see docs/AEM_ALIGNMENT.md); add a property there before using it.
+  feature the AEM team asked for; see docs/AEM_ALIGNMENT.md); add a property there before using it. A test that runs
+  a multi-agent workflow end to end names it (`workflow: W1`), an id from `traceeval/catalog/workflows.yaml`.
 - Keep the catalog passing on the baseline, apart from Gemma's known mistakes (`KNOWN_MODEL_MISTAKES` in
   `tests/test_sut.py`).
 - Derive seeds from names with a stable function of their characters (`experiment/evaluate.py` sums the

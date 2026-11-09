@@ -69,7 +69,7 @@ a GPU. Three things follow from playing the agents with a real model:
   - FS-0103 `pr_correct`: the service now refuses to publish or schedule without a fresh link check, and in
     DS-INTENTS/i02 and i05 Gemma does so without one, so those regression cases fail.
   - FS-0104 `pr_config_70`: Gemma applies an over-long title whatever the limit (as in SEO-02), and the
-    property over title lengths finds one.
+    property over title lengths, the boundary scenario and the monitor over the SEO runs all find one.
 - **Several wrong PRs are caught in more ways.** FS-0101 `pr_in_adapter` and `pr_unwired` let Gemma's schedule
   of an unapproved page (PUB-10) through, which the service version refuses: the monitor catches both. FS-0103
   `pr_gate_ignores_version` lets the unchecked publish and schedule of i02 and i05 through, and the `precedes`
@@ -80,10 +80,10 @@ FS-0105 `pr_fix`. A spec checks the whole system, model
 included: a correct code change can still be rejected when the model doesn't do what the skill or the spec
 asks, and the evidence names the run where it didn't.
 
-## How this maps to the direction note
+## How this maps to the direction note on spec-driven development
 
-See [STUDY_GUIDE.md](STUDY_GUIDE.md) §2: what the note asks for, what the testbed already had, what the
-SDD layer adds, and the design decisions.
+See [STUDY_GUIDE.md](STUDY_GUIDE.md) §2: what the note (the request this layer answers) asks for, what the
+testbed already had, what the SDD layer adds, and the design decisions.
 
 ## What is not here yet
 

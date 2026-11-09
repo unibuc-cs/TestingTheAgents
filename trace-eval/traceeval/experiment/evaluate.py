@@ -13,7 +13,7 @@ import pandas as pd
 from traceeval.catalog import load_catalog, load_properties
 from traceeval.selection import CORE, STRATEGIES, SelectionContext, get_strategy
 
-from .coverage import affected_properties
+from .coverage import affected_properties, affected_workflows
 from .history import History
 from .metrics import apfd, apfdc, evaluate_log
 
@@ -35,6 +35,8 @@ def make_oracle(history: History, variant: str, rng: random.Random):
 
     def oracle(test_id: str):
         stats = history.variants.get(variant, {}).get(test_id)
+        # A test the variant never ran (a recording made with --only, say) behaves as on the original app: the
+        # same convention as History.variant_pass_rate, so the oracle and the ground truth agree.
         runs = stats.runs if stats and stats.runs else history.baseline[test_id].runs
         rec = rng.choice(runs)
         return bool(rec["passed"]), float(rec["tokens"])
@@ -59,7 +61,9 @@ def evaluate(
     shared = {"order_cache": {}}
     for variant in variants:
         change = history.changesets[variant]
-        affected = affected_properties(change, history, catalog, props)  # for the change coverage columns
+        # for the change coverage columns: both depend on the change only, so they are computed once per variant
+        affected = affected_properties(change, history, catalog, props)
+        affected_wf = affected_workflows(change, history, catalog)
         train = [v for v in variants if v != variant]  # learning may use every change but this one
         for name in strategies:
             strat = get_strategy(name)
@@ -71,7 +75,7 @@ def evaluate(
                     opts = dict(shared, seed=seed)
                     ctx = SelectionContext(change, catalog, history, budget, rng, train_variants=train, options=opts)
                     log = strat.run(ctx, make_oracle(history, variant, rng))
-                    row = evaluate_log(log, variant, history, catalog, budget, props, affected)
+                    row = evaluate_log(log, variant, history, catalog, budget, props, affected, affected_wf)
                     row.update(
                         {
                             "seed": seed,

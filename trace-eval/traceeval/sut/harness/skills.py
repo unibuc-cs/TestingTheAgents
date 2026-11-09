@@ -143,7 +143,11 @@ def _plain(expr, config, template: bool = False) -> str:
     text = re.sub(r"\bresult\.", "", text)
     text = re.sub(r"\blast\.", "", text)
     if not template:
+        # "not fetch.review_approved" -> "fetch.review_approved is false"; the look-behind leaves "is not None"
+        # alone, which the lines above already rewrote.
         text = re.sub(r"(?<!is )\bnot ([\w.]+)", r"\1 is false", text)
+        # "len(<seo_title>) > seo.max_title_length (60)" -> "<seo_title> has more than ... characters"; the
+        # optional group keeps a setting's "(value)" that the first rewrite added.
         text = re.sub(r"len\((<\w+>)\) > ([\w.]+(?: \([^()]*\))?)", r"\1 has more than \2 characters", text)
     return text
 

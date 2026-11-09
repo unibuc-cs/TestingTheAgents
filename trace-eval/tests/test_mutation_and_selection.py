@@ -6,7 +6,7 @@ import pytest
 
 from traceeval.catalog import load_catalog, load_properties
 from traceeval.experiment.check import check
-from traceeval.experiment.coverage import affected_properties, suite_coverage
+from traceeval.experiment.coverage import _crosses, affected_properties, suite_coverage
 from traceeval.experiment.evaluate import evaluate, make_oracle
 from traceeval.experiment.history import History
 from traceeval.experiment.metrics import apfd, apfdc
@@ -78,6 +78,16 @@ def test_changeset_is_order_sensitive_for_intents(tmp_path):
     assert "agent:translation.intents" in cs.ids()
 
 
+def test_a_run_covers_a_workflow_when_it_delegates_to_exactly_its_chain():
+    def run(*targets):
+        return {"routes": [("orchestrator", t) for t in targets]}
+
+    w4 = ["authoring", "translation", "publishing"]
+    assert _crosses(run("authoring", "translation", "translation", "publishing"), w4)  # one step per language
+    assert not _crosses(run("authoring", "assets", "brand", "translation", "publishing"), w4)  # W1 contains W4's chain
+    assert not _crosses(run("authoring", "translation"), w4)
+
+
 def test_apfd_metrics():
     order = ["a", "b", "c", "d"]
     assert apfd(order, {"a"}) == pytest.approx(1 - 1 / 4 + 1 / 8)
@@ -115,9 +125,15 @@ def test_small_end_to_end_experiment(tmp_path, capsys):
     # coverage: the suite by dimension, and each run's change coverage (no ground truth needed)
     props = load_properties()
     rows = {r["dimension"]: r for r in suite_coverage(h, catalog, props, SUT_ROOT)}
-    assert {"agent", "skill", "tool", "configuration", "property", "execution path", "risk"} <= set(rows)
+    assert {"agent", "skill", "tool", "configuration", "property", "workflow", "execution path", "risk"} <= set(rows)
     assert rows["property"]["not covered"] == [] and rows["skill"]["observed"] > 0
-    assert {"component_coverage", "affected_property_coverage", "mandatory_covered"} <= set(df.columns)
+    # every workflow a test names counts as declared, and a recorded run delegates to exactly W3's chain (brand, then
+    # publishing); only the workflows no test names may be listed as not covered
+    named = {c.workflow for c in catalog.values() if c.workflow}
+    assert rows["workflow"]["declared"] == len(named) and rows["workflow"]["observed"] >= 1
+    assert not named & set(rows["workflow"]["not covered"])
+    columns = {"component_coverage", "affected_property_coverage", "mandatory_covered", "affected_workflow_coverage"}
+    assert columns <= set(df.columns)
     benign = h.changesets["benign_skill_prose_reflow"]
     assert any(props[p].mandatory for p in affected_properties(benign, h, catalog, props))
     # step 5: with the whole suite affordable, a run without a regression tests every affected mandatory property
