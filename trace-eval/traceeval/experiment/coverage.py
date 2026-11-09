@@ -206,24 +206,58 @@ def affected_error_paths(change, sut_dir: Path = SUT_ROOT) -> list[ErrorPath]:
     return [p for p in error_paths(sut_dir) if f"code:{p.file}::{p.function}" in ids or f"code:{p.file}" in ids]
 
 
+def invoked(history, test_id: str) -> set[str]:
+    """What a test's recorded baseline runs invoked: the agents, skills, tools, settings and code in their
+    dependencies, plus ``tool:route_to_agent`` when a run delegated (a delegation is recorded as a route, not as a
+    tool call)."""
+    deps = history.deps(test_id)
+    if any(r.get("routes") for r in history.baseline[test_id].runs):
+        deps = deps | {"tool:route_to_agent"}
+    return deps
+
+
+def _components(sut_dir: Path) -> dict[str, list[str]]:
+    """The application's agents, skills, tools (every tool it registers) and settings, by dimension."""
+    return {
+        "agent": sorted(
+            yaml.safe_load(p.read_text(encoding="utf-8"))["name"] for p in (sut_dir / "agents").glob("*.yaml")
+        ),
+        "skill": sorted(p.name for p in (sut_dir / "skills").iterdir() if p.is_dir()),
+        "tool": sorted(_registered_tools(sut_dir) | {"route_to_agent"}),
+        "config": sorted(_flatten(yaml.safe_load((sut_dir / "config" / "runtime.yaml").read_text(encoding="utf-8")))),
+    }
+
+
+def tests_per_component(history, catalog, sut_dir: Path) -> dict[str, list[tuple[str, int, int]]]:
+    """For each agent, skill, tool and feature: (name, the tests that declare it, the tests that invoke it in their
+    recorded runs). A component few tests invoke is thinly covered even when the suite-level row counts it as
+    covered; a gap between the two counts is metadata that does not match what the tests do."""
+    tests = list(history.baseline)
+    inv = {t: invoked(history, t) for t in tests}
+    dec = {t: catalog[t].declared_components() if t in catalog else set() for t in tests}
+    out = {}
+    for dim, names in _components(sut_dir).items():
+        if dim != "config":
+            out[dim] = [
+                (n, sum(f"{dim}:{n}" in dec[t] for t in tests), sum(f"{dim}:{n}" in inv[t] for t in tests))
+                for n in names
+            ]
+    out["feature"] = [
+        (f.name, sum(bool(f.tool_ids() & dec[t]) for t in tests), sum(bool(f.tool_ids() & inv[t]) for t in tests))
+        for f in features().values()
+    ]
+    return out
+
+
 def suite_coverage(history, catalog, props, sut_dir: Path) -> list[dict]:
     """One row per dimension: how many components it has, how many the tests declare and the traces show, and the
     components no test covers (declared or observed)."""
-    observed = set().union(*(history.deps(t) for t in history.baseline))
-    if any(r.get("routes") for s in history.baseline.values() for r in s.runs):
-        observed.add("tool:route_to_agent")  # a delegation is recorded as a route, not as a tool call
+    observed = set().union(*(invoked(history, t) for t in history.baseline))
     declared = set().union(*(c.declared_components() for c in catalog.values()))
-    agents = sorted(yaml.safe_load(p.read_text(encoding="utf-8"))["name"] for p in (sut_dir / "agents").glob("*.yaml"))
-    skills = sorted(p.name for p in (sut_dir / "skills").iterdir() if p.is_dir())
-    config = sorted(_flatten(yaml.safe_load((sut_dir / "config" / "runtime.yaml").read_text(encoding="utf-8"))))
-    tools = sorted({d.split(":", 1)[1] for d in observed if d.startswith("tool:")} | _registered_tools(sut_dir))
+    comps = _components(sut_dir)
     rows = []
-    for name, prefix, universe in (
-        ("agent", "agent", agents),
-        ("skill", "skill", skills),
-        ("tool", "tool", tools),
-        ("configuration", "config", config),
-    ):
+    for name, prefix in (("agent", "agent"), ("skill", "skill"), ("tool", "tool"), ("configuration", "config")):
+        universe = comps[prefix]
         ids = {u: f"{prefix}:{u}" for u in universe}
         dec = {u for u, i in ids.items() if i in declared}
         obs = {u for u, i in ids.items() if i in observed}

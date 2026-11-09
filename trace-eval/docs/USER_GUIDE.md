@@ -89,15 +89,17 @@ Everything else is plumbing (loaders, tracing, report).
     what no test covers. A feature (`catalog/features.yaml`) is covered by the tests that declare or call one of
     its tools, and a table counts the tests per feature. A tool error path is a place in the code where a tool
     call is refused, reached when a run executes it. A workflow is declared by the tests that name it, and
-    observed when a run delegates to exactly its agents, in order.
+    observed when a run delegates to exactly its agents, in order. Then, for each agent, skill, tool and
+    feature, the number of tests that declare it and the number that invoke it in their recorded runs.
+    `traceeval coverage --history runs/gemma5` prints this part in the terminal.
   - Then each change, without the ground truth (`experiment/coverage.py`): the share of the changed components the
     executed tests exercised, the share of the properties the change may affect that they checked, how often a run
     that found no regression tested every affected mandatory property, the share of the affected workflows they
     ran, and the share of the affected features they reached. The properties a change may affect are those whose
     `sources` it touches and those of the tests that ran a changed component on the original app. The workflows it
     may affect are those of the same tests. The features it affects are those with a tool or a part it touches.
-    `traceeval check` prints the same figures, and names the refusals in the changed code that no executed test
-    reached.
+    `traceeval check` prints the same figures, names the refusals in the changed code that no executed test
+    reached, and counts the agents, skills, tools and features its tests invoked.
 - `replay.csv` has one row per (change, strategy, budget, seed), for slicing the results yourself.
 
 ## 5. How the adaptive method weighs a test

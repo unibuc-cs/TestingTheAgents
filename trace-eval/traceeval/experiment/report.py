@@ -193,26 +193,20 @@ def _properties_section(history, reg) -> list[str]:
     return out
 
 
-def _coverage_section(workdir, history, df) -> list[str]:
-    """Section 6: coverage of the test suite by dimension, and change coverage per strategy over every change (it
-    needs no ground truth)."""
-    from traceeval.sut import SUT_ROOT
+def suite_coverage_lines(history, sut_dir) -> list[str]:
+    """The coverage of the test suite as Markdown: per dimension, then per agent, skill, tool and feature (also printed
+    by ``traceeval coverage``)."""
+    from .coverage import suite_coverage, tests_per_component
 
-    from .coverage import features, suite_coverage, tools_called
-
-    sut_dir = workdir / "variants" / "baseline" / "sut"
     cases = {c.id: c for c in load_catalog()}
-    rows = suite_coverage(history, cases, load_properties(), sut_dir if sut_dir.exists() else SUT_ROOT)
     table = ["| dimension | components | declared | observed | not covered |", "|---|---|---|---|---|"]
-    for r in rows:
+    for r in suite_coverage(history, cases, load_properties(), sut_dir):
         gaps = ", ".join(r["not covered"][:8]) + (" ..." if len(r["not covered"]) > 8 else "")
         table.append(
             f"| {r['dimension']} | {r['components']} | {'' if r['declared'] is None else r['declared']} | "
             f"{r['observed']} | {gaps or r.get('detail', '')} |"
         )
     out = [
-        "## 6. Coverage",
-        "",
         "Coverage of the test suite: per dimension, how many components the tests declare and the traces show, and "
         "what no test covers. A feature (`catalog/features.yaml`) is covered by the tests that declare or call one of "
         "its tools. A tool error path is a place in the code where a tool call is refused, reached when a run executes "
@@ -221,16 +215,23 @@ def _coverage_section(workdir, history, df) -> list[str]:
         "",
         *table,
         "",
-        "Tests per feature (observed: the recorded tests that call one of its tools):",
-        "",
-        "| feature | tests |",
-        "|---|---|",
-        *(
-            f"| {f.name} | {sum(1 for t in history.baseline if f.tool_ids() & tools_called(history, [t]))} |"
-            for f in features().values()
-        ),
+        "Per component: how many tests declare it in their metadata, and how many invoke it in their recorded runs. A "
+        "component few tests invoke is thinly covered. A difference between the two counts is where the hand-written "
+        "metadata and the runs disagree.",
         "",
     ]
+    for dim, rows in tests_per_component(history, cases, sut_dir).items():
+        out += [f"| {dim} | declared | invoked |", "|---|---|---|", *(f"| {n} | {d} | {o} |" for n, d, o in rows), ""]
+    return out
+
+
+def _coverage_section(workdir, history, df) -> list[str]:
+    """Section 6: coverage of the test suite by dimension, and change coverage per strategy over every change (it
+    needs no ground truth)."""
+    from traceeval.sut import SUT_ROOT
+
+    sut_dir = workdir / "variants" / "baseline" / "sut"
+    out = ["## 6. Coverage", "", *suite_coverage_lines(history, sut_dir if sut_dir.exists() else SUT_ROOT)]
     if "component_coverage" in df:
         # a run that found a regression is over whatever it left untested; the mandatory rule concerns the others
         open_runs = df[df.stop_reason != "regression"].astype({"mandatory_covered": float})

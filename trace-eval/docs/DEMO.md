@@ -117,6 +117,7 @@ skill_routing_drop_approval: changed skill:routing#prose
 REGRESSION: WF3-03 failed
 3 runs, 25,111 tokens (1% of the suite), 22 s (the whole suite takes about 361 s, one test at a time); P(something broke) = 1.00
 coverage: 100% of the changed components exercised, 27% of the 15 affected properties checked, 17% of the 6 affected workflows run, 100% of the 3 affected features reached
+invoked: 3 of 11 agents, 5 of 13 skills, 5 of 32 tools, 5 of 19 features
 ```
 
 WF3-03 is the legal takedown in which the person refuses the approval. Without the rule, the orchestrator skips
@@ -160,7 +161,10 @@ current app:
 - Section 6 gives the coverage of the suite per dimension and the change coverage per strategy. The dimensions
   are agents, features, skills, tools, tool error paths, configuration, properties, workflows, execution paths
   and risk, each declared and observed, with what no test covers. Every feature has a test, but the tests reach
-  only 13 of the 31 places where a tool refuses: a gap no other dimension shows.
+  only 13 of the 31 places where a tool refuses: a gap no other dimension shows. Below it, each agent, skill,
+  tool and feature has the number of tests that declare it and the number that invoke it. The assets agent,
+  for instance, is declared by 37 tests and invoked by 17, because the routing datasets stop at the hand-off.
+  `traceeval coverage --history runs/gemma5` prints the same in the terminal.
 
 Mention one finding: the mandatory-coverage rule is what catches `skill_publish_drop_link_validation`. Without
 the rule, the method calls that change clean. With it, the method must test the mandatory "no broken publish"

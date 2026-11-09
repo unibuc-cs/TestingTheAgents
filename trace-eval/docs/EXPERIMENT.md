@@ -385,7 +385,8 @@ The check prints each test as it runs, and then:
   may affect that they checked, of the affected workflows they ran, of the affected features they reached and
   of the refusals in the changed code they reached;
 - what they left out: the affected properties left unchecked (marked when mandatory), the workflows not run, the
-  features not reached and the refusals not reached.
+  features not reached and the refusals not reached;
+- what the tests invoked: how many of the application's agents, skills, tools and features.
 
 `--history` gives the method what it knows beforehand: each test's cost, the code it runs on the original
 app, and how the other changes showed up in the tests. Record the history with the same model, and record it

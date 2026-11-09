@@ -189,6 +189,12 @@ page analytics (five each). The tests reach 13 of the 31 places where a tool ref
 a person the platform does not know, has a service refuse a user for a missing role, schedules a page while
 scheduling is switched off, or sends the dispatcher an unknown tool or malformed arguments.
 
+The report, and `traceeval coverage --history runs/gemma5` in the terminal, also give for each agent, skill, tool
+and feature the number of tests that declare it and the number that invoke it. On Gemma's recording the two counts
+disagree in telling ways. The routing datasets name the agent a request should go to, but only the hand-off runs,
+so the assets agent is declared by 37 tests and invoked by 17. The `governance-checks` skill, which every
+specialist loads, is invoked in 116 tests and declared by none. `get_asset` is invoked by none.
+
 **2. Change coverage: for one change and one strategy, how much of what the change touches the executed tests
 cover.** Computed without the ground truth, at the moment the strategy stops ("coverage achieved before stopping",
 requirements section 8.1), so `traceeval check` prints it after its verdict:
@@ -205,6 +211,9 @@ requirements section 8.1), so `traceeval check` prints it after its verdict:
   loop or the retries, affects none in particular;
 - the share of the refusals in the changed code they reached, for a change to a function that can refuse a tool
   call. `traceeval check` names the ones no executed test reached.
+
+`traceeval check` also prints what its tests invoked, out of what the application has ("invoked: 3 of 11 agents, 5
+of 13 skills, 5 of 32 tools, 5 of 19 features").
 
 On Gemma's recording, at a budget of 20% of the suite's tokens, the tests the adaptive method runs reach 89% of the
 affected features: it stops once it is confident. The trace-based strategy (`observed`) reaches all of them, for

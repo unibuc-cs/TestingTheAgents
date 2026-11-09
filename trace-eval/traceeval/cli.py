@@ -140,6 +140,14 @@ def cmd_check(args):
     check(args.change, Path(args.history), args.budget, args.backend)
 
 
+def cmd_coverage(args):
+    from traceeval.experiment.history import History
+    from traceeval.experiment.report import suite_coverage_lines
+    from traceeval.sut import SUT_ROOT
+
+    print("\n".join(suite_coverage_lines(History.load(Path(args.history)), SUT_ROOT)))
+
+
 def cmd_properties(args):
     from traceeval.catalog import extract
 
@@ -243,6 +251,10 @@ def main(argv=None):
     ck.add_argument("--budget", type=float, default=0.2, help="at most this fraction of the full suite's tokens")
     ck.add_argument("--backend", default="vllm", choices=BACKENDS, help="who plays the agents (default: vllm, Gemma)")
     ck.set_defaults(fn=cmd_check)
+
+    cv = sub.add_parser("coverage")
+    cv.add_argument("--history", required=True, help="a recorded experiment, e.g. runs/gemma5")
+    cv.set_defaults(fn=cmd_coverage)
 
     pp = sub.add_parser("properties")
     pp.add_argument("action", choices=["draft", "apply"])

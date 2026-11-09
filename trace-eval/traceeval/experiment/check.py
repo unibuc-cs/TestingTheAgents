@@ -24,12 +24,14 @@ from traceeval.selection import SelectionContext, get_strategy
 from traceeval.sut import SUT_ROOT
 
 from .coverage import (
+    _components,
     affected_error_paths,
     affected_features,
     affected_properties,
     affected_workflows,
     change_coverage,
     features,
+    invoked,
     tools_called,
 )
 from .executor import run_case
@@ -124,6 +126,15 @@ def _print_coverage(cs, executed, history, catalog):
         parts.append(f"{cov['error_path_coverage']:.0%} of the {len(paths)} refusals in the changed code reached")
     if parts:
         print("coverage: " + ", ".join(parts))
+    # what the executed tests invoked on the original app, out of what the application has
+    deps = set().union(*(invoked(history, t) for t in executed)) if executed else set()
+    counts = [
+        f"{sum(f'{dim}:{n}' in deps for n in names)} of {len(names)} {dim}s"
+        for dim, names in _components(SUT_ROOT).items()
+        if dim != "config"
+    ]
+    reached_features = sum(bool(f.tool_ids() & deps) for f in features().values())
+    print(f"invoked: {', '.join(counts)}, {reached_features} of {len(features())} features")
     checked = {p for t in executed for p in catalog[t].properties}
     missing = [p + (" (mandatory)" if props[p].mandatory else "") for p in sorted(affected - checked)]
     if missing:

@@ -196,29 +196,94 @@ Coverage of the test suite: per dimension, how many components the tests declare
 | execution path | 78 |  | 78 |  |
 | risk | 4 | 4 | 4 | critical 30, high 75, low 22, medium 49 |
 
-Tests per feature (observed: the recorded tests that call one of its tools):
+Per component: how many tests declare it in their metadata, and how many invoke it in their recorded runs. A component few tests invoke is thinly covered. A difference between the two counts is where the hand-written metadata and the runs disagree.
 
-| feature | tests |
-|---|---|
-| show a page | 74 |
-| create or edit a page | 26 |
-| request and approve a page's review | 15 |
-| publish a page | 21 |
-| schedule a page | 5 |
-| take a page down | 7 |
-| check a page's links | 56 |
-| set a page's SEO metadata | 23 |
-| translate a page | 14 |
-| upload, find and attach assets | 14 |
-| check pages against the brand rules and find the pages that use a term | 13 |
-| run a site health check and fix alt text | 4 |
-| read page analytics | 5 |
-| roll a page back to an earlier version | 6 |
-| answer a privacy request (consent, data export) and show the audit history | 11 |
-| refuse what the user may not do | 108 |
-| hand a request to the specialist that owns it | 148 |
-| plan a request that needs several specialists | 14 |
-| ask a person before publishing, scheduling or taking pages down | 15 |
+| agent | declared | invoked |
+|---|---|---|
+| assets | 37 | 17 |
+| authoring | 46 | 29 |
+| brand | 12 | 12 |
+| governance | 32 | 12 |
+| insights | 5 | 5 |
+| maintenance | 7 | 7 |
+| optimizer | 5 | 6 |
+| orchestrator | 66 | 149 |
+| publishing | 59 | 44 |
+| seo | 10 | 10 |
+| translation | 35 | 15 |
+
+| skill | declared | invoked |
+|---|---|---|
+| asset-management | 35 | 17 |
+| brand-governance | 9 | 12 |
+| data-insights | 5 | 5 |
+| governance-checks | 0 | 116 |
+| governance-ops | 32 | 12 |
+| link-validation | 3 | 71 |
+| page-authoring | 44 | 29 |
+| publishing-workflow | 58 | 44 |
+| rollback | 7 | 7 |
+| routing | 66 | 149 |
+| seo-metadata | 10 | 10 |
+| site-optimization | 5 | 6 |
+| translation | 34 | 15 |
+
+| tool | declared | invoked |
+|---|---|---|
+| approve_review | 7 | 10 |
+| attach_asset | 8 | 12 |
+| audit_site | 3 | 3 |
+| check_brand_policy | 6 | 7 |
+| check_consent | 5 | 8 |
+| check_permission | 9 | 108 |
+| create_page | 11 | 15 |
+| create_translation_job | 9 | 12 |
+| export_user_data | 7 | 4 |
+| fix_alt_text | 2 | 1 |
+| get_asset | 0 | 0 |
+| get_audit_log | 1 | 3 |
+| get_brand_guidelines | 1 | 1 |
+| get_page | 2 | 74 |
+| get_page_metrics | 5 | 5 |
+| get_seo_report | 2 | 9 |
+| get_translation_status | 1 | 2 |
+| list_versions | 2 | 6 |
+| make_plan | 12 | 14 |
+| publish_page | 26 | 21 |
+| request_approval | 13 | 15 |
+| request_review | 4 | 5 |
+| rollback_page | 7 | 5 |
+| route_to_agent | 0 | 148 |
+| schedule_publish | 5 | 5 |
+| search_assets | 2 | 5 |
+| search_pages | 3 | 5 |
+| set_page_metadata | 11 | 22 |
+| unpublish_page | 7 | 7 |
+| update_page_content | 10 | 25 |
+| upload_asset | 4 | 5 |
+| validate_links | 15 | 56 |
+
+| feature | declared | invoked |
+|---|---|---|
+| show a page | 2 | 74 |
+| create or edit a page | 20 | 26 |
+| request and approve a page's review | 11 | 15 |
+| publish a page | 26 | 21 |
+| schedule a page | 5 | 5 |
+| take a page down | 7 | 7 |
+| check a page's links | 15 | 56 |
+| set a page's SEO metadata | 11 | 23 |
+| translate a page | 10 | 14 |
+| upload, find and attach assets | 11 | 14 |
+| check pages against the brand rules and find the pages that use a term | 10 | 13 |
+| run a site health check and fix alt text | 5 | 4 |
+| read page analytics | 5 | 5 |
+| roll a page back to an earlier version | 7 | 6 |
+| answer a privacy request (consent, data export) and show the audit history | 8 | 11 |
+| refuse what the user may not do | 9 | 108 |
+| hand a request to the specialist that owns it | 0 | 148 |
+| plan a request that needs several specialists | 12 | 14 |
+| ask a person before publishing, scheduling or taking pages down | 13 | 15 |
 
 Change coverage over every change, without the ground truth: the share of the changed components the executed tests exercised, and the share of the properties the change may affect (`coverage.py`) that they checked.
 

@@ -17,6 +17,9 @@ from traceeval.experiment.coverage import (
     error_paths,
     suite_coverage,
 )
+from traceeval.experiment.coverage import (
+    tests_per_component as per_component,
+)
 from traceeval.experiment.evaluate import evaluate, make_oracle
 from traceeval.experiment.history import History
 from traceeval.experiment.metrics import apfd, apfdc
@@ -181,6 +184,11 @@ def test_small_end_to_end_experiment(tmp_path, capsys):
     named = {c.workflow for c in catalog.values() if c.workflow}
     assert rows["workflow"]["declared"] == len(named) and rows["workflow"]["observed"] >= 1
     assert not named & set(rows["workflow"]["not covered"])
+    # per component: the tests that declare it and the tests that invoke it
+    per = per_component(h, catalog, SUT_ROOT)
+    assert set(per) == {"agent", "skill", "tool", "feature"}
+    invoked = {n: o for dim in ("agent", "skill") for n, _, o in per[dim]}
+    assert 0 < invoked["orchestrator"] == invoked["routing"]  # the orchestrator always reads its routing skill
     columns = {"component_coverage", "affected_property_coverage", "mandatory_covered", "affected_workflow_coverage"}
     columns |= {"affected_feature_coverage", "error_path_coverage"}
     assert columns <= set(df.columns)
@@ -192,4 +200,5 @@ def test_small_end_to_end_experiment(tmp_path, capsys):
     # the prototype: the same change checked live (here on recorded answers), from this history
     log = check("skill_publish_drop_link_validation", work, 0.3, "replay")
     assert log.stop_reason == "regression" and log.p_broken > 0.9
-    assert "coverage: " in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "coverage: " in out and "invoked: " in out
