@@ -110,7 +110,9 @@ def run_case(
             _apply_patch(state.data, case.fixture_patch)
         if keep_state:
             initial = state.snapshot()
-        config = Config.load(sut.path / "config" / "runtime.yaml", tracer=tracer, overrides=config_overrides)
+        # the case's own settings, then the caller's (traceeval run --set), which win
+        overrides = {**case.config, **(config_overrides or {})}
+        config = Config.load(sut.path / "config" / "runtime.yaml", tracer=tracer, overrides=overrides)
         if backend not in ("llm", "hf", "vllm", "replay"):
             raise ValueError(f"unknown backend {backend}")
         llm = sut.sub("harness.backends.llm_openai")

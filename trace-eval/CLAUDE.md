@@ -61,7 +61,8 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
 - A test's `properties` must be ids from `traceeval/catalog/properties.yaml` (the catalog of properties, a feature
   the AEM team asked for; see docs/AEM_ALIGNMENT.md); add a property there before using it. A test that runs a
   multi-agent workflow end to end names it (`workflow: W1`), an id from `traceeval/catalog/workflows.yaml`. A
-  feature in `traceeval/catalog/features.yaml` lists its parts as component ids; a new tool, skill or setting users
+  feature in `traceeval/catalog/features.yaml` lists its parts as component ids; a case that needs a setting at
+  another value sets it in `config:` (by dotted key); a new tool, skill or setting users
   would see belongs to a feature.
 - Keep the catalog passing on the baseline, apart from Gemma's known mistakes (`KNOWN_MODEL_MISTAKES` in
   `tests/test_sut.py`).

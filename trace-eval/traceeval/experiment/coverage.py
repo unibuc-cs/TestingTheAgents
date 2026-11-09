@@ -3,9 +3,9 @@
 Two levels:
 
 - **Suite coverage** (``suite_coverage``): how well the tests cover the application before any change. For each
-  dimension of Adobe's requirements (agent, feature, skill, tool, tool error path, configuration, property,
-  workflow, execution path, risk), the share of its components that at least one test covers, declared (the tests'
-  metadata) and observed (the recorded traces), and what no test covers.
+  dimension of Adobe's requirements (agent, feature, skill, tool, tool error path, configuration, setting value,
+  property, workflow, execution path, risk), the share of its components that at least one test covers, declared
+  (the tests' metadata) and observed (the recorded traces), and what no test covers.
 - **Change coverage** (``change_coverage``): for one change and the tests a strategy ran, how much of what the change
   touches they cover. It needs no ground truth, so it can be reported live: the changed components the tests
   exercised, the affected properties they checked, whether every affected mandatory property got a test, the
@@ -23,6 +23,7 @@ records.
 """
 
 import ast
+import json
 import re
 from dataclasses import dataclass
 from functools import lru_cache
@@ -249,6 +250,19 @@ def tests_per_component(history, catalog, sut_dir: Path) -> dict[str, list[tuple
     return out
 
 
+def setting_value(key: str, value) -> str:
+    """The component id of a setting at a value: ``config:publishing.require_review=false``."""
+    return f"config:{key}={json.dumps(value)}"
+
+
+def setting_values(sut_dir: Path, catalog) -> list[str]:
+    """The settings at a value other than their default that the suite should cover: the other value of every
+    on/off setting, and every value a case sets (``config:`` in the case)."""
+    defaults = _flatten(yaml.safe_load((sut_dir / "config" / "runtime.yaml").read_text(encoding="utf-8")))
+    flipped = {f"config:{k}={json.dumps(v != 'true')}" for k, v in defaults.items() if v in ("true", "false")}
+    return sorted(flipped | {setting_value(k, v) for c in catalog.values() for k, v in c.config.items()})
+
+
 def suite_coverage(history, catalog, props, sut_dir: Path) -> list[dict]:
     """One row per dimension: how many components it has, how many the tests declare and the traces show, and the
     components no test covers (declared or observed)."""
@@ -282,6 +296,27 @@ def suite_coverage(history, catalog, props, sut_dir: Path) -> list[dict]:
             "declared": len(dec),
             "observed": len(obs),
             "not covered": sorted(feats[f].name for f in set(feats) - dec - obs),
+        },
+    )
+    # A setting at a non-default value is declared by the cases that set it, and observed when such a case's
+    # recorded run read the setting.
+    values = setting_values(sut_dir, catalog)
+    dec = {setting_value(k, v) for c in catalog.values() for k, v in c.config.items()}
+    obs = {
+        setting_value(k, v)
+        for t in history.baseline
+        if t in catalog
+        for k, v in catalog[t].config.items()
+        if f"config:{k}" in invoked(history, t)
+    }
+    rows.insert(
+        len(rows),
+        {
+            "dimension": "setting value",
+            "components": len(values),
+            "declared": len(dec & set(values)),
+            "observed": len(obs & set(values)),
+            "not covered": [v[len("config:") :] for v in values if v not in dec | obs],
         },
     )
     # A tool error path is observed when a baseline run executed it. A test's expect.tool_errors names a tool and an

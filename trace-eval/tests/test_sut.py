@@ -51,7 +51,7 @@ def test_skill_parsing_exposes_procedure():
 # republished two pages it never published; in WF5-02 it goes on to the publishing step after the rollback's link
 # check failed (publishing's own link check then refuses); in WF6-02 it stops the whole plan after the refused
 # export, although the byline edits do not depend on it. Every other case must pass.
-KNOWN_MODEL_MISTAKES = ["AUT-04", "PUB-10", "SEO-02", "WF1-01", "WF2-03", "WF5-02", "WF6-02"]
+KNOWN_MODEL_MISTAKES = ["AUT-04", "CFG-01", "PUB-10", "SEO-02", "WF1-01", "WF2-03", "WF5-02", "WF6-02"]
 
 
 class ScriptedClient:
@@ -214,6 +214,21 @@ def test_a_failed_step_on_one_page_does_not_stop_the_others(sut, cases):
     rec = run_case(sut, cases["WF3-02"], backend="llm", llm_client=client)
     assert rec["passed"], rec["failed_checks"]
     assert [t for _, t in rec["routes"]] == ["brand", "publishing", "publishing"]
+
+
+def test_a_case_runs_with_its_own_settings(sut, cases):
+    """CFG-02 runs with scheduling switched off (config: in the case), so the scheduling call is refused."""
+    script = {
+        "orchestrator": [("route_to_agent", {"agent": "publishing"})],
+        "publishing agent": [
+            ("get_page", {"page_id": "p4"}),
+            ("check_permission", {"user_id": "bob", "action": "schedule"}),
+            ("validate_links", {"page_id": "p4"}),
+            ("schedule_publish", {"page_id": "p4", "at": "2026-11-20T09:00:00Z"}),
+        ],
+    }
+    rec = run_case(sut, cases["CFG-02"], backend="llm", llm_client=ScriptedClient(script, final="Scheduling is off."))
+    assert rec["passed"], rec["failed_checks"]
 
 
 def test_each_agent_has_its_own_step_budget_and_the_run_a_total(sut, cases):

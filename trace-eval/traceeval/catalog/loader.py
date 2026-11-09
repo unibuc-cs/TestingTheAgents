@@ -27,6 +27,7 @@ class EvalCase:
     context: dict = field(default_factory=dict)
     fixture: str = "base"
     fixture_patch: dict = field(default_factory=dict)
+    config: dict = field(default_factory=dict)  # settings this case runs with, by dotted key (the rest default)
     fault_profile: str = "healthy"
     risk: str = "medium"
     properties: list[str] = field(default_factory=list)
@@ -53,7 +54,7 @@ class EvalCase:
             out.add(f"skill:{s}")
         for t in self.declared.get("tools", []):
             out.add(f"tool:{t}")
-        for c in self.declared.get("config", []):
+        for c in [*self.declared.get("config", []), *self.config]:  # a setting the case sets is one it depends on
             out.add(f"config:{c}")
         return out
 
@@ -153,6 +154,7 @@ def load_catalog(root: Path | str = CATALOG_ROOT) -> list[EvalCase]:
                     context=dict(raw.get("context", {})),
                     fixture=raw.get("fixture", "base"),
                     fixture_patch=dict(raw.get("fixture_patch", {})),
+                    config=dict(raw.get("config", {})),
                     fault_profile=raw.get("fault_profile", "healthy"),
                     risk=raw.get("risk", "medium"),
                     properties=list(raw.get("properties", [])),

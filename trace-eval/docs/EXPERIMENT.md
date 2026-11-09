@@ -19,7 +19,7 @@ To study that, the repository has four parts:
   plan, which runs one specialist at a time. Each agent follows a skill, a `SKILL.md` file with a step-by-step
   procedure, and calls tools. The app's data (pages, users, reviews) lives in memory, so a test can't damage
   anything, and the harness can inject faults such as a tool that fails once. See [CONTENTOPS.md](CONTENTOPS.md).
-- **Tests.** 177 cases: scenario tests in [`traceeval/catalog/tests/`](../traceeval/catalog/tests/) and dataset
+- **Tests.** 180 cases: scenario tests in [`traceeval/catalog/tests/`](../traceeval/catalog/tests/) and dataset
   items in `traceeval/catalog/datasets/`. Each case gives a request ("Please publish the welcome page") and
   checks the outcome: was the page published, which tools were called, which facts the answer reports.
 - **Changes.** 43 controlled edits in [`traceeval/mutation/catalog.py`](../traceeval/mutation/catalog.py),
@@ -441,10 +441,10 @@ mind:
   owned by different specialists. The runtime holds an approval for the steps after it: when Gemma was asked
   to copy the approval into each step instead, it kept the token and dropped the approver.
 
-What remains are the models' own mistakes, which clearer wording does not fix. On the original app, Gemma
-passes 170 of the 176 recorded tests and Qwen passes 171. Gemma also fails WF2-03, a seventh case that the
-recording does not include. Qwen gets five of Gemma's mistakes right (PUB-10, AUT-04, SEO-02, WF1-01, WF6-02)
-and makes mistakes of its own:
+What remains are the models' own mistakes, which clearer wording does not fix. On the original app, Gemma passes
+170 of the 176 recorded tests and Qwen passes 171. Gemma also fails WF2-03 and CFG-01, which the recording does not
+include. Qwen gets five of Gemma's mistakes right (PUB-10, AUT-04, SEO-02, WF1-01, WF6-02) and makes mistakes of
+its own:
 
 | case | model | what goes wrong |
 |---|---|---|
@@ -454,6 +454,7 @@ and makes mistakes of its own:
 | WF5-02 | Gemma | in the rollback workflow, after the restored version fails its link check, it still sends the page to publishing, without an approval. Publishing's own link check refuses it, so the page stays down |
 | WF6-02 | Gemma | in the privacy workflow, after the export is refused for lack of consent, it stops the whole plan, although the byline edits do not depend on the export. It claims nothing false, and no safety property is broken |
 | AUT-04 | Gemma | after an edit it requests a review nobody asked for |
+| CFG-01 | Gemma | asked to publish a page on a platform that does not require reviews, it requests one anyway. Added after the recording |
 | SEO-02 | Gemma | it applies an 83-character title over the 60-character limit |
 | WF1-02, WF5-02 | Qwen | it re-plans after a failed step, as Adobe's Agent Orchestrator does. It rewrites the campaign page that failed the brand check, or has the broken link of the restored page fixed, and goes on to translate, schedule or publish, where the routing skill and the tests say stop |
 | PUB-07 | Qwen | after the takedown is refused for lack of an approval token, it asks the approver itself and then takes the page down. The test expects the refusal to stand |
@@ -488,7 +489,7 @@ set:
 
 | change | why no test reveals it under Gemma |
 |---|---|
-| `config_require_review_false`, `code_edit_keeps_review` | it schedules a page without an approved review anyway (PUB-10), and requests a review nobody asked for after an edit (AUT-04) |
+| `config_require_review_false`, `code_edit_keeps_review` | it schedules a page without an approved review anyway (PUB-10), requests a review nobody asked for after an edit (AUT-04), and requests one even when none is required (CFG-01) |
 | `config_seo_title_20`, `skill_seo_drop_length_guard` | it applies an over-long title whatever the limit (SEO-02) |
 | `skill_linkval_ignore_assets` | it stops at a broken asset reference even when the skill says it does not block |
 

@@ -16,9 +16,9 @@ real models, results in `docs/results/gemma5/report.md`
   token in a Bayesian model whose sensitivities are calibrated from history, and stop when the probability of a
   regression is low. The method is `adaptive_bayes`; six baselines run alongside it.
 - **Testbed.** A small multi-agent app (`traceeval/sut`) whose agents are played by a real model (Gemma 4 E4B, and
-  Qwen3.8-27B as a second model), 177 tests (the recordings hold 176; WF2-03 was added after them) and 43
-  controlled changes applied as file edits (9 of them benign). Full-suite runs with three repetitions give the
-  ground truth, and strategies are compared by offline replay.
+  Qwen3.8-27B as a second model), 180 tests (the recordings hold 176; four came later) and 43 controlled changes
+  applied as file edits (9 of them benign). Full-suite runs with three repetitions give the ground truth, and
+  strategies are compared by offline replay.
 - **Results (§5, Gemma).** Hand-written dependencies catch 61% of the regressions. Trace-based selection catches
   86% within a budget of 20% of the full-suite tokens, and TF-IDF over the diff 92%. The adaptive method catches
   76% at a 5% budget and 79% at 20% while spending under 3% of the tokens, and 86% of the changes that break a
@@ -520,7 +520,7 @@ of agent tests as one problem and propose a method that (i) extracts a change se
 granularity of code lines, skill procedures, agent-definition fields and configuration keys, (ii) maps it to tests
 through dependencies *observed* in execution traces rather than declared metadata, (iii) ranks tests by expected
 information per token in a Bayesian model whose sensitivities are calibrated from history, and (iv) stops when
-the posterior probability of a regression is low. We evaluate on a testbed with 177 tests and eval items, 43
+the posterior probability of a regression is low. We evaluate on a testbed with 180 tests and eval items, 43
 controlled changes with a mutation-based ground truth derived per model, and a working multi-agent application,
 including multi-agent workflows, whose agents are played by open models (a small one, and a mid-size one as a
 second). Declared dependencies miss 39% of the regressions; trace-informed selection finds 86% of them within 20%

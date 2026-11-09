@@ -4,9 +4,9 @@ After a change to an LLM agent system (a skill, a prompt, harness code, a config
 what order, and when can we stop? The aim is to spend fewer tokens and less time and still catch regressions.
 
 This repository is a testbed for that question. It contains a small, working multi-agent app whose agents are
-played by a real model (Gemma 4 E4B or Qwen3.8-27B), 177 tests, 43 controlled changes with known effects, and 7
-selection strategies. The strategies are compared by replaying recorded runs. One of them, `adaptive_bayes`, is
-the method this project proposes, and `traceeval check` runs it live on one change.
+played by a real model (Gemma 4 E4B or Qwen3.8-27B), 180 tests, 43 controlled changes with known effects, and 7
+selection strategies. The strategies are compared by replaying recorded runs. One of them, `adaptive_bayes`, is the
+method this project proposes, and `traceeval check` runs it live on one change.
 
 ## Run it
 
@@ -71,10 +71,11 @@ method what each test costs and which code it runs.
 ## Main results
 
 These results come from a recording in which Gemma 4 E4B played the agents of the current app (176 tests, 43
-changes, three repetitions per test; the 177th, WF2-03, was added after it). Of the 34 regressions, 29 are revealed
-by at least one test. Gemma ignores the other five either way: it behaves the same with or without the change. No
-benign change, one meant to break nothing, fails a test. The table gives the share of those 29 that each strategy
-detects with a nominal budget of 20% of the full-suite tokens, and what it actually spends:
+changes, three repetitions per test; the other four, WF2-03 and the three cases with settings of their own, came
+later). Of the 34 regressions, 29 are revealed by at least one test. Gemma ignores the other five either way: it
+behaves the same with or without the change. No benign change, one meant to break nothing, fails a test. The table
+gives the share of those 29 that each strategy detects with a nominal budget of 20% of the full-suite tokens, and
+what it actually spends:
 
 | strategy | detected | tokens spent | time spent |
 |---|---|---|---|
@@ -104,7 +105,7 @@ are summed up in [docs/AEM_ALIGNMENT.md](docs/AEM_ALIGNMENT.md), together with t
 |---|---|
 | Catalog of properties, each with a category, how it is checked, a mandatory flag and a threshold ([`properties.yaml`](traceeval/catalog/properties.yaml)). Reports give pass rates against the thresholds and the share of affected properties each strategy covered | done |
 | Drafting the catalog with a model, from the requirements only (skills' rules, agents, config guards, specs) and within fixed limits, for people to edit: `traceeval properties draft`, then `apply` | done; Qwen's draft is in [`docs/properties/draft_qwen/`](docs/properties/draft_qwen/) |
-| Coverage from several angles, in the report and in `traceeval check`. For the suite: each dimension (agents, features, skills, tools, tool error paths, config, properties, workflows, execution paths, risk), declared and observed, with what no test covers, and per agent, skill, tool and feature the tests that declare it and the tests that invoke it (`traceeval coverage`). For each change: the changed components exercised, the affected properties checked, the affected workflows run, the affected features reached and the refusals in the changed code reached | done |
+| Coverage from several angles, in the report and in `traceeval check`. For the suite: each dimension (agents, features, skills, tools, tool error paths, config, setting values, properties, workflows, execution paths, risk), declared and observed, with what no test covers, and per agent, skill, tool and feature the tests that declare it and the tests that invoke it (`traceeval coverage`). For each change: the changed components exercised, the affected properties checked, the affected workflows run, the affected features reached and the refusals in the changed code reached | done |
 | Mandatory properties in the method: while the budget allows, a run that has found no regression does not end until every mandatory property the change may affect has been tested | done (`adaptive_bayes`) |
 | Test selection, prioritization and stopping under a token budget | done (`adaptive_bayes`, `traceeval check`) |
 | Per-test metadata: agents, skills, tools, config, workflow, risk, cost, history (declared and observed) | done |

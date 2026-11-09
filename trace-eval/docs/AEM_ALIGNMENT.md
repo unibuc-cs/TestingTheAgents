@@ -36,10 +36,10 @@ repository, in its parent folder: `Agent_Test_Prioritization_Requirements.md`, `
 | shared components, changes to skills, harness and config | yes (ContentOps, 43 controlled changes, ten of them aimed at the workflows) | — |
 | statistical evals over datasets | yes (50 routing items, 24 intent items); pass-rate thresholds per property | — |
 | tests that run several agents from one prompt | **done**: six workflows of two to five specialists (§3.3), each with a variant where a step must stop | — |
-| plans, data passed between agents, approvals, re-planning | **done**: the orchestrator plans (`make_plan`), gives each step its own instruction and the ids of the earlier steps, and asks a person before publishing, scheduling or taking pages down (`request_approval`) | re-planning after a failed step: our routing skill says stop; Qwen re-plans on its own (WF1-02, WF5-02; [EXPERIMENT.md](EXPERIMENT.md) §6). Planned in §4.2 |
+| plans, data passed between agents, approvals, re-planning | **done**: the orchestrator plans (`make_plan`), gives each step its own instruction and the ids of the earlier steps, and asks a person before publishing, scheduling or taking pages down (`request_approval`) | re-planning after a failed step: our routing skill says stop; Qwen re-plans on its own (WF1-02, WF5-02; [EXPERIMENT.md](EXPERIMENT.md) §6). Planned in §4.1 |
 | workflows as a coverage dimension | **done**: `catalog/workflows.yaml` lists the six; the report shows the workflows no test covers, declared (named by a test) and observed (a recorded run delegates to exactly its agents, in order), and the change coverage gives the share of the affected workflows the executed tests ran | — |
 | a catalog of properties with categories and thresholds | **done**: `traceeval/catalog/properties.yaml`, pass rates against thresholds and property coverage in the report; a model can draft it from the requirements, for people to edit (`traceeval properties draft`; Qwen's draft in §3.4) | — |
-| coverage over agents, features, skills, tools, tool error paths, config, properties, workflows, paths, risk (declared, observed, required) | **done**: suite coverage per dimension and change coverage per strategy in the report and in `traceeval check`; the method tests every mandatory property a change may affect (§3.5) | settings at a non-default value as components of their own (§4.1) |
+| coverage over agents, features, skills, tools, tool error paths, config, setting values, properties, workflows, paths, risk (declared, observed, required) | **done**: suite coverage per dimension and change coverage per strategy in the report and in `traceeval check`; the method tests every mandatory property a change may affect (§3.5) | — |
 | per-test metadata (agents, skills, tools, workflow, risk, cost, history) | yes (declared + observed + history; a workflow test names its workflow) | — |
 | trace assertions | yes: final state, required and forbidden tools, attempts, audit, step limit, termination, agent order and tool order (`agents_in_order`, `tools_in_order`) | — |
 | budgets and early stopping | yes (`adaptive_bayes`, `traceeval check`) | — |
@@ -179,6 +179,7 @@ of its components at least one test covers, declared and observed, and the list 
 | tool | a test calls it (every tool the app registers counts, called or not) | an untested tool |
 | tool error path | a run executes it. An error path is a place in the code where a tool call is refused: a `raise` of one of the errors of `sut/services/errors.py`, or an error result the dispatcher writes out. They are found by reading the code | a refusal no test provokes |
 | configuration | a test reads the key | a setting whose effect nothing checks |
+| setting value | a case runs with the setting at a value other than its default (its `config:` block: declared) and its recorded run reads the setting (observed). The values are the other value of each on/off setting and every value a case sets | a setting whose other value nothing checks |
 | property | a test checks it | an untested requirement; an untested mandatory one is a release risk |
 | workflow | a test names it (declared), or a recorded run delegates to exactly its agents in order (observed) | a workflow no test runs |
 | execution path | the distinct agent and tool sequences the traces show | counted, not a share |
@@ -188,6 +189,13 @@ On Gemma's recording every feature has a test; the thinnest are the site health 
 page analytics (five each). The tests reach 13 of the 31 places where a tool refuses. No test asks for the data of
 a person the platform does not know, has a service refuse a user for a missing role, schedules a page while
 scheduling is switched off, or sends the dispatcher an unknown tool or malformed arguments.
+
+Every test runs with the default settings unless it sets its own. Three cases do (`catalog/tests/settings.yaml`):
+publishing without a required review, scheduling switched off, and the link check switched off. They cover three of
+the five settings at a non-default value; no case runs with idempotency keys or the required meta description
+switched off. CFG-01 explains a change no test reveals, `config_require_review_false`: Gemma asks for a review even
+when the platform does not require one. The three cases came after the recording of the current app, so its report
+counts them as declared, not observed.
 
 The report, and `traceeval coverage --history runs/gemma5` in the terminal, also give for each agent, skill, tool
 and feature the number of tests that declare it and the number that invoke it. On Gemma's recording the two counts
@@ -260,20 +268,10 @@ down): covering a change is not revealing it, the case the method is built for.
 The demo on Thursday 12 November 2026 shows the testbed, the features of section 3 and the method on Gemma's
 recording, with one change checked live ([DEMO.md](DEMO.md)). Everything it needs is in place and rehearsed.
 
-Two items of section 2 are open: settings at a non-default value as coverage components, and re-planning after a
-failed step. Both change what the recordings must hold. The first adds cases, and the second changes the
-orchestrator's instructions, which every recorded answer depends on. They therefore go together, into one new
-recording of both models.
+One item of section 2 is open: re-planning after a failed step. It changes the orchestrator's instructions, which
+every recorded answer depends on, so it needs a new recording of every model.
 
-### 4.1 Settings at a non-default value
-
-A setting counts as covered when a test reads it, but every test runs with the defaults, so what happens with
-`publishing.require_review: false` or `publishing.allow_scheduling: false` is never checked. A case gets an
-optional `config:` block, applied like `fixture_patch`, and the other value of each on/off or list setting becomes
-a component of its own (`config:publishing.require_review=false`). A few new cases cover them. The existing cases
-do not change, so their recorded answers stay valid; only the new cases are recorded.
-
-### 4.2 Re-planning after a failed step
+### 4.1 Re-planning after a failed step
 
 Adobe's orchestrator re-plans when a step fails. Ours stops (rule 5 of the routing skill). Qwen already re-plans
 on its own in WF1-02 and WF5-02; Gemma does not. Re-planning is useful only within limits a test can check, so
@@ -301,15 +299,14 @@ the plan starts from them.
   case it fails becomes a known model mistake, which is a result in itself: re-planning depends on the model, not
   only on its instructions.
 
-### 4.3 Order
+### 4.2 Order
 
 | step | changes the application | new recording | when |
 |---|---|---|---|
-| settings at a non-default value | no: new cases only | the new cases | with re-planning |
 | re-planning after a failed step | yes: the routing skill, one setting, `make_plan` | everything, Gemma first and Qwen last | after the demo |
 | tau2-bench as a second application | no | its own | after re-planning |
 
-### 4.4 Limits to mention in the demo
+### 4.3 Limits to mention in the demo
 
 - **Some workflow cases fail under Gemma on the original app**, so they cannot reveal a change under Gemma.
   WF1-01 schedules the launch page after requesting a review, as in PUB-10. WF5-02 goes on to publishing after the
@@ -320,8 +317,8 @@ the plan starts from them.
 - **Gemma does not go on with the other pages when one fails inside a step.** With the broken page ranked first
   (WF2-03), it sends all three pages to publishing in one step, publishing stops at the broken link, and the
   orchestrator neither republishes the other two nor says so; it claims it did. Only the checks on the final state
-  catch it. WF2-03 was added after the recordings, which therefore hold 176 of the 177 tests; it replays in the
-  demo ([DEMO.md](DEMO.md) §3).
+  catch it. WF2-03 was added after the recordings, which therefore hold 176 of the 180 tests (the three cases with
+  settings of their own came later too); it replays in the demo ([DEMO.md](DEMO.md) §3).
 - **A one-off difference between runs.** A benign change that a single failing run reveals, or a regression no
   test reveals, shows as VIOLATED on the report's sanity line. Three repetitions and the majority vote absorb most
   of it.
