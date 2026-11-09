@@ -240,7 +240,8 @@ some candidate changes were left out of the set.
   - For a workflow, `agents_in_order` lists agents the delegations must reach in that order, and
     `tools_in_order` lists tools whose successful calls must come in that order. Anything may come in between.
   - `response_contains` is for facts the answer must report (a job id, a path, which link is broken), not for
-    wording. An item that is a list is a set of alternatives.
+    wording. An item that is a list is a set of alternatives. The comparison ignores case, and typographic
+    hyphens, spaces and quotes count as the plain ones (some models write "risk-free" with a non-breaking hyphen).
   - A run that ends with an answer must not end with an empty one (check `answered`).
   - A test can also set `fixture_patch` and `fault_profile` (`transient_once:<tool>`, `ack_timeout_once:<tool>`,
     `permanent_down:<tool>`). The approver's answer is fixture data:
