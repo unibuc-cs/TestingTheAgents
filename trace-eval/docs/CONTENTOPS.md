@@ -121,33 +121,7 @@ agent that includes it. Test selection has to follow that ripple.
 
 ### One request, step by step
 
-```mermaid
-sequenceDiagram
-    participant C as case PUB-01
-    participant E as executor
-    participant R as runtime
-    participant B as backend (the model)
-    participant D as dispatcher
-    participant T as tool, service, state
-    participant REC as recorder
-    C->>E: request + context {user_id: bob, page_id: p4}
-    E->>R: run(orchestrator)
-    R->>REC: run.start, agent.start, skill.load
-    R->>B: next_action
-    B-->>R: route_to_agent(publishing)
-    Note over R: loads publishing-workflow and the skills it includes
-    loop until the model answers (it follows the procedure, written out as numbered steps)
-        B-->>R: tool call (get_page, check_permission, validate_links, publish_page)
-        R->>D: call(tool, args, ctx)
-        D->>T: gates, retry with idempotency key, fault injection
-        T-->>D: result or error
-        D->>REC: tool.call event
-        D-->>B: the result, added to the conversation
-    end
-    B-->>R: final message "Published p4 ..."
-    E->>E: score expectations, observed deps, coverage
-    E-->>C: record (passed, checks, tokens, deps, events, state)
-```
+![One run of a case, end to end](figures/guide_2_run.png)
 
 *Bob asks: "Please publish the welcome page". The executor starts the orchestrator, which routes the
 request to publishing. The publishing agent follows its procedure: fetch the page, check the permission,

@@ -20,7 +20,7 @@ on these runs and traces and on controlled edits of the application.
 
 ### 1.1 One run, end to end
 
-The diagram of one run is in [CONTENTOPS.md](CONTENTOPS.md), "One request, step by step".
+![One run of a case, end to end](figures/guide_2_run.png)
 
 Open these three files side by side as you read: `traceeval/catalog/tests/publishing.yaml`
 (PUB-01), `traceeval/sut/skills/publishing-workflow/SKILL.md` (the Procedure the model reads as numbered steps)
