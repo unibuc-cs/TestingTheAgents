@@ -66,13 +66,15 @@ Agents do not chat with each other. The only hand-off is the orchestrator passin
 which skill to follow and what to do next, happens inside a single agent.
 
 The orchestrator is the front door. It reads the request and looks at every specialist's description and
-trigger words. A request one specialist owns is delegated exactly once; when no specialist owns it, it goes
-to the default agent named in the settings, which is `authoring`. A request that needs several
-specialists gets a plan, as in AEM's Agent Orchestrator: the orchestrator writes the steps down
-(`make_plan`), then delegates them one at a time, each with its own instruction (`task`) and the values it
-needs (`context`: the ids earlier steps reported). Before a step that publishes, schedules or takes pages
-down it asks a person (`request_approval`); an approval then holds for the steps after it. A failed step
-stops the steps that depend on it. The orchestrator never touches content itself.
+trigger words. A request one specialist owns is delegated exactly once. When no specialist owns it, it goes
+to the default agent named in the settings, which is `authoring`.
+
+A request that needs several specialists gets a plan, as in AEM's Agent Orchestrator. The orchestrator writes
+the steps down (`make_plan`), then delegates them one at a time. Each step gets its own instruction (`task`)
+and the values it needs (`context`), which are the ids that earlier steps reported. Before a step that
+publishes, schedules or takes pages down, the orchestrator asks a person (`request_approval`), and the approval
+then holds for the steps after it. A failed step stops the steps that depend on it. The orchestrator never
+touches content itself.
 
 Click an agent to see its definition, or a skill to read its procedure:
 
@@ -95,9 +97,9 @@ Optimization and Content Advisor agents ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md)).
 
 † A *guarded* tool. The dispatcher refuses the call unless the request carries an approval token, but it
 only checks that a token is there, not whose it is. The services check the rest: `approve_review` needs the
-named reviewer's own token and a role that may approve; `export_user_data` needs the requesting user's own token
-and the `export_data` permission. `unpublish_page` gets no such check, so any token will do (but a protected
-page never goes down).
+named reviewer's own token and a role that may approve, and `export_user_data` needs the requesting user's own
+token and the `export_data` permission. `unpublish_page` gets no such check, so any token will do, but a
+protected page never goes down.
 
 ### The shared skills
 
@@ -140,26 +142,28 @@ data and the answer are scored against what the test case expects.*
 The rules sit in three places, and the difference matters: when a change removes a check from a skill,
 usually nothing below the skill catches the mistake.
 
-**The harness, on every tool call.** The dispatcher refuses a call when the tool does not exist, when the
+The harness checks every tool call. The dispatcher refuses a call when the tool does not exist, when the
 settings have switched it off, when this agent is not allowed to use it, when it is guarded and the request
-has no approval token, or when the arguments do not fit. A call that gets through runs with fault
-injection, and transient failures are retried. Write tools get an idempotency key derived from the request,
-the tool, its arguments and how often that call has already gone through, so a retry, or a failed write the
-agent repeats, is not applied twice by the services that honour the key. Every call leaves a `tool.call` event in the trace. Around the dispatcher, the agent loop limits how
-many steps each agent may take and how many the whole request may take (delegations count too), and how
-deep delegation may go. The code is in
+has no approval token, or when the arguments do not fit. A call that gets through runs with fault injection,
+and transient failures are retried. Write tools also get an idempotency key, a key that identifies the
+operation so that a service can recognise a repeat. It is derived from the request, the tool, its arguments
+and how often that call has already gone through. A retry, or a failed write the agent repeats, is then not
+applied twice by the services that honour the key. Every call leaves a `tool.call` event in the trace.
+
+Around the dispatcher, the agent loop limits how many steps each agent may take, how many the whole request may
+take (delegations count too), and how deep delegation may go. The code is in
 [`dispatcher.py`](../traceeval/sut/harness/dispatcher.py) and [`runtime.py`](../traceeval/sut/harness/runtime.py).
 
-**The skills.** The skills hold most of the business rules: check the permission before acting, never
-publish a page with broken links, get a review approved before going live, keep the SEO title within the
-limit, export nobody's data without their consent. Most services do not check permissions themselves.
-They trust the skill to have asked first.
+The skills hold most of the business rules: check the permission before acting, never publish a page with
+broken links, get a review approved before going live, keep the SEO title within the limit, and export
+nobody's data without their consent. Most services do not check permissions themselves. They trust the skill
+to have asked first.
 
-**The services and tools.** A few rules are checked again at the bottom. Approving a review and exporting
-personal data need the right role and the user's own approval token. Rolling a page back needs the right
-role, so a rollback skill that forgot to ask would still be refused: the page stays safe, but the agent
-makes a call it should not have made. Scheduling is refused when the settings switch it off, and taking down a
-protected page is always refused.
+The services and tools check a few rules again, at the bottom. Approving a review and exporting personal data
+need the right role and the user's own approval token. Rolling a page back needs the right role, so a rollback
+skill that forgot to ask would still be refused. The page stays safe, but the agent makes a call it should not
+have made. Scheduling is refused when the settings switch it off, and taking down a protected page is always
+refused.
 
 Tests can also break things on purpose, to check that the resilience rules hold. A fault profile names the
 tool it hits ([`faults.py`](../traceeval/sut/harness/faults.py)):
@@ -173,9 +177,9 @@ tool it hits ([`faults.py`](../traceeval/sut/harness/faults.py)):
 
 The application is small but realistic. It has enough layers (instructions, skills, tools, services,
 settings, harness) that a change can land in the wrong one. It has enough rules (gates, retries, budgets)
-that a change can break one without touching the feature it was aimed at. And because the model decodes
-greedily and the app has no clock and no randomness, a run replays exactly from recorded answers, so the whole
-catalog can be run again and again for free.
+that a change can break one without touching the feature it was aimed at. Finally, the model decodes greedily
+(it always takes its most likely next token), and the app has no clock and no randomness. A run therefore
+replays exactly from recorded answers, so the whole catalog can be run again and again for free.
 
 To follow a single request through the code, see [STUDY_GUIDE.md §1.1](STUDY_GUIDE.md#11-one-run-end-to-end).
 The test scenarios that exercise the platform are in [`traceeval/catalog/tests/`](../traceeval/catalog/tests/).

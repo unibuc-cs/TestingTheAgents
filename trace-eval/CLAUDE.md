@@ -8,7 +8,7 @@ systems. Read `README.md` (5 minutes), then `docs/USER_GUIDE.md` only when you n
 ```
 uv venv --python 3.12 .venv         # the project venv (git-ignored); use .venv/Scripts/python on Windows
 pip install -e ".[dev,ml]"          # or: uv pip install --python .venv -e ".[dev,ml]" ruff
-pytest -q                           # ~60 s; must stay green; replays Gemma's recorded answers (tests/cassettes/)
+pytest -q                           # ~90 s; must stay green; replays Gemma's recorded answers (tests/cassettes/)
 ruff check traceeval tests          # rules and line length come from pyproject.toml
 ruff format traceeval tests         # see "Gotchas" before formatting sut/
 traceeval experiment --backend vllm --workdir runs/gemma5 --reps 3   # full experiment, Gemma on the GPU server, about an hour
