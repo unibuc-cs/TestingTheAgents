@@ -11,6 +11,8 @@ tools:
 
 routing:
   default_agent: authoring    # specialist for requests that no specialist owns
+  max_replans: 1              # new plans a request may make after a step that failed for a reason another
+                              # specialist can repair (make_plan refuses one more)
 
 publishing:
   require_review: true        # pages need an approved review before publishing

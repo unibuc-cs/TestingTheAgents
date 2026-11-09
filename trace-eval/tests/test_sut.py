@@ -216,6 +216,89 @@ def test_a_failed_step_on_one_page_does_not_stop_the_others(sut, cases):
     assert [t for _, t in rec["routes"]] == ["brand", "publishing", "publishing"]
 
 
+def _rollback_then_repair_script(replan: bool) -> dict:
+    """W5 with a broken link in the restored version: the rollback's link check fails, and the orchestrator
+    re-plans (fix the links, then publish) when ``replan``."""
+    orchestrator = [
+        (
+            "make_plan",
+            {"goal": "roll back and republish p22", "steps": ["maintenance: roll back", "publishing: publish"]},
+        ),
+        (
+            "route_to_agent",
+            {"agent": "maintenance", "task": "Roll p22 back to version 1", "context": {"page_id": "p22"}},
+        ),
+        (
+            "make_plan",
+            {"goal": "repair p22", "steps": ["optimizer: fix the broken links of p22", "publishing: publish p22"]},
+        ),
+    ]
+    if replan:
+        orchestrator += [
+            (
+                "route_to_agent",
+                {"agent": "optimizer", "task": "Fix the broken links of p22", "context": {"page_id": "p22"}},
+            ),
+            ("request_approval", {"summary": "Republish p22"}),
+            ("route_to_agent", {"agent": "publishing", "task": "Publish p22", "context": {"page_id": "p22"}}),
+        ]
+    return {
+        "orchestrator": orchestrator,
+        "maintenance agent": [
+            ("check_permission", {"user_id": "carol", "action": "rollback"}),
+            ("rollback_page", {"page_id": "p22", "version": 1}),
+            ("validate_links", {"page_id": "p22"}),
+            ("final", "Restored p22 to version 1; 1 broken link: https://old.example.com/gone."),
+        ],
+        "site optimization agent": [("fix_broken_links", {"page_id": "p22"})],
+        "publishing agent": [
+            ("get_page", {"page_id": "p22"}),
+            ("check_permission", {"user_id": "carol", "action": "publish"}),
+            ("validate_links", {"page_id": "p22"}),
+            ("approve_review", {"page_id": "p22", "reviewer_id": "carol"}),
+            ("publish_page", {"page_id": "p22"}),
+        ],
+    }
+
+
+def test_a_broken_link_is_repaired_by_a_new_plan_within_the_limit(sut, cases):
+    """WF5-02: the second plan repairs the restored page's broken link and republishes it. With re-planning
+    switched off (routing.max_replans: 0, as WF5-03 runs), make_plan refuses the second plan."""
+    client = ScriptedClient(_rollback_then_repair_script(replan=True), final="Restored, repaired and republished p22.")
+    rec = run_case(sut, cases["WF5-02"], backend="llm", llm_client=client)
+    assert rec["passed"], rec["failed_checks"]
+    assert [t for _, t in rec["routes"]] == ["maintenance", "optimizer", "publishing"]
+    client = ScriptedClient(_rollback_then_repair_script(replan=False), final="Restored p22; it has a broken link.")
+    rec = run_case(sut, cases["WF5-02"], backend="llm", llm_client=client, config_overrides={"routing.max_replans": 0})
+    assert {"replans", "tool_error:make_plan"} <= set(rec["failed_checks"])
+
+
+def test_the_link_repair_unlinks_only_broken_links_and_checks_the_permission(sut):
+    state = sut.sub("services.state").State.from_fixture(sut.path / "fixtures" / "base.json")
+    site, errors = sut.sub("services.site"), sut.sub("services.errors")
+    with pytest.raises(errors.PermissionDenied):
+        site.fix_broken_links(state, "p16", actor="dave")  # a viewer may not edit
+    assert site.fix_broken_links(state, "p1", actor="bob")["unlinked"] == []  # its links all work
+    out = site.fix_broken_links(state, "p2", actor="bob")
+    assert out["unlinked"] == ["https://old.example.com/gone"] and out["links"] == ["/content/site/home"]
+    assert "https://old.example.com/gone" in state.pages["p2"]["body"]  # the text stays, the link goes
+
+
+def test_a_case_runs_with_its_own_settings(sut, cases):
+    """CFG-02 runs with scheduling switched off (config: in the case), so the scheduling call is refused."""
+    script = {
+        "orchestrator": [("route_to_agent", {"agent": "publishing"})],
+        "publishing agent": [
+            ("get_page", {"page_id": "p4"}),
+            ("check_permission", {"user_id": "bob", "action": "schedule"}),
+            ("validate_links", {"page_id": "p4"}),
+            ("schedule_publish", {"page_id": "p4", "at": "2026-11-20T09:00:00Z"}),
+        ],
+    }
+    rec = run_case(sut, cases["CFG-02"], backend="llm", llm_client=ScriptedClient(script, final="Scheduling is off."))
+    assert rec["passed"], rec["failed_checks"]
+
+
 def test_each_agent_has_its_own_step_budget_and_the_run_a_total(sut, cases):
     """A specialist stops at its own budget although the run's total is not spent, and the run's total stops
     it although its own is not."""

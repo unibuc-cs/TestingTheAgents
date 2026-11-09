@@ -4,8 +4,9 @@ The analytics live in the state under ``analytics``: page id -> ``views``, ``bou
 ``load_ms`` (how long the page takes to load), as a web-analytics product would report them for the pages that
 are live."""
 
-from .links import validate_links
-from .repository import get_page
+from . import permissions
+from .links import broken_links, validate_links
+from .repository import _extract_links, get_page
 
 
 def _metrics(state, page_id: str) -> dict:
@@ -54,3 +55,21 @@ def audit_site(state, section: str, max_load_ms: int) -> dict:
             pages.append({"page_id": pid, "path": page["path"], "issues": issues})
             total += len(issues)
     return {"section": section, "issue_count": total, "pages": pages}
+
+
+def fix_broken_links(state, page_id: str, actor: str) -> dict:
+    """Unlink every link in a page's body that the link check finds broken: ``[[target]]`` becomes the plain
+    text ``target``, so the page keeps its wording and loses only the dead links. An attached asset that is
+    missing is not in the body and stays for the assets agent to replace. The page's review is kept, since no
+    wording changes. Returns ``page_id``, ``unlinked`` (the targets, in order) and ``links`` (those that remain).
+    Raises NotFound for an unknown page, and PermissionDenied for a user who may not edit: the service checks the
+    permission itself, whether or not the agent did."""
+    page = get_page(state, page_id)
+    permissions.require(state, actor, "edit")
+    _, broken = broken_links(state, page)
+    dead = [b["link"] for b in broken if b["link"] in page.get("links", [])]
+    for link in dict.fromkeys(dead):
+        page["body"] = page["body"].replace(f"[[{link}]]", link)
+    page["links"] = _extract_links(page["body"])
+    state.audit("fix_broken_links", actor, page_id=page_id, unlinked=len(dead))
+    return {"page_id": page_id, "unlinked": list(dict.fromkeys(dead)), "links": page["links"]}

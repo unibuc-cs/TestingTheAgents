@@ -1,6 +1,6 @@
 ---
 name: routing
-version: 3
+version: 4
 description: Route a request to the specialist agent that owns it, or plan and run the steps of a request that needs several.
 tools: [route_to_agent, make_plan, request_approval]
 ---
@@ -42,7 +42,11 @@ plan: delegate it once. A plan goes like this:
 5. If a step fails (the specialist could not do it, or a check failed), stop: do not run the steps that
    depend on it. The same action on other pages does not depend on it: go on with those, and report
    every failure.
-6. Finish with one answer that says what each step did, with its ids, and what was not done and why.
+6. In a plan, broken links are the one failure a new plan repairs: when its publishing step refuses
+   a page for broken links, or its rollback step's link check fails, call `make_plan` again with
+   `optimizer: fix the broken links of <page>` and `publishing: publish <page>`, and run them. If
+   `make_plan` refuses, stop.
+7. Finish with one answer that says what each step did, with its ids, and what was not done and why.
 
 ## Procedure
 ```yaml

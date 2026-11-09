@@ -201,6 +201,17 @@ MUTATIONS: list[Mutation] = [
     Mutation('benign_routing_guidance_reordered', BENIGN, "Routing skill's guidance list re-ordered: the bullets of the brand, insights and optimizer agents move to the top (same owners).", False,
              [('replace', 'skills/routing/SKILL.md', "- Publishing, scheduling and taking pages down belong to `publishing`.\n", "- Brand checks, the brand guidelines and finding the pages that use a term belong to `brand`.\n- Page views, traffic and the best or worst performing pages belong to `insights`.\n- The alt text of images, site health checks and slow pages belong to `optimizer`.\n- Publishing, scheduling and taking pages down belong to `publishing`.\n"),
               ('replace', 'skills/routing/SKILL.md', "- Restoring earlier versions belongs to `maintenance`.\n- Brand checks, the brand guidelines and finding the pages that use a term belong to `brand`.\n- Page views, traffic and the best or worst performing pages belong to `insights`.\n- The alt text of images, site health checks and slow pages belong to `optimizer`.\n", "- Restoring earlier versions belongs to `maintenance`.\n")]),
+    # aimed at re-planning after a failed step (docs/AEM_ALIGNMENT.md, section 3.2)
+    Mutation('skill_routing_replan_refusals', SKILL, 'Routing skill lets a failed brand check be repaired by a new plan too: the page is rewritten and the plan goes on.', True,
+             [('replace', 'skills/routing/SKILL.md', '6. In a plan, broken links are the one failure a new plan repairs: when its publishing step refuses\n   a page for broken links, or its rollback step' + "'" + 's link check fails,', '6. In a plan, broken links and a failed brand check can be repaired by a new plan. After a failed brand check, call\n   `make_plan` again with `authoring: rewrite the page so that it passes the brand check` and the steps\n   that remain. When its publishing step refuses a page for broken links, or its rollback step' + "'" + 's link\n   check fails,')]),
+    Mutation('config_max_replans_0', CONFIG, 'Re-planning switched off: routing.max_replans is 0, so make_plan refuses any plan after the first.', True,
+             [('replace', 'config/runtime.yaml', '  max_replans: 1 ', '  max_replans: 0 ')]),
+    Mutation('code_make_plan_unlimited', CODE, 'make_plan no longer enforces routing.max_replans: a request may make any number of new plans.', True,
+             [('delete_block', 'tools/control_tools.py', '    if number > 1 + limit:', '    return {"goal": goal')]),
+    Mutation('code_fix_links_internal_only', CODE, "The optimizer's link repair unlinks only broken links to pages of the site, not broken external URLs.", True,
+             [('replace', 'services/site.py', 'dead = [b["link"] for b in broken if b["link"] in page.get("links", [])]', 'dead = [b["link"] for b in broken if b["kind"] == "internal" and b["link"] in page.get("links", [])]')]),
+    Mutation('benign_replan_rule_reworded', BENIGN, "Routing skill's re-planning rule reworded; same repair, same limit.", False,
+             [('replace', 'skills/routing/SKILL.md', '6. In a plan, broken links are the one failure a new plan repairs: when its publishing step refuses', '6. In a plan, only broken links are repaired by a new plan: when its publishing step turns down')]),
 ]
 # fmt: on
 

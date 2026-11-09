@@ -68,10 +68,10 @@
   parts: [skill:brand-governance, agent:brand, code:services/brand.py, code:services/repository.py::search_pages]
 
 - id: site_health
-  name: run a site health check and fix alt text
-  tools: [audit_site, fix_alt_text]
+  name: run a site health check, fix broken links and alt text
+  tools: [audit_site, fix_broken_links, fix_alt_text]
   parts: [skill:site-optimization, agent:optimizer, config:optimizer.max_load_ms, code:services/site.py::audit_site,
-          code:services/repository.py::set_alt_text]
+          code:services/site.py::fix_broken_links, code:services/repository.py::set_alt_text]
 
 - id: analytics
   name: read page analytics
@@ -101,9 +101,9 @@
   parts: [skill:routing, agent:orchestrator, config:routing.default_agent, code:harness/runtime.py::Runtime._delegate]
 
 - id: planning
-  name: plan a request that needs several specialists
+  name: plan a request that needs several specialists, and re-plan after a step that can be repaired
   tools: [make_plan]
-  parts: [skill:routing, agent:orchestrator, code:harness/runtime.py::Runtime._delegate]
+  parts: [skill:routing, agent:orchestrator, config:routing.max_replans, code:harness/runtime.py::Runtime._delegate]
 
 - id: approval
   name: ask a person before publishing, scheduling or taking pages down

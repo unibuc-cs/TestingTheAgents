@@ -2,6 +2,7 @@
 schema), the plan of a request that needs several specialists, and the human approval of a consequential step."""
 
 from ..services import governance
+from ..services.errors import ValidationError
 from .registry import ToolContext, tool
 
 
@@ -36,7 +37,13 @@ def route_to_agent(ctx: ToolContext, agent: str, reason: str = "", task: str = "
 def make_plan(ctx: ToolContext, goal: str, steps: list[str]):
     """Record a plan. Nothing in the platform changes: the plan goes into the trace with the call (the
     "cognition event" of a planning orchestrator), and the result repeats it with the steps numbered, for the
-    orchestrator to follow."""
+    orchestrator to follow. A request makes one plan, and after a step that failed for a reason another
+    specialist can repair, a new one (a re-plan); ``routing.max_replans`` caps the new plans, so the limit holds
+    even when the model ignores it."""
+    number = ctx.state.new_plan()
+    limit = int(ctx.config.get("routing.max_replans") or 0)
+    if number > 1 + limit:
+        raise ValidationError(f"no new plan: a request may be re-planned at most {limit} time(s)")
     return {"goal": goal, "steps": [f"{i + 1}. {s}" for i, s in enumerate(steps)]}
 
 

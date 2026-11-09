@@ -17,6 +17,9 @@ The answer is checked for facts, not wording: ``response_contains`` lists what i
 list of alternatives), and a run that ends with an answer must not end with an empty one (check ``answered``).
 ``tool_results`` checks what a tool returned (its last successful call), like the state.
 
+Re-planning: ``replans`` is the number of new plans the run must make after its first (``make_plan`` calls that
+succeeded, minus one): 1 for a run that repairs a failed step, 0 for one that must stop.
+
 Order, for runs that cross several agents: ``agents_in_order`` lists agents that the run's delegations must reach
 in that order, and ``tools_in_order`` tools whose successful calls must come in that order (other agents and
 calls may come in between).
@@ -121,6 +124,9 @@ def score_case(case, trace: dict, state: dict, run: dict, error: str | None = No
     if "tools_in_order" in exp:
         ok_calls = [c["tool"] for c in calls if c.get("status") == "ok"]
         add("tools_in_order", _in_order(ok_calls, exp["tools_in_order"]), f"ok calls: {ok_calls}")
+    if "replans" in exp:
+        plans = sum(1 for c in calls if c["tool"] == "make_plan" and c.get("status") == "ok")
+        add("replans", max(plans - 1, 0) == exp["replans"], f"plans made: {plans}")
     for spec in exp.get("tool_attempts", []):
         mx = max([c.get("attempts", 0) for c in calls if c["tool"] == spec["tool"]] or [0])
         add(f"attempts:{spec['tool']}", mx >= spec.get("min", 1), f"max attempts {mx}")

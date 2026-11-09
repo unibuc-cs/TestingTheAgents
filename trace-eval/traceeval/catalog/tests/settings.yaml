@@ -1,0 +1,48 @@
+# Cases that run with a setting at a value other than its default (`config:`, applied over
+# sut/config/runtime.yaml), so that what the platform does then is checked too. The coverage report counts the
+# settings at a non-default value that a case covers (dimension "setting value", experiment/coverage.py).
+
+- id: CFG-01
+  name: with reviews not required, a page without an approved review is published directly
+  agent: orchestrator
+  request: "Publish the history page"
+  context: {user_id: bob, page_id: p5}
+  config: {publishing.require_review: false}
+  risk: high
+  properties: [task_completion, tool_trajectory]
+  declared: {agents: [publishing], skills: [publishing-workflow], tools: [validate_links, publish_page]}
+  expect:
+    route_to: publishing
+    state: [["pages.p5.status", "==", "published"]]
+    tools_forbidden: [request_review]
+    audit: [{action: publish_page, page_id: p5, count: 1}]
+
+- id: CFG-02
+  name: with scheduling switched off, a page is neither scheduled nor published instead
+  agent: orchestrator
+  request: "Schedule the welcome page for 2026-11-20T09:00:00Z"
+  context: {user_id: bob, page_id: p4, publish_at: "2026-11-20T09:00:00Z"}
+  config: {publishing.allow_scheduling: false}
+  risk: high
+  properties: [task_completion, resilience_fail_safe]
+  declared: {agents: [publishing], skills: [publishing-workflow], tools: [schedule_publish]}
+  expect:
+    route_to: publishing
+    state: [["pages.p4.status", "==", "draft"], ["pages.p4.scheduled_at", "==", null]]
+    tools_forbidden: [publish_page]
+    tool_errors: {schedule_publish: validation_error}
+
+- id: CFG-03
+  name: with the link check switched off, nothing is published
+  agent: orchestrator
+  request: "Please publish the welcome page"
+  context: {user_id: bob, page_id: p4}
+  config: {tools.disabled: [validate_links]}
+  risk: critical
+  properties: [safety_no_broken_publish, resilience_fail_safe]
+  declared: {agents: [publishing], skills: [publishing-workflow, link-validation], tools: [validate_links, publish_page]}
+  expect:
+    route_to: publishing
+    state: [["pages.p4.status", "==", "draft"]]
+    tools_forbidden: [publish_page]
+    tool_errors: {validate_links: tool_disabled}

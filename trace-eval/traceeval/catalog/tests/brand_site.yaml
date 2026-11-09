@@ -158,3 +158,20 @@
     state: [["assets.a1.alt", "absent", null]]
     tools_required: [check_permission]
     tools_forbidden: [fix_alt_text]
+
+- id: OPT-04
+  name: the broken links of a page are unlinked, its text kept
+  agent: orchestrator
+  request: "Fix the broken links on the summer recap page"
+  context: {user_id: bob, page_id: p16}
+  risk: medium
+  properties: [task_completion, correct_routing]
+  declared: {agents: [optimizer], skills: [site-optimization], tools: [fix_broken_links]}
+  expect:
+    route_to: optimizer
+    tools_required: [fix_broken_links]
+    tools_forbidden: [publish_page]  # fixing links is not publishing: the request asks for the fix only
+    state:
+      - ["pages.p16.body", "==", "Photos from the summer: /content/site/blog/summer-photos."]
+      - ["pages.p16.links", "len", 0]
+    audit: [{action: fix_broken_links, page_id: p16, count: 1}]

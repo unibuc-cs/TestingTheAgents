@@ -172,8 +172,11 @@ def test_small_end_to_end_experiment(tmp_path, capsys):
     # coverage: the suite by dimension, and each run's change coverage (no ground truth needed)
     props = load_properties()
     rows = {r["dimension"]: r for r in suite_coverage(h, catalog, props, SUT_ROOT)}
-    dims = {"agent", "feature", "skill", "tool", "tool error path", "configuration", "property", "workflow"}
-    assert dims | {"execution path", "risk"} <= set(rows)
+    dims = {"agent", "feature", "skill", "tool", "tool error path", "configuration", "setting value", "property"}
+    assert dims | {"workflow", "execution path", "risk"} <= set(rows)
+    # the other value of every on/off setting, and the values the cases set (CFG-*, WF5-03)
+    assert "publishing.allow_scheduling=false" not in rows["setting value"]["not covered"]
+    assert "runtime.idempotency_keys=false" in rows["setting value"]["not covered"]  # no case runs with it
     assert (
         rows["feature"]["observed"] > 0
         and 0 < rows["tool error path"]["observed"] < rows["tool error path"]["components"]

@@ -36,6 +36,7 @@ class State:
         self._idem: dict[str, dict] = {}  # idempotency key -> the result of the first call made with that key
         self._clock = 0  # the logical clock behind tick(); every state starts at 0
         self._requests = 0  # requests started against this state so far, behind next_request_id()
+        self._plans = 0  # plans the current request has made, behind new_plan()
 
     # ---------------------------------------------------------------- loading / snapshots
     @classmethod
@@ -70,7 +71,13 @@ class State:
         derived from it. Numbering requests here, where the idempotency cache lives, keeps keys unique among
         all the requests that share the cache, and gives the same ids each time the same requests run."""
         self._requests += 1
+        self._plans = 0
         return f"req-{self._requests}"
+
+    def new_plan(self) -> int:
+        """Count one more plan of the current request and return how many it has made (1 for its first plan)."""
+        self._plans += 1
+        return self._plans
 
     # ---------------------------------------------------------------- audit / idempotency
     def audit(self, action: str, actor: str | None, **fields):

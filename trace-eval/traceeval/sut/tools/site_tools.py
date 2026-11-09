@@ -41,3 +41,14 @@ def audit_site(ctx: ToolContext, section: str):
 def fix_alt_text(ctx: ToolContext, asset_id: str, alt: str):
     """Set an asset's alt text through the repository service, on behalf of the requesting user."""
     return repository.set_alt_text(ctx.state, asset_id, alt, actor=ctx.user_id)
+
+
+@tool(
+    "fix_broken_links",
+    "write",
+    "Unlink the broken links of a page (the text stays, the dead link goes), so that it passes the link check.",
+    {"page_id": "page identifier"},
+)
+def fix_broken_links(ctx: ToolContext, page_id: str):
+    """Unlink a page's broken links through the site service, on behalf of the requesting user."""
+    return site.fix_broken_links(ctx.state, page_id, actor=ctx.user_id)
