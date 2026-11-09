@@ -47,6 +47,7 @@ PRESETS="gemma qwen gptoss"
 preset() {
   NAME=$1
   TP=1  # GPUs one copy of the model is split over (tensor parallel)
+  PRESET_ENV=""  # settings this preset's server needs
   case "$NAME" in
     gemma)  # we build Gemma's prompts and parse its answers ourselves (traceeval/llm/chat.py)
       MODEL=${TRACEEVAL_HF_MODEL:-google/gemma-4-E4B-it}; GPUS=0; PORT=18100; EXTRA="" ;;
@@ -57,6 +58,9 @@ preset() {
       EXTRA="$EXTRA --limit-mm-per-prompt '{\"image\": 0, \"video\": 0}'" ;;
     gptoss)  # vLLM applies its chat template and parses its tool calls; it reasons before it answers
       MODEL=openai/gpt-oss-120b; GPUS=0,1; PORT=18102; TP=2
+      # the two GPUs talk over NVLink; NCCL fails to start ("unhandled cuda error") unless NVLink SHARP and its
+      # cuMem allocator are off
+      PRESET_ENV="NCCL_NVLS_ENABLE=0 NCCL_CUMEM_ENABLE=0"
       EXTRA="--enable-auto-tool-choice --tool-call-parser openai" ;;
     *) echo "unknown model '$NAME' (one of: $PRESETS)"; exit 2 ;;
   esac
@@ -105,7 +109,7 @@ if nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits | awk '\$1 >
 fi
 cd ~/$RDIR
 [ -x .venv/bin/vllm ] || { python3 -m venv .venv && .venv/bin/pip install -q 'vllm==$VERSION'; }
-$SERVE_ENV $(serve_cmd)
+$SERVE_ENV $PRESET_ENV $(serve_cmd)
 EOF
 }
 
@@ -167,7 +171,7 @@ cmd_up() {
     echo "$NAME: starting $MODEL on $HOST, GPUs $GPUS, port $PORT ..."
     # setsid gives the server its own process group, so that 'down' stops it together with its workers.
     remote "cd ~/$RDIR || exit 1
-      CUDA_VISIBLE_DEVICES=$GPUS HF_HUB_OFFLINE=1 $SERVE_ENV setsid nohup $(serve_cmd) > $NAME.log 2>&1 < /dev/null &
+      CUDA_VISIBLE_DEVICES=$GPUS HF_HUB_OFFLINE=1 $SERVE_ENV $PRESET_ENV setsid nohup $(serve_cmd) > $NAME.log 2>&1 < /dev/null &
       echo \$! > $NAME.pid"
   fi
   # Through the controller to the GPU node on hpc; straight to the server on fmi0.
