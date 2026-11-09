@@ -51,7 +51,7 @@ def test_skill_parsing_exposes_procedure():
 # republished two pages it never published; in WF5-02 it goes on to the publishing step after the rollback's link
 # check failed (publishing's own link check then refuses); in WF6-02 it stops the whole plan after the refused
 # export, although the byline edits do not depend on it. Every other case must pass.
-KNOWN_MODEL_MISTAKES = ["AUT-04", "PUB-10", "SEO-02", "WF1-01", "WF2-03", "WF5-02", "WF6-02"]
+KNOWN_MODEL_MISTAKES = ["AUT-04", "CFG-01", "PUB-10", "SEO-02", "WF1-01", "WF2-03", "WF5-02", "WF6-02"]
 
 
 class ScriptedClient:

@@ -84,14 +84,14 @@ Everything else is plumbing (loaders, tracing, report).
 - Section 5 covers the catalog of properties: each property's pass rate on the original app against its
   threshold and, per strategy, the share of the properties a change breaks that the strategy's tests exercised.
 - Section 6 measures coverage ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5).
-  - First the suite. For each dimension (agent, feature, skill, tool, tool error path, configuration, property,
-    workflow, execution path, risk), it shows how many components the tests declare and the traces show, and
-    what no test covers. A feature (`catalog/features.yaml`) is covered by the tests that declare or call one of
-    its tools, and a table counts the tests per feature. A tool error path is a place in the code where a tool
-    call is refused, reached when a run executes it. A workflow is declared by the tests that name it, and
-    observed when a run delegates to exactly its agents, in order. Then, for each agent, skill, tool and
-    feature, the number of tests that declare it and the number that invoke it in their recorded runs.
-    `traceeval coverage --history runs/gemma5` prints this part in the terminal.
+  - First the suite. For each dimension (agent, feature, skill, tool, tool error path, configuration, setting
+    value, property, workflow, execution path, risk), it shows how many components the tests declare and the traces
+    show, and what no test covers. A feature (`catalog/features.yaml`) is covered by the tests that declare or call
+    one of its tools, and a table counts the tests per feature. A tool error path is a place in the code where a
+    tool call is refused, reached when a run executes it. A workflow is declared by the tests that name it, and
+    observed when a run delegates to exactly its agents, in order. Then, for each agent, skill, tool and feature,
+    the number of tests that declare it and the number that invoke it in their recorded runs. `traceeval coverage
+    --history runs/gemma5` prints this part in the terminal.
   - Then each change, without the ground truth (`experiment/coverage.py`): the share of the changed components the
     executed tests exercised, the share of the properties the change may affect that they checked, how often a run
     that found no regression tested every affected mandatory property, the share of the affected workflows they
@@ -252,6 +252,10 @@ some candidate changes were left out of the set.
   `catalog/workflows.yaml`, which lists each workflow with the chain of specialists its plan delegates to, so add
   the entry there first. The coverage report then shows the workflow as covered once a test names it and a
   recorded run delegates to exactly its agents, in order.
+- **Settings**: a case runs with the defaults of `sut/config/runtime.yaml` unless it sets its own, by dotted key:
+  `config: {publishing.allow_scheduling: false}`. A value other than the default is a coverage component of its
+  own (`config:publishing.allow_scheduling=false`), and the report lists the on/off settings no case runs at
+  their other value. `traceeval run --set key=value` overrides both.
 - **Feature**: a capability users see goes into `catalog/features.yaml`, with the tools that carry it out and the
   other components it is made of (`skill:`, `agent:`, `config:`, `code:<file>` or `code:<file>::<function>`).
   A test then covers it by calling one of its tools, and a change affects it by touching a tool or a part.

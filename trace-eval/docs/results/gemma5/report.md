@@ -198,7 +198,8 @@ Coverage of the test suite: per dimension, how many components the tests declare
 | skill | 13 | 12 | 13 |  |
 | tool | 32 | 30 | 31 | get_asset |
 | tool error path | 31 |  | 13 | harness/dispatcher.py:60 Dispatcher.call unknown_tool, harness/dispatcher.py:63 Dispatcher.call tool_disabled, harness/dispatcher.py:66 Dispatcher.call tool_not_available, harness/dispatcher.py:77 Dispatcher.call invalid_arguments, harness/runtime.py:188 Runtime._delegate unknown_agent, harness/runtime.py:191 Runtime._delegate invalid_arguments, harness/runtime.py:195 Runtime._delegate max_delegation_depth, services/governance.py:39 export_user_data approval_required ... |
-| configuration | 13 | 9 | 13 |  |
+| configuration | 13 | 10 | 13 |  |
+| setting value | 5 | 3 | 0 | runtime.idempotency_keys=false, seo.require_description=false |
 | property | 15 | 15 | 15 |  |
 | workflow | 6 | 6 | 6 |  |
 | execution path | 77 |  | 77 |  |

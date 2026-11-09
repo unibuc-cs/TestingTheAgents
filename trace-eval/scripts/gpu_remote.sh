@@ -7,9 +7,12 @@
 #   scripts/gpu_remote.sh logs [MODEL]        follow a server's log
 #   scripts/gpu_remote.sh down [MODEL]        stop a server and close its tunnel (default: all of them)
 #
-# MODEL is a preset (default: gemma). The two presets use different GPUs and ports, so both can run at once:
-#   gemma  google/gemma-4-E4B-it  GPU 0  port 18100  then: traceeval ... --backend vllm
-#   qwen   Qwen/Qwen3.8-27B-FP8   GPU 1  port 18101  then: traceeval ... --backend llm
+# MODEL is a preset (default: gemma). Gemma and Qwen use different GPUs and ports, so both can run at once:
+#   gemma   google/gemma-4-E4B-it  GPU 0     port 18100  then: traceeval ... --backend vllm
+#   qwen    Qwen/Qwen3.8-27B-FP8   GPU 1     port 18101  then: traceeval ... --backend llm
+#   gptoss  openai/gpt-oss-120b    GPUs 0,1  port 18102  one copy split over both GPUs (tensor parallel), so it
+#           needs both alone; then: TRACEEVAL_LLM_BASE_URL=http://127.0.0.1:18102/v1
+#           TRACEEVAL_LLM_MODEL=openai/gpt-oss-120b traceeval ... --backend llm
 #
 # A server listens only on the server's own localhost; this machine reaches it through its tunnel, at
 # http://127.0.0.1:PORT/v1. Environment variables override a preset for one call:
@@ -38,11 +41,12 @@ case "$SITE" in
 esac
 VERSION=0.31.0  # the vLLM release setup installs
 RDIR=traceeval-vllm  # folder in the server home: environment, and per model its log and pid
-PRESETS="gemma qwen"
+PRESETS="gemma qwen gptoss"
 
 # Sets the variables of one preset: model, GPUs, port, extra vLLM flags, and where its pid and log live.
 preset() {
   NAME=$1
+  TP=1  # GPUs one copy of the model is split over (tensor parallel)
   case "$NAME" in
     gemma)  # we build Gemma's prompts and parse its answers ourselves (traceeval/llm/chat.py)
       MODEL=${TRACEEVAL_HF_MODEL:-google/gemma-4-E4B-it}; GPUS=0; PORT=18100; EXTRA="" ;;
@@ -51,6 +55,9 @@ preset() {
       EXTRA="--enable-auto-tool-choice --tool-call-parser qwen3_coder --reasoning-parser qwen3"
       EXTRA="$EXTRA --default-chat-template-kwargs '{\"enable_thinking\": false}'"
       EXTRA="$EXTRA --limit-mm-per-prompt '{\"image\": 0, \"video\": 0}'" ;;
+    gptoss)  # vLLM applies its chat template and parses its tool calls; it reasons before it answers
+      MODEL=openai/gpt-oss-120b; GPUS=0,1; PORT=18102; TP=2
+      EXTRA="--enable-auto-tool-choice --tool-call-parser openai" ;;
     *) echo "unknown model '$NAME' (one of: $PRESETS)"; exit 2 ;;
   esac
   SUFFIX=""
@@ -59,6 +66,7 @@ preset() {
   PORT=${TRACEEVAL_VLLM_PORT:-$PORT}
   COPIES=$(awk -F, '{print NF}' <<<"$GPUS")  # one copy of the model per GPU in the list
   if [ "$SITE" = hpc ]; then COPIES=$GPUS; fi
+  COPIES=$((COPIES / TP))  # copies of the model, each over TP GPUs
   URL="http://127.0.0.1:$PORT/v1"
   PIDF="$RDIR/$NAME.pid"  # on the server, relative to the home folder
   LOG="$RDIR/$NAME.log"
@@ -82,14 +90,14 @@ server_alive() {
 # than a hybrid model such as Qwen3.8 has room for.
 SERVE_ENV="VLLM_USE_FLASHINFER_SAMPLER=0 VLLM_USE_DEEP_GEMM=0 ${TRACEEVAL_VLLM_ENV:-}"
 serve_cmd() {
-  echo ".venv/bin/vllm serve $MODEL --host 127.0.0.1 --port $PORT --data-parallel-size $COPIES \
+  echo ".venv/bin/vllm serve $MODEL --host 127.0.0.1 --port $PORT --data-parallel-size $COPIES --tensor-parallel-size $TP \
     --max-model-len 32768 --max-num-seqs 128 --enable-prefix-caching --gpu-memory-utilization 0.85 --seed 0 $EXTRA"
 }
 
 # On hpc: submit the job that serves the model. It stops at once on a GPU that is already in use (SLURM does not
 # see processes started outside it), creates the vLLM environment the first time, and serves until cancelled.
 start_hpc() {
-  remote "mkdir -p ~/$RDIR && cd ~/$RDIR && sbatch --job-name=$JOB --partition=gpu --gres=gpu:$COPIES \
+  remote "mkdir -p ~/$RDIR && cd ~/$RDIR && sbatch --job-name=$JOB --partition=gpu --gres=gpu:$((COPIES * TP)) \
     --cpus-per-task=$((8 * COPIES)) --mem=$((64 * COPIES))G --time=08:00:00 --output=$NAME.log" <<EOF
 #!/bin/bash
 if nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits | awk '\$1 > 1000 {busy = 1} END {exit !busy}'; then

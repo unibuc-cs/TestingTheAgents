@@ -1,6 +1,6 @@
 # Spec-driven development: evidence report
 
-5 change requests, 25 pull requests, 177 recorded baseline runs (47,369 tokens of source in 59 files).
+5 change requests, 25 pull requests, 180 recorded baseline runs (47,369 tokens of source in 59 files).
 
 Each request is a spec: prose intent plus machine-checkable clauses. Each PR is a variant of the system. The clauses are checked, the change-affected regression tests are run, and the result is an evidence record with the assurance rung reached per clause (L0 reviewed, L1 example-tested, L2 property-tested, L3 monitored, L4 statically checked, L5 proven).
 
@@ -8,31 +8,31 @@ Each request is a spec: prose intent plus machine-checkable clauses. Each PR is 
 
 | request | PR | expected | verdict | what failed / gap | rungs reached | clause runs | regression cases (of full) | tokens (of full) | s |
 |---|---|---|---|---|---|---|---|---|---|
-| FS-0101 | pr_correct | accepted | **accepted** | - | L5×1, L4×5, L3×1, L1×4 | 27 | 58 (177) | 1,206,911 (2,024,392) | 2.2 |
-| FS-0101 | pr_no_lower_bound | rejected | **rejected** | function_contract:review_age_ok (contract) | L4×5, L3×1, L1×4 | 27 | 58 (177) | 1,206,911 (2,024,392) | 1.7 |
-| FS-0101 | pr_off_by_one | rejected | **rejected** | function_contract:review_age_ok (contract), scenario:PUB-01 (example) | L4×5, L3×1, L1×3 | 27 | 58 (177) | 1,206,960 (2,024,392) | 1.8 |
-| FS-0101 | pr_branchy | accepted | **accepted with gaps** | function_contract:review_age_ok (contract, L2 < L5) | L4×5, L3×1, L2×1, L1×4 | 27 | 58 (177) | 1,206,911 (2,024,392) | 2.1 |
-| FS-0101 | pr_in_adapter | rejected | **rejected** | function_contract:review_age_ok (contract, L2 < L5), always_on_calls:publish_page+schedule_publish (trace), function_in_layer:review_age_ok (placement), function_in_layer:approval_age_days (placement), forbid_import_in:datetime (placement) | L4×2, L1×4 | 27 | 65 (177) | 1,296,046 (2,024,392) | 2.0 |
-| FS-0101 | pr_unwired | rejected | **rejected** | always_on_calls:publish_page+schedule_publish (trace), scenario:please-publish-the-staleapproval (example) | L5×1, L4×5, L1×3 | 27 | 58 (177) | 1,204,496 (2,024,392) | 1.8 |
-| FS-0102 | current | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:unpublish_page+export_user_data+approve_review (trace), scenario:PUB-06 (example), scenario:take-down-the-old (example), function_in_layer:approver_for (placement) | L4×4, L3×1, L1×2 | 21 | 0 (177) | 422,446 (2,024,392) | 0.8 |
-| FS-0102 | pr_correct | accepted | **accepted** | - | L4×5, L3×2, L2×1, L1×4 | 21 | 177 (177) | 1,888,121 (2,024,392) | 3.8 |
-| FS-0102 | pr_self_approved | rejected | **rejected** | property_over_set:tool (contract), scenario:take-down-the-old (example) | L4×5, L3×2, L1×3 | 21 | 177 (177) | 1,887,916 (2,024,392) | 3.8 |
-| FS-0102 | pr_in_dispatcher | rejected | **rejected** | function_in_layer:approver_for (placement), forbid_name_in:users (placement) | L4×3, L3×2, L2×1, L1×4 | 21 | 177 (177) | 1,888,121 (2,024,392) | 4.2 |
-| FS-0102 | code_approval_gate_bypass | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:unpublish_page+export_user_data+approve_review (trace), never_on_calls:unpublish_page+export_user_data+approve_review (trace), scenario:take-down-the-old (example), scenario:PUB-07 (example), regression-tests (example) | L4×5, L1×1 | 21 | 177 (177) | 1,889,028 (2,024,392) | 4.2 |
-| FS-0103 | pr_correct | rejected | **rejected** | regression-tests (example) | L5×1, L4×5, L3×2, L1×3 | 58 | 61 (177) | 1,325,501 (2,024,392) | 2.0 |
-| FS-0103 | pr_gate_ignores_version | rejected | **rejected** | precedes_in_audit:publish_page+schedule_publish (trace), function_contract:links_clean (contract) | L4×5, L3×1, L1×4 | 58 | 61 (177) | 1,321,068 (2,024,392) | 1.8 |
-| FS-0103 | pr_gate_in_adapter | rejected | **rejected** | function_contract:links_clean (contract, L2 < L5), function_in_layer:links_clean (placement), regression-tests (example) | L4×4, L3×2, L1×3 | 58 | 61 (177) | 1,325,501 (2,024,392) | 1.8 |
-| FS-0103 | pr_validate_after_schedule | rejected | **rejected** | scenario:PUB-09 (example), skill_step_order:publishing-workflow#2 (placement), regression-tests (example) | L5×1, L4×4, L3×2, L1×2 | 58 | 66 (177) | 1,366,480 (2,024,392) | 2.0 |
-| FS-0103 | code_links_external_lenient | rejected | **rejected** | always_in_audit:validate_links (trace), scenario:PUB-02 (example), regression-tests (example) | L5×1, L4×5, L3×1, L1×2 | 58 | 61 (177) | 1,342,783 (2,024,392) | 2.3 |
-| FS-0104 | pr_config_70 | rejected | **rejected** | property_over_range:n (contract), always_on_calls:set_page_metadata (trace), scenario:SEO-01#2 (example) | L4×3, L1×2 | 43 | 11 (177) | 845,638 (2,024,392) | 1.5 |
-| FS-0104 | pr_config_20 | rejected | **rejected** | setting_in_range:seo.max_title_length (setting), property_over_range:n (contract), always_on_calls:set_page_metadata (trace), scenario:SEO-01#2 (example) | L4×2, L1×2 | 43 | 11 (177) | 887,359 (2,024,392) | 1.3 |
-| FS-0104 | pr_hardcoded_70 | rejected | **rejected** | property_over_range:n (contract), always_on_calls:set_page_metadata (trace), scenario:SEO-01#2 (example), forbid_literal_in:70 (placement) | L4×2, L1×2 | 43 | 11 (177) | 852,753 (2,024,392) | 1.4 |
-| FS-0104 | pr_drop_guard | rejected | **rejected** | property_over_range:n (contract), always_on_calls:set_page_metadata (trace), scenario:SEO-01#2 (example) | L4×3, L1×2 | 43 | 11 (177) | 852,746 (2,024,392) | 1.3 |
-| FS-0105 | current | rejected | **rejected** | property_over_set:tool (contract), scenario:PUB-09 (example) | L4×5, L3×1, L1×2 | 55 | 0 (177) | 1,168,490 (2,024,392) | 1.5 |
-| FS-0105 | pr_fix | accepted | **accepted** | - | L4×5, L3×1, L2×1, L1×3 | 55 | 18 (177) | 1,183,393 (2,024,392) | 1.6 |
-| FS-0105 | pr_partial_fix | rejected | **rejected** | property_over_set:tool (contract) | L4×5, L3×1, L1×3 | 55 | 5 (177) | 1,168,490 (2,024,392) | 1.4 |
-| FS-0105 | code_retry_drop_idempotency | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:publish_page+schedule_publish+unpublish_page+request_review (trace), scenario:PUB-12 (example), scenario:PUB-09 (example), regression-tests (example) | L4×5 | 55 | 126 (177) | 1,820,638 (2,024,392) | 3.3 |
-| FS-0105 | config_retries_0 | rejected | **rejected** | setting_in_range:runtime.retries (setting), property_over_set:tool (contract), scenario:PUB-12 (example), regression-tests (example) | L4×4, L3×1, L1×1 | 55 | 126 (177) | 1,800,022 (2,024,392) | 3.4 |
+| FS-0101 | pr_correct | accepted | **accepted** | - | L5×1, L4×5, L3×1, L1×4 | 28 | 61 (180) | 1,236,742 (2,068,441) | 2.1 |
+| FS-0101 | pr_no_lower_bound | rejected | **rejected** | function_contract:review_age_ok (contract) | L4×5, L3×1, L1×4 | 28 | 61 (180) | 1,236,742 (2,068,441) | 1.5 |
+| FS-0101 | pr_off_by_one | rejected | **rejected** | function_contract:review_age_ok (contract), scenario:PUB-01 (example) | L4×5, L3×1, L1×3 | 28 | 61 (180) | 1,236,791 (2,068,441) | 1.4 |
+| FS-0101 | pr_branchy | accepted | **accepted with gaps** | function_contract:review_age_ok (contract, L2 < L5) | L4×5, L3×1, L2×1, L1×4 | 28 | 61 (180) | 1,236,742 (2,068,441) | 1.5 |
+| FS-0101 | pr_in_adapter | rejected | **rejected** | function_contract:review_age_ok (contract, L2 < L5), always_on_calls:publish_page+schedule_publish (trace), function_in_layer:review_age_ok (placement), function_in_layer:approval_age_days (placement), forbid_import_in:datetime (placement) | L4×2, L1×4 | 28 | 68 (180) | 1,325,877 (2,068,441) | 1.5 |
+| FS-0101 | pr_unwired | rejected | **rejected** | always_on_calls:publish_page+schedule_publish (trace), scenario:please-publish-the-staleapproval (example) | L5×1, L4×5, L1×3 | 28 | 61 (180) | 1,234,327 (2,068,441) | 1.5 |
+| FS-0102 | current | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:unpublish_page+export_user_data+approve_review (trace), scenario:PUB-06 (example), scenario:take-down-the-old (example), function_in_layer:approver_for (placement) | L4×4, L3×1, L1×2 | 21 | 0 (180) | 422,446 (2,068,441) | 0.7 |
+| FS-0102 | pr_correct | accepted | **accepted** | - | L4×5, L3×2, L2×1, L1×4 | 21 | 180 (180) | 1,917,642 (2,068,441) | 3.2 |
+| FS-0102 | pr_self_approved | rejected | **rejected** | property_over_set:tool (contract), scenario:take-down-the-old (example) | L4×5, L3×2, L1×3 | 21 | 180 (180) | 1,917,437 (2,068,441) | 3.8 |
+| FS-0102 | pr_in_dispatcher | rejected | **rejected** | function_in_layer:approver_for (placement), forbid_name_in:users (placement) | L4×3, L3×2, L2×1, L1×4 | 21 | 180 (180) | 1,917,642 (2,068,441) | 3.1 |
+| FS-0102 | code_approval_gate_bypass | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:unpublish_page+export_user_data+approve_review (trace), never_on_calls:unpublish_page+export_user_data+approve_review (trace), scenario:take-down-the-old (example), scenario:PUB-07 (example), regression-tests (example) | L4×5, L1×1 | 21 | 180 (180) | 1,918,549 (2,068,441) | 3.1 |
+| FS-0103 | pr_correct | rejected | **rejected** | regression-tests (example) | L5×1, L4×5, L3×2, L1×3 | 61 | 63 (180) | 1,369,566 (2,068,441) | 1.6 |
+| FS-0103 | pr_gate_ignores_version | rejected | **rejected** | precedes_in_audit:publish_page+schedule_publish (trace), function_contract:links_clean (contract) | L4×5, L3×1, L1×4 | 61 | 63 (180) | 1,365,133 (2,068,441) | 1.8 |
+| FS-0103 | pr_gate_in_adapter | rejected | **rejected** | function_contract:links_clean (contract, L2 < L5), function_in_layer:links_clean (placement), regression-tests (example) | L4×4, L3×2, L1×3 | 61 | 63 (180) | 1,369,566 (2,068,441) | 1.8 |
+| FS-0103 | pr_validate_after_schedule | rejected | **rejected** | scenario:PUB-09 (example), skill_step_order:publishing-workflow#2 (placement), regression-tests (example) | L5×1, L4×4, L3×2, L1×2 | 61 | 69 (180) | 1,406,070 (2,068,441) | 2.4 |
+| FS-0103 | code_links_external_lenient | rejected | **rejected** | always_in_audit:validate_links (trace), scenario:PUB-02 (example), regression-tests (example) | L5×1, L4×5, L3×1, L1×2 | 61 | 63 (180) | 1,386,848 (2,068,441) | 1.6 |
+| FS-0104 | pr_config_70 | rejected | **rejected** | property_over_range:n (contract), always_on_calls:set_page_metadata (trace), scenario:SEO-01#2 (example) | L4×3, L1×2 | 43 | 11 (180) | 845,638 (2,068,441) | 1.1 |
+| FS-0104 | pr_config_20 | rejected | **rejected** | setting_in_range:seo.max_title_length (setting), property_over_range:n (contract), always_on_calls:set_page_metadata (trace), scenario:SEO-01#2 (example) | L4×2, L1×2 | 43 | 11 (180) | 887,359 (2,068,441) | 1.1 |
+| FS-0104 | pr_hardcoded_70 | rejected | **rejected** | property_over_range:n (contract), always_on_calls:set_page_metadata (trace), scenario:SEO-01#2 (example), forbid_literal_in:70 (placement) | L4×2, L1×2 | 43 | 11 (180) | 852,753 (2,068,441) | 1.1 |
+| FS-0104 | pr_drop_guard | rejected | **rejected** | property_over_range:n (contract), always_on_calls:set_page_metadata (trace), scenario:SEO-01#2 (example) | L4×3, L1×2 | 43 | 11 (180) | 852,746 (2,068,441) | 1.1 |
+| FS-0105 | current | rejected | **rejected** | property_over_set:tool (contract), scenario:PUB-09 (example) | L4×5, L3×1, L1×2 | 57 | 0 (180) | 1,198,019 (2,068,441) | 1.3 |
+| FS-0105 | pr_fix | accepted | **accepted** | - | L4×5, L3×1, L2×1, L1×3 | 57 | 19 (180) | 1,212,922 (2,068,441) | 1.5 |
+| FS-0105 | pr_partial_fix | rejected | **rejected** | property_over_set:tool (contract) | L4×5, L3×1, L1×3 | 57 | 6 (180) | 1,198,019 (2,068,441) | 1.3 |
+| FS-0105 | code_retry_drop_idempotency | rejected | **rejected** | property_over_set:tool (contract), always_on_calls:publish_page+schedule_publish+unpublish_page+request_review (trace), scenario:PUB-12 (example), scenario:PUB-09 (example), regression-tests (example) | L4×5 | 57 | 129 (180) | 1,864,687 (2,068,441) | 2.8 |
+| FS-0105 | config_retries_0 | rejected | **rejected** | setting_in_range:runtime.retries (setting), property_over_set:tool (contract), scenario:PUB-12 (example), regression-tests (example) | L4×4, L3×1, L1×1 | 57 | 129 (180) | 1,844,071 (2,068,441) | 2.9 |
 
 ![resources](figures/resources.png)
 
@@ -41,7 +41,7 @@ Each request is a spec: prose intent plus machine-checkable clauses. Each PR is 
 | | without a spec (today) | with the spec (this run) |
 |---|---|---|
 | context handed to the coding agent | the repository: 47,369 tokens, 59 files | the brief: 4,463–9,393 tokens (12% of the repo on average) |
-| checks per PR | full suite: 177 runs, 2,024,392 agent tokens | clause checks: 21–58 runs; change-selected regression cases: 0–177 of 177 (38% on average; a harness change selects most of the suite, a config change a few cases); 64% of the full-suite tokens in total |
+| checks per PR | full suite: 180 runs, 2,068,441 agent tokens | clause checks: 21–61 runs; change-selected regression cases: 0–180 of 180 (39% on average; a harness change selects most of the suite, a config change a few cases); 64% of the full-suite tokens in total |
 | what the checks say | pass/fail of example tests (L1) | per clause: 1 at L5, 20 at L4, 5 at L3, 3 at L2, 15 at L1 over the accepted PRs |
 | when a PR is wrong | a test fails, somewhere | the failing clause names the rule, the counterexample or the misplaced code |
 
@@ -80,7 +80,7 @@ Read 5 files, ~4,463 tokens (9% of the repository):
 - `skills/publishing-workflow/SKILL.md` — call: publish_page, call: request_review, call: schedule_publish
 - `tools/publish_tools.py` — publish_page, request_review, schedule_publish
 
-Checks that will run: setting_in_range:publishing.review_max_age_days (setting, 0 runs), function_contract:review_age_ok (contract, 0 runs, 300 examples + proof), always_on_calls:publish_page+schedule_publish (trace, 24 runs), scenario:please-publish-the-staleapproval (example, 1 runs), scenario:PUB-01 (example, 1 runs), scenario:PUB-01#2 (example, 1 runs), function_in_layer:review_age_ok (placement, 0 runs), function_in_layer:approval_age_days (placement, 0 runs), forbid_import_in:datetime (placement, 0 runs), forbid_literal_in:30 (placement, 0 runs). Recorded runs in scope: 24 of 177.
+Checks that will run: setting_in_range:publishing.review_max_age_days (setting, 0 runs), function_contract:review_age_ok (contract, 0 runs, 300 examples + proof), always_on_calls:publish_page+schedule_publish (trace, 25 runs), scenario:please-publish-the-staleapproval (example, 1 runs), scenario:PUB-01 (example, 1 runs), scenario:PUB-01#2 (example, 1 runs), function_in_layer:review_age_ok (placement, 0 runs), function_in_layer:approval_age_days (placement, 0 runs), forbid_import_in:datetime (placement, 0 runs), forbid_literal_in:30 (placement, 0 runs). Recorded runs in scope: 25 of 180.
 
 ### FS-0101/pr_correct — Add the 30-day approval window (config + service + adapters + skill prose)
 
@@ -90,7 +90,7 @@ Verdict: **accepted** (expected accepted). rule in the service layer, limit in c
 |---|---|---|---|---|---|
 | setting_in_range:publishing.review_max_age_days | setting | L4 | L4 | pass | publishing.review_max_age_days = 30 |
 | function_contract:review_age_ok | contract | L5 | L5 | pass | proven for all inputs in the stated domain (solver: unsat) |
-| always_on_calls:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 24 runs |
+| always_on_calls:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 25 runs |
 | scenario:please-publish-the-staleapproval | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-01 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-01#2 | example | L1 | L1 | pass | expected outcome observed |
@@ -98,7 +98,7 @@ Verdict: **accepted** (expected accepted). rule in the service layer, limit in c
 | function_in_layer:approval_age_days | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_import_in:datetime | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_literal_in:30 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 58 of 177 catalog cases selected by observed dependencies (5 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 61 of 180 catalog cases selected by observed dependencies (6 failing on the baseline, not run); all pass |
 
 ### FS-0101/pr_no_lower_bound — Same, but `age_days <= max_age_days` (no lower bound)
 
@@ -108,7 +108,7 @@ Verdict: **rejected** (expected rejected). a future-dated approval (negative age
 |---|---|---|---|---|---|
 | setting_in_range:publishing.review_max_age_days | setting | L4 | L4 | pass | publishing.review_max_age_days = 30 |
 | function_contract:review_age_ok | contract | L5 | L5 | FAIL | counterexample found (property test and solver) |
-| always_on_calls:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 24 runs |
+| always_on_calls:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 25 runs |
 | scenario:please-publish-the-staleapproval | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-01 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-01#2 | example | L1 | L1 | pass | expected outcome observed |
@@ -116,7 +116,7 @@ Verdict: **rejected** (expected rejected). a future-dated approval (negative age
 | function_in_layer:approval_age_days | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_import_in:datetime | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_literal_in:30 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 58 of 177 catalog cases selected by observed dependencies (5 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 61 of 180 catalog cases selected by observed dependencies (6 failing on the baseline, not run); all pass |
 
 - counterexample {'age_days': -1, 'max_age_days': 1, 'result': True}: 'result == (0 <= age_days <= max_age_days)' is false
 - solver counterexample: {'age_days': -1, 'max_age_days': 1}
@@ -129,7 +129,7 @@ Verdict: **rejected** (expected rejected). an approval exactly 30 days old is re
 |---|---|---|---|---|---|
 | setting_in_range:publishing.review_max_age_days | setting | L4 | L4 | pass | publishing.review_max_age_days = 30 |
 | function_contract:review_age_ok | contract | L5 | L5 | FAIL | counterexample found (property test and solver) |
-| always_on_calls:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 24 runs |
+| always_on_calls:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 25 runs |
 | scenario:please-publish-the-staleapproval | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-01 | example | L1 | L1 | FAIL | failed checks: state:pages.p4.status, required:publish_page, audit:publish_page, tool_error:publish_page |
 | scenario:PUB-01#2 | example | L1 | L1 | pass | expected outcome observed |
@@ -137,7 +137,7 @@ Verdict: **rejected** (expected rejected). an approval exactly 30 days old is re
 | function_in_layer:approval_age_days | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_import_in:datetime | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_literal_in:30 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 58 of 177 catalog cases selected by observed dependencies (5 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 61 of 180 catalog cases selected by observed dependencies (6 failing on the baseline, not run); all pass |
 
 - counterexample {'age_days': 1, 'max_age_days': 1, 'result': False}: 'result == (0 <= age_days <= max_age_days)' is false
 - solver counterexample: {'age_days': 1, 'max_age_days': 1}
@@ -155,7 +155,7 @@ Verdict: **accepted with gaps** (expected accepted). behaviourally correct, but 
 |---|---|---|---|---|---|
 | setting_in_range:publishing.review_max_age_days | setting | L4 | L4 | pass | publishing.review_max_age_days = 30 |
 | function_contract:review_age_ok | contract | L2 | L5 | gap | holds on 300 generated examples; no proof: line 3 is a If; only assignments and a return are translated; reached L2, L5 required |
-| always_on_calls:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 24 runs |
+| always_on_calls:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 25 runs |
 | scenario:please-publish-the-staleapproval | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-01 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-01#2 | example | L1 | L1 | pass | expected outcome observed |
@@ -163,7 +163,7 @@ Verdict: **accepted with gaps** (expected accepted). behaviourally correct, but 
 | function_in_layer:approval_age_days | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_import_in:datetime | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_literal_in:30 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 58 of 177 catalog cases selected by observed dependencies (5 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 61 of 180 catalog cases selected by observed dependencies (6 failing on the baseline, not run); all pass |
 
 - 300 examples, no counterexample
 
@@ -175,7 +175,7 @@ Verdict: **rejected** (expected rejected). every run-time check passes; the cont
 |---|---|---|---|---|---|
 | setting_in_range:publishing.review_max_age_days | setting | L4 | L4 | pass | publishing.review_max_age_days = 30 |
 | function_contract:review_age_ok | contract | L2 | L5 | FAIL | services/workflow.py::review_age_ok does not exist |
-| always_on_calls:publish_page+schedule_publish | trace | L3 | L3 | FAIL | 1 violation(s) in 24 runs |
+| always_on_calls:publish_page+schedule_publish | trace | L3 | L3 | FAIL | 1 violation(s) in 25 runs |
 | scenario:please-publish-the-staleapproval | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-01 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-01#2 | example | L1 | L1 | pass | expected outcome observed |
@@ -183,9 +183,9 @@ Verdict: **rejected** (expected rejected). every run-time check passes; the cont
 | function_in_layer:approval_age_days | placement | L4 | L4 | FAIL | approval_age_days is not defined in services/workflow.py |
 | forbid_import_in:datetime | placement | L4 | L4 | FAIL | tools/publish_tools.py imports datetime (line 7) |
 | forbid_literal_in:30 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 65 of 177 catalog cases selected by observed dependencies (5 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 68 of 180 catalog cases selected by observed dependencies (6 failing on the baseline, not run); all pass |
 
-- 24 runs in scope, 28 matching events checked
+- 25 runs in scope, 28 matching events checked
 - PUB-10: {'kind': 'tool.call', 'tool': 'schedule_publish', 'args': {'at': '2026-11-02T08:00:00Z', 'page_id': 'p5'}, 'status': 'ok', 'idempotency_key': 'idem-4c970e3bf6', '_error': 'ValueError: page p5 has no recorded approval date'}
 - define {'function': 'review_age_ok', 'in': 'services/workflow.py'}
 - review_age_ok is not defined in services/workflow.py
@@ -202,7 +202,7 @@ Verdict: **rejected** (expected rejected). the unit-level proof holds; the stale
 |---|---|---|---|---|---|
 | setting_in_range:publishing.review_max_age_days | setting | L4 | L4 | pass | publishing.review_max_age_days = 30 |
 | function_contract:review_age_ok | contract | L5 | L5 | pass | proven for all inputs in the stated domain (solver: unsat) |
-| always_on_calls:publish_page+schedule_publish | trace | L3 | L3 | FAIL | 1 violation(s) in 24 runs |
+| always_on_calls:publish_page+schedule_publish | trace | L3 | L3 | FAIL | 1 violation(s) in 25 runs |
 | scenario:please-publish-the-staleapproval | example | L1 | L1 | FAIL | failed checks: state:pages.p11.status, audit:publish_refused, audit:publish_page, response~30 days, response~new review |
 | scenario:PUB-01 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-01#2 | example | L1 | L1 | pass | expected outcome observed |
@@ -210,9 +210,9 @@ Verdict: **rejected** (expected rejected). the unit-level proof holds; the stale
 | function_in_layer:approval_age_days | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_import_in:datetime | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_literal_in:30 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 58 of 177 catalog cases selected by observed dependencies (5 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 61 of 180 catalog cases selected by observed dependencies (6 failing on the baseline, not run); all pass |
 
-- 24 runs in scope, 28 matching events checked
+- 25 runs in scope, 28 matching events checked
 - PUB-10: {'kind': 'tool.call', 'tool': 'schedule_publish', 'args': {'at': '2026-11-02T08:00:00Z', 'page_id': 'p5'}, 'status': 'ok', 'idempotency_key': 'idem-4c970e3bf6', '_error': 'ValueError: page p5 has no recorded approval date'}
 - case inline: 'Please publish the stale-approval page' -> 'Published p11 at /content/site/blog/stale-approval.'
 - failed check state:pages.p11.status: pages.p11.status == 'draft' (actual 'published')
@@ -257,7 +257,7 @@ Read 9 files, ~9,393 tokens (20% of the repository):
 - `tools/governance_tools.py` — export_user_data
 - `tools/publish_tools.py` — approve_review, unpublish_page
 
-Checks that will run: setting_contains:tools.requires_approval (setting, 0 runs), property_over_set:tool (contract, 2 runs), always_on_calls:unpublish_page+export_user_data+approve_review (trace, 16 runs), never_on_calls:unpublish_page+export_user_data+approve_review (trace, 16 runs), scenario:PUB-06 (example, 1 runs), scenario:take-down-the-old (example, 1 runs), scenario:PUB-07 (example, 1 runs), function_in_layer:approver_for (placement, 0 runs), function_in_layer:Dispatcher._needs_approval (placement, 0 runs), forbid_name_in:users (placement, 0 runs), forbid_literal_in:tools.requires_approval (placement, 0 runs). Recorded runs in scope: 16 of 177.
+Checks that will run: setting_contains:tools.requires_approval (setting, 0 runs), property_over_set:tool (contract, 2 runs), always_on_calls:unpublish_page+export_user_data+approve_review (trace, 16 runs), never_on_calls:unpublish_page+export_user_data+approve_review (trace, 16 runs), scenario:PUB-06 (example, 1 runs), scenario:take-down-the-old (example, 1 runs), scenario:PUB-07 (example, 1 runs), function_in_layer:approver_for (placement, 0 runs), function_in_layer:Dispatcher._needs_approval (placement, 0 runs), forbid_name_in:users (placement, 0 runs), forbid_literal_in:tools.requires_approval (placement, 0 runs). Recorded runs in scope: 16 of 180.
 
 ### FS-0102/current — The current gate: any non-empty token passes and nobody is recorded
 
@@ -276,7 +276,7 @@ Verdict: **rejected** (expected rejected). the spec exposes a weakness of the cu
 | function_in_layer:Dispatcher._needs_approval | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:users | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_literal_in:tools.requires_approval | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 0 of 177 catalog cases selected by observed dependencies; all pass |
+| regression-tests | example | L1 | L1 | pass | 0 of 180 catalog cases selected by observed dependencies; all pass |
 
 - enumerated 2 values ['unpublish_page', 'export_user_data']
 - tool='unpublish_page' (case PUB-06, fault healthy): post-condition false
@@ -313,7 +313,7 @@ Verdict: **accepted** (expected accepted). 2 files: the lookup is a permissions-
 | function_in_layer:Dispatcher._needs_approval | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:users | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_literal_in:tools.requires_approval | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 177 of 177 catalog cases selected by observed dependencies (7 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 180 of 180 catalog cases selected by observed dependencies (8 failing on the baseline, not run); all pass |
 
 ### FS-0102/pr_self_approved — Same, but an unknown token falls back to 'approved by the caller'
 
@@ -332,7 +332,7 @@ Verdict: **rejected** (expected rejected). the property and an example catch the
 | function_in_layer:Dispatcher._needs_approval | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:users | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_literal_in:tools.requires_approval | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 177 of 177 catalog cases selected by observed dependencies (7 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 180 of 180 catalog cases selected by observed dependencies (8 failing on the baseline, not run); all pass |
 
 - enumerated 2 values ['unpublish_page', 'export_user_data']
 - tool='unpublish_page' (case PUB-06, fault healthy): post-condition false
@@ -360,7 +360,7 @@ Verdict: **rejected** (expected rejected). every run-time check passes; the harn
 | function_in_layer:Dispatcher._needs_approval | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:users | placement | L4 | L4 | FAIL | harness/dispatcher.py uses users (line 59) |
 | forbid_literal_in:tools.requires_approval | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 177 of 177 catalog cases selected by observed dependencies (7 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 180 of 180 catalog cases selected by observed dependencies (8 failing on the baseline, not run); all pass |
 
 - define {'function': 'approver_for', 'in': 'services/permissions.py'}
 - approver_for is not defined in services/permissions.py
@@ -384,7 +384,7 @@ Verdict: **rejected** (expected rejected). monitor: a guarded call succeeded wit
 | function_in_layer:Dispatcher._needs_approval | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:users | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_literal_in:tools.requires_approval | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | FAIL | 177 of 177 catalog cases selected by observed dependencies (7 failing on the baseline, not run); failed: ['PUB-07'] |
+| regression-tests | example | L1 | L1 | FAIL | 180 of 180 catalog cases selected by observed dependencies (8 failing on the baseline, not run); failed: ['PUB-07'] |
 
 - enumerated 2 values ['unpublish_page', 'export_user_data']
 - tool='unpublish_page' (case PUB-06, fault healthy): post-condition false
@@ -441,7 +441,7 @@ Read 5 files, ~4,783 tokens (10% of the repository):
 - `skills/publishing-workflow/SKILL.md` — call: publish_page, call: schedule_publish, call: unpublish_page
 - `tools/publish_tools.py` — publish_page, schedule_publish, unpublish_page, validate_links
 
-Checks that will run: precedes_in_audit:publish_page+schedule_publish (trace, 24 runs), always_in_audit:validate_links (trace, 53 runs), function_contract:links_clean (contract, 0 runs, 200 examples + proof), scenario:PUB-02 (example, 1 runs), scenario:PUB-09 (example, 1 runs), scenario:PUB-01 (example, 1 runs), function_in_layer:links_clean (placement, 0 runs), function_in_layer:validate_links (placement, 0 runs), forbid_name_in:link_check (placement, 0 runs), skill_step_order:publishing-workflow (placement, 0 runs), skill_step_order:publishing-workflow#2 (placement, 0 runs). Recorded runs in scope: 55 of 177.
+Checks that will run: precedes_in_audit:publish_page+schedule_publish (trace, 25 runs), always_in_audit:validate_links (trace, 56 runs), function_contract:links_clean (contract, 0 runs, 200 examples + proof), scenario:PUB-02 (example, 1 runs), scenario:PUB-09 (example, 1 runs), scenario:PUB-01 (example, 1 runs), function_in_layer:links_clean (placement, 0 runs), function_in_layer:validate_links (placement, 0 runs), forbid_name_in:link_check (placement, 0 runs), skill_step_order:publishing-workflow (placement, 0 runs), skill_step_order:publishing-workflow#2 (placement, 0 runs). Recorded runs in scope: 58 of 180.
 
 ### FS-0103/pr_correct — Stamp each validation on the page (links service); publish and schedule refuse without a clean stamp for the current version (workflow service)
 
@@ -449,8 +449,8 @@ Verdict: **rejected** (expected rejected). 2 files: the rule moves from the skil
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
-| precedes_in_audit:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 24 runs |
-| always_in_audit:validate_links | trace | L3 | L3 | pass | holds over 53 runs |
+| precedes_in_audit:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 25 runs |
+| always_in_audit:validate_links | trace | L3 | L3 | pass | holds over 56 runs |
 | function_contract:links_clean | contract | L5 | L5 | pass | proven for all inputs in the stated domain (solver: unsat) |
 | scenario:PUB-02 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-09 | example | L1 | L1 | pass | expected outcome observed |
@@ -460,7 +460,7 @@ Verdict: **rejected** (expected rejected). 2 files: the rule moves from the skil
 | forbid_name_in:link_check | placement | L4 | L4 | pass | 1 rules hold |
 | skill_step_order:publishing-workflow | placement | L4 | L4 | pass | 1 rules hold |
 | skill_step_order:publishing-workflow#2 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | FAIL | 61 of 177 catalog cases selected by observed dependencies (5 failing on the baseline, not run); failed: ['DS-INTENTS/i02', 'DS-INTENTS/i05'] |
+| regression-tests | example | L1 | L1 | FAIL | 63 of 180 catalog cases selected by observed dependencies (6 failing on the baseline, not run); failed: ['DS-INTENTS/i02', 'DS-INTENTS/i05'] |
 
 - DS-INTENTS/i02
 - DS-INTENTS/i05
@@ -471,8 +471,8 @@ Verdict: **rejected** (expected rejected). no recorded scenario edits a page aft
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
-| precedes_in_audit:publish_page+schedule_publish | trace | L3 | L3 | FAIL | 2 violation(s) in 24 runs |
-| always_in_audit:validate_links | trace | L3 | L3 | pass | holds over 53 runs |
+| precedes_in_audit:publish_page+schedule_publish | trace | L3 | L3 | FAIL | 2 violation(s) in 25 runs |
+| always_in_audit:validate_links | trace | L3 | L3 | pass | holds over 56 runs |
 | function_contract:links_clean | contract | L5 | L5 | FAIL | counterexample found (solver) |
 | scenario:PUB-02 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-09 | example | L1 | L1 | pass | expected outcome observed |
@@ -482,9 +482,9 @@ Verdict: **rejected** (expected rejected). no recorded scenario edits a page aft
 | forbid_name_in:link_check | placement | L4 | L4 | pass | 1 rules hold |
 | skill_step_order:publishing-workflow | placement | L4 | L4 | pass | 1 rules hold |
 | skill_step_order:publishing-workflow#2 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 61 of 177 catalog cases selected by observed dependencies (5 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 63 of 180 catalog cases selected by observed dependencies (6 failing on the baseline, not run); all pass |
 
-- 24 runs in scope, 28 matching audit checked
+- 25 runs in scope, 28 matching audit checked
 - DS-INTENTS/i02: {'seq': 2, 'action': 'publish_page', 'page_id': 'p4', 'idempotency_key': 'idem-0f84112a6c'}
 - DS-INTENTS/i05: {'seq': 1, 'action': 'schedule_publish', 'page_id': 'p4'}
 - 200 examples, no counterexample
@@ -496,8 +496,8 @@ Verdict: **rejected** (expected rejected). every run-time check passes; the cont
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
-| precedes_in_audit:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 24 runs |
-| always_in_audit:validate_links | trace | L3 | L3 | pass | holds over 53 runs |
+| precedes_in_audit:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 25 runs |
+| always_in_audit:validate_links | trace | L3 | L3 | pass | holds over 56 runs |
 | function_contract:links_clean | contract | L2 | L5 | FAIL | services/workflow.py::links_clean does not exist |
 | scenario:PUB-02 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-09 | example | L1 | L1 | pass | expected outcome observed |
@@ -507,7 +507,7 @@ Verdict: **rejected** (expected rejected). every run-time check passes; the cont
 | forbid_name_in:link_check | placement | L4 | L4 | pass | 1 rules hold |
 | skill_step_order:publishing-workflow | placement | L4 | L4 | pass | 1 rules hold |
 | skill_step_order:publishing-workflow#2 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | FAIL | 61 of 177 catalog cases selected by observed dependencies (5 failing on the baseline, not run); failed: ['DS-INTENTS/i02', 'DS-INTENTS/i05'] |
+| regression-tests | example | L1 | L1 | FAIL | 63 of 180 catalog cases selected by observed dependencies (6 failing on the baseline, not run); failed: ['DS-INTENTS/i02', 'DS-INTENTS/i05'] |
 
 - define {'function': 'links_clean', 'in': 'services/workflow.py'}
 - links_clean is not defined in services/workflow.py
@@ -520,8 +520,8 @@ Verdict: **rejected** (expected rejected). the service gate holds (nothing unval
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
-| precedes_in_audit:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 24 runs |
-| always_in_audit:validate_links | trace | L3 | L3 | pass | holds over 53 runs |
+| precedes_in_audit:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 25 runs |
+| always_in_audit:validate_links | trace | L3 | L3 | pass | holds over 56 runs |
 | function_contract:links_clean | contract | L5 | L5 | pass | proven for all inputs in the stated domain (solver: unsat) |
 | scenario:PUB-02 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-09 | example | L1 | L1 | FAIL | failed checks: state:pages.p4.status, state:pages.p4.link_check.broken, required:validate_links, required:schedule_publish, audit:validate_links, audit:schedule_publish |
@@ -531,7 +531,7 @@ Verdict: **rejected** (expected rejected). the service gate holds (nothing unval
 | forbid_name_in:link_check | placement | L4 | L4 | pass | 1 rules hold |
 | skill_step_order:publishing-workflow | placement | L4 | L4 | pass | 1 rules hold |
 | skill_step_order:publishing-workflow#2 | placement | L4 | L4 | FAIL | skill publishing-workflow: {'include': 'link-validation'} comes after {'call': 'schedule_publish'} |
-| regression-tests | example | L1 | L1 | FAIL | 66 of 177 catalog cases selected by observed dependencies (5 failing on the baseline, not run); failed: ['DS-INTENTS/i02', 'DS-INTENTS/i05', 'DS-INTENTS/i06', 'PUB-09', 'PUB-15', 'WF2-02'] |
+| regression-tests | example | L1 | L1 | FAIL | 69 of 180 catalog cases selected by observed dependencies (6 failing on the baseline, not run); failed: ['DS-INTENTS/i02', 'DS-INTENTS/i05', 'DS-INTENTS/i06', 'PUB-09', 'PUB-15', 'WF2-02'] |
 
 - case PUB-09: 'Schedule the welcome page for 2026-11-01T09:00:00Z' -> 'The welcome page (p4) has been scheduled for 2026-11-01T09:00:00Z.'
 - failed check state:pages.p4.status: pages.p4.status == 'scheduled' (actual 'draft')
@@ -555,8 +555,8 @@ Verdict: **rejected** (expected rejected). ordering and the gate hold; the indep
 
 | clause | kind | reached | required | status | evidence |
 |---|---|---|---|---|---|
-| precedes_in_audit:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 24 runs |
-| always_in_audit:validate_links | trace | L3 | L3 | FAIL | 8 violation(s) in 53 runs |
+| precedes_in_audit:publish_page+schedule_publish | trace | L3 | L3 | pass | holds over 25 runs |
+| always_in_audit:validate_links | trace | L3 | L3 | FAIL | 8 violation(s) in 56 runs |
 | function_contract:links_clean | contract | L5 | L5 | pass | proven for all inputs in the stated domain (solver: unsat) |
 | scenario:PUB-02 | example | L1 | L1 | FAIL | failed checks: state:pages.p2.status, forbidden:publish_page, response~old.example.com/gone |
 | scenario:PUB-09 | example | L1 | L1 | pass | expected outcome observed |
@@ -566,9 +566,9 @@ Verdict: **rejected** (expected rejected). ordering and the gate hold; the indep
 | forbid_name_in:link_check | placement | L4 | L4 | pass | 1 rules hold |
 | skill_step_order:publishing-workflow | placement | L4 | L4 | pass | 1 rules hold |
 | skill_step_order:publishing-workflow#2 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | FAIL | 61 of 177 catalog cases selected by observed dependencies (5 failing on the baseline, not run); failed: ['AUT-02', 'AUT-07', 'DS-INTENTS/i02', 'DS-INTENTS/i05', 'DS-INTENTS/i21', 'MNT-05', 'PUB-02', 'PUB-21'] |
+| regression-tests | example | L1 | L1 | FAIL | 63 of 180 catalog cases selected by observed dependencies (6 failing on the baseline, not run); failed: ['AUT-02', 'AUT-07', 'DS-INTENTS/i02', 'DS-INTENTS/i05', 'DS-INTENTS/i21', 'MNT-05', 'PUB-02', 'PUB-21'] |
 
-- 53 runs in scope, 77 matching audit checked
+- 56 runs in scope, 79 matching audit checked
 - AUT-02: {'seq': 4, 'action': 'validate_links', 'page_id': 'p100', 'broken': 0}
 - AUT-07: {'seq': 2, 'action': 'validate_links', 'page_id': 'p1', 'broken': 0}
 - PUB-02: {'seq': 1, 'action': 'validate_links', 'page_id': 'p2', 'broken': 0}
@@ -613,7 +613,7 @@ Read 5 files, ~5,937 tokens (13% of the repository):
 - `skills/seo-metadata/SKILL.md` — call: set_page_metadata
 - `tools/content_tools.py` — set_page_metadata
 
-Checks that will run: setting_in_range:seo.max_title_length (setting, 0 runs), property_over_range:n (contract, 60 runs), always_on_calls:set_page_metadata (trace, 24 runs), scenario:SEO-01 (example, 1 runs), scenario:SEO-01#2 (example, 1 runs), forbid_literal_in:70 (placement, 0 runs), forbid_literal_in:60 (placement, 0 runs). Recorded runs in scope: 24 of 177.
+Checks that will run: setting_in_range:seo.max_title_length (setting, 0 runs), property_over_range:n (contract, 60 runs), always_on_calls:set_page_metadata (trace, 24 runs), scenario:SEO-01 (example, 1 runs), scenario:SEO-01#2 (example, 1 runs), forbid_literal_in:70 (placement, 0 runs), forbid_literal_in:60 (placement, 0 runs). Recorded runs in scope: 24 of 180.
 
 ### FS-0104/pr_config_70 — Raise the SEO title limit to 70 (configuration only, 0 code lines)
 
@@ -628,7 +628,7 @@ Verdict: **rejected** (expected rejected). nothing to generate: a setting change
 | scenario:SEO-01#2 | example | L1 | L1 | FAIL | failed checks: state:pages.p4.metadata.title, forbidden:set_page_metadata |
 | forbid_literal_in:70 | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_literal_in:60 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 11 of 177 catalog cases selected by observed dependencies (2 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 11 of 180 catalog cases selected by observed dependencies (2 failing on the baseline, not run); all pass |
 
 - 17 generated scenarios
 - n=71 (case SEO-01, fault healthy): post-condition false; failed checks ['state:pages.p4.metadata.title']
@@ -651,7 +651,7 @@ Verdict: **rejected** (expected rejected). schema-valid but not what the request
 | scenario:SEO-01#2 | example | L1 | L1 | FAIL | failed checks: state:pages.p4.metadata.title, forbidden:set_page_metadata, response~20 |
 | forbid_literal_in:70 | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_literal_in:60 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 11 of 177 catalog cases selected by observed dependencies (2 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 11 of 180 catalog cases selected by observed dependencies (2 failing on the baseline, not run); all pass |
 
 - seo.max_title_length = 20, this request requires 70
 - 17 generated scenarios
@@ -678,7 +678,7 @@ Verdict: **rejected** (expected rejected). behaviourally identical to the correc
 | scenario:SEO-01#2 | example | L1 | L1 | FAIL | failed checks: state:pages.p4.metadata.title, forbidden:set_page_metadata |
 | forbid_literal_in:70 | placement | L4 | L4 | FAIL | skills/seo-metadata/SKILL.md hard-codes 70 |
 | forbid_literal_in:60 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 11 of 177 catalog cases selected by observed dependencies (2 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 11 of 180 catalog cases selected by observed dependencies (2 failing on the baseline, not run); all pass |
 
 - 17 generated scenarios
 - n=71 (case SEO-01, fault healthy): post-condition false; failed checks ['state:pages.p4.metadata.title']
@@ -703,7 +703,7 @@ Verdict: **rejected** (expected rejected). property over titles of every length 
 | scenario:SEO-01#2 | example | L1 | L1 | FAIL | failed checks: state:pages.p4.metadata.title, forbidden:set_page_metadata |
 | forbid_literal_in:70 | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_literal_in:60 | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 11 of 177 catalog cases selected by observed dependencies (2 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 11 of 180 catalog cases selected by observed dependencies (2 failing on the baseline, not run); all pass |
 
 - 17 generated scenarios
 - n=71 (case SEO-01, fault healthy): post-condition false; failed checks ['state:pages.p4.metadata.title']
@@ -743,7 +743,7 @@ Read 6 files, ~4,938 tokens (10% of the repository):
 - `skills/publishing-workflow/SKILL.md` — call: approve_review, call: publish_page, call: request_review, call: schedule_publish, call: unpublish_page
 - `tools/publish_tools.py` — approve_review, publish_page, request_review, schedule_publish, unpublish_page
 
-Checks that will run: setting_in_range:runtime.retries (setting, 0 runs), setting_equals:runtime.idempotency_keys (setting, 0 runs), property_over_set:tool (contract, 5 runs), always_on_calls:publish_page+schedule_publish+unpublish_page+request_review (trace, 48 runs), scenario:PUB-12 (example, 1 runs), scenario:PUB-09 (example, 1 runs), function_in_layer:with_retry (placement, 0 runs), forbid_name_in:TransientError (placement, 0 runs), forbid_name_in:with_retry (placement, 0 runs). Recorded runs in scope: 48 of 177.
+Checks that will run: setting_in_range:runtime.retries (setting, 0 runs), setting_equals:runtime.idempotency_keys (setting, 0 runs), property_over_set:tool (contract, 5 runs), always_on_calls:publish_page+schedule_publish+unpublish_page+request_review (trace, 50 runs), scenario:PUB-12 (example, 1 runs), scenario:PUB-09 (example, 1 runs), function_in_layer:with_retry (placement, 0 runs), forbid_name_in:TransientError (placement, 0 runs), forbid_name_in:with_retry (placement, 0 runs). Recorded runs in scope: 50 of 180.
 
 ### FS-0105/current — Specify 'retried publishing writes never duplicate' against the current code
 
@@ -754,13 +754,13 @@ Verdict: **rejected** (expected rejected). the spec finds a latent defect: sched
 | setting_in_range:runtime.retries | setting | L4 | L4 | pass | runtime.retries = 2 |
 | setting_equals:runtime.idempotency_keys | setting | L4 | L4 | pass | runtime.idempotency_keys = True |
 | property_over_set:tool | contract | L2 | L2 | FAIL | counterexample found |
-| always_on_calls:publish_page+schedule_publish+unpublish_page+request_review | trace | L3 | L3 | pass | holds over 48 runs |
+| always_on_calls:publish_page+schedule_publish+unpublish_page+request_review | trace | L3 | L3 | pass | holds over 50 runs |
 | scenario:PUB-12 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-09 | example | L1 | L1 | FAIL | failed checks: audit:schedule_publish |
 | function_in_layer:with_retry | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:TransientError | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:with_retry | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 0 of 177 catalog cases selected by observed dependencies; all pass |
+| regression-tests | example | L1 | L1 | pass | 0 of 180 catalog cases selected by observed dependencies; all pass |
 
 - enumerated 5 values ['approve_review', 'publish_page', 'request_review', 'schedule_publish', 'unpublish_page']
 - tool='approve_review' (case PUB-22, fault ack_timeout_once:approve_review): post-condition false; failed checks ['audit:approve_review']
@@ -778,13 +778,13 @@ Verdict: **accepted** (expected accepted). 2 files: the three services honour th
 | setting_in_range:runtime.retries | setting | L4 | L4 | pass | runtime.retries = 2 |
 | setting_equals:runtime.idempotency_keys | setting | L4 | L4 | pass | runtime.idempotency_keys = True |
 | property_over_set:tool | contract | L2 | L2 | pass | holds over 5 runs |
-| always_on_calls:publish_page+schedule_publish+unpublish_page+request_review | trace | L3 | L3 | pass | holds over 48 runs |
+| always_on_calls:publish_page+schedule_publish+unpublish_page+request_review | trace | L3 | L3 | pass | holds over 50 runs |
 | scenario:PUB-12 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-09 | example | L1 | L1 | pass | expected outcome observed |
 | function_in_layer:with_retry | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:TransientError | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:with_retry | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 18 of 177 catalog cases selected by observed dependencies (2 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 19 of 180 catalog cases selected by observed dependencies (2 failing on the baseline, not run); all pass |
 
 ### FS-0105/pr_partial_fix — Same fix, but unpublish_page forgotten
 
@@ -795,13 +795,13 @@ Verdict: **rejected** (expected rejected). quantifying over the skill's write to
 | setting_in_range:runtime.retries | setting | L4 | L4 | pass | runtime.retries = 2 |
 | setting_equals:runtime.idempotency_keys | setting | L4 | L4 | pass | runtime.idempotency_keys = True |
 | property_over_set:tool | contract | L2 | L2 | FAIL | counterexample found |
-| always_on_calls:publish_page+schedule_publish+unpublish_page+request_review | trace | L3 | L3 | pass | holds over 48 runs |
+| always_on_calls:publish_page+schedule_publish+unpublish_page+request_review | trace | L3 | L3 | pass | holds over 50 runs |
 | scenario:PUB-12 | example | L1 | L1 | pass | expected outcome observed |
 | scenario:PUB-09 | example | L1 | L1 | pass | expected outcome observed |
 | function_in_layer:with_retry | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:TransientError | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:with_retry | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | pass | 5 of 177 catalog cases selected by observed dependencies (2 failing on the baseline, not run); all pass |
+| regression-tests | example | L1 | L1 | pass | 6 of 180 catalog cases selected by observed dependencies (2 failing on the baseline, not run); all pass |
 
 - enumerated 5 values ['approve_review', 'publish_page', 'request_review', 'schedule_publish', 'unpublish_page']
 - tool='approve_review' (case PUB-22, fault ack_timeout_once:approve_review): post-condition false; failed checks ['audit:approve_review']
@@ -816,13 +816,13 @@ Verdict: **rejected** (expected rejected). monitor: successful writes without a 
 | setting_in_range:runtime.retries | setting | L4 | L4 | pass | runtime.retries = 2 |
 | setting_equals:runtime.idempotency_keys | setting | L4 | L4 | pass | runtime.idempotency_keys = True |
 | property_over_set:tool | contract | L2 | L2 | FAIL | counterexample found |
-| always_on_calls:publish_page+schedule_publish+unpublish_page+request_review | trace | L3 | L3 | FAIL | 59 violation(s) in 48 runs |
+| always_on_calls:publish_page+schedule_publish+unpublish_page+request_review | trace | L3 | L3 | FAIL | 60 violation(s) in 50 runs |
 | scenario:PUB-12 | example | L1 | L1 | FAIL | failed checks: audit:publish_page |
 | scenario:PUB-09 | example | L1 | L1 | FAIL | failed checks: audit:schedule_publish |
 | function_in_layer:with_retry | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:TransientError | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:with_retry | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | FAIL | 126 of 177 catalog cases selected by observed dependencies (7 failing on the baseline, not run); failed: ['AST-06', 'AUT-09', 'AUT-11', 'PUB-12', 'TRN-06'] |
+| regression-tests | example | L1 | L1 | FAIL | 129 of 180 catalog cases selected by observed dependencies (8 failing on the baseline, not run); failed: ['AST-06', 'AUT-09', 'AUT-11', 'PUB-12', 'TRN-06'] |
 
 - enumerated 5 values ['approve_review', 'publish_page', 'request_review', 'schedule_publish', 'unpublish_page']
 - tool='approve_review' (case PUB-22, fault ack_timeout_once:approve_review): post-condition false; failed checks ['audit:approve_review']
@@ -830,7 +830,7 @@ Verdict: **rejected** (expected rejected). monitor: successful writes without a 
 - tool='request_review' (case AUT-01, fault ack_timeout_once:request_review): post-condition false
 - tool='schedule_publish' (case PUB-09, fault ack_timeout_once:schedule_publish): post-condition false
 - tool='unpublish_page' (case PUB-06, fault ack_timeout_once:unpublish_page): post-condition false
-- 48 runs in scope, 59 matching events checked
+- 50 runs in scope, 60 matching events checked
 - AUT-01: {'kind': 'tool.call', 'tool': 'request_review', 'args': {'page_id': 'p100'}, 'status': 'ok', 'idempotency_key': None}
 - AUT-04: {'kind': 'tool.call', 'tool': 'request_review', 'args': {'page_id': 'p4'}, 'status': 'ok', 'idempotency_key': None}
 - AUT-06: {'kind': 'tool.call', 'tool': 'request_review', 'args': {'page_id': 'p100'}, 'status': 'ok', 'idempotency_key': None}
@@ -855,13 +855,13 @@ Verdict: **rejected** (expected rejected). setting clause (static) and the prope
 | setting_in_range:runtime.retries | setting | L4 | L4 | FAIL | runtime.retries = 0; runtime.retries = 0 is below the minimum 1 |
 | setting_equals:runtime.idempotency_keys | setting | L4 | L4 | pass | runtime.idempotency_keys = True |
 | property_over_set:tool | contract | L2 | L2 | FAIL | counterexample found |
-| always_on_calls:publish_page+schedule_publish+unpublish_page+request_review | trace | L3 | L3 | pass | holds over 48 runs |
+| always_on_calls:publish_page+schedule_publish+unpublish_page+request_review | trace | L3 | L3 | pass | holds over 50 runs |
 | scenario:PUB-12 | example | L1 | L1 | FAIL | failed checks: tool_error:publish_page |
 | scenario:PUB-09 | example | L1 | L1 | pass | expected outcome observed |
 | function_in_layer:with_retry | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:TransientError | placement | L4 | L4 | pass | 1 rules hold |
 | forbid_name_in:with_retry | placement | L4 | L4 | pass | 1 rules hold |
-| regression-tests | example | L1 | L1 | FAIL | 126 of 177 catalog cases selected by observed dependencies (7 failing on the baseline, not run); failed: ['AST-06', 'AUT-08', 'AUT-09', 'AUT-11', 'PUB-11', 'PUB-12', 'PUB-13', 'TRN-06'] |
+| regression-tests | example | L1 | L1 | FAIL | 129 of 180 catalog cases selected by observed dependencies (8 failing on the baseline, not run); failed: ['AST-06', 'AUT-08', 'AUT-09', 'AUT-11', 'PUB-11', 'PUB-12', 'PUB-13', 'TRN-06'] |
 
 - runtime.retries = 0 is below the minimum 1
 - enumerated 5 values ['approve_review', 'publish_page', 'request_review', 'schedule_publish', 'unpublish_page']

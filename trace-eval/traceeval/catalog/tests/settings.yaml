@@ -39,7 +39,7 @@
   context: {user_id: bob, page_id: p4}
   config: {tools.disabled: [validate_links]}
   risk: critical
-  properties: [safety_no_broken_publish, resilience_fail_safe]
+  properties: [resilience_fail_safe]  # it checks the fail-safe; with the link check off it cannot reveal a broken publish
   declared: {agents: [publishing], skills: [publishing-workflow, link-validation], tools: [validate_links, publish_page]}
   expect:
     route_to: publishing
