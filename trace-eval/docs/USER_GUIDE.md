@@ -134,8 +134,8 @@ The experiment plants 43 known changes in copies of the app (`mutation/catalog.p
 strategy finds them: 34 regressions, which at least one test should reveal, and 9 benign changes, which no test
 should. Each one is in the set for a reason: a kind of change (code, skill, prompt, config), a reach (one test or
 dozens), or a trap for selection. "Revealing tests" counts the tests that pass on the original app and fail on the
-changed copy, in Gemma's recording of the current app (`runs/gemma5`: 176 tests, three repetitions); Qwen's
-counts are added when its recording of the same app is in.
+changed copy, in Gemma's recording of the current app (`runs/gemma5`: 176 tests, three repetitions). Qwen's
+recording of the same app is not a clean ground truth ([EXPERIMENT.md](EXPERIMENT.md) §7), so it has no column.
 
 | change | what it does | why it is in the set | revealing tests (Gemma) |
 |---|---|---|---|
@@ -150,7 +150,7 @@ counts are added when its recording of the same app is in.
 | `code_termination_off_by_six` | the agent loop stops each agent six tool calls before its configured budget | every test runs the changed line, but only long tasks fail: covering code is not catching the bug | 5 |
 | `code_delegation_truncates_answer` | the orchestrator receives only the first 40 characters of the specialist's answer | a delegation bug that shows only when the answer must carry a fact past 40 characters | 25 |
 | **Skills** | | | |
-| `skill_publish_drop_link_validation` | publishing no longer validates links | a change to a skill's procedure, not to code; the link check is a skill no test declares; Qwen checks links anyway | 4 |
+| `skill_publish_drop_link_validation` | publishing no longer validates links | a change to a skill's procedure, not to code; the link check is a skill no test declares; the method alone calls it clean, and the mandatory-coverage rule catches it | 4 |
 | `skill_publish_drop_permission_check` | publishing no longer checks the user's permission | a safety rule enforced only in a skill: nothing below it stops the write | 3 |
 | `skill_authoring_drop_metadata` | new pages no longer get SEO metadata | a removed step that one test notices | 1 |
 | `skill_translation_wrong_default` | translation uses en-US instead of the configured languages | a skill that ignores a configuration value | 3 |
@@ -170,7 +170,7 @@ counts are added when its recording of the same app is in.
 | `config_seo_title_20` | the maximum SEO title length drops from 60 to 20 | a boundary value; Gemma ignores the limit anyway | 0 |
 | `config_default_agent_publishing` | requests no specialist owns go to publishing instead of authoring | a routing setting the orchestrator reads | 3 |
 | **Code and configuration together** | | | |
-| `combined_seo_keyword_limit` | a keyword-count rule in code plus a very low limit in config | a regression that needs both edits; each alone is harmless. Its one test, SEO-07, fails on the original app under Qwen's strict judge | 1 |
+| `combined_seo_keyword_limit` | a keyword-count rule in code plus a very low limit in config | a regression that needs both edits; each alone is harmless | 1 |
 | **Benign: no test should fail** | | | |
 | `benign_skill_prose_reflow` | the publishing skill's prose is reworded, its procedure untouched | a wording change: a strategy should spend little on it | 0 |
 | `benign_code_comment_docstring` | comments and docstrings change in the links service | leaves an empty change set (code only), so there is nothing to test | 0 |

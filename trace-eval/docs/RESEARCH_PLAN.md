@@ -2,7 +2,7 @@
 
 **Change-aware, cost-bounded selection, prioritization and stopping of tests and evals for LLM agent systems**
 
-Ciprian Păduraru · University of Bucharest · working document, 6 October 2026, updated 9 November 2026 · status: prototype v0.1 running on real models, results in `docs/results/gemma5/report.md` (Qwen's recording of the current app follows)
+Ciprian Păduraru · University of Bucharest · working document, 6 October 2026, updated 9 November 2026 · status: prototype v0.1 running on real models, results in `docs/results/gemma5/report.md`
 
 ---
 
@@ -25,8 +25,9 @@ Ciprian Păduraru · University of Bucharest · working document, 6 October 2026
   revealed by one to five tests, where it can stop "clean" too early. A mandatory-coverage rule (§5.3) makes it
   test every mandatory property a change may affect before it calls the change clean, for under one extra test per
   change, and on this app the rule also catches a regression the method alone misses. Change sets hold code only,
-  so the results are the same whether or not the code is commented. Qwen's recording of the same app follows.
-- **Next.** The demo for the AEM team (`docs/AEM_ALIGNMENT.md` §4) and Qwen's recording of the current app; make Qwen's answers exactly repeatable (vLLM's batch-invariant mode), so that one run is proof again; then move
+  so the results are the same whether or not the code is commented. Qwen's recording of the same app is not a
+  clean ground truth: its answers change with how requests are batched (§5.4).
+- **Next.** The demo for the AEM team (`docs/AEM_ALIGNMENT.md` §4); make Qwen's answers exactly repeatable (vLLM's batch-invariant mode), so that one run is proof again; then move
   to tau2-bench as the external system under test. Real models only, decoded greedily. Paper: ASE/ISSTA/ICST framing.
 
 ---
@@ -184,7 +185,7 @@ The report checks a sanity property of the testbed: every regression-inducing ch
 ### 5.1 Gemma on the current app (`runs/gemma5`: 176 tests × 3 reps baseline, 43 changes × 3 reps, with the model judge, 5 replay seeds)
 
 The agents are played by Gemma 4 E4B, served with vLLM on a GPU server (`docs/EXPERIMENT.md`); Qwen3.8-27B's
-recording of the same app follows. The ground truth belongs to the model:
+recording of the same app is in §5.4. The ground truth belongs to the model:
 
 - **Original app:** 170 of 176 tests pass. The six failures are model mistakes that clearer wording did not fix
   (`docs/EXPERIMENT.md` §6): Gemma schedules a page without an approved review (PUB-10, and in the campaign launch
@@ -253,8 +254,8 @@ text), and no variant gives a "regression" verdict on a change no test reveals.
 **Reading.** TF-IDF brings forward the one test that reveals a narrow change, and helps by up to four points for
 less spending. Without any text the method loses ten points, so text matters, but coverage and history carry most
 of the result. The testbed is textual: tests, skills and config keys share vocabulary, which favours any text
-measure (a threat noted in §8). The default stays word overlap until the second model's recording shows whether
-the gain holds there too; whether TF-IDF helps as much where tests and changes are worded differently is a
+measure (a threat noted in §8). The default stays word overlap until a repeatable second model's recording shows
+whether the gain holds there too (§5.4); whether TF-IDF helps as much where tests and changes are worded differently is a
 question for tau2-bench.
 
 ### 5.3 Coverage, and mandatory properties in the method
@@ -280,6 +281,21 @@ that checks it and passes on the original app, while the budget allows. At a 20%
 On this app the rule is also a detector: it catches `skill_publish_drop_link_validation`, which the method alone
 calls clean. Before ending, the method must test the mandatory "no broken publish" property, and that test fails.
 The rule never caused a false verdict. Below a 10% budget it often cannot afford the extra test.
+
+### 5.4 Qwen on the current app: a finding, not a ground truth
+
+Qwen3.8-27B (`runs/qwen5`, the same protocol on fmi0's GPU1 and two SLURM GPUs) passes 171 of the 176 tests on
+the original app. It gets five of Gemma's six mistakes right and makes its own; in particular it re-plans after
+a failed step (it repairs the page that failed the brand check, or has the broken link fixed, and goes on), as
+Adobe's Agent Orchestrator does, where the routing skill says stop (`docs/EXPERIMENT.md` §6). Its recording is not
+a clean ground truth, though: every regression is revealed, but so is every benign change, by two to five tests,
+including the no-op change whose change set is empty. Six tests (the two Qwen judges itself, the 60-character
+boundary and three long workflows) answer differently when run 64 at a time over three servers, as the changed
+copies are, than one at a time, as the baseline is, and Qwen's three runs disagreed on 260 (change, test) pairs
+against Gemma's five. The strategies' numbers on it are therefore not results. Its report is kept in
+`docs/results/qwen5/` as a record of the effect; the remedy is exactly repeatable decoding (vLLM's batch-invariant
+mode) for the next recording. The lesson for a pipeline: measure the suite's own flakiness under the serving setup
+the selection will run on (the no-op change does exactly that) before trusting a ground truth or a stopping rule.
 
 ---
 
@@ -307,7 +323,7 @@ The rule never caused a false verdict. Below a 10% budget it often cannot afford
 | 1. Testbed | SUT, catalog, tracing, mutations, change sets, record/replay, metrics, report, CLI, tests | done (v0.1) |
 | 2. Methods | baselines + cost-aware + predictive + adaptive Bayesian selector with stopping | done (v0.1), with the mandatory-coverage rule (§5.3); tune ε, priors, discount |
 | 3. Method improvements | (a) test-level learned sensitivities (per test × component-kind reveal history) instead of kind-level; (b) IR relevance inside the Bayesian likelihood; (c) CASPER-style slices and the Risk-Aware Adaptive Evaluation bandit as reproduced baselines | (a) done; (b) done as an option (§5.2); (c) open |
-| 4. Real LLM | ContentOps on real models (local vLLM): all variants × 3 reps under two models | done: Gemma on the current app (`runs/gemma5`); Qwen's recording of it follows (`docs/EXPERIMENT.md`) |
+| 4. Real LLM | ContentOps on real models (local vLLM): all variants × 3 reps under two models | done: Gemma on the current app (`runs/gemma5`); Qwen's recording of it (`runs/qwen5`) is spoiled by batching nondeterminism and is to be redone with repeatable decoding (§5.4) |
 | 5. External SUT | tau2-bench airline adapter; 12 mutations (6 policy, 4 tool-code, 2 benign); same evaluation | after the AEM steps and repeatable decoding |
 | 6. Scale/robustness | more mutations (mutation operators generated systematically: step deletion/swap/condition negation in procedures, argument swaps in adapters, config boundary values), equivalent-mutant analysis, sensitivity to K and to budget definitions (time vs. tokens), ablations of each model ingredient | with the paper |
 | 7. Paper | see §8 | drafting can start from this document and the report |

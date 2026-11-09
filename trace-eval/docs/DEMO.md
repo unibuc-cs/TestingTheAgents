@@ -125,7 +125,7 @@ same tests run with the same outcomes (the seconds read 0).
 ## 5. The evidence over all changes (4 minutes)
 
 `docs/results/gemma5/report.md`, the replay of every strategy on every change, from the recording of the current
-app (and `docs/results/qwen5/report.md` for Qwen):
+app:
 
 - Section 1, the ground truth: each change with the number of tests that reveal it, and the sanity line. Of the 34
   regressions, 29 are revealed; the other five are ones Gemma ignores either way (it does not act on a review flag
@@ -170,9 +170,15 @@ scenario. `traceeval sdd` replays it in about a minute. [SDD_DEMO.md](SDD_DEMO.m
   PUB-10); in WF5-02 it goes on to publishing after the rollback's link check failed, and publishing's own link
   check refuses the page (defence in depth); in WF6-02 it stops the whole plan after a refused export, although
   the byline edits do not depend on it. A test the model already fails cannot reveal a change, which is why the
-  method discounts it. The Qwen recording shows whether a larger model gets them right.
+  method discounts it. Qwen gets WF1-01 and WF6-02 right; in WF5-02 and WF1-02 it re-plans (it has the broken link
+  fixed, or rewrites the page that failed the brand check, and goes on), as Adobe's Agent Orchestrator does.
+- *Why only Gemma's numbers?* Qwen's recording of the same app is not a clean ground truth: six of its tests answer
+  differently when run 64 at a time than one at a time, so even a change that alters nothing "breaks" them. A
+  larger model is not automatically a cleaner ground truth; the next Qwen recording uses exactly repeatable
+  decoding. The lesson for Adobe: measure the suite's flakiness under the real serving setup first (RESEARCH_PLAN
+  §5.4).
 - *How would this run at Adobe?* Nightly full-suite runs are the recordings the method learns from; per change,
   `traceeval check` is the selection, the order and the stop; the traces are OpenTelemetry; the catalog of
   properties maps onto DeepEval's metrics.
-- *What is next?* Re-planning after a failed step, exactly repeatable decoding for Qwen, and tau2-bench as a
-  second application ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4).
+- *What is next?* Re-planning after a failed step, Qwen recorded again with exactly repeatable decoding, and
+  tau2-bench as a second application ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4).

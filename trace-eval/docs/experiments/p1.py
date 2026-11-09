@@ -31,7 +31,8 @@ class ElevatorEvent:
 def __main__():
     logger.log(logging.INFO, "Starting elevator simulation")
 
-    # sys.stdin = open("test.in", encoding="utf-8", mode='r')  # redirect stdin to a file for easier testing
+    if IS_DEBUG_MODE:
+        sys.stdin = open("test.in", encoding="utf-8", mode='r')  # redirect stdin to a file for easier testing
     #sys.stdout= open("test.out", encoding="utf-8, mode='w'")  # redirect stdout to a file for easier reading of the output
 
     data = list(map(int, sys.stdin.read().split()))

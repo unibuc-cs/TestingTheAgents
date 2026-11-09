@@ -246,9 +246,11 @@ reserved while it runs, even when idle.
 
 ### More GPUs: the SLURM cluster, and several servers in one run
 
-Two more H100s are available through the university's SLURM cluster (login
+More H100s are available through the university's SLURM cluster (login
 `ciprian.paduraru@hpc-ctrl01.acc-ub.local`). Its GPU node, `hpc-nodegpu01`, is the same machine as fmi0: it has 8
-H100s, and SLURM hands out 4 of them. The same script drives it with `TRACEEVAL_SITE=hpc`:
+H100s, and SLURM hands out 4 of them. Each job of ours asks for 2, and two jobs may run at once, one per model
+(each has its own job name and port), when the other users leave the GPUs free. The same script drives it with
+`TRACEEVAL_SITE=hpc`:
 
 ```bash
 TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen     # a SLURM job for 2 GPUs (8 hours at most), tunnel on port 18111
@@ -421,9 +423,8 @@ A model does not follow a skill the way a script would. The prompts and the chec
   Gemma kept the token and dropped the approver.
 
 What is left are the models' own mistakes, which clearer wording does not fix. On the original app Gemma passes
-170 of the 176 recorded tests; WF2-03, added after the recording, is a seventh. Qwen's mistakes below come from its
-recording of the app before the workflows; its recording of the current app follows
-([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4):
+170 of the 176 recorded tests (WF2-03, added after the recording, is a seventh) and Qwen 171. Qwen gets five of
+Gemma's mistakes right (PUB-10, AUT-04, SEO-02, WF1-01, WF6-02) and makes its own:
 
 | case | model | what goes wrong |
 |---|---|---|
@@ -434,21 +435,25 @@ recording of the app before the workflows; its recording of the current app foll
 | WF6-02 | Gemma | in the privacy workflow, after the export is refused for lack of consent, it stops the whole plan, although the byline edits do not depend on the export; it claims nothing false and no safety property is broken |
 | AUT-04 | Gemma | after an edit it requests a review nobody asked for |
 | SEO-02 | Gemma | it applies an 83-character title over the 60-character limit |
-| SEO-05 | Qwen | it counts the 60-character title as 61 and refuses it |
-| SEO-07 | Qwen | its own judge fails its answer: "Updated SEO metadata on p1; SEO score is now 100" does not say that the keywords were applied, which the rubric asks for. Gemma, judging the same kind of answer, lets it pass. The rubric stays strict on purpose |
+| WF1-02, WF5-02 | Qwen | it re-plans after a failed step, as Adobe's Agent Orchestrator does: it rewrites the campaign page that failed the brand check, or has the broken link of the restored page fixed, and goes on to translate, schedule or publish, where the routing skill and the tests say stop |
+| PUB-07 | Qwen | after the takedown is refused for lack of an approval token, it asks the approver itself and then takes the page down; the test expects the refusal to stand |
+| WF4-01 | Qwen | it asks for the locale "es" instead of es-ES, the job is refused, and it does not republish |
+| DS-ROUTING/r40 | Qwen | it answers a vague request itself instead of handing it to the default agent |
 
-The pattern: Gemma acts on guards that come from a tool's answer (a denied permission, a broken link), but not
-on guards it has to work out for itself (a review flag, a length), and in a plan it does not judge well which
-steps depend on a failed one. Gemma's cases are listed in `KNOWN_MODEL_MISTAKES` (`tests/test_sut.py`): the test
-suite expects them to fail and every other case to pass. A test the model fails on the original app cannot reveal
-a change, which is also why some changes have no revealing test (section 7).
+The pattern: Gemma acts on guards that come from a tool's answer (a denied permission, a broken link), but not on
+guards it has to work out for itself (a review flag, a length), and in a plan it does not judge well which steps
+depend on a failed one. Qwen follows the guards, but in a plan it tends to repair a failed step and go on. Gemma's
+cases are listed in `KNOWN_MODEL_MISTAKES` (`tests/test_sut.py`): the test suite expects them to fail and every
+other case to pass. A test the model fails on the original app cannot reveal a change, which is also why some
+changes have no revealing test (section 7).
 
 ## 7. The recordings
 
 The results in `docs/results/gemma5/` come from `runs/gemma5`: Gemma on the current app, 176 tests, 43 changes,
 three repetitions, with the model judge. It took about an hour on fmi0's GPU0: 18 minutes for the baseline, one
-test at a time, and about a minute per change with 64 tests at a time. Qwen's recording of the same app runs on
-fmi0's GPU1 and the two SLURM GPUs (section 4) and is added when it ends.
+test at a time, and about a minute per change with 64 tests at a time. Qwen's recording of the same app
+(`docs/results/qwen5/`) took about four hours on fmi0's GPU1 and the two SLURM GPUs, and is not a clean ground
+truth (below).
 
 | | Gemma 4 E4B |
 |---|---|
@@ -466,11 +471,18 @@ The changes no test reveals belong to the model, not to the testbed, and they st
 | `skill_linkval_ignore_assets` | it stops at a broken asset reference even when the skill says it does not block |
 
 **Repetitions.** Gemma's three runs of each test agreed on the original app, and disagreed on only five (change,
-test) pairs over all 43 changes; the majority vote absorbs them. Qwen is more sensitive to how requests are
-batched together, and splitting a run over several servers makes one-off differences more frequent (section 3).
-The majority vote keeps the ground truth clean, but the adaptive method stops at the first failure of a test that
-passed on the original app, so a one-off failure can give a false "regression" verdict. vLLM 0.31 has a
-batch-invariant mode that makes greedy decoding exactly repeatable; a later Qwen recording should use it.
+test) pairs over all 43 changes; the majority vote absorbs them.
+
+**Qwen: a ground truth spoiled by how the model is served.** Qwen's runs disagreed on 260 pairs. Worse, it records every benign change as "revealed" by two to five tests, because six tests (the two it judges
+itself, the 60-character boundary and three long workflows) answer differently when run 64 at a time over three
+servers than one at a time.
+SEO-07, for one, passes all three baseline runs and fails on most changed copies, the no-op one included
+(`benign_code_comment_docstring`, whose change set is empty). The cause is the one section 3 describes: greedy
+decoding on vLLM is repeatable only up to batching, and the baseline (one test at a time, for code coverage) and
+the changed copies (64 at a time, over three servers) are batched differently. A larger model is not
+automatically a cleaner ground truth. Every regression is revealed (27 of the 34 by a test outside those six),
+but so is every benign change, so Qwen's strategy numbers are not reported as results. The next Qwen recording
+should use vLLM's batch-invariant mode, which makes greedy decoding exactly repeatable.
 
 **Strategies at 20% of the full-suite tokens**, on the 29 regressions Gemma reveals (the full tables are in
 [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.1 and in the report):

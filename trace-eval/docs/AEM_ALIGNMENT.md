@@ -36,7 +36,7 @@ repository, in its parent folder: `Agent_Test_Prioritization_Requirements.md`, `
 | shared components, changes to skills, harness and config | yes (ContentOps, 43 controlled changes, ten of them aimed at the workflows) | — |
 | statistical evals over datasets | yes (50 routing items, 24 intent items); pass-rate thresholds per property (step 1) | — |
 | tests that run several agents from one prompt | **done (steps 2, M1, S3)**: six workflows of two to five specialists (§3.3), each with a variant where a step must stop | — |
-| plans, data passed between agents, approvals, re-planning | **done (step 2)**: the orchestrator plans (`make_plan`), gives each step its own instruction and the ids of the earlier steps, and asks a person before publishing, scheduling or taking pages down (`request_approval`) | re-planning after a failed step |
+| plans, data passed between agents, approvals, re-planning | **done (step 2)**: the orchestrator plans (`make_plan`), gives each step its own instruction and the ids of the earlier steps, and asks a person before publishing, scheduling or taking pages down (`request_approval`) | re-planning after a failed step: our routing skill says stop; Qwen re-plans on its own (WF1-02, WF5-02; [EXPERIMENT.md](EXPERIMENT.md) §6) |
 | workflows as a coverage dimension | **done (M2)**: `catalog/workflows.yaml` lists the six; the report shows the workflows no test covers, declared (named by a test) and observed (a recorded run delegates to exactly its agents, in order), and the change coverage gives the share of the affected workflows the executed tests ran | — |
 | a catalog of properties with categories and thresholds | **done (step 1)**: `traceeval/catalog/properties.yaml`, pass rates against thresholds and property coverage in the report; a model can draft it from the requirements, for people to edit (`traceeval properties draft`, step 1b) | the Qwen run (step 4) |
 | coverage over agents, skills, tools, config, properties, workflows, paths, risk (declared, observed, required) | **done (step 1c)**: suite coverage per dimension and change coverage per strategy in the report and in `traceeval check`; the method tests every mandatory property a change may affect (§3.5) | features as a dimension; tool error paths and non-default settings as their own components |
@@ -259,8 +259,8 @@ below.
 |---|---|---|---|
 | M4 | The ground truth on the current app with Gemma (`runs/gemma5`: 176 tests, 43 changes, three repetitions), its report in [results/gemma5](results/gemma5/report.md), the README's results | **done 9 Nov**; the results prose of RESEARCH_PLAN §5, EXPERIMENT §7 and USER_GUIDE §5–6 is rewritten with S1's numbers | — |
 | M6 | The live check rehearsed with `--history runs/gemma5` and its answers recorded into the cassette, so that `--backend replay` is the fallback on the day | **done 9 Nov** ([DEMO.md](DEMO.md) §4) | — |
-| M5 | The walkthrough rehearsed end to end | **done on replay 9 Nov**; once more with the Qwen report | — |
-| S1 | The same recording with Qwen (`runs/qwen5`), its report in `results/qwen5`, `results/qwen4` removed; the Qwen run of `traceeval properties draft` is done (§3.4) | recording since 9 November, evening | Qwen |
+| M5 | The walkthrough rehearsed end to end | **done on replay 9 Nov** | — |
+| S1 | The same recording with Qwen (`runs/qwen5`, report in [results/qwen5](results/qwen5/report.md)), and the Qwen run of `traceeval properties draft` (§3.4) | **done 9 Nov**, with a finding: the recording is not a clean ground truth, because Qwen's answers change with how requests are batched (RESEARCH_PLAN §5.4); its numbers are not used | — |
 
 WF2-03 (W2 with the broken page ranked first) is in the catalog as a known model mistake, after the recordings, so
 they hold 176 of the 177 tests. Gemma tells the user that the other two pages were republished when they were not:
@@ -269,14 +269,15 @@ since only the checks on the final state catch it. It replays in the demo ([DEMO
 
 Not for the demo (open, after it): re-planning after a failed step; features as a coverage dimension; a tool's
 error paths and a setting's non-default values as coverage components; assigning `INFRA_INVALID` to runs the
-environment broke; exactly repeatable decoding for Qwen (vLLM's batch-invariant mode); tau2-bench as a second
+environment broke; Qwen recorded again with exactly repeatable decoding (vLLM's batch-invariant mode); tau2-bench as a second
 system under test.
 
 ### 4.3 Day by day
 
-Four GPUs are available, and the vLLM environments on both accounts are set up: GPU0 and GPU1 on fmi0
-(`scripts/gpu_remote.sh up gemma|qwen`) and two through SLURM on the same machine (`TRACEEVAL_SITE=hpc
-scripts/gpu_remote.sh up qwen`, ports 18110 and 18111; [EXPERIMENT.md](EXPERIMENT.md) §4). The two recordings run
+Up to six GPUs are available, and the vLLM environments on both accounts are set up: GPU0 and GPU1 on fmi0
+(`scripts/gpu_remote.sh up gemma|qwen`) and, through SLURM on the same machine, two jobs of two GPUs each, one per
+model, when the cluster's other users leave them free (`TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up gemma|qwen`,
+ports 18110 and 18111; [EXPERIMENT.md](EXPERIMENT.md) §4). The two recordings run
 side by side: Gemma on fmi0's GPU0, Qwen on fmi0's GPU1 and on the two SLURM GPUs. The Qwen servers are listed
 together in `TRACEEVAL_LLM_BASE_URL`, the cluster's twice since it serves a copy on each of its two GPUs, and the
 run uses `--workers 64`. Only the `mutants` step gains from more servers: the `baseline` step runs one case at a
@@ -295,8 +296,8 @@ time, because it records code coverage.
   WF1-01 (it schedules the launch page after requesting a review, as in PUB-10), WF5-02 (it goes on to publishing
   after the rollback's link check failed; publishing's own check refuses the page) and WF6-02 (it stops the whole
   plan after a refused export, although the byline edits do not depend on it). In the demo, say so: they show that
-  the ground truth belongs to the model, and WF5-02 shows defence in depth at work. Qwen's recording shows whether
-  a larger model gets them right.
+  the ground truth belongs to the model, and WF5-02 shows defence in depth at work. Qwen gets WF1-01 and WF6-02
+  right, and fails WF5-02 differently: it re-plans and has the broken link fixed.
 - **Gemma does not go on with the other pages when one fails inside a step.** With the broken page ranked first,
   it sends all three pages to publishing in one step, publishing stops at the broken link, and the orchestrator
   neither republishes the other two nor says so (it claims it did). WF2-02 has the broken page last, so it passes;

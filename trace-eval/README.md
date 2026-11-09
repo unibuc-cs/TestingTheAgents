@@ -62,8 +62,7 @@ what each test costs and which code it runs.
 
 ## Main results
 
-Gemma 4 E4B played the agents of the current app (176 tests, 43 changes, three repetitions per test; the Qwen
-recording of the same app is under way). Of the 34 regressions, 29 are revealed by at least one test; the other
+Gemma 4 E4B played the agents of the current app (176 tests, 43 changes, three repetitions per test). Of the 34 regressions, 29 are revealed by at least one test; the other
 five are ones Gemma ignores either way, with or without the change. No benign change fails a test. The table gives
 the share of those 29 that a strategy detects with a nominal budget of 20% of the full-suite tokens, and what it
 actually spends:
@@ -78,7 +77,8 @@ actually spends:
 The adaptive method is the only one that returns budget: it stops as soon as it is confident, and it never calls
 a change that breaks nothing a regression. It misses mostly narrow regressions, revealed by one to five tests,
 where it stops "clean" too early. Of the 21 changes that break a safety property it catches 86%. See the
-[Gemma report](docs/results/gemma5/report.md).
+[Gemma report](docs/results/gemma5/report.md). Qwen3.8-27B's recording of the same app is not a clean ground
+truth: it records every benign change as "revealed" by two to five tests, because six tests (the two it judges itself, the 60-character boundary and three long workflows) answer differently when run 64 at a time over three servers than one at a time ([EXPERIMENT.md](docs/EXPERIMENT.md) §7).
 
 ## Features asked for by Adobe's AEM team
 
