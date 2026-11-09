@@ -182,14 +182,16 @@ is why a ground truth should come from several repetitions (`--reps 3`, majority
 ## 4. The GPU server, step by step
 
 Everything goes through one script, [`scripts/gpu_remote.sh`](../scripts/gpu_remote.sh). Run it from the
-repository root in Git Bash or any other bash shell. It knows two models, called presets:
+repository root in Git Bash or any other bash shell. It knows three models, called presets:
 
 | preset | model | GPU | port | run with |
 |---|---|---|---|---|
 | `gemma` (the default) | `google/gemma-4-E4B-it` | 0 | 18100 | `--backend vllm` |
 | `qwen` | `Qwen/Qwen3.8-27B-FP8` (8-bit weights, about 30 GB) | 1 | 18101 | `--backend llm` |
+| `gptoss` | `openai/gpt-oss-120b` (4-bit weights, about 65 GB), one copy split over both GPUs | 0 and 1 | 18102 | `--backend llm` with `TRACEEVAL_LLM_BASE_URL=http://127.0.0.1:18102/v1` and `TRACEEVAL_LLM_MODEL=openai/gpt-oss-120b` |
 
-Because they use different GPUs and ports, both can run at the same time, each with its own experiment.
+Gemma and Qwen use different GPUs and ports, so both can run at the same time, each with its own experiment.
+gpt-oss needs both GPUs; Gemma and Qwen then run on the SLURM cluster.
 
 ### What lives where
 
