@@ -5,7 +5,9 @@ Result classification follows the TRACE-Eval handoff, extended with the tool bou
     TOOL_ERROR     a tool call crashed, or failed with an error the case does not allow and was not recovered
     AGENT_FAILURE  tool calls behaved as allowed, but an expectation failed
     HARNESS_ERROR  the run itself raised (fixture, config, agent loop)
-(INFRA_INVALID is reserved for runs where the environment, not the agent, was broken.)
+    INFRA_INVALID  the environment broke the run, not the agent or the app: the model server or the network did not
+                   answer, or a replay met a request it has no recorded answer for. Such a run says nothing about the
+                   agent, so it is left out of pass rates and replays (``experiment/history.py``).
 
 Tool errors: a case lists the errors it expects in ``expect.tool_errors`` ({tool: code or [codes]}, or
 ``"*"`` for any). Any other error fails the case (check ``tool_error:<tool>``) unless a later call of the same tool
@@ -83,10 +85,12 @@ def _state_check(state: dict, assertion) -> tuple[bool, str]:
     return False, f"unknown op {op}"
 
 
-def score_case(case, trace: dict, state: dict, run: dict, error: str | None = None) -> Verdict:
-    """Evaluate every expectation of ``case``. ``trace`` is the recorder's ``to_dict()``."""
+def score_case(case, trace: dict, state: dict, run: dict, error: str | None = None, infra: bool = False) -> Verdict:
+    """Evaluate every expectation of ``case``. ``trace`` is the recorder's ``to_dict()``. ``error`` is the traceback of
+    a run that raised; ``infra`` says that the environment, not the run, caused it."""
     if error is not None:
-        return Verdict(False, "HARNESS_ERROR", [{"name": "harness", "ok": False, "detail": error}])
+        kind, label = ("infra", "INFRA_INVALID") if infra else ("harness", "HARNESS_ERROR")
+        return Verdict(False, label, [{"name": kind, "ok": False, "detail": error}])
     exp = case.expect
     checks: list[dict] = []
 

@@ -120,7 +120,8 @@ P(something broke) = 0.04, and before it ends it has run a test of every mandato
 ask for: changed components exercised, affected properties checked, affected workflows run.
 
 If the GPU server is down, run both with `--backend replay`: the answers of the rehearsal are recorded, so the
-same tests run with the same outcomes (the seconds read 0).
+same tests run with the same outcomes (the seconds read 0). If it stops answering during a check, the check says
+so and gives no verdict (the run is `INFRA_INVALID`, the environment's fault, not the change's).
 
 ## 5. The evidence over all changes (4 minutes)
 
@@ -174,11 +175,11 @@ scenario. `traceeval sdd` replays it in about a minute. [SDD_DEMO.md](SDD_DEMO.m
   fixed, or rewrites the page that failed the brand check, and goes on), as Adobe's Agent Orchestrator does.
 - *Why only Gemma's numbers?* Qwen's recording of the same app is not a clean ground truth: six of its tests answer
   differently when run 64 at a time than one at a time, so even a change that alters nothing "breaks" them. A
-  larger model is not automatically a cleaner ground truth; the next Qwen recording uses exactly repeatable
-  decoding. The lesson for Adobe: measure the suite's flakiness under the real serving setup first (RESEARCH_PLAN
+  larger model is not automatically a cleaner ground truth: some of Qwen's answers vary from run to run, and
+  vLLM's switch for repeatable decoding does not support Qwen3.8. The lesson for Adobe: measure the suite's flakiness under the real serving setup first (RESEARCH_PLAN
   §5.4).
 - *How would this run at Adobe?* Nightly full-suite runs are the recordings the method learns from; per change,
   `traceeval check` is the selection, the order and the stop; the traces are OpenTelemetry; the catalog of
   properties maps onto DeepEval's metrics.
-- *What is next?* Re-planning after a failed step, Qwen recorded again with exactly repeatable decoding, and
+- *What is next?* Re-planning after a failed step, a clean second model, and
   tau2-bench as a second application ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4).

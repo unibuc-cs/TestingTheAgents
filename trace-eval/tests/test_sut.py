@@ -14,6 +14,7 @@ import pytest
 
 from traceeval.catalog import load_catalog, load_properties, load_workflows
 from traceeval.experiment.executor import run_case
+from traceeval.experiment.history import TestStats as RunStats  # not a test class for pytest
 from traceeval.experiment.sutloader import copy_sut, load_sut
 from traceeval.scoring import score_case
 from traceeval.sut import SUT_ROOT
@@ -267,7 +268,8 @@ def test_property_catalog():
 
 def test_full_catalog_passes_on_baseline(sut, cases):
     records = {c.id: run_case(sut, c) for c in cases.values()}
-    assert not [t for t, r in records.items() if r["classification"] == "HARNESS_ERROR"]  # e.g. a cassette miss
+    broken = [t for t, r in records.items() if r["classification"] in ("HARNESS_ERROR", "INFRA_INVALID")]
+    assert not broken, broken  # INFRA_INVALID here is a cassette miss: record the missing answers
     assert sorted(t for t, r in records.items() if not r["passed"]) == KNOWN_MODEL_MISTAKES
 
 
@@ -324,6 +326,23 @@ def test_harness_error_is_classified(sut, cases):
     assert rec["classification"] == "HARNESS_ERROR" and rec["passed"] is False
 
 
+def test_a_run_the_environment_broke_is_infra_invalid_and_left_out(sut, cases):
+    """A model server that does not answer is the environment's fault: the run is INFRA_INVALID, and the pass rate,
+    the ground truth and the replay leave it out."""
+
+    def refuse(**request):
+        raise ConnectionError("connection refused")
+
+    down = SimpleNamespace(model_id="down", chat=SimpleNamespace(completions=SimpleNamespace(create=refuse)))
+    rec = run_case(sut, cases["PUB-01"], backend="llm", llm_client=down)
+    assert rec["classification"] == "INFRA_INVALID" and rec["passed"] is False
+    assert rec["failed_checks"] == ["infra"]
+    stats = RunStats("PUB-01")
+    for r in (rec, {**rec, "passed": True, "classification": "PASS"}):
+        stats.add(r)
+    assert stats.pass_rate == 1.0 and stats.valid_runs == stats.runs[1:]
+
+
 def test_tool_crash_is_classified(tmp_path, cases):
     sut_dir = copy_sut(tmp_path / "sut")  # an adapter that crashes (TypeError) when no keywords are given
     tool = sut_dir / "tools" / "content_tools.py"
@@ -375,4 +394,5 @@ def test_replayed_runs_do_not_depend_on_the_hash_salt():
         env = {**os.environ, "PYTHONHASHSEED": salt}
         proc = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, check=True)
         outs.add(proc.stdout)
-    assert len(outs) == 1 and "HARNESS_ERROR" not in outs.pop(), outs
+    out = outs.pop()
+    assert not outs and "HARNESS_ERROR" not in out and "INFRA_INVALID" not in out, out

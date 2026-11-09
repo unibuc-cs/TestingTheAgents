@@ -27,7 +27,7 @@ Ciprian Păduraru · University of Bucharest · working document, 6 October 2026
   change, and on this app the rule also catches a regression the method alone misses. Change sets hold code only,
   so the results are the same whether or not the code is commented. Qwen's recording of the same app is not a
   clean ground truth: its answers change with how requests are batched (§5.4).
-- **Next.** The demo for the AEM team (`docs/AEM_ALIGNMENT.md` §4); make Qwen's answers exactly repeatable (vLLM's batch-invariant mode), so that one run is proof again; then move
+- **Next.** The demo for the AEM team (`docs/AEM_ALIGNMENT.md` §4); a clean second model, since Qwen's answers vary from run to run (§5.4); then move
   to tau2-bench as the external system under test. Real models only, decoded greedily. Paper: ASE/ISSTA/ICST framing.
 
 ---
@@ -91,7 +91,7 @@ c(t) = agent tokens (prompt + completion over all LLM calls in the delegation ch
 
 ### 2.4 Outcome model
 
-A test run is PASS / TOOL_ERROR (a tool crashed, or failed in a way the case does not allow) / AGENT_FAILURE / HARNESS_ERROR (INFRA_INVALID is reserved for environment faults). Only pass/fail enters the ground truth. With K repetitions per variant, the ground truth "t reveals Δ" is a *majority flip*: baseline pass rate ≥ 0.5 and variant pass rate < 0.5. A test that the model fails on the original app (f(t) = 1 − baseline pass rate) cannot reveal anything; f(t) is a direct input to the selectors.
+A test run is PASS / TOOL_ERROR (a tool crashed, or failed in a way the case does not allow) / AGENT_FAILURE / HARNESS_ERROR (the run itself raised) / INFRA_INVALID (the environment broke the run: the model server or the network did not answer, or a replay had no recorded answer). An INFRA_INVALID run is left out, as if it had not been made; of the others, only pass/fail enters the ground truth. With K repetitions per variant, the ground truth "t reveals Δ" is a *majority flip*: baseline pass rate ≥ 0.5 and variant pass rate < 0.5. A test that the model fails on the original app (f(t) = 1 − baseline pass rate) cannot reveal anything; f(t) is a direct input to the selectors.
 
 ---
 
@@ -254,7 +254,7 @@ text), and no variant gives a "regression" verdict on a change no test reveals.
 **Reading.** TF-IDF brings forward the one test that reveals a narrow change, and helps by up to four points for
 less spending. Without any text the method loses ten points, so text matters, but coverage and history carry most
 of the result. The testbed is textual: tests, skills and config keys share vocabulary, which favours any text
-measure (a threat noted in §8). The default stays word overlap until a repeatable second model's recording shows
+measure (a threat noted in §8). The default stays word overlap until a clean second model's recording shows
 whether the gain holds there too (§5.4); whether TF-IDF helps as much where tests and changes are worded differently is a
 question for tau2-bench.
 
@@ -284,18 +284,23 @@ The rule never caused a false verdict. Below a 10% budget it often cannot afford
 
 ### 5.4 Qwen on the current app: a finding, not a ground truth
 
-Qwen3.8-27B (`runs/qwen5`, the same protocol on fmi0's GPU1 and two SLURM GPUs) passes 171 of the 176 tests on
-the original app. It gets five of Gemma's six mistakes right and makes its own; in particular it re-plans after
-a failed step (it repairs the page that failed the brand check, or has the broken link fixed, and goes on), as
+Qwen3.8-27B (`runs/qwen5`, the same protocol on fmi0's GPU1 and two SLURM GPUs) passes 171 of the 176 tests on the
+original app. It gets five of Gemma's six mistakes right and makes its own; in particular it re-plans after a
+failed step (it repairs the page that failed the brand check, or has the broken link fixed, and goes on), as
 Adobe's Agent Orchestrator does, where the routing skill says stop (`docs/EXPERIMENT.md` §6). Its recording is not
 a clean ground truth, though: every regression is revealed, but so is every benign change, by two to five tests,
 including the no-op change whose change set is empty. Six tests (the two Qwen judges itself, the 60-character
 boundary and three long workflows) answer differently when run 64 at a time over three servers, as the changed
 copies are, than one at a time, as the baseline is, and Qwen's three runs disagreed on 260 (change, test) pairs
 against Gemma's five. The strategies' numbers on it are therefore not results. Its report is kept in
-`docs/results/qwen5/` as a record of the effect; the remedy is exactly repeatable decoding (vLLM's batch-invariant
-mode) for the next recording. The lesson for a pipeline: measure the suite's own flakiness under the serving setup
-the selection will run on (the no-op change does exactly that) before trusting a ground truth or a stopping rule.
+`docs/results/qwen5/` as a record of the effect. vLLM 0.31's batch-invariant mode, which makes greedy decoding
+exactly repeatable, does not support Qwen3.8: the server refuses it for the model's linear-attention layers ("not
+supported for GDN_ATTN"). Recording the baseline the way the changes are recorded is not enough either: with the
+no-op change, recorded exactly like the others, as the reference, seven of the eight other benign changes still
+"reveal" one to five tests, so some of Qwen's answers vary from run to run even under identical conditions. A clean
+second model needs more repetitions with the flaky tests quarantined, or a model whose serving can be made
+repeatable. The lesson for a pipeline: measure the suite's own flakiness under the serving setup the selection will
+run on (the no-op change does exactly that) before trusting a ground truth or a stopping rule.
 
 ---
 
@@ -323,14 +328,14 @@ the selection will run on (the no-op change does exactly that) before trusting a
 | 1. Testbed | SUT, catalog, tracing, mutations, change sets, record/replay, metrics, report, CLI, tests | done (v0.1) |
 | 2. Methods | baselines + cost-aware + predictive + adaptive Bayesian selector with stopping | done (v0.1), with the mandatory-coverage rule (§5.3); tune ε, priors, discount |
 | 3. Method improvements | (a) test-level learned sensitivities (per test × component-kind reveal history) instead of kind-level; (b) IR relevance inside the Bayesian likelihood; (c) CASPER-style slices and the Risk-Aware Adaptive Evaluation bandit as reproduced baselines | (a) done; (b) done as an option (§5.2); (c) open |
-| 4. Real LLM | ContentOps on real models (local vLLM): all variants × 3 reps under two models | done: Gemma on the current app (`runs/gemma5`); Qwen's recording of it (`runs/qwen5`) is spoiled by batching nondeterminism and is to be redone with repeatable decoding (§5.4) |
-| 5. External SUT | tau2-bench airline adapter; 12 mutations (6 policy, 4 tool-code, 2 benign); same evaluation | after the AEM steps and repeatable decoding |
+| 4. Real LLM | ContentOps on real models (local vLLM): all variants × 3 reps under two models | done: Gemma on the current app (`runs/gemma5`); Qwen's recording of it (`runs/qwen5`) is spoiled by run-to-run variation and is not used (§5.4) |
+| 5. External SUT | tau2-bench airline adapter; 12 mutations (6 policy, 4 tool-code, 2 benign); same evaluation | after the AEM steps and a clean second model (§5.4) |
 | 6. Scale/robustness | more mutations (mutation operators generated systematically: step deletion/swap/condition negation in procedures, argument swaps in adapters, config boundary values), equivalent-mutant analysis, sensitivity to K and to budget definitions (time vs. tokens), ablations of each model ingredient | with the paper |
 | 7. Paper | see §8 | drafting can start from this document and the report |
 
 A model's own mistakes and blind spots shape the ground truth: which changes a test reveals depends on the model (`docs/EXPERIMENT.md` §6 and §7). Two parts of the method come from that. Each test's own record (§3.1) exists because kind-level sensitivities let the method spend on cheap tests that merely call a changed function; stopping at the first failure of a test that passed on the original app exists because a failure the model also produces on the original app says nothing about the change.
 
-The AEM team's wish list (`docs/AEM_ALIGNMENT.md`) is being implemented step by step; its §4 is the dated plan for the demo of 12 November 2026. Done: the catalog of properties, drafted by a model from the requirements; coverage reports with the mandatory-coverage rule (§5.3); the orchestrator's planning mode (plans, hand-offs with ids, human approvals), three agents modelled on AEM's (brand, insights, optimizer) and asset search, six multi-agent workflows (campaign launch across five specialists, site optimization across four, legal takedown, localized price update, rollback of a broken release, privacy request), and trace assertions on agent and tool order. Next, in order: the remaining workflows with controlled changes aimed at them, both ground truths recorded on the current app; then exactly repeatable decoding for Qwen (vLLM's batch-invariant mode), so that a one-off difference cannot pass for a regression; a run with an OpenAI model once API tokens are available; tau2-bench.
+The AEM team's wish list (`docs/AEM_ALIGNMENT.md`) is being implemented step by step; its §4 is the dated plan for the demo of 12 November 2026. Done: the catalog of properties, drafted by a model from the requirements; coverage reports with the mandatory-coverage rule (§5.3); the orchestrator's planning mode (plans, hand-offs with ids, human approvals), three agents modelled on AEM's (brand, insights, optimizer) and asset search, six multi-agent workflows (campaign launch across five specialists, site optimization across four, legal takedown, localized price update, rollback of a broken release, privacy request), and trace assertions on agent and tool order. Next, in order: the remaining workflows with controlled changes aimed at them, both ground truths recorded on the current app; then a clean second model (§5.4: more repetitions with the flaky tests quarantined, or a model whose serving can be made repeatable), so that a one-off difference cannot pass for a regression; a run with an OpenAI model once API tokens are available; tau2-bench.
 
 ---
 

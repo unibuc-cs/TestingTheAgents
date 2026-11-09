@@ -96,6 +96,7 @@ up in [docs/AEM_ALIGNMENT.md](docs/AEM_ALIGNMENT.md) with the plan and status):
 | Trace assertions: final state, required and forbidden tools, attempts, audit, step limit, agent order, tool order | done |
 | Workflows: one prompt that runs 2–5 agents: the orchestrator plans, passes each step its instruction and the ids of earlier steps, asks a person before publishing, scheduling or taking pages down, and stops at a failed step | done: six workflows of two to five agents (campaign launch, site optimization, legal takedown, localized price update, rollback of a broken release, privacy request), each with a variant where a step must stop |
 | New agents modelled on AEM's: brand governance, data insights, site optimization, and asset search in the assets agent | done |
+| **Environment failures kept apart**: a run the model server or the network broke is `INFRA_INVALID`, left out of pass rates and replays, so it never counts against the agent; `traceeval check` stops instead of giving a verdict | done |
 | OpenTelemetry export of traces (`traceeval run --otel`), with the plan, the routing decisions and the approvals as span events | done |
 
 ## Spec-driven development on the same testbed

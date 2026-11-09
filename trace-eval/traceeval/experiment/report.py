@@ -285,7 +285,8 @@ def write_report(workdir: Path) -> Path:
         "",
         f"`{workdir.as_posix()}` · {summ['tests']} tests · {summ['variants']} changes · {summ['baseline_reps']} "
         f"baseline repetitions · full suite = {summ['total_tokens_full_suite']:,} tokens · "
-        f"tests failing on the original app: {len(summ['failing_tests'])}",
+        f"tests failing on the original app: {len(summ['failing_tests'])} · "
+        f"runs the environment broke, left out: {summ['infra_invalid_runs']}",
         "",
         "## 1. Ground truth — which changes are revealed by how many tests",
         "",

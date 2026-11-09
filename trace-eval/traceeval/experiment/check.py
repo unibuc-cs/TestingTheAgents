@@ -46,9 +46,17 @@ def check(change: str, history_dir: Path, budget: float, backend: str):
         seconds = [0.0]  # wall time of the tests run so far
 
         def oracle(test_id: str) -> tuple[bool, float]:
-            """Run the test now, on the changed app, with the real model."""
-            rec = run_case(sut, catalog[test_id], backend=backend, variant=cs.variant)
-            seconds[0] += rec["latency_ms"] / 1000
+            """Run the test now, on the changed app, with the real model. A run the environment broke (the model
+            server did not answer) is tried once more; if it breaks again, the check stops rather than read the
+            failure as the change's."""
+            for _ in range(2):
+                rec = run_case(sut, catalog[test_id], backend=backend, variant=cs.variant)
+                seconds[0] += rec["latency_ms"] / 1000
+                if rec["classification"] != "INFRA_INVALID":
+                    break
+            else:
+                cause = (rec["error"] or "").strip().splitlines()[-1]
+                raise SystemExit(f"stopped: the model did not answer while {test_id} ran ({cause}); no verdict")
             outcome = "pass" if rec["passed"] else f"FAIL {','.join(rec['failed_checks']) or rec['classification']}"
             print(f"  {test_id:22s} {outcome:40s} {rec['tokens']:>7,} tokens", flush=True)
             return rec["passed"], float(rec["tokens"])

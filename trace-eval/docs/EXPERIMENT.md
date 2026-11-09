@@ -292,6 +292,7 @@ All optional, as environment variables:
 | `TRACEEVAL_VLLM_URL` | `http://127.0.0.1:18100/v1` | where `--backend vllm` sends Gemma's calls; several servers separated by commas |
 | `TRACEEVAL_LLM_BASE_URL`, `TRACEEVAL_LLM_MODEL` | `http://127.0.0.1:18101/v1`, `Qwen/Qwen3.8-27B-FP8` | where `--backend llm` sends its calls (several servers separated by commas), and the model name the servers know |
 | `TRACEEVAL_JUDGE` | the agents' model | `gemma` or `qwen`: the model that judges the cases with a rubric |
+| `TRACEEVAL_VLLM_ENV` | none | extra settings for the vLLM server, e.g. `VLLM_BATCH_INVARIANT=1` (answers that do not depend on batching; not supported for Qwen3.8) |
 
 To add a third model, add a preset to the `case` in `preset()` at the top of the script (model, GPU, port, and
 any vLLM flags it needs) and its name to `PRESETS`.
@@ -388,7 +389,7 @@ randomness, so a run that starts from recorded answers sends the same prompts ag
 - **`TRACEEVAL_CACHE=<file>`** with `--backend hf` or `vllm` answers what the file has, asks Gemma for the rest
   and adds those answers to the file. Running the same experiment again then costs nothing.
 - **When the app changes a prompt** (a skill, an agent definition, a config value, a tool result), the recorded
-  answer no longer matches, and a replay fails with `CacheMiss`. Start Gemma, run `TRACEEVAL_BACKEND=vllm pytest
+  answer no longer matches, and a replay run is `INFRA_INVALID` with `CacheMiss`. Start Gemma, run `TRACEEVAL_BACKEND=vllm pytest
   -q` (it replays what it can and records the rest) and commit the cassette. To drop answers nothing asks for
   any more, delete the file first and record everything again.
 
@@ -473,16 +474,21 @@ The changes no test reveals belong to the model, not to the testbed, and they st
 **Repetitions.** Gemma's three runs of each test agreed on the original app, and disagreed on only five (change,
 test) pairs over all 43 changes; the majority vote absorbs them.
 
-**Qwen: a ground truth spoiled by how the model is served.** Qwen's runs disagreed on 260 pairs. Worse, it records every benign change as "revealed" by two to five tests, because six tests (the two it judges
-itself, the 60-character boundary and three long workflows) answer differently when run 64 at a time over three
-servers than one at a time.
-SEO-07, for one, passes all three baseline runs and fails on most changed copies, the no-op one included
-(`benign_code_comment_docstring`, whose change set is empty). The cause is the one section 3 describes: greedy
-decoding on vLLM is repeatable only up to batching, and the baseline (one test at a time, for code coverage) and
-the changed copies (64 at a time, over three servers) are batched differently. A larger model is not
-automatically a cleaner ground truth. Every regression is revealed (27 of the 34 by a test outside those six),
-but so is every benign change, so Qwen's strategy numbers are not reported as results. The next Qwen recording
-should use vLLM's batch-invariant mode, which makes greedy decoding exactly repeatable.
+**Qwen: a ground truth spoiled by how the model is served.** Qwen's runs disagreed on 260 pairs. Worse, it records
+every benign change as "revealed" by two to five tests, because six tests (the two it judges itself, the
+60-character boundary and three long workflows) answer differently when run 64 at a time over three servers than
+one at a time. SEO-07, for one, passes all three baseline runs and fails on most changed copies, the no-op one
+included (`benign_code_comment_docstring`, whose change set is empty). The cause is the one section 3 describes:
+greedy decoding on vLLM is repeatable only up to batching, and the baseline (one test at a time, for code coverage)
+and the changed copies (64 at a time, over three servers) are batched differently. A larger model is not
+automatically a cleaner ground truth. Every regression is revealed (27 of the 34 by a test outside those six), but
+so is every benign change, so Qwen's strategy numbers are not reported as results. vLLM 0.31's batch-invariant
+mode, which makes greedy decoding exactly repeatable, does not support Qwen3.8: the server refuses it for the
+model's linear-attention layers ("not supported for GDN_ATTN"). Recording the baseline the way the changes are
+recorded is not enough either: with the no-op change, recorded exactly like the others, as the reference, seven of
+the eight other benign changes still "reveal" one to five tests, so some of Qwen's answers vary from run to run
+even under identical conditions. A clean second model needs more repetitions with the flaky tests quarantined, or a
+model whose serving can be made repeatable.
 
 **Strategies at 20% of the full-suite tokens**, on the 29 regressions Gemma reveals (the full tables are in
 [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.1 and in the report):

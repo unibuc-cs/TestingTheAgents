@@ -35,9 +35,11 @@ def make_oracle(history: History, variant: str, rng: random.Random):
 
     def oracle(test_id: str):
         stats = history.variants.get(variant, {}).get(test_id)
-        # A test the variant never ran (a recording made with --only, say) behaves as on the original app: the
-        # same convention as History.variant_pass_rate, so the oracle and the ground truth agree.
-        runs = stats.runs if stats and stats.runs else history.baseline[test_id].runs
+        # A test the variant never ran (a recording made with --only, say), or ran only in runs the environment broke,
+        # behaves as on the original app: the same convention as History.variant_pass_rate, so the oracle and the
+        # ground truth agree. A run the environment broke is never drawn.
+        base = history.baseline[test_id]
+        runs = stats.valid_runs if stats and stats.valid_runs else (base.valid_runs or base.runs)
         rec = rng.choice(runs)
         return bool(rec["passed"]), float(rec["tokens"])
 

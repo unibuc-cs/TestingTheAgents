@@ -84,7 +84,7 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
   the YAML in them must stay parseable and its step keys are documented in `sut/harness/skills.py`.
 - The tests replay Gemma's recorded answers, keyed by the exact request (`traceeval/llm/cache.py`). Anything a
   prompt is built from (skills, agent definitions, config values, the rendering, tool schemas and results,
-  fixtures, case requests) changes the key: replays then miss (`HARNESS_ERROR` with `CacheMiss`). Record the
+  fixtures, case requests) changes the key: replays then miss (`INFRA_INVALID` with `CacheMiss`). Record the
   missing answers with `TRACEEVAL_BACKEND=vllm pytest -q` and commit `tests/cassettes/gemma.jsonl`; to drop
   answers nothing asks for any more, delete the file first and record everything again.
 - `runs/*/history/*.jsonl` include line-level coverage and are large; do not commit them. For the same reason a

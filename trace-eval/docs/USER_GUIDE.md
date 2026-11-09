@@ -242,8 +242,13 @@ the report's section 1 shows it with 0. Why some candidate changes were left out
 
 ## 8. Gotchas
 
+- A run the environment broke (the model server or the network did not answer, or a replay had no recorded
+  answer) is `INFRA_INVALID`, not a failure: pass rates, the ground truth and the replays leave it out, and
+  `traceeval check` tries it once more and otherwise stops without a verdict. The report's header counts such
+  runs.
 - The tests replay Gemma's recorded answers, keyed by the exact request. After a change to anything a prompt is
-  built from (a skill, an agent, a config value, a tool, a case), the replay misses (`CacheMiss`): record the
+  built from (a skill, an agent, a config value, a tool, a case), the replay misses (`INFRA_INVALID` with
+  `CacheMiss`): record the
   missing answers with `TRACEEVAL_BACKEND=vllm pytest -q` and commit the cassette (EXPERIMENT.md §5).
 - Test texts share vocabulary with skills and config keys, which is why `ir_tfidf` is strong here.
 - `history_ml` (needs scikit-learn) and `observed_diverse` are optional. `--strategies all` includes them.

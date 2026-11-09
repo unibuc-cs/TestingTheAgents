@@ -19,6 +19,8 @@
 #                        the server is shared: only GPUs 0 and 1 are ours, never list GPU 2. On hpc: how many
 #   TRACEEVAL_VLLM_PORT  port on both ends of the tunnel
 #   TRACEEVAL_HF_MODEL   the gemma preset's model (the vllm backend reads the same variable)
+#   TRACEEVAL_VLLM_ENV   extra settings for the server, e.g. "VLLM_BATCH_INVARIANT=1" (greedy answers that do not
+#                        depend on how requests are batched together)
 #
 # TRACEEVAL_SITE=hpc runs the same commands on the SLURM cluster (login ciprian.paduraru@hpc-ctrl01.acc-ub.local).
 # 'up' submits a job for 2 GPUs (at most 8 hours, SLURM's limit) whose server listens on the GPU node's localhost,
@@ -78,7 +80,7 @@ server_alive() {
 # the system nvcc, which on fmi0 is too old; vLLM's own sampler and its precompiled FP8 kernels need no compiling.
 # At most 128 requests at once: a run sends a few dozen, and vLLM's default (1024) needs more per-request state
 # than a hybrid model such as Qwen3.8 has room for.
-SERVE_ENV="VLLM_USE_FLASHINFER_SAMPLER=0 VLLM_USE_DEEP_GEMM=0"
+SERVE_ENV="VLLM_USE_FLASHINFER_SAMPLER=0 VLLM_USE_DEEP_GEMM=0 ${TRACEEVAL_VLLM_ENV:-}"
 serve_cmd() {
   echo ".venv/bin/vllm serve $MODEL --host 127.0.0.1 --port $PORT --data-parallel-size $COPIES \
     --max-model-len 32768 --max-num-seqs 128 --enable-prefix-caching --gpu-memory-utilization 0.85 --seed 0 $EXTRA"

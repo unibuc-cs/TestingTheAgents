@@ -44,7 +44,7 @@ repository, in its parent folder: `Agent_Test_Prioritization_Requirements.md`, `
 | trace assertions | yes: final state, required and forbidden tools, attempts, audit, step limit, termination, and since step 2 agent order and tool order (`agents_in_order`, `tools_in_order`) | — |
 | budgets and early stopping | yes (`adaptive_bayes`, `traceeval check`) | — |
 | OpenTelemetry | **done (S2)**: `traceeval run --otel` exports a run as OTLP JSON spans, with the plan, the routing decisions and the approvals as span events (§3.6) | pushing to a collector, if wanted |
-| environment failures kept apart | partly (fault injection, `HARNESS_ERROR`) | `INFRA_INVALID` is reserved but never assigned |
+| environment failures kept apart | **done**: a run the model server or the network broke, or a replay without a recorded answer, is `INFRA_INVALID`; it is left out of pass rates, the ground truth and the replays, and `traceeval check` tries it once more and otherwise stops without a verdict | — |
 | agents like AEM's | **done (step 2)**: authoring, publishing, assets (with asset search), SEO, translation, governance, maintenance, and brand governance, data insights, site optimization | — |
 
 The level of testing per agent was right from the start; what the testbed lacked is what makes Adobe's case
@@ -246,6 +246,7 @@ Updated Monday 9 November 2026. The demo shows the AEM team the prototype: the t
 | M3 | ten controlled changes aimed at the workflows, checked under Gemma (§3.7) |
 | M5 | the demo walkthrough, [DEMO.md](DEMO.md), drafted |
 | S2 | the OpenTelemetry export (§3.6) |
+| infra | environment failures kept apart: a run the model server or the network broke is `INFRA_INVALID` and does not count against the agent (§2) |
 | report | the time each strategy spends and how many of the critical regressions (the changes that break a safety property) it catches, next to the tokens: efficiency and effectiveness measures of the requirements, section 8.1 |
 
 The test suite passes on Gemma's recorded answers (177 cases; seven are Gemma's known mistakes,
@@ -267,10 +268,11 @@ they hold 176 of the 177 tests. Gemma tells the user that the other two pages we
 the clearest example of the requirements' point that the answer and the trace do not prove the state changed,
 since only the checks on the final state catch it. It replays in the demo ([DEMO.md](DEMO.md) §3).
 
-Not for the demo (open, after it): re-planning after a failed step; features as a coverage dimension; a tool's
-error paths and a setting's non-default values as coverage components; assigning `INFRA_INVALID` to runs the
-environment broke; Qwen recorded again with exactly repeatable decoding (vLLM's batch-invariant mode); tau2-bench as a second
-system under test.
+Not for the demo (open, after it): re-planning after a failed step (Qwen already re-plans on its own); features as
+a coverage dimension; a tool's error paths and a setting's non-default values as coverage components; a clean
+second model (Qwen's answers vary from run to run; vLLM's batch-invariant mode, tried on 9 November, does not
+support Qwen3.8, and a batched baseline is not enough: RESEARCH_PLAN §5.4); tau2-bench as a second system under
+test.
 
 ### 4.3 Day by day
 

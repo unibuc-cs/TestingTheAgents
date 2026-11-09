@@ -1,6 +1,6 @@
 # TRACE-Eval experiment report
 
-`runs/qwen5` · 176 tests · 43 changes · 3 baseline repetitions · full suite = 2,376,588 tokens · tests failing on the original app: 5
+`runs/qwen5` · 176 tests · 43 changes · 3 baseline repetitions · full suite = 2,376,588 tokens · tests failing on the original app: 5 · runs the environment broke, left out: 0
 
 ## 1. Ground truth — which changes are revealed by how many tests
 

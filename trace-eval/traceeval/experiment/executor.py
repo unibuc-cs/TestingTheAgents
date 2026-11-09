@@ -44,6 +44,24 @@ def _apply_patch(data: dict, patch: dict):
         node[parts[-1]] = copy.deepcopy(value)
 
 
+# Errors of the OpenAI client that mean the server did not serve the request (it was down, overloaded or out of
+# time), as opposed to a request the server rejected (a prompt too long for the model: the run's own fault).
+_SERVER_ERRORS = {"APIConnectionError", "APITimeoutError", "InternalServerError", "RateLimitError"}
+
+
+def is_infrastructure_error(exc: BaseException) -> bool:
+    """Whether the environment, not the agent or the app, broke the run: the model server or the network did not
+    answer, or a replay met a request it has no recorded answer for (``CacheMiss``). The run is then INFRA_INVALID."""
+    from traceeval.llm.cache import CacheMiss
+
+    for e in (exc, exc.__cause__):  # a client may wrap the network error it met
+        if isinstance(e, (ConnectionError, TimeoutError, CacheMiss)) or type(e).__name__ in _SERVER_ERRORS:
+            return True
+        if e is not None and type(e).__module__.split(".")[0] in ("httpx", "httpcore"):
+            return True
+    return False
+
+
 def default_backend() -> str:
     """The backend of a run that names none: ``TRACEEVAL_BACKEND``, or "replay" (recorded answers, no model).
     Running the test suite with ``TRACEEVAL_BACKEND=vllm`` records the answers its cassette lacks."""
@@ -63,7 +81,8 @@ def run_case(
     fault_profile: str | None = None,
     keep_state: bool = False,
 ) -> dict:
-    """Run one eval case once. Never raises: harness errors are recorded as HARNESS_ERROR.
+    """Run one eval case once. Never raises: a run that raised is recorded as HARNESS_ERROR, or as INFRA_INVALID
+    when the environment caused it (``is_infrastructure_error``).
 
     ``backend`` picks who plays the agents: "hf" (Gemma on the local GPU), "vllm" (Gemma on a vLLM server),
     "replay" (Gemma's recorded answers, no model; ``traceeval/llm/cache.py``) or "llm" (an OpenAI-compatible
@@ -81,7 +100,7 @@ def run_case(
     FaultInjector = sut.sub("harness.faults").FaultInjector
 
     t0 = time.perf_counter()
-    error = None
+    error, infra = None, False
     run = {}
     state = None
     initial = None
@@ -107,13 +126,13 @@ def run_case(
         faults = FaultInjector(fault_profile if fault_profile is not None else case.fault_profile)
         runtime = Runtime(sut.path, config, state, tracer, factory, faults, sut.tools)
         run = runtime.run(case.agent, case.request, dict(case.context))
-    except Exception:  # noqa: BLE001 - every failure must become a record
-        error = traceback.format_exc(limit=6)
+    except Exception as exc:  # noqa: BLE001 - every failure must become a record
+        error, infra = traceback.format_exc(limit=6), is_infrastructure_error(exc)
     wall_ms = (time.perf_counter() - t0) * 1000
 
     trace = tracer.to_dict()
     final_state = state.data if state is not None else {}
-    verdict = score_case(case, trace, final_state, run, error=error)
+    verdict = score_case(case, trace, final_state, run, error=error, infra=infra)
 
     judge_tokens = 0
     judge_result = None
@@ -127,10 +146,10 @@ def run_case(
                 verdict.passed = False
                 verdict.classification = "AGENT_FAILURE"
                 verdict.checks.append({"name": "judge", "ok": False, "detail": judge_result["verdict"]})
-        except Exception:  # noqa: BLE001 - a judge that cannot answer fails the run like any harness error
+        except Exception as exc:  # noqa: BLE001 - a judge that cannot answer fails the run like any harness error
             error = traceback.format_exc(limit=6)
             verdict.passed = False
-            verdict.classification = "HARNESS_ERROR"
+            verdict.classification = "INFRA_INVALID" if is_infrastructure_error(exc) else "HARNESS_ERROR"
 
     agent_tokens = trace["tokens"]
     record = {

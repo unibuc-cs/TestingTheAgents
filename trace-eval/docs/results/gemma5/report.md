@@ -1,6 +1,6 @@
 # TRACE-Eval experiment report
 
-`runs/gemma5` · 176 tests · 43 changes · 3 baseline repetitions · full suite = 1,991,194 tokens · tests failing on the original app: 6
+`runs/gemma5` · 176 tests · 43 changes · 3 baseline repetitions · full suite = 1,991,194 tokens · tests failing on the original app: 6 · runs the environment broke, left out: 0
 
 ## 1. Ground truth — which changes are revealed by how many tests
 

@@ -29,19 +29,27 @@ class TestStats:
         return len(self.runs)
 
     @property
+    def valid_runs(self) -> list[dict]:
+        """The runs that say something about the agent: a run the environment broke (INFRA_INVALID) does not."""
+        return [r for r in self.runs if r.get("classification") != "INFRA_INVALID"]
+
+    @property
     def pass_rate(self) -> float:
-        return sum(1 for r in self.runs if r["passed"]) / max(1, self.n)
+        """The share of the valid runs that passed (0 when no run is valid)."""
+        runs = self.valid_runs
+        return sum(1 for r in runs if r["passed"]) / len(runs) if runs else 0.0
 
     @property
     def mean_tokens(self) -> float:
-        return statistics.fmean(r["tokens"] for r in self.runs)
+        return statistics.fmean(r["tokens"] for r in (self.valid_runs or self.runs))
 
     # The two below are cached on first use: runs are only added while History.load reads the files.
     @cached_property
     def dep_frequency(self) -> dict[str, float]:
-        """Fraction of runs in which each component was exercised (depth/frequency of dependency)."""
-        counts = Counter(d for r in self.runs for d in set(r.get("deps", [])))
-        return {d: c / self.n for d, c in counts.items()}
+        """Fraction of the valid runs in which each component was exercised (depth/frequency of dependency)."""
+        runs = self.valid_runs or self.runs
+        counts = Counter(d for r in runs for d in set(r.get("deps", [])))
+        return {d: c / len(runs) for d, c in counts.items()}
 
     @cached_property
     def deps(self) -> set[str]:
@@ -94,7 +102,8 @@ class History:
     def seconds(self, test_id: str) -> float:
         """Expected run time of a test: its mean wall time over the baseline runs, which run one case at a time, so
         that no other run's load is in it."""
-        return statistics.fmean(r["latency_ms"] for r in self.baseline[test_id].runs) / 1000
+        st = self.baseline[test_id]
+        return statistics.fmean(r["latency_ms"] for r in (st.valid_runs or st.runs)) / 1000
 
     def total_seconds(self) -> float:
         return sum(self.seconds(t) for t in self.baseline)
@@ -106,9 +115,10 @@ class History:
         return self.baseline[test_id].pass_rate
 
     def variant_pass_rate(self, variant: str, test_id: str) -> float:
-        # a test the variant did not run counts as behaving like the baseline
+        # a test the variant did not run, or ran only in runs the environment broke, counts as behaving like the
+        # baseline
         st = self.variants.get(variant, {}).get(test_id)
-        return st.pass_rate if st else self.baseline_pass_rate(test_id)
+        return st.pass_rate if st and st.valid_runs else self.baseline_pass_rate(test_id)
 
     def revealing_tests(self, variant: str, threshold: float = 0.5) -> set[str]:
         """Tests whose majority outcome flips from pass (baseline) to fail (variant) = ground truth."""
@@ -126,4 +136,7 @@ class History:
             "baseline_reps": max((s.n for s in self.baseline.values()), default=0),
             "failing_tests": sorted(t for t, s in self.baseline.items() if s.pass_rate < 0.5),  # model mistakes
             "total_tokens_full_suite": round(self.total_cost()),
+            "infra_invalid_runs": sum(
+                s.n - len(s.valid_runs) for stats in (self.baseline, *self.variants.values()) for s in stats.values()
+            ),
         }
