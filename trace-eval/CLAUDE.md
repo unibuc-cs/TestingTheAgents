@@ -44,7 +44,8 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
 - `traceeval/spec/` — spec-driven development layer: clause catalog (`catalog.yaml`) and model, one checker per
   clause kind (`checks/`), product model, demo PRs, runner, report, drafting with a model (`draft.py`).
   Specs live in `traceeval/specs/FS-*.yaml` as catalog templates + slots (see `docs/SDD_GUIDE.md`).
-- `tests/` — pytest; `runs/` — experiment outputs (git-ignored); `docs/` — guide, plan, related work, results.
+- `tests/` — pytest; `runs/` — experiment outputs (git-ignored); `docs/` — guide, plan, related work, references, results, and
+  the paper draft (`docs/paper/`, LaTeX).
 
 ## Conventions
 

@@ -1,0 +1,36 @@
+% The end-to-end overview (Figure 1 of main.tex). No numbers on the figure: it shows the mechanism, not a result.
+\begin{tikzpicture}[
+  node distance=5mm and 8mm,
+  box/.style={draw, rounded corners=2pt, align=center, font=\small, inner sep=4pt, minimum height=11mm, text width=34mm},
+  model/.style={box, fill=black!6, text width=40mm, minimum height=16mm},
+  stop/.style={box, text width=36mm, fill=black!3},
+  arr/.style={-{Stealth[length=2mm]}, thick},
+  lbl/.style={font=\scriptsize, fill=white, inner sep=1pt}
+]
+% inputs, left column
+\node[box] (sys) {agent system\\skills, agents, tools,\\harness code, settings};
+\node[box, below=of sys] (run) {full run of the\\current version,\\traced};
+\node[box, below=of run] (hist) {earlier changes\\with their known\\outcomes};
+% what the inputs become, middle-left column
+\node[box, right=of sys] (cs) {change set\\components $C(\Delta)$};
+\node[box, right=of run] (deps) {per test: observed\\dependencies, cost,\\pass rate};
+\node[box, right=of hist] (cal) {calibration: reveal\\ratio per kind,\\record per test};
+% the model and the loop
+\node[model, right=12mm of deps] (bayes) {Bayesian model\\prior $\pi_c$, sensitivities $s_{tc}$,\\posterior over the subsets\\of broken components};
+\node[box, right=of bayes] (pick) {pick the test with\\the most information\\per token};
+\node[box, below=of pick] (exec) {run it on the\\changed version};
+\node[box, below=of exec] (upd) {update the posterior\\with the outcome};
+\node[stop, above=of pick] (stop) {stop: regression,\\clean ($P<\varepsilon$) or budget;\\mandatory properties\\checked before clean};
+% edges
+\draw[arr] (sys) -- node[lbl] {diff} (cs);
+\draw[arr] (run) -- node[lbl] {traces} (deps);
+\draw[arr] (hist) -- (cal);
+\draw[arr] (cs.east) -- (bayes.west);
+\draw[arr] (deps.east) -- (bayes.west);
+\draw[arr] (cal.east) -- (bayes.west);
+\draw[arr] (bayes) -- (pick);
+\draw[arr] (pick) -- (exec);
+\draw[arr] (exec) -- (upd);
+\draw[arr] (upd.west) -| (bayes.south);
+\draw[arr] (pick) -- (stop);
+\end{tikzpicture}

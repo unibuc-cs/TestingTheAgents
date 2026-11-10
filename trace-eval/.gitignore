@@ -7,5 +7,16 @@ runs/
 dist/
 .venv/
 
+# LaTeX build files of the paper draft (docs/paper); main.tex, refs.bib, the figure and the PDF are kept
+docs/paper/*.aux
+docs/paper/*.bbl
+docs/paper/*.blg
+docs/paper/*.log
+docs/paper/*.out
+docs/paper/*.fls
+docs/paper/*.fdb_latexmk
+docs/paper/*.synctex.gz
+docs/paper/*.toc
+
 # drafts of the catalog of properties, under review (traceeval properties draft)
 traceeval/catalog/properties.draft.*

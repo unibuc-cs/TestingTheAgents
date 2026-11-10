@@ -19,7 +19,9 @@ search, but their full text has not been checked; they should be read before the
   behavioural signals of the baseline traces, two representatives per slice, the slices ranked by the shift in
   their failure rate. CASPER is not diff-aware: it does not map what changed in a skill, prompt or harness to
   tests. It also reports no APFD-style metric, has no ground truth from mutations or injected faults, covers a
-  single application domain and has no stopping rule.
+  single application domain and has no stopping rule. Its strength is the case this testbed does not cover: a
+  change with no diff to map, such as a model upgrade, where only the logs of the last full run exist
+  (RESEARCH_PLAN §5.1 says where it fits beside the change-aware strategies).
 - **(Why) Is My Prompt Getting Worse? Rethinking Regression Testing for Evolving LLM APIs.** Ma, Yang, Kästner
   (CMU), arXiv 2311.11123. A case study of silent updates to LLM APIs. It identifies three obstacles to classic
   regression testing (no crisp oracle, brittle prompts, nondeterminism) and recommends slicing the suites.
@@ -117,7 +119,8 @@ Fault-injection work that can generate a ground truth or serve as a contrast:
 - Rothermel, Untch, Chu, Harrold, "Prioritizing test cases for regression testing", ICSM 1999 / TSE 27(10), 2001.
   APFD, and the total and additional greedy orderings.
 - Elbaum, Malishevsky, Rothermel, "Incorporating varying test costs and fault severities into TCP", ICSE 2001
-  (APFD_c); Malishevsky et al., "Cost-cognizant test case prioritization", ICSM 2006.
+  (APFD_c); Malishevsky, Ruthruff, Rothermel, Elbaum, "Cost-cognizant test case prioritization", technical
+  report TR-UNL-CSE-2006-0004, University of Nebraska–Lincoln, 2006.
 - Saha, Zhang, Khurshid, Perry, "An IR approach for regression test prioritization based on program changes"
   (REPiR), ICSE 2015.
 - Spieker, Gotlieb, Marijan, Mossige, "RL for automatic TCP and selection in CI" (RETECS), ISSTA 2017.
@@ -215,6 +218,9 @@ See RESEARCH_PLAN §8. ASE is a natural fit (AgentChaos appeared there); ISSTA f
 angle.
 
 ## References
+
+Full bibliographic entries for the works the project builds on, with what each is used for, are in
+[REFERENCES.md](REFERENCES.md).
 
 1. Muse, Briand, Lu, Gallaba. CASPER. arXiv 2608.00378, 2026. https://arxiv.org/abs/2608.00378
 2. Ma, Yang, Kästner. (Why) Is My Prompt Getting Worse? arXiv 2311.11123. https://arxiv.org/abs/2311.11123

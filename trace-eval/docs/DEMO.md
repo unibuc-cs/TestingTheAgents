@@ -237,3 +237,73 @@ Their answers decide what comes next ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §9 k
 - Which properties block a release, and which are judged by a model?
 - Is a budget counted in tokens, in time or both, per change or per night? Is a partial run that ends with "nothing
   broke, with probability p" acceptable?
+
+## The methods, one by one
+
+Each strategy answers the same question, which tests to run on the changed app and in what order, from the same
+inputs: the recording of the current app (traces, costs, pass rates) and the change set. None sees the ground
+truth. The names are those of the report; the formulas are in [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §3 and the paper
+draft in `docs/paper/`.
+
+- `full` runs the suite in catalog order. It is the reference, not a method.
+- `random` runs it in a random order, the baseline every method must beat.
+- `declared` runs only the tests whose hand-written metadata names a changed component, riskiest first. This is
+  classic regression test selection on what the authors declared, and the metadata is incomplete on purpose, as it
+  is in practice.
+- `ir_tfidf` ranks every test by how much its text (name, request, expectations) resembles the diff, with words
+  weighted by TF-IDF so that a word every test uses counts little. It is information-retrieval prioritization, as
+  in REPiR, and uses no traces.
+- `observed` runs only the tests whose recorded traces touched a changed component (an agent, a skill, a tool, a
+  setting read, a code line executed), ordered by how often they touched it times their risk, divided by cost. This
+  is the trace-informed selection the project argues for.
+- `cost_aware` ranks the whole suite by risk, closeness to the change, failure history and cost, affected tests
+  first and cheap ones before expensive ones. It never stops early, so it always spends the budget.
+- `casper_slices` reproduces CASPER. It groups the tests into slices that behave alike on the current app (tool
+  calls, hand-offs, skills, size of the run), runs two representatives of every slice on the changed app, and then
+  runs first the slices whose representatives failed more than before. It does not read the diff.
+- `risk_aware_ts` reproduces Risk-Aware Adaptive Evaluation. It is a bandit: after each test it refits a model of
+  which tests fail, draws a failure probability for every test still to run, and runs the one whose draw times its
+  risk is highest. It does not read the diff either, and any failure counts as a find.
+- `adaptive_bayes` is the proposed method. For every changed component it keeps the probability that the component
+  is broken, and for every test the probability that the test fails if it is, calibrated on the other recorded
+  changes and on the test's own record. It runs the test with the most information per token, updates after each
+  outcome, stops at the first failure of a test that passed on the current app, or when the probability that
+  anything is broken is small, and before ending without a regression it runs a test of every mandatory property
+  the change may affect. It is the only strategy that stops, and the only one with a verdict.
+
+## What the results say
+
+The report compares the strategies on Gemma's recording: 29 regressions that at least one test reveals, 14 changes
+that none does (nine benign, five that Gemma cannot see), seven budgets from 2% to 100% of the suite's tokens, five
+replay seeds.
+
+- *Hand-written metadata is not enough.* `declared` tops out at 61% of the regressions however large the budget,
+  because shared skills, harness code and most settings are reached without being declared. The traces recover
+  that: `observed` reaches 86% at a 20% budget and everything at 100%.
+- *The diff is worth a lot.* The two methods that ignore it, CASPER's slices and the bandit, find 50% and 59% at
+  20%, close to a random order's 52%; the strategies that read it find 79% to 92%. Their first revealing test comes
+  after 12% to 13% of the suite's tokens, against 2% to 6% for the change-aware strategies. The tests were written
+  for the app, not for the changes, and the changes were written to resemble real regressions; which test reveals
+  which change was measured afterwards, and no strategy is told.
+- *Text alone is strong, but spends everything.* TF-IDF over the diff has the best detection at 20% (92%) and the
+  best over the changes that break a safety property (98%), and it always spends the whole budget, on benign
+  changes too. The adaptive method reaches 79% for 3% of the tokens, and 76% already at a 5% budget, where TF-IDF
+  is at 70%.
+- *Stopping is what saves tokens, and it has a price.* The adaptive method returns the budget: 3% of the suite
+  spent on regressions, a tenth on benign changes at a 20% budget and a fifth at 100%. Its ceiling is 83%, because
+  on a change that only one to five tests reveal it can become confident nothing broke before reaching them. The
+  mandatory rule lowers that risk for the safety properties: before calling a change clean it tests every mandatory
+  property the change may affect, for under one extra test per change, and on this app that is what catches the
+  publishing skill without its link check.
+- *Red tests on the current app mislead the others.* Six tests fail on the current app, Gemma's own mistakes, and
+  fail on every changed copy too. A strategy that runs one sees a failure the change did not cause: on the 14
+  changes no test reveals, this happens to `full` in 71% of its replays, to the bandit in 71%, to CASPER's slices
+  in 57% and to the adaptive method in none, because it discounts a test by its failures on the current app and
+  stops only on a test that used to pass.
+- *The order is good, not only the stopping.* Read as a plain order with no stopping, the adaptive method has the
+  highest cost-weighted APFD (0.81, against 0.53 for random and 0.76 to 0.79 for the other change-aware strategies)
+  and the earliest first detection (1.7% of the suite's tokens).
+- *Where the ground truth comes from.* A change counts as revealed by a test when the test passes on the current
+  app and fails on the changed one, by majority over three runs. Gemma's runs agreed on all but five (change, test)
+  pairs; Qwen's and gpt-oss's answers vary too much from run to run for the same rule, which is why only Gemma's
+  numbers are reported.

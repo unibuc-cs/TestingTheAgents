@@ -332,7 +332,8 @@ belong to the model (§5.1); under Qwen every regression is revealed, but so is 
    - property coverage: of the properties a change breaks, those its selected tests exercise;
    - detection (≥ 1 revealing test executed and failed), recall of revealing tests, tokens actually spent, cost
      to first detection, false alarms, safety recall, stop reason and stop correctness;
-   - APFD and APFD_c of the complete prioritized order;
+   - APFD and APFD_c of the complete prioritized order (Rothermel et al. 2001; Elbaum et al. 2001; the formulas
+     are in `docs/USER_GUIDE.md` §4 and the papers in `docs/REFERENCES.md`);
    - selection recall and selected-subset cost.
 
 ---
@@ -402,6 +403,18 @@ spent follows tokens closely (the report's section 2).
   that break a safety property (73% at 20%, 94% at 50%). It rewards any failure, so it also runs Gemma's red tests
   early: on the changes no test reveals it sees a failure the change did not cause in 71% of its replays, CASPER's
   slices in 57%. Neither stops: both spend the whole budget on every change.
+- *Where CASPER fits.* The numbers above measure what the diff is worth, not CASPER in its own setting. CASPER was
+  built for changes that have no diff a test can be mapped to: a model upgrade, a provider's silent update, a
+  prompt-level change whose effect spreads through the model's behaviour. It needs only the logs of the last full
+  run, so it applies to a system whose code the testing team does not own, and its cost does not grow with the
+  suite: a fixed number of representatives per slice samples a suite of a thousand tests as cheaply as one of a
+  hundred, and the slices themselves are a map of the suite's behaviours that the team can read. A platform like
+  AEM's sees both kinds of change. The change-aware strategies cover the edits to skills, code and settings;
+  CASPER's representatives are the natural first pass after a model update, when every test is affected and the
+  question is which behaviours drifted. The two could also be combined: the slices can serve as the near-duplicate
+  groups of the adaptive method, and a slice whose representatives drifted can enter the model as a changed
+  component. On this testbed every change is an edit with a diff and the suite is small (176 tests, which the
+  reproduction cuts into twelve slices), which is the case slicing has least to offer.
 
 ### 5.2 Text in the method: an option (roadmap 3(b))
 

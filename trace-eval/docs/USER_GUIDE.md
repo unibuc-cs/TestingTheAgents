@@ -79,9 +79,24 @@ Everything else is plumbing (loaders, tracing, report).
   changes that break a safety property, meaning that one of their revealing tests checks a safety property.
 - Section 3 gives the tokens spent on changes that break nothing. Its stop-reason table shows whether the
   adaptive strategy said `clean` on benign changes and `regression` on regressions.
-- Section 4 gives selection recall and the prioritization quality of the complete order: APFD (average
-  percentage of faults detected, which rewards an order that finds the faults early) and APFD_c, its cost-aware
-  form.
+- Section 4 gives selection recall and the prioritization quality of the complete order, by APFD and APFD_c
+  (`experiment/metrics.py`; the papers are in [REFERENCES.md](REFERENCES.md)). Both score an order of the whole
+  suite with every test run and no stopping, so they measure prioritization alone. Each revealing test counts as
+  one fault, found when that test runs.
+  - APFD (Rothermel et al. 2001) is the area under the curve of faults found against tests run. With n tests, m
+    faults and TF_i the position of the test that finds fault i: `APFD = 1 - (TF_1 + ... + TF_m) / (n * m) + 1 / (2
+    * n)`. It is near 1 when the first tests find every fault and near 0 when the last ones do; a random order
+    scores about 0.5. A fault no test in the order finds counts as found at position n + 1.
+  - APFD_c (Elbaum, Malishevsky and Rothermel 2001) replaces the position of a test by the cost spent up to it and
+    weighs each fault by its severity. With c_j the cost of the j-th test in the order, s_i the severity of fault i
+    (the risk weight of the revealing test, 1 to 4) and C the cost of the whole order: `APFD_c = sum_i s_i * (C -
+    cost spent before test TF_i - c_TF_i / 2) / (C * sum_i s_i)`. Finding a fault after a few cheap tests costs
+    little and scores high; finding it after the long workflows scores low, however few tests came before. Tokens
+    per test vary by a factor of ten or more on this suite, so APFD_c is the one to read: an order can score well
+    on APFD and poorly on APFD_c by putting the expensive tests first.
+  - What to expect: `full` (catalog order) and `random` sit near 0.55 on both; an order that uses the change scores
+    0.75 or more. The adaptive method's order is the one its model would pick if every test passed, followed by the
+    rest in cost-aware order.
 - Section 5 covers the catalog of properties: each property's pass rate on the original app against its
   threshold and, per strategy, the share of the properties a change breaks that the strategy's tests exercised.
 - Section 6 measures coverage ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5).
