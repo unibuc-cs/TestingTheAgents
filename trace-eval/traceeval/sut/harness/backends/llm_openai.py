@@ -40,7 +40,7 @@ class LLMSettings:
     api_key: str = os.environ.get("TRACEEVAL_LLM_API_KEY", "EMPTY")
     model: str = os.environ.get("TRACEEVAL_LLM_MODEL", "Qwen/Qwen3.8-27B-FP8")
     temperature: float = 0.0  # 0 keeps the model's choices as repeatable as the server allows
-    max_tokens: int = 700  # the most tokens the model may write in one answer
+    max_tokens: int = int(os.environ.get("TRACEEVAL_LLM_MAX_TOKENS", "700"))  # per answer; gpt-oss needs 4096
     max_tool_calls_per_turn: int = 4  # tool calls taken from one answer; any further ones are dropped
 
 
