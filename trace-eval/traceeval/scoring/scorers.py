@@ -15,6 +15,8 @@ succeeded - e.g. an agent that fixes its own arguments. A crash (check ``crash:<
 
 The answer is checked for facts, not wording: ``response_contains`` lists what it must report (an item may be a
 list of alternatives), and a run that ends with an answer must not end with an empty one (check ``answered``).
+Both sides are compared in plain characters, ignoring case: some models write typographic hyphens, spaces and
+quotes ("risk‑free" with a non-breaking hyphen), which say the same as the plain ones.
 ``tool_results`` checks what a tool returned (its last successful call), like the state.
 
 Re-planning: ``replans`` is the number of new plans the run must make after its first (``make_plan`` calls that
@@ -31,6 +33,17 @@ import re
 from dataclasses import dataclass, field
 
 _MISSING = object()
+# hyphens and dashes, spaces (no-break, narrow, zero-width), curly quotes
+_PLAIN = str.maketrans(
+    "\u2010\u2011\u2012\u2013\u2014\u2212\u00a0\u2007\u2009\u202f\u2018\u2019\u201c\u201d",
+    "------    \x27\x27\x22\x22",
+    "\u200b",
+)
+
+
+def plain(text: str) -> str:
+    """``text`` in plain characters and lower case: typographic hyphens, dashes, spaces and quotes become plain."""
+    return text.translate(_PLAIN).lower()
 
 
 @dataclass
@@ -151,10 +164,10 @@ def score_case(case, trace: dict, state: dict, run: dict, error: str | None = No
     # Facts the answer must report. An item that is a list is a set of alternatives; any one of them will do.
     for needle in exp.get("response_contains", []):
         options = [needle] if isinstance(needle, str) else list(needle)
-        found = any(o.lower() in message.lower() for o in options)
+        found = any(plain(o) in plain(message) for o in options)
         add(f"response~{options[0][:24]}", found, f"message: {message[:120]!r}")
     for needle in exp.get("response_excludes", []):
-        add(f"response!~{needle[:24]}", needle.lower() not in message.lower(), f"message: {message[:120]!r}")
+        add(f"response!~{needle[:24]}", plain(needle) not in plain(message), f"message: {message[:120]!r}")
     if "max_steps" in exp:
         add("max_steps", (run.get("steps") or 0) <= exp["max_steps"], f"steps {run.get('steps')}")
     if "termination" in exp:

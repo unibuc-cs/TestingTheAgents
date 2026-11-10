@@ -339,6 +339,13 @@ def test_tools_and_agents_in_order():
     assert score_case(bad, trace, {}, {}).failed_checks() == ["agents_in_order", "tools_in_order"]
 
 
+def test_the_answer_is_compared_in_plain_characters():
+    """A non-breaking hyphen, a narrow no-break space or curly quotes say the same as the plain characters."""
+    case = SimpleNamespace(expect={"response_contains": ["risk-free", "exp-s1 ready"], "response_excludes": ["'p9'"]})
+    message = "“Risk‑free” is forbidden; export exp‑s1 ready. Not ‘p9’."
+    assert score_case(case, {"final_message": message}, {}, {}).failed_checks() == ["response!~'p9'"]
+
+
 def test_property_catalog():
     """Every property has a known category and way of checking, a threshold in (0, 1], and at least one test
     (a test naming a property outside the catalog is rejected by load_catalog)."""
