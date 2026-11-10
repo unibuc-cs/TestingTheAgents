@@ -99,8 +99,8 @@ Qwen3.8-27B's recording of the same app is not a clean ground truth. It records 
 two to five tests, for two reasons. Six tests answer differently when run 64 at a time over three servers than when
 run one at a time: the two it judges itself, the one at the 60-character boundary and three long workflows. And
 some of its answers vary from run to run even under identical conditions. gpt-oss-120b, a third model, varies even
-more. The models are used as they are served, so these recordings are reported as a finding rather than as results
-([EXPERIMENT.md](docs/EXPERIMENT.md) §7).
+more, and five repetitions instead of three do not settle its vote. The models are used as they are served, so
+these recordings are reported as a finding rather than as results ([EXPERIMENT.md](docs/EXPERIMENT.md) §7).
 
 ## Features asked for by Adobe's AEM team
 

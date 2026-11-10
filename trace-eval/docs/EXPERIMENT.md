@@ -488,8 +488,9 @@ no revealing test (section 7).
 The results in `docs/results/gemma5/` come from `runs/gemma5`: Gemma on the current app, with 176 tests, 43
 changes, three repetitions and the model judge. The recording took about an hour on fmi0's GPU0: 18 minutes
 for the baseline, one test at a time, and about a minute per change with 64 tests at a time. Qwen's recording
-of the same app (`docs/results/qwen5/`) took about four hours on fmi0's GPU1 and the two SLURM GPUs. It is not
-a clean ground truth, for the reasons given below.
+of the same app (`docs/results/qwen5/`) took about four hours on fmi0's GPU1 and the two SLURM GPUs, and
+gpt-oss-120b's, with five repetitions (`docs/results/gptoss7/`), three and a half hours on both of fmi0's GPUs.
+Neither is a clean ground truth, for the reasons given below.
 
 | | Gemma 4 E4B |
 |---|---|
@@ -530,10 +531,13 @@ five tests that fail where the reference passes. Some of Qwen's answers therefor
 under identical conditions. Like Gemma, Qwen is used as it is served. Its recording stands as this finding,
 and the results are Gemma's.
 
-gpt-oss-120b, OpenAI's open-weights model, was recorded on the branch with re-planning
-([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4.1): 182 tests, 48 changes and three repetitions, served as one copy over
-both of fmi0's GPUs. Its answers vary even more than Qwen's. The no-op change appears to break four tests, and
-every benign change two to seven, so its recording is not used for results either.
+gpt-oss-120b, OpenAI's open-weights model, was recorded on the same app with five repetitions, served as one
+copy over both of fmi0's GPUs (`docs/results/gptoss7/`: 180 tests, 43 changes). It passes 153 tests on the
+original app and varies more than Qwen. Five repetitions do not settle the vote: every benign change is revealed
+by two to five tests under the majority over five runs, by one to four under the first three, and the two votes
+differ on 95 (change, test) pairs. Thirteen tests carry the variation, mostly the long workflows: WF1-01 and
+WF1-03 pass one at a time on the original app and fail on nearly every changed copy, 32 at a time, the empty
+change included. Its recording is not used for results either ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4).
 
 The table below compares the strategies at a budget of 20% of the full suite's tokens, on the 29 regressions
 Gemma reveals. The full tables are in [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.1 and in the report.

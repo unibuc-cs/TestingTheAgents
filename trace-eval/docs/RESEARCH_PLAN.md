@@ -485,10 +485,16 @@ GDN_ATTN"). Recording the baseline the way the changes are recorded is not enoug
 recorded exactly like the others, as the reference, seven of the eight other benign changes still flip one to
 five tests, so some of Qwen's answers vary from run to run even under identical conditions.
 
-gpt-oss-120b, OpenAI's open-weights model, was recorded on the branch with re-planning (`docs/AEM_ALIGNMENT.md`
-§4.1: 182 tests, 48 changes, three repetitions). Its answers vary even more: the no-op change appears to break four
-tests, and every benign change two to seven. More repetitions would show whether a majority vote settles them
-(roadmap, phase 6).
+gpt-oss-120b, OpenAI's open-weights model, was recorded on the same app with five repetitions instead of three
+(`runs/gptoss7`, report in `docs/results/gptoss7/`: 180 tests, 43 changes, three and a half hours on both of
+fmi0's GPUs). It passes 153 of the 180 tests on the original app and varies more than Qwen. Five repetitions do not
+settle the vote: the benign changes are "revealed" by two to five tests under the majority over five runs, and by
+one to four under the first three; the two votes differ on 95 (change, test) pairs, and a change's own runs
+disagree on 577. The variation sits in thirteen tests, mostly the long workflows. WF1-01 and WF1-03 pass on the
+original app, one test at a time, and fail on nearly every changed copy, 32 tests at a time, whichever the change,
+the empty one included; MNT-05 flips on twenty changes. Twenty-five of the 34 regressions have a revealing test
+outside those thirteen. CASPER's twenty representatives include the three, so its slices appear to detect 98% of
+the changes at a 20% budget there.
 
 Qwen and gpt-oss are used as they are served, like Gemma. Their recordings stand as this finding, and the results
 are Gemma's. The lesson for a pipeline is to measure how much the model's answers vary from run to run under the
@@ -524,9 +530,9 @@ measures exactly that.
 | 1. Testbed | SUT, catalog, tracing, mutations, change sets, record/replay, metrics, report, CLI, tests | done (v0.1) |
 | 2. Methods | baselines + cost-aware + predictive + adaptive Bayesian selector with stopping | done (v0.1), with the mandatory-coverage rule (§5.3); open: tuning ε, the priors and the discount |
 | 3. Method improvements | (a) test-level learned sensitivities (per test × component-kind reveal history) instead of kind-level; (b) IR relevance inside the Bayesian likelihood; (c) CASPER-style slices and the Risk-Aware Adaptive Evaluation bandit as reproduced baselines | (a) done; (b) done as an option (§5.2); (c) done: `casper_slices` and `risk_aware_ts` (§5.1) |
-| 4. Real LLM | ContentOps on real models (local vLLM): all variants × 3 reps under two models | done: Gemma (`runs/gemma5`); Qwen's recording of the same app (`runs/qwen5`) is spoiled by run-to-run variation and is not used for the results (§5.4); gpt-oss-120b, recorded on the re-planning branch, varies even more |
+| 4. Real LLM | ContentOps on real models (local vLLM): all variants × 3 reps under two models | done: Gemma (`runs/gemma5`); Qwen's recording of the same app (`runs/qwen5`) is spoiled by run-to-run variation and is not used for the results (§5.4); gpt-oss-120b (`runs/gptoss7`, five repetitions) varies even more |
 | 5. External SUT | tau2-bench airline adapter; 12 mutations (6 policy, 4 tool-code, 2 benign); same evaluation | after the demo for the AEM team |
-| 6. Scale/robustness | more mutations (mutation operators generated systematically: step deletion/swap/condition negation in procedures, argument swaps in adapters, config boundary values), equivalent-mutant analysis, sensitivity to K and to budget definitions (time vs. tokens), ablations of each model ingredient, more repetitions for the models whose answers vary (§5.4) | with the paper |
+| 6. Scale/robustness | more mutations (mutation operators generated systematically: step deletion/swap/condition negation in procedures, argument swaps in adapters, config boundary values), equivalent-mutant analysis, sensitivity to K and to budget definitions (time vs. tokens), ablations of each model ingredient, more repetitions for the models whose answers vary (five recorded for gpt-oss: they do not settle the vote, §5.4) | with the paper |
 | 7. Paper | see §8 | drafting can start from this document and the report |
 
 A model's own mistakes and blind spots shape the ground truth: which changes a test reveals depends on the model

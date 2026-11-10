@@ -619,8 +619,11 @@ change whose change set is empty: six tests answer differently when they run 64 
 do, than one at a time, as the baseline does, and its three runs disagreed on 260 (change, test) pairs against
 Gemma's five. vLLM's batch-invariant mode, which would make greedy decoding exactly repeatable, does not support
 the model's attention layers, and recording the baseline the way the changes are recorded leaves seven of the
-nine benign changes still flipping tests. gpt-oss varies more. A larger model is not automatically a cleaner
-ground truth, and a pipeline should measure how much its model's answers vary under the serving setup the
+nine benign changes still flipping tests. gpt-oss-120b, recorded with five repetitions, varies more: the benign
+changes flip two to five tests under the majority over five runs and one to four under the first three, so more
+repetitions do not settle the vote; thirteen tests carry the variation, mostly long workflows that pass one at a
+time on the current version and fail in a batch on nearly every changed copy, whichever the change. A larger
+model is not automatically a cleaner ground truth, and a pipeline should measure how much its model's answers vary under the serving setup the
 selection will run on before trusting a ground truth or a stopping rule. The empty change measures exactly that.
 
 \section{Threats to validity}
