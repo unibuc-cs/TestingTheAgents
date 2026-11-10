@@ -230,8 +230,8 @@ traceeval check skill_routing_drop_approval --history runs/gemma5       # one ch
 
 # Qwen (in another terminal, at the same time if you like)
 traceeval run --test PUB-01 --backend llm
-traceeval experiment --backend llm --workdir runs/qwen5 --reps 3
-traceeval check skill_routing_drop_approval --history runs/qwen5 --backend llm
+traceeval experiment --backend llm --workdir runs/qwen7 --reps 5
+traceeval check skill_routing_drop_approval --history runs/qwen7 --backend llm
 
 # gpt-oss-120b (it takes both fmi0 GPUs: Gemma and Qwen then run on the cluster)
 scripts/gpu_remote.sh up gptoss
@@ -293,7 +293,7 @@ more frequent (section 7). For Qwen:
 ```bash
 # Qwen on fmi0's GPU1 and on the cluster's two GPUs: a third of the requests to fmi0, two thirds to the cluster
 export TRACEEVAL_LLM_BASE_URL=http://127.0.0.1:18101/v1,http://127.0.0.1:18111/v1,http://127.0.0.1:18111/v1
-traceeval experiment --backend llm --workdir runs/qwen5 --reps 3 --workers 64
+traceeval experiment --backend llm --workdir runs/qwen7 --reps 5 --workers 64
 ```
 
 For Gemma the variable is `TRACEEVAL_VLLM_URL` (ports 18100 and 18110).
@@ -383,7 +383,7 @@ and has the model run the chosen tests live, instead of looking their outcomes u
 
 ```bash
 traceeval check skill_routing_drop_approval --history runs/gemma5 --budget 0.2    # a change from the catalog
-traceeval check my-sut-copy --history runs/qwen5 --backend llm                    # a changed copy of traceeval/sut
+traceeval check my-sut-copy --history runs/qwen7 --backend llm                    # a changed copy of traceeval/sut
 ```
 
 The method picks the most informative test for its cost and runs it on the changed app; the outcome decides
@@ -458,9 +458,9 @@ mind:
   approval into each step instead, Gemma keeps the token and drops the approver.
 
 What remains are the models' own mistakes, which clearer wording does not fix. On the original app, Gemma passes
-170 of the 176 recorded tests and Qwen passes 171. Gemma also fails WF2-03 and CFG-01, which the recording does not
-include. Qwen gets five of Gemma's mistakes right (PUB-10, AUT-04, SEO-02, WF1-01, WF6-02) and makes mistakes of
-its own:
+170 of the 176 recorded tests, and also fails WF2-03 and CFG-01, which the recording does not include. Qwen passes
+173 of the 180: it gets five of Gemma's mistakes right (PUB-10, AUT-04, SEO-02, WF1-01, WF6-02), shares CFG-01 and
+WF2-03, and makes mistakes of its own:
 
 | case | model | what goes wrong |
 |---|---|---|
@@ -472,10 +472,11 @@ its own:
 | AUT-04 | Gemma | after an edit it requests a review nobody asked for |
 | CFG-01 | Gemma | asked to publish a page on a platform that does not require reviews, it requests one anyway. Not in the recording |
 | SEO-02 | Gemma | it applies an 83-character title over the 60-character limit |
-| WF1-02, WF5-02 | Qwen | it re-plans after a failed step, as Adobe's Agent Orchestrator does. It rewrites the campaign page that failed the brand check, or has the broken link of the restored page fixed, and goes on to translate, schedule or publish, where the routing skill and the tests say stop |
+| WF1-02, and WF5-02 in half of its runs | Qwen | it re-plans after a failed step, as Adobe's Agent Orchestrator does. It rewrites the campaign page that failed the brand check, or has the broken link of the restored page fixed, and goes on to translate, schedule or publish, where the routing skill and the tests say stop |
 | PUB-07 | Qwen | after the takedown is refused for lack of an approval token, it asks the approver itself and then takes the page down. The test expects the refusal to stand |
 | WF4-01 | Qwen | it asks for the locale "es" instead of es-ES, the job is refused, and it does not republish |
 | DS-ROUTING/r40 | Qwen | it answers a vague request itself instead of handing it to the default agent |
+| SEO-07 | Qwen | the case it judges itself against a rubric: its own judge rejects its answer |
 
 There is a pattern. Gemma acts on guards, the conditions that should stop a step, when they come from a
 tool's answer (a denied permission, a broken link). It does not act on guards it has to work out for itself
@@ -489,10 +490,10 @@ no revealing test (section 7).
 
 The results in `docs/results/gemma5/` come from `runs/gemma5`: Gemma on the current app, with 176 tests, 43
 changes, three repetitions and the model judge. The recording took about an hour on fmi0's GPU0: 18 minutes
-for the baseline, one test at a time, and about a minute per change with 64 tests at a time. Qwen's recording
-of the same app (`docs/results/qwen5/`) took about four hours on fmi0's GPU1 and the two SLURM GPUs, and
-gpt-oss-120b's, with five repetitions (`docs/results/gptoss7/`), three and a half hours on both of fmi0's GPUs.
-Neither is a clean ground truth, for the reasons given below.
+for the baseline, one test at a time, and about a minute per change with 64 tests at a time. Qwen's and
+gpt-oss's recordings of the same app have five repetitions and all 180 tests: Qwen's (`docs/results/qwen7/`) took
+about six hours on two SLURM GPUs, gpt-oss's (`docs/results/gptoss7/`) three and a half hours on both of fmi0's
+GPUs. Neither is a clean ground truth, for the reasons given below.
 
 | | Gemma 4 E4B |
 |---|---|
@@ -513,33 +514,34 @@ set:
 Gemma's three runs of each test agreed on the original app, and disagreed on only five (change, test) pairs
 over all 43 changes. The majority vote absorbs them.
 
-Qwen's recording is spoiled as a ground truth by how the model is served. Its runs disagreed on 260 pairs.
-Worse, the recording has every benign change revealed by two to five tests, although a benign change should
-break nothing. Six tests answer differently when run 64 at a time over three servers than when run one at a
-time: the two cases with a rubric, which Qwen judges itself, the 60-character boundary and three long
-workflows. SEO-07, for example, passes all three baseline runs and fails on most changed copies, including
-the no-op change `benign_code_comment_docstring`, whose change set is empty. The cause is the one section 3
-describes. Greedy decoding on vLLM is repeatable only up to batching, and the baseline and the changed copies
-are batched differently: the baseline runs one test at a time, for code coverage, and the changed copies run
-64 at a time over three servers. A larger model is not automatically a cleaner ground truth. Every regression
-is revealed, 27 of the 34 by a test outside those six, but so is every benign change, so Qwen's strategy
-numbers are not reported as results.
+Qwen's recording is spoiled as a ground truth by how the model is served, and five repetitions do not mend it.
+Its runs disagree on 357 (change, test) pairs. Every benign change is revealed by three to six tests under the
+majority over five runs and by two to four under the first three, although a benign change should break nothing;
+the two votes differ on 75 pairs. Seven tests carry the variation: PUB-20, which Qwen judges itself, the
+60-character boundary SEO-05, four long workflows (WF2-01, WF2-02, WF4-02, WF5-02) and AUT-05. PUB-20 and SEO-05
+pass one at a time, as the baseline runs, and fail in most batched runs, as the changed copies run, the empty
+change `benign_code_comment_docstring` included. The cause is the one section 3 describes: greedy decoding on vLLM
+is repeatable only up to batching, and the baseline runs one test at a time, for code coverage, while the
+changed copies run 64 at a time. A larger model is not automatically a cleaner ground truth. Every regression is
+revealed, 29 of the 34 by a test outside those seven, but so is every benign change, so Qwen's strategy numbers
+are not reported as results. The 116 baseline runs that a dropped tunnel broke are left out, so about 110 tests
+have four valid baseline runs instead of five.
 
-Two remedies fall short. vLLM 0.31's batch-invariant mode, which makes greedy decoding exactly repeatable,
-does not support Qwen3.8: the server refuses it for the model's linear-attention layers ("not supported for
-GDN_ATTN"). Recording the baseline the same way as the changes is not enough either. With the no-op change as
-the reference, recorded exactly like the others, seven of the eight other benign changes still have one to
-five tests that fail where the reference passes. Some of Qwen's answers therefore vary from run to run even
-under identical conditions. Like Gemma, Qwen is used as it is served. Its recording stands as this finding,
-and the results are Gemma's.
+Two remedies fall short. vLLM's batch-invariant mode, which makes greedy decoding exactly repeatable, does not
+support Qwen3.8: the server refuses it for the model's linear-attention layers ("not supported for GDN_ATTN").
+Recording the baseline the same way as the changes is not enough either. With the empty change as the reference,
+recorded exactly like the others, every one of the eight other benign changes still has two to five tests that
+fail where the reference passes, WF4-01 and WF5-02 in nearly all of them. Some of Qwen's answers therefore vary
+from run to run even under identical conditions. Like Gemma, Qwen is used as it is served. Its recording stands
+as this finding, and the results are Gemma's.
 
-gpt-oss-120b, OpenAI's open-weights model, was recorded on the same app with five repetitions, served as one
-copy over both of fmi0's GPUs (`docs/results/gptoss7/`: 180 tests, 43 changes). It passes 153 tests on the
-original app and varies more than Qwen. Five repetitions do not settle the vote: every benign change is revealed
-by two to five tests under the majority over five runs, by one to four under the first three, and the two votes
-differ on 95 (change, test) pairs. Thirteen tests carry the variation, mostly the long workflows: WF1-01 and
-WF1-03 pass one at a time on the original app and fail on nearly every changed copy, 32 at a time, the empty
-change included. Its recording is not used for results either ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4).
+gpt-oss-120b, OpenAI's open-weights model, served as one copy over both of fmi0's GPUs, passes 153 tests on the
+original app and varies more than Qwen. Five repetitions do not settle its vote either: every benign change is
+revealed by two to five tests under the majority over five runs, by one to four under the first three, and the
+two votes differ on 95 (change, test) pairs. Thirteen tests carry the variation, mostly the long workflows:
+WF1-01 and WF1-03 pass one at a time on the original app and fail on nearly every changed copy, 32 at a time,
+the empty change included; with the empty change as the reference, the eight other benign changes still flip one
+to four tests. Its recording is not used for results either ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4).
 
 The table below compares the strategies at a budget of 20% of the full suite's tokens, on the 29 regressions
 Gemma reveals. The full tables are in [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.1 and in the report.

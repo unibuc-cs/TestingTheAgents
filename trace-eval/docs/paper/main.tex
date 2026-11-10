@@ -765,19 +765,21 @@ slicing has least to offer.
 
 \paragraph{Other models.}
 The same application was recorded with Qwen3.8-27B and with gpt-oss-120b, served as they are, with greedy
-decoding. Neither recording is a clean ground truth. Qwen passes 171 of the 176 tests on the current version
-and reveals every regression, but it also ``reveals'' every benign change, by two to five tests, including a
-change whose change set is empty: six tests answer differently when they run 64 at a time, as the changed copies
-do, than one at a time, as the baseline does, and its three runs disagreed on 260 (change, test) pairs against
-Gemma's five. vLLM's batch-invariant mode, which would make greedy decoding exactly repeatable, does not support
-the model's attention layers, and recording the baseline the way the changes are recorded leaves seven of the
-nine benign changes still flipping tests. gpt-oss-120b, recorded with five repetitions, varies more: the benign
-changes flip two to five tests under the majority over five runs and one to four under the first three, so more
-repetitions do not settle the vote; thirteen tests carry the variation, mostly long workflows that pass one at a
-time on the current version and fail in a batch on nearly every changed copy, whichever the change. A larger
-model is not automatically a cleaner ground truth, and a pipeline should measure how much its model's answers vary
-under the serving setup the selection will run on before trusting a ground truth or a stopping rule. The empty
-change measures exactly that.
+decoding and five repetitions instead of three. Neither recording is a clean ground truth, and the five
+repetitions do not settle either vote. Qwen passes 173 of the 180 tests on the current version and reveals every
+regression, but it also ``reveals'' every benign change, by three to six tests under the majority over five runs
+and by two to four under the first three, including a change whose change set is empty; the two votes differ on 75
+(change, test) pairs, and its runs disagree on 357 pairs against Gemma's five. Seven tests carry the variation: the
+case Qwen judges itself, the one at a length boundary, four long workflows and one more. Two of them pass one at a
+time, as the baseline runs, and fail in a batch, as the changed copies run; vLLM's batch-invariant mode, which
+would make greedy decoding exactly repeatable, does not support the model's attention layers. Recording the
+baseline the way the changes are recorded does not help either: with the empty change as the reference, every
+other benign change still flips two to five tests. gpt-oss-120b varies more: the benign changes flip two to five
+tests under the majority over five runs and one to four under the first three; thirteen tests carry the variation,
+mostly long workflows that pass one at a time on the current version and fail in a batch on nearly every changed
+copy, whichever the change. A larger model is not automatically a cleaner ground truth, and a pipeline should
+measure how much its model's answers vary under the serving setup the selection will run on before trusting a
+ground truth or a stopping rule. The empty change measures exactly that.
 
 \paragraph{Threats to validity.}
 The regressions are mutants, not real changes; they were written to resemble regressions a team would ship, and
@@ -815,10 +817,11 @@ the suite's tokens unless said otherwise.
         cause in 51\% to 91\% of its replays; the adaptive method in none, because it keeps each test's pass rate
         on the current version and acts only on a flip.
   \item \textbf{Measure the model's noise before trusting a verdict.} Gemma's three runs agree on every test of the
-        current version and disagree on five (change, test) pairs over the 43 changes; Qwen's disagree on 260 and
-        gpt-oss's on 577, both ``reveal'' every benign change, and five repetitions do not settle gpt-oss's vote.
-        The baseline runs one test at a time and the changed copies in batches, and that alone flips some tests. An
-        empty change, recorded like the others, measures the noise floor; record it per model and per serving setup.
+        current version and disagree on five (change, test) pairs over the 43 changes; Qwen's disagree on 357 and
+        gpt-oss's on 577, both ``reveal'' every benign change, and five repetitions instead of three settle neither
+        vote. The baseline runs one test at a time and the changed copies in batches, and that alone flips some
+        tests; the rest varies under identical conditions. An empty change, recorded like the others, measures the
+        noise floor; record it per model and per serving setup.
   \item \textbf{CASPER and the bandit have their place.} CASPER needs no diff: a model or provider update, or a
         prompt-level change in a system the team does not own. Its representatives are the natural first pass after
         a model update, and its slices could serve as the adaptive method's groups of near-duplicate tests. The

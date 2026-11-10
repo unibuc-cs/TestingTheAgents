@@ -83,7 +83,7 @@ changed app with the real model, the outcome decides what runs next, and the che
 
 ```bash
 traceeval check skill_routing_drop_approval --history runs/gemma5 --budget 0.2      # a change from the catalog
-traceeval check path/to/my-copy-of-sut --history runs/qwen5 --backend llm           # your own edit, with Qwen
+traceeval check path/to/my-copy-of-sut --history runs/qwen7 --backend llm           # your own edit, with Qwen
 ```
 
 `--history` points to an experiment recorded with the same model and the same version of the app. It tells the
@@ -114,11 +114,11 @@ random (52%) and the change-aware strategies. The full numbers are in the
 [Gemma report](docs/results/gemma5/report.md), and the take-aways of the experiments in
 [RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.5.
 
-Qwen3.8-27B's recording of the same app is not a clean ground truth. It records every benign change as revealed by
-two to five tests, for two reasons. Six tests answer differently when run 64 at a time over three servers than when
-run one at a time: the two it judges itself, the one at the 60-character boundary and three long workflows. And
-some of its answers vary from run to run even under identical conditions. gpt-oss-120b, a third model, varies even
-more, and five repetitions instead of three do not settle its vote. The models are used as they are served, so
+Qwen3.8-27B's recording of the same app is not a clean ground truth, and five repetitions instead of three do not
+mend it. It records every benign change as revealed by three to six tests, for two reasons. Seven tests answer
+differently when run 64 at a time than when run one at a time: the case it judges itself, the one at the
+60-character boundary, four long workflows and one more. And some of its answers vary from run to run even under
+identical conditions. gpt-oss-120b, a third model, varies even more. The models are used as they are served, so
 these recordings are reported as a finding rather than as results ([EXPERIMENT.md](docs/EXPERIMENT.md) §7).
 
 ## Features asked for by Adobe's AEM team

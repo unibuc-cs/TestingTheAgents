@@ -240,12 +240,12 @@ cases:
   change, which is why the method discounts it. Qwen gets WF1-01 and WF6-02 right. In WF5-02 and WF1-02 it
   re-plans, as Adobe's Agent Orchestrator does: it has the broken link fixed, or rewrites the page that failed
   the brand check, and goes on.
-- *Why only Gemma's numbers?* Qwen's recording of the same app is not a clean ground truth. Six of its tests answer
-  differently when run 64 at a time than when run one at a time, so even a change that alters nothing appears to
-  break them. A larger model does not automatically give a cleaner ground truth: some of Qwen's answers vary from
-  run to run, and vLLM, the model server, has a switch for repeatable decoding that does not support Qwen3.8.
-  gpt-oss-120b, a third model, varies even more, and five repetitions do not settle its vote. The models are used
-  as they are served. The lesson for Adobe is to measure first how much the answers vary under the real serving setup
+- *Why only Gemma's numbers?* Qwen's recording of the same app is not a clean ground truth. Seven of its tests
+  answer differently when run 64 at a time than when run one at a time, so even a change that alters nothing
+  appears to break them. A larger model does not automatically give a cleaner ground truth: some of Qwen's answers
+  vary from run to run, and vLLM, the model server, has a switch for repeatable decoding that does not support
+  Qwen3.8. gpt-oss-120b, a third model, varies even more, and five repetitions instead of three settle neither
+  model's vote. The models are used as they are served. The lesson for Adobe is to measure first how much the answers vary under the real serving setup
   (RESEARCH_PLAN §5.4).
 - *How would this run at Adobe?* Nightly full-suite runs provide the recordings the method learns from. For each
   change, `traceeval check` selects the tests, orders them and decides when to stop. The traces are
@@ -338,7 +338,7 @@ tokens, five replay seeds.
   and the earliest first detection (1.7% of the suite's tokens).
 - *Where the ground truth comes from.* Gemma's three runs agreed on all but five (change, test) pairs over the 43
   changes; Qwen's and gpt-oss's answers vary too much from run to run for the same majority rule, and five
-  repetitions instead of three do not settle gpt-oss's vote, which is why only Gemma's numbers are reported.
+  repetitions instead of three settle neither vote, which is why only Gemma's numbers are reported.
 
 ## Take-aways
 
@@ -362,10 +362,11 @@ suite's tokens unless said otherwise.
    91% of its replays; the adaptive method in none, because it keeps each test's pass rate on the current app and
    acts only on a flip. A pipeline should do the same rather than treat every red test as a regression.
 5. **Measure the model's noise before trusting a verdict.** Gemma's three runs agree on every test of the current
-   app and disagree on five (change, test) pairs over the 43 changes; Qwen's disagree on 260 and gpt-oss's on 577,
-   both "reveal" every benign change, and five repetitions do not settle gpt-oss's vote. The baseline runs one
-   test at a time and the changed copies in batches, and that alone flips some tests. An empty change, recorded
-   like the others, measures the noise floor; record it per model and per serving setup.
+   app and disagree on five (change, test) pairs over the 43 changes; Qwen's disagree on 357 and gpt-oss's on 577,
+   both "reveal" every benign change, and five repetitions instead of three settle neither vote. The baseline
+   runs one test at a time and the changed copies in batches, and that alone flips some tests; the rest varies
+   under identical conditions. An empty change, recorded like the others, measures the noise floor; record it per
+   model and per serving setup.
 6. **CASPER and the bandit have their place.** CASPER needs no diff: a model or provider update, or a prompt-level
    change in a system the team does not own. For AEM its representatives are the natural first pass after a model
    update, when every test is affected and the question is which behaviours drifted; its slices could also serve

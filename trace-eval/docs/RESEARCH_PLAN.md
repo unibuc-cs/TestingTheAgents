@@ -524,40 +524,43 @@ fails. The rule never caused a false verdict. Below a 10% budget it often cannot
 
 ### 5.4 Qwen and gpt-oss: why their recordings are not a ground truth
 
-Qwen3.8-27B (`runs/qwen5`: the same protocol, on one GPU of the server and two SLURM GPUs) passes 171 of the 176
-tests on the original app. It gets five of Gemma's six mistakes right and makes its own. In particular, where the
-routing skill says to stop after a failed step, it re-plans, as Adobe's Agent Orchestrator does: it repairs the
-page that failed the brand check, or has the broken link fixed, and goes on (`docs/EXPERIMENT.md` §6).
+Both were recorded on the same app with five repetitions instead of three, Qwen3.8-27B on two SLURM GPUs
+(`runs/qwen7`, report in `docs/results/qwen7/`) and gpt-oss-120b on both of fmi0's GPUs (`runs/gptoss7`,
+`docs/results/gptoss7/`): 180 tests, 43 changes, the baseline one test at a time and the changed copies in batches.
+The question the five repetitions answer is whether a majority vote settles where three did not. It does not, for
+either model.
 
-Its recording is not a clean ground truth. Every regression is revealed, but so is every benign change, by two to
-five tests, including the no-op change whose change set is empty. Six tests (the two that Qwen judges itself, the
-60-character boundary and three long workflows) answer differently when they run 64 at a time over three servers,
-as the changed copies do, than when they run one at a time, as the baseline does. Qwen's three runs also disagreed
-on 260 (change, test) pairs, against Gemma's five. The strategies' numbers on this recording are therefore not
-results; its report stays in `docs/results/qwen5/` as a record of the effect. The two reproduced methods show the
-effect once more: CASPER's slices appear to detect 87% of the changes at a 20% budget there, because two of their
-twenty representatives, SEO-05 and WF4-02, are among the unstable tests and "reveal" 25 and 31 of the 43 changes.
+Qwen passes 173 of the 180 tests on the original app. It gets five of Gemma's mistakes right (PUB-10, AUT-04,
+SEO-02, WF1-01, WF6-02), shares two (CFG-01, WF2-03) and makes its own: where the routing skill says to stop after
+a failed step, it re-plans, as Adobe's Agent Orchestrator does, repairing the page that failed the brand check or
+having the broken link fixed, and goes on (`docs/EXPERIMENT.md` §6). Its recording is not a clean ground truth.
+Every regression is revealed, but so is every benign change, by three to six tests under the majority over five
+runs and by two to four under the first three, the empty change included; the two votes differ on 75 (change,
+test) pairs and on the revealing sets of 40 of the 43 changes, and a change's own runs disagree on 357 pairs.
+Seven tests carry the variation: the case Qwen judges itself (PUB-20), the 60-character boundary (SEO-05), four
+long workflows (WF2-01, WF2-02, WF4-02, WF5-02) and AUT-05. Twenty-nine of the 34 regressions have a revealing test
+outside the seven. CASPER's twenty representatives include SEO-05, WF5-02 and WF2-02, which "reveal" 40, 34 and 15
+of the 43 changes, so its slices appear to detect 90% of the changes at a 20% budget there.
 
-Two remedies fall short. vLLM 0.31's batch-invariant mode, which makes greedy decoding exactly repeatable, does
-not support Qwen3.8: the server refuses it for the model's linear-attention layers ("not supported for
-GDN_ATTN"). Recording the baseline the way the changes are recorded is not enough either. With the no-op change,
-recorded exactly like the others, as the reference, seven of the eight other benign changes still flip one to
-five tests, so some of Qwen's answers vary from run to run even under identical conditions.
+gpt-oss passes 153 of the 180 tests and varies more. The benign changes are "revealed" by two to five tests under
+the majority over five runs and by one to four under the first three; the two votes differ on 95 pairs, and a
+change's own runs disagree on 577. Thirteen tests carry the variation, mostly the long workflows: WF1-01 and
+WF1-03 pass on the original app and fail on nearly every changed copy, whichever the change, the empty one
+included; MNT-05 flips on twenty changes. Twenty-five of the 34 regressions have a revealing test outside those
+thirteen. CASPER's representatives include the three, so its slices appear to detect 98% of the changes at a 20%
+budget there.
 
-gpt-oss-120b, OpenAI's open-weights model, was recorded on the same app with five repetitions instead of three
-(`runs/gptoss7`, report in `docs/results/gptoss7/`: 180 tests, 43 changes, three and a half hours on both of
-fmi0's GPUs). It passes 153 of the 180 tests on the original app and varies more than Qwen. Five repetitions do not
-settle the vote: the benign changes are "revealed" by two to five tests under the majority over five runs, and by
-one to four under the first three; the two votes differ on 95 (change, test) pairs, and a change's own runs
-disagree on 577. The variation sits in thirteen tests, mostly the long workflows. WF1-01 and WF1-03 pass on the
-original app, one test at a time, and fail on nearly every changed copy, 32 tests at a time, whichever the change,
-the empty one included; MNT-05 flips on twenty changes. Twenty-five of the 34 regressions have a revealing test
-outside those thirteen. CASPER's twenty representatives include the three, so its slices appear to detect 98% of
-the changes at a 20% budget there.
+Two remedies fall short. vLLM's batch-invariant mode, which makes greedy decoding exactly repeatable, does not
+support Qwen3.8: the server refuses it for the model's linear-attention layers ("not supported for GDN_ATTN").
+Recording the baseline the way the changes are recorded is not enough either. With the empty change, recorded
+exactly like the others, as the reference, every one of the eight other benign changes still flips tests: two to
+five under Qwen (WF4-01 and WF5-02 in nearly all of them) and one to four under gpt-oss. Part of the variation is
+batching, the tests that pass one at a time and fail in a batch; the rest is run-to-run variation under identical
+conditions.
 
 Qwen and gpt-oss are used as they are served, like Gemma. Their recordings stand as this finding, and the results
 are Gemma's. The lesson for a pipeline is to measure how much the model's answers vary from run to run under the
-serving setup the selection will run on, before trusting a ground truth or a stopping rule. The no-op change
+serving setup the selection will run on, before trusting a ground truth or a stopping rule. The empty change
 measures exactly that.
 
 ### 5.5 Take-aways
@@ -582,10 +585,11 @@ Gemma's (§5.1), at a budget of 20% of the suite's tokens unless said otherwise.
    91% of its replays; the adaptive method in none, because it keeps each test's pass rate on the current app and
    acts only on a flip. A pipeline should do the same rather than treat every red test as a regression.
 5. **Measure the model's noise before trusting a verdict.** Gemma's three runs agree on every test of the current
-   app and disagree on five (change, test) pairs over the 43 changes; Qwen's disagree on 260 and gpt-oss's on 577,
-   both "reveal" every benign change, and five repetitions do not settle gpt-oss's vote. The baseline runs one
-   test at a time and the changed copies in batches, and that alone flips some tests. An empty change, recorded
-   like the others, measures the noise floor; record it per model and per serving setup.
+   app and disagree on five (change, test) pairs over the 43 changes; Qwen's disagree on 357 and gpt-oss's on 577,
+   both "reveal" every benign change, and five repetitions instead of three settle neither vote. The baseline
+   runs one test at a time and the changed copies in batches, and that alone flips some tests; the rest varies
+   under identical conditions. An empty change, recorded like the others, measures the noise floor; record it per
+   model and per serving setup.
 6. **CASPER and the bandit have their place.** CASPER needs no diff: a model or provider update, or a prompt-level
    change in a system the team does not own. For AEM its representatives are the natural first pass after a model
    update, when every test is affected and the question is which behaviours drifted; its slices could also serve
@@ -628,9 +632,9 @@ Gemma's (§5.1), at a budget of 20% of the suite's tokens unless said otherwise.
 | 1. Testbed | SUT, catalog, tracing, mutations, change sets, record/replay, metrics, report, CLI, tests | done (v0.1) |
 | 2. Methods | baselines + cost-aware + predictive + adaptive Bayesian selector with stopping | done (v0.1), with the mandatory-coverage rule (§5.3); open: tuning ε, the priors and the discount |
 | 3. Method improvements | (a) test-level learned sensitivities (per test × component-kind reveal history) instead of kind-level; (b) IR relevance inside the Bayesian likelihood; (c) CASPER-style slices and the Risk-Aware Adaptive Evaluation bandit as reproduced baselines | (a) done; (b) done as an option (§5.2); (c) done: `casper_slices` and `risk_aware_ts` (§5.1) |
-| 4. Real LLM | ContentOps on real models (local vLLM): all variants × 3 reps under two models | done: Gemma (`runs/gemma5`); Qwen's recording of the same app (`runs/qwen5`) is spoiled by run-to-run variation and is not used for the results (§5.4); gpt-oss-120b (`runs/gptoss7`, five repetitions) varies even more |
+| 4. Real LLM | ContentOps on real models (local vLLM): all variants × K reps under three models | done: Gemma (`runs/gemma5`); Qwen's (`runs/qwen7`) and gpt-oss's (`runs/gptoss7`) five-repetition recordings of the same app are spoiled by run-to-run variation and are not used for the results (§5.4) |
 | 5. External SUT | tau2-bench airline adapter; 12 mutations (6 policy, 4 tool-code, 2 benign); same evaluation | after the demo for the AEM team |
-| 6. Scale/robustness | more mutations (mutation operators generated systematically: step deletion/swap/condition negation in procedures, argument swaps in adapters, config boundary values), equivalent-mutant analysis, sensitivity to K and to budget definitions (time vs. tokens), ablations of each model ingredient, more repetitions for the models whose answers vary (five recorded for gpt-oss: they do not settle the vote, §5.4) | with the paper |
+| 6. Scale/robustness | more mutations (mutation operators generated systematically: step deletion/swap/condition negation in procedures, argument swaps in adapters, config boundary values), equivalent-mutant analysis, sensitivity to K and to budget definitions (time vs. tokens), ablations of each model ingredient, more repetitions for the models whose answers vary (five recorded for Qwen and gpt-oss: they do not settle the vote, §5.4) | with the paper |
 | 7. Paper | see §8 | drafting can start from this document and the report |
 
 A model's own mistakes and blind spots shape the ground truth: which changes a test reveals depends on the model
