@@ -18,14 +18,11 @@ Ciprian Păduraru · University of Bucharest · the results are in `docs/results
   Qwen3.8-27B and gpt-oss-120b as further models), 180 tests and 43 controlled changes applied as file edits (9 of
   them benign). Full-suite runs with five repetitions give the ground truth, and strategies are compared by offline
   replay.
-- **Results (§5, Gemma).** Hand-written dependencies catch 62% of the regressions; trace-based selection 86% within
-  a budget of 20% of the full-suite tokens; TF-IDF over the diff 93%. The adaptive method catches 78% at 20% while
-  spending under 3% of the tokens, gives no false "regression" verdict on the 14 changes no test reveals, and tests
-  every mandatory property a change may affect before it calls the change clean (§5.3). Its weakness is narrow
-  regressions, revealed by one to five tests, where it can stop too early. Qwen's and gpt-oss's recordings of the
-  same app are not clean ground truths (§5.4).
-- **Next.** The demo for the AEM team (`docs/AEM_ALIGNMENT.md` §4), then tau2-bench as the external system under
-  test, with the models as they are served and decoded greedily. The paper is framed for ASE, ISSTA or ICST.
+- **Results (§5, Gemma).** Trace-based selection and the adaptive method beat hand-written dependencies by a wide
+  margin, and the adaptive method returns most of the budget while giving no false verdict (the README's table,
+  §5.1). Qwen's and gpt-oss's recordings of the same app are not clean ground truths (§5.4).
+- **Next.** The demo for the AEM team (`docs/AEM_ALIGNMENT.md` §4), then tau2-bench as the second system under test
+  (§6).
 
 ---
 
@@ -33,7 +30,7 @@ Ciprian Păduraru · University of Bucharest · the results are in `docs/results
 
 The research design and the testbed that makes it runnable, in reading order: the problem (§1), the abstractions
 the method rests on (§2), the methods (§3), the evaluation environment (§4), the results and the take-aways (§5),
-the models and the prototype (§6), the roadmap (§7), the paper (§8) and the open questions for the AEM team (§9).
+the roadmap (§6), the paper (§7) and the open questions for the AEM team (§8).
 The research problem is kept general: any agent platform built from skills, prompts, tools, harness code and
 configuration. AEM, Adobe's platform, is the motivating instance, and the method does not depend on it.
 
@@ -41,10 +38,10 @@ configuration. AEM, Adobe's platform, is the motivating instance, and the method
 
 | Topic | Decision | Reason |
 |---|---|---|
-| System under test (SUT) | A purpose-built mini content-operations platform ("ContentOps": pages, assets, publishing, SEO, translation, governance, rollback) is the primary SUT. tau2-bench, with the local vLLM model playing both the agent and the user, is the second SUT (designed, not yet implemented; see §6). | The primary SUT gives a multi-agent structure with shared components built in on purpose (the hard case the AEM team describes) and full control over mutations. Its agents run on a local model, and recorded answers make reruns free and exact. tau2-bench adds external validity. |
+| System under test (SUT) | A purpose-built mini content-operations platform ("ContentOps": pages, assets, publishing, SEO, translation, governance, rollback) is the primary SUT. | The primary SUT gives a multi-agent structure with shared components built in on purpose (the hard case the AEM team describes) and full control over mutations. Its agents run on a local model, and recorded answers make reruns free and exact. tau2-bench, the second system under test, adds external validity (§6). |
 | Agent runtime | A pure Python harness with an OpenAI-compatible LLM backend. | It is the shortest path, and the harness code must itself be mutable and instrumentable (coverage contexts). |
-| Observability | Our own trace recorder with an OpenTelemetry-compatible event model (agent, skill, tool, config and llm events) and an OTLP JSON exporter (`tracing/otel.py`), rather than Phoenix/OpenInference as a dependency. | No services in the loop, and the export needs no dependency. |
-| Oracles | Deterministic checks (final state, tool trajectories, audit log, response substrings). An LLM judge (Gemma or Qwen, against the case's rubric) runs only for explicitly marked answer-quality properties, and only after the deterministic checks pass. | Regression tracking must not depend on judge noise. |
+| Observability | Our own trace recorder with an OpenTelemetry-compatible event model (agent, skill, tool, config and llm events) and an OTLP JSON exporter (`tracing/otel.py`). | No services in the loop, and the export needs no dependency. |
+| Oracles (what decides pass or fail) | Deterministic checks (final state, tool trajectories, audit log, response substrings). An LLM judge (Gemma or Qwen, against the case's rubric) runs only for explicitly marked answer-quality properties, and only after the deterministic checks pass. | Regression tracking must not depend on judge noise. |
 | Ground truth | Mutation analysis: 43 controlled changes, benign ones included, applied as file edits. The selectors see only the diff. | Needed to measure the detection rate against a known answer, and to measure wasted budget. |
 | Evaluation | Record, then replay: run the full suite once per variant, and evaluate all strategies offline. | Decouples method development (thousands of replays) from execution cost (one recording per variant). |
 
@@ -93,6 +90,7 @@ use:
   checked, a mandatory flag, a threshold and the components it comes from; `docs/AEM_ALIGNMENT.md` §3.4). The
   mandatory ones, the safety properties, are the required dependencies of §2.3;
 - its **declared dependencies**, the metadata its author wrote;
+- its **fault profile**, if it injects one (`docs/CONTENTOPS.md`);
 - its **cost** and its **pass rate**, measured on the original app (§2.4, §2.5);
 - its **behaviour signature**: the agents, tools, fault profile and dataset of its baseline runs. Tests with the
   same signature are near-duplicates, whose outcomes are correlated.
@@ -119,7 +117,7 @@ for dependencies:
 
 | Component | Example | Granularity notes |
 |---|---|---|
-| `code:<file>::<function>` + `line:<file>:<n>` | `code:harness/retry.py::with_retry`, `line:harness/retry.py:29` | AST-normalised function comparison (docstrings ignored); changed baseline code lines; an insertion anchors to the code lines around it. |
+| `code:<file>::<function>` + `line:<file>:<n>` | `code:harness/retry.py::with_retry`, `line:harness/retry.py:29` | functions compared as syntax trees, docstrings ignored; changed baseline code lines; an insertion anchors to the code lines around it. |
 | `tool:<name>` | `tool:set_page_metadata` | When a changed function is a registered tool adapter. |
 | `skill:<name>#procedure` / `#prose` / `#meta` | `skill:link-validation#procedure` | The machine-readable procedure block, the instruction prose, and the front matter. |
 | `agent:<name>.<field>` | `agent:publishing.triggers`, `agent:seo.tools` | Order-sensitive comparison (intent order matters). A tool or skill list that only lost items names them (`removed: tool:check_consent`). |
@@ -152,7 +150,7 @@ A test run ends in one of five outcomes:
 
 - PASS;
 - TOOL_ERROR: a tool crashed, or failed in a way the case does not allow;
-- AGENT_FAILURE;
+- AGENT_FAILURE: the tool calls were allowed, but a check on the state, the calls or the answer failed;
 - HARNESS_ERROR: the run itself raised;
 - INFRA_INVALID: the environment broke the run, because the model server or the network did not answer, or a
   replay had no recorded answer.
@@ -215,11 +213,11 @@ The same strategies, placed in the literature:
 |---|---|---|---|
 | `full` | reference | no | no |
 | `random` | baseline | no | no |
-| `declared` | change-based (classic RTS on metadata) | yes | n/a |
-| `ir_tfidf` | IR-based test prioritization (REPiR-style; `docs/REFERENCES.md`) | no (ranks all) | no |
+| `declared` | classic regression test selection (RTS) on metadata | yes | n/a |
+| `ir_tfidf` | information-retrieval test case prioritization (TCP), REPiR-style (`docs/REFERENCES.md`) | no (ranks all) | no |
 | `observed` | trace-informed RTS | yes | n/a |
-| `observed_diverse` (optional) | observed + "additional" greedy breadth | yes | n/a |
-| `cost_aware` | the formula of Adobe's requirements, Risk × ChangeAffinity × FailureHistory / ExpectedTokens | ranks all (affected first) | no |
+| `observed_diverse` (optional) | the observed selection, one behaviour group at a time | yes | n/a |
+| `cost_aware` | the formula of Adobe's requirements (`cost_aware` above) | ranks all (affected first) | no |
 | `history_ml` (optional) | predictive test selection (Machalica et al.) | ranks all | no |
 | `casper_slices` | CASPER (Muse et al. 2026), reproduced | ranks slices (runs all) | no |
 | `risk_aware_ts` | Risk-Aware Adaptive Evaluation (Maji & Chowdhury 2026), reproduced | no (ranks all) | no |
@@ -233,12 +231,13 @@ variants of the proposed method differ from it only in how text is compared (§5
 
 The loop is the one pictured in `docs/USER_GUIDE.md` §5; the paragraphs below define each box.
 
-*Hypotheses.* Each changed component c is broken with a prior π_c that depends on its kind: ≈ 0.45–0.5 for code,
-skill, config and agent components, ≈ 0.12–0.15 for prompt wording and prose. The posterior is kept exactly over
-all 2^k subsets B of the changed components (k ≤ 8 components).
+*Hypotheses (step 1 of the five in `adaptive_bayes.py`'s docstring).* Each changed component c is broken with a
+prior π_c that depends on its kind: ≈ 0.45–0.5 for code, skill, config and agent components, ≈ 0.12–0.15 for prompt
+wording and prose. The posterior is kept exactly over all 2^k subsets B of the changed components (k ≤ 8
+components).
 
-*Likelihood.* P(t fails | B) = 1 − (1 − f_t) ∏_{c∈B} (1 − s_tc). The sensitivity s_tc of test t to component c is
-s_tc = r_kind(c) · lift_t,kind(c) · freq_t(c) · tilt_t, where
+*Likelihood (step 2).* P(t fails | B) = 1 − (1 − f_t) ∏_{c∈B} (1 − s_tc). The sensitivity s_tc of test t to
+component c is s_tc = r_kind(c) · lift_t,kind(c) · freq_t(c) · tilt_t, where
 
 - r_kind is the empirical reveal ratio learned from the other recorded changes: the fraction of statically
   impacted tests that actually revealed a change of that kind. Kinds separate, for example, tests that executed
@@ -251,28 +250,28 @@ s_tc = r_kind(c) · lift_t,kind(c) · freq_t(c) · tilt_t, where
   those changes' reveal rates), and m = 2 pads a short record. A test that ran many changed functions and never
   caught anything gets a lift below 1; one that caught changes most impacted tests missed gets a lift above 1.
   Comparing with E, instead of counting catches, matters because a change that breaks a large part of the suite
-  (link validation turned off everywhere: 49 tests) says little about each test it breaks. Like r_kind, the
-  records are recomputed from the recordings at every run, without the change under evaluation, so they grow as
-  more changes are recorded (`docs/USER_GUIDE.md` §5).
+  (link validation turned off everywhere: 49 tests) says little about each test it breaks. Like r_kind, the records
+  are recomputed from the recordings at every run, without the change under evaluation (`docs/USER_GUIDE.md` §5).
+  The record is there because kind-level sensitivities alone let the method spend on cheap tests that merely call a
+  changed function.
 - freq_t(c) is how often t exercised c in its baseline runs. For an agent's tool or skill list that only lost
-  items, it is how often t used one of the removed items: losing `check_consent` can affect only the tests that
-  call it, and not every test of the governance agent.
+  items, it is how often t used one of the removed items.
 - tilt_t ∈ [0.5, 2.0] combines the lexical relevance of the change text (code only, never comments) to the test's
   own text (name, request, expectations) with a bonus when the author declared the dependency. It is a proxy for
   whether the test's oracle plausibly observes the changed behaviour. The relevance measure is an option
   (`text`): word overlap (the default), TF-IDF, or none (§5.2).
 
-*Policy.* The next test is the argmax over t of (expected information gain about B, tilted by risk) / c(t). After a
-pass, the sensitivities of tests with the same behaviour signature (agents, tools, fault profile, dataset) are
-discounted (×0.35), because near-duplicate tests give correlated evidence rather than independent draws. Each test
-runs at most once: the models decode greedily, so a rerun almost always gives the same answer (§5.4 measures where
-it does not).
+*Policy (step 3).* The next test is the argmax over t of (expected information gain about B, tilted by risk) /
+c(t). After a pass, the sensitivities of tests with the same behaviour signature (agents, tools, fault profile,
+dataset) are discounted (×0.35), because near-duplicate tests give correlated evidence rather than independent
+draws. Each test runs at most once: the models decode greedily, so a rerun almost always gives the same answer
+(§5.4 measures where it does not).
 
-*Stopping.* The method stops with the verdict "regression" at the first failure of a test that passed on the
-original app. The models decode greedily, so that failure shows a changed behaviour, which is what the ground
-truth calls revealing. It stops with the verdict "clean" when P(any component broken | evidence) < ε_clean (0.05).
-Otherwise it runs until the budget is exhausted or no test is informative. Selection, prioritization and stopping
-all come from the same model.
+*Stopping (step 4).* The method stops with the verdict "regression" at the first failure of a test that passed on
+the original app: that failure shows a changed behaviour, which is what the ground truth calls revealing, while a
+failure the model also produces on the original app says nothing about the change. It stops with the verdict
+"clean" when P(any component broken | evidence) < ε_clean (0.05). Otherwise it runs until the budget is exhausted
+or no test is informative. Selection, prioritization and stopping all come from the same model.
 
 *Mandatory coverage (step 5).* A coverage rule sits on top of the model. A run that found no regression then
 tests every mandatory property the change may affect that is still untested, with the cheapest test that checks
@@ -286,16 +285,9 @@ They cover the design space of the literature: classic RTS/TCP on declared cover
 external competitors (`docs/related_work.md`), and both are reproduced on the testbed (`selection/reproduced.py`,
 roadmap item 3(c)).
 
-Neither looks at the diff. CASPER cuts the suite into slices of tests that behave alike on the original app
-(k-means on ten behavioural signals of the baseline traces, with the baseline outcome as a heavier column), runs
-two representatives of every slice on the changed app, and ranks the slices by the shift in their failure rate; it
-has no stopping rule. Risk-Aware Adaptive Evaluation is a contextual Thompson-sampling bandit: a logistic
-regression on the outcomes so far gives every test a failure probability, a Beta posterior per test mixes it with
-the test's own outcome, and the test whose draw times its risk is highest runs next. It rewards any failure, so a
-test the model already fails counts as a find. The module's docstrings say where the testbed forced an adaptation:
+The module's docstrings say where the testbed forced an adaptation:
 the replay oracle returns an outcome and a cost, not a trace, so CASPER's slices are scored by their failure rate
-rather than by a model of the signals; the budget is in tokens; and each test runs once, because the models decode
-greedily.
+rather than by a model of the signals; the budget is in tokens; and each test runs once (Policy, §3.1).
 
 ---
 
@@ -309,10 +301,8 @@ configuration file. The structure is deliberate, so that selection is hard and d
 discussed. Some components are shared and have a wide blast radius: `governance-checks` and `link-validation` are
 included by several skills, `check_permission` is available to eight of the ten specialists and `get_page` to six,
 and the retry helper wraps every tool call. Others are narrow: the approval gate matters to one test. Some policies
-are enforced only in skills (publish permission), others also in tools (approval tokens). A `SKILL.md` has front
-matter, prose, and a `## Procedure` YAML block that the model reads as numbered steps, with included skills written
-out in place and settings shown with their current values; mutations of the prose and of the procedure are separate
-components (`#prose`, `#procedure`).
+are enforced only in skills (publish permission), others also in tools (approval tokens). Mutations of a skill's
+prose and of its procedure are separate components (`#prose`, `#procedure`, §2.2).
 
 ### 4.2 Eval catalog
 
@@ -326,31 +316,20 @@ The catalog holds 106 scenario tests and two dataset-style evals:
 - Dataset-style evals: 50 routing items (prompt → expected delegation, run in route-only mode, where the delegation
   is recorded and the specialist is not run) and 24 intent items (prompt → expected tool invocation).
 
-Each case defines:
-
-- an agent entry point, a request, context slots and a fixture (with an optional patch);
-- a fault profile: `healthy`, `transient_once:<tool>`, `ack_timeout_once:<tool>` or `permanent_down:<tool>`;
-- a risk, critical/high/medium/low, mapped to severity 4/3/2/1;
-- properties, ids from the catalog of properties such as `task_completion`, `correct_routing`,
-  `workflow_completion`, `safety_*` and `resilience_*`;
-- declared dependencies;
-- expectations: state assertions, required and forbidden tools, attempt counts, audit counts, response
-  substrings, step limits, termination, and agent and tool order;
-- for the workflow tests, the workflow they run end to end (`traceeval/catalog/workflows.yaml` lists the six
-  with their chains of specialists);
-- for two cases, a judge rubric.
-
 ### 4.3 Controlled changes (43)
 
-| Category | Count | Examples |
+The code calls a controlled change a mutation, a changed copy of the app a variant, and the table of which test
+fails under which change the fault matrix.
+
+| Category | Count | One example (all 43 in `docs/USER_GUIDE.md` §6) |
 |---|---|---|
-| code (tool adapters, services, harness) | 10 | argument-mapping bug in `set_page_metadata`; retry drops idempotency keys; approval gate bypass; external links treated as reachable; shared `get_page` reports the wrong review flag; edits keep approvals; the insights ranking sorted the wrong way; page search and the brand check case-sensitive; the site audit ignores alt text |
-| runtime | 3 | termination six steps early; the delegated answer cut to 40 characters; a delegation drops the ids of earlier steps |
-| skill | 11 | publishing skill drops link validation / permission check; authoring drops metadata; translation hard-codes en-US; rollback drops its permission check (the service still refuses); rollback restores the latest version; shared link-validation tolerates broken assets; governance drops the consent check; SEO drops the title-length guard; the routing skill stops asking for approval; the routing skill drops the brand gate |
-| prompt / agent definition | 2 | SEO loses a tool; governance loses `check_consent` |
-| configuration | 7 | validate_links disabled; review not required; step budget 5; retries 0; title limit 20; default agent changed; no approval needed to take a page down |
-| combined | 1 | keyword-count rule in code + very low limit in config (each alone harmless) |
-| benign | 9 | prose reflow; comment/docstring edit (AST-equivalent); local-variable renames; config comments/ordering; new unused tool; orchestrator prompt wording; translation intents re-ordered; brand skill prose reworded; routing guidance reordered |
+| code (tool adapters, services, harness) | 10 | the SEO tool writes the title into the description field |
+| runtime | 3 | the agent loop stops six steps early |
+| skill | 11 | the publishing skill drops its link validation |
+| prompt / agent definition | 2 | the governance agent loses `check_consent` |
+| configuration | 7 | link validation switched off everywhere |
+| combined | 1 | a keyword-count rule in code plus a very low limit in config |
+| benign | 9 | the publishing skill's prose reflowed |
 
 The set is written for the models: a change has to touch an input a model acts on (keyword weights, trigger
 lists and the order of an agent's intents are not such inputs), and a removed step has to go from both the
@@ -361,23 +340,19 @@ and brand rules, the hand-off of ids between steps, the services behind the AEM-
 ones. `docs/USER_GUIDE.md` §6 explains each of the 43 and why it is in the set.
 
 The report checks a sanity property of the testbed: every regression-inducing change is revealed by ≥ 1 test, and
-no benign change is revealed by any test. Under Gemma five regressions are revealed by no test, for reasons that
-belong to the model (§5.1); under Qwen every regression is revealed, but so is every benign change (§5.4).
+no benign change is revealed by any test. Under Gemma five regressions are revealed by no test (§5.1); the
+other models' recordings are the subject of §5.4.
 
 ### 4.4 Protocol and metrics
 
-1. `baseline`: full suite × K with coverage contexts, giving observed dependencies, cost and pass rates.
-2. `mutants`: for each change, copy the SUT, apply the edit, extract the change set and run the full suite × K,
-   giving the fault matrix.
-3. `evaluate`: for every (change, strategy, budget ∈ {2,5,10,20,30,50,100}% of full-suite tokens, seed), the
-   strategy selects from the baseline facts and the change set only. Each execution is answered from the
-   recorded runs of that variant (a random repetition supplies the outcome and cost). Adaptive strategies
-   interact sequentially.
-4. Metrics:
-   - change coverage, which needs no ground truth (`experiment/coverage.py`): the share of the changed components
-     the executed tests exercised, the share of the properties the change may affect that they checked, whether
-     every affected mandatory property got a test, and the shares of the affected workflows they ran, of the
-     affected features they reached and of the refusals in the changed code they reached;
+The recording is `docs/EXPERIMENT.md` §5's `baseline` and `mutants` steps with K repetitions; a 43-change × 5-rep
+recording of the 180 tests is about 39k runs. `evaluate` then replays: for every (change, strategy, budget ∈ {2, 5,
+10, 20, 30, 50, 100}% of the full-suite tokens, seed), the strategy selects from the baseline facts and the change
+set only, each execution is answered from the recorded runs of that variant (a random repetition supplies the
+outcome and cost), and adaptive strategies interact sequentially. The metrics:
+
+   - change coverage, which needs no ground truth (`docs/USER_GUIDE.md` §4; the dimensions are defined in
+     `docs/AEM_ALIGNMENT.md` §3.5);
    - property coverage: of the properties a change breaks, those its selected tests exercise;
    - detection (≥ 1 revealing test executed and failed), recall of revealing tests, tokens actually spent, cost
      to first detection, false alarms, safety recall, stop reason and stop correctness;
@@ -394,15 +369,10 @@ belong to the model (§5.1); under Qwen every regression is revealed, but so is 
 The agents are played by Gemma 4 E4B, served with vLLM on a GPU server (`docs/EXPERIMENT.md`). §5.4 covers Qwen's
 and gpt-oss's recordings of the same app. The ground truth belongs to the model:
 
-- On the original app, 172 of 180 tests pass. The eight failures are the model's own mistakes, which wording does
-  not fix (`docs/EXPERIMENT.md` §6). Gemma schedules a page without an approved review (PUB-10, and in the campaign
-  launch WF1-01), requests a review nobody asked for (AUT-04) and where none is required (CFG-01), applies an
-  over-long SEO title (SEO-02), goes on to publishing after a failed link check (WF5-02), reports pages as
-  republished that were not (WF2-03), and stops a whole plan after a refused export that the other steps do not
-  depend on (WF6-02). Its five runs of each test always agreed.
-- 29 of the 34 regressions are revealed. Gemma does not act on guards it has to work out for itself (a review
-  flag, a length), and it stops at a broken asset reference even when the skill says the reference does not
-  block. It therefore behaves the same, wrongly, with or without the five changes to those guards.
+- On the original app, 172 of 180 tests pass; the eight failures are Gemma's own mistakes (`docs/EXPERIMENT.md`
+  §6). Its five runs of each test always agreed.
+- 29 of the 34 regressions are revealed; the five that are not are the model's misses, the same wrong behaviour
+  with or without the change (`docs/EXPERIMENT.md` §7).
 - None of the nine benign changes fails a test. Across all 43 changes, the five runs disagreed on only four
   (change, test) pairs, and the majority vote absorbs them.
 
@@ -420,11 +390,9 @@ Detection of the 29 regressions Gemma reveals, by nominal budget, and tokens act
 | risk_aware_ts (Risk-Aware Adaptive Evaluation, reproduced) | 0.28 | 0.35 | 0.57 | 0.83 | 1.00 | 0.20 | 0.98 | 1.00 |
 | adaptive_bayes | 0.74 | 0.78 | 0.78 | 0.81 | 0.81 | 0.03 | 0.03 | 0.20 |
 
-APFD_c of the full prioritized order: casper_slices 0.52, random 0.54, full 0.58, risk_aware_ts 0.60, declared 0.76
-(selection recall 0.53), ir_tfidf 0.77, cost_aware 0.77, observed 0.79 (selection recall 1.00 at half the suite's
-cost), adaptive 0.81. Cost to first detection, as a fraction of the full suite: adaptive 0.017, declared 0.03,
-ir_tfidf 0.04, observed 0.05, cost_aware 0.06, casper_slices 0.12, random 0.14, risk_aware_ts 0.14, full 0.19. Time
-spent follows tokens closely (the report's section 2).
+APFD_c of the full prioritized order runs from 0.54 (random) to 0.76–0.81 for the strategies that use the change,
+the adaptive method's 0.81 the best; its first detection comes after 1.7% of the suite's tokens, the reproduced
+methods' after 12–14%. The report's sections 2 and 4 hold the full tables; time spent follows tokens closely.
 
 **Reading.**
 - *RQ1/RQ2.* Declared metadata caps detection at 62%, because shared skills reached through `include`, harness
@@ -453,9 +421,8 @@ spent follows tokens closely (the report's section 2).
   and the traces (78–93%; hand-written dependencies alone 62%); an order no better than random's (APFD_c 0.52 and
   0.60); and a first detection at 12–14% of the suite, where the change-aware strategies need 2–6%. The bandit's
   impact score is the test's risk, so it does better on the changes that break a safety property (71% at 20%, 98%
-  at 50%). It rewards any failure, so it also runs Gemma's red tests early: on the changes no test reveals it sees
-  a failure the change did not cause in 76% of its replays, CASPER's slices in 57%. Neither stops: both spend the
-  whole budget on every change.
+  at 50%). It rewards any failure, so it also runs Gemma's red tests early (the *Red tests* bullet). Neither stops:
+  both spend the whole budget on every change.
 - *Where CASPER fits.* The numbers above measure what the diff is worth, not CASPER in its own setting. CASPER was
   built for changes that have no diff a test can be mapped to: a model upgrade, a provider's silent update, a
   prompt-level change whose effect spreads through the model's behaviour. It needs only the logs of the last full
@@ -487,15 +454,15 @@ text), and no variant gives a "regression" verdict on a change no test reveals.
 **Reading.** TF-IDF brings forward the one test that reveals a narrow change, and gains up to five points while
 spending less. Without any text the method loses ten points, so text matters, but coverage and history carry most
 of the result. The testbed is textual: tests, skills and config keys share vocabulary, which favours any text
-measure (a threat the paper notes). The default stays word overlap until a recording of another application
-(tau2-bench, §6) shows whether the gain holds there too. Whether TF-IDF helps as much where tests and changes are
-worded differently is a question for tau2-bench.
+measure (a threat the paper notes). The default stays word overlap until a recording of another application, where
+tests and changes are worded differently (tau2-bench, §6), shows whether the gain holds there too.
 
 ### 5.3 Coverage, and mandatory properties in the method
 
-Coverage is a metric the AEM team asked for (`docs/AEM_ALIGNMENT.md` §3.5); the report's section 6 gives it for
-the suite and for each change. On this app every agent, skill, setting, property and workflow has a test; one
-tool, `get_asset`, has none. The declared metadata misses one skill and three settings that the traces show in use.
+Coverage is a metric the AEM team asked for (`docs/AEM_ALIGNMENT.md` §3.5); the report's section 6 gives it for the
+suite and for each change. On this app every agent, skill, configuration key, property and workflow has a test; one
+tool (`get_asset`) and two setting values have none. The declared metadata misses one skill and three settings that
+the traces show in use.
 
 Change coverage needs no ground truth. Observed, cost-aware and TF-IDF selection and the adaptive method all
 exercise 97% of the changed components at a 20% budget (one change touches code no test runs). The adaptive
@@ -504,13 +471,11 @@ stops at the first real failure or as soon as it is confident. That is the purpo
 let the method call a change clean with a mandatory property untested.
 
 Step 5 of the method (on by default; `adaptive_bayes_nomandatory` is the ablation) closes that gap. A run that
-found no regression does not end before every mandatory property the change may affect has a test, while the
-budget allows. The test chosen is the cheapest one that checks the property and passes on the original app. At a
-20% budget:
+found no regression does not end before every mandatory property the change may affect has a test, while the budget
+allows. The test chosen is the cheapest one that checks the property and passes on the original app.
 
-| recording | runs without a regression that tested every affected mandatory property, without / with the rule | extra tests per change | detection without / with the rule |
-|---|---|---|---|
-| gemma7 | 0.33 / 0.90 | 0.8 | 0.74 / 0.78 |
+At a 20% budget the rule raises the share of regression-free runs that tested every affected mandatory property
+from 0.33 to 0.90, for 0.8 extra tests per change, and detection from 0.74 to 0.78.
 
 On this app the rule is also a detector. It catches `skill_publish_drop_link_validation`, which the method alone
 calls clean: before ending, the method must test the mandatory property `safety_no_broken_publish`, and that test
@@ -524,19 +489,14 @@ report in `docs/results/qwen7/`) and gpt-oss-120b on both of fmi0's GPUs (`runs/
 repetitions answer is whether a majority over five runs settles what a majority over the first three does not. It
 does not, for either model.
 
-Gemma gives the opposite picture (§5.1): the votes over three and over five runs differ on two labels, the two
-pairs that sit at the majority line (DS-INTENTS/i20 under `skill_governance_drop_consent`, WF4-01 under
-`skill_translation_wrong_default`). Those two are also the only labels on which a second recording, with three
-repetitions, disagrees with §5.1's. Gemma's ground truth is stable across repetitions and across recordings, three
-repetitions suffice for it, and the strategies' numbers on the second recording are within a few points of §5.1's.
+Gemma gives the opposite picture (§5.1): its vote is stable, and the votes over the first three and over all five
+runs differ on two labels only, the two pairs at the majority line (DS-INTENTS/i20 under
+`skill_governance_drop_consent`, WF4-01 under `skill_translation_wrong_default`).
 
-Qwen passes 173 of the 180 tests on the original app. It gets five of Gemma's mistakes right (PUB-10, AUT-04,
-SEO-02, WF1-01, WF6-02), shares two (CFG-01, WF2-03) and makes its own: where the routing skill says to stop after
-a failed step, it re-plans, as Adobe's Agent Orchestrator does, repairing the page that failed the brand check or
-having the broken link fixed, and goes on (`docs/EXPERIMENT.md` §6). Its recording is not a clean ground truth.
-Every regression is revealed, but so is every benign change, by three to six tests under the majority over five
-runs and by two to four under the first three, the empty change (`benign_code_comment_docstring`, whose change set
-is empty) included; the two votes differ on 75 (change, test) pairs and on the revealing sets of 40 of the 43
+Qwen passes 173 of the 180 tests on the original app (`docs/EXPERIMENT.md` §6). Its recording is not a clean ground
+truth. Every regression is revealed, but so is every benign change, by three to six tests under the majority over
+five runs and by two to four under the first three, the empty change (`benign_code_comment_docstring`, whose change
+set is empty) included; the two votes differ on 75 (change, test) pairs and on the revealing sets of 40 of the 43
 changes, and a change's own runs disagree on 357 pairs. Seven tests carry the variation: one of the two cases a
 model judges against a rubric (PUB-20), the 60-character boundary (SEO-05), four long workflows (WF2-01, WF2-02,
 WF4-02, WF5-02) and AUT-05. Twenty-nine of the 34 regressions have a revealing test outside the seven. CASPER's
@@ -569,60 +529,36 @@ measures exactly that.
 What the experiments say, in the order a team would act on them. The numbers are Gemma's (§5.1), at a budget of 20%
 of the suite's tokens unless said otherwise.
 
-1. **Record traces; do not maintain a map.** Hand-written dependency metadata finds 62% of the regressions at any
-   budget, because shared skills, harness code and settings are reached without being declared. Dependencies read
-   from traces find 86%, and everything at 100%. One instrumentation of the agent runtime (the testbed exports
-   OpenTelemetry spans) replaces a test-to-component map that nobody keeps current.
-2. **Read the diff.** The strategies that read the diff and the traces find 78% to 93% of the regressions,
-   hand-written dependencies alone 62%; the two that do not read the change, CASPER's slices and the risk-aware
-   bandit, find 59% and 57%, near a random order's 56%, and their first revealing test comes after 12% to 14% of
-   the suite's tokens instead of 2% to 6%.
-3. **Stop when confident, with a safety net.** The adaptive method finds 78% for 3% of the tokens and returns the
-   rest. Its ceiling is 81%: on a regression that one to five tests reveal it can stop too early. The mandatory
-   rule covers the safety properties for under one extra test per change, and on this app catches the publishing
-   skill without its link check, which the stopping rule alone misses. The catalog of properties is where that
-   policy lives: whoever sets the mandatory flag decides what the pipeline never skips.
-4. **Discount the tests the model already fails.** Eight tests fail on the current app, and on nearly every changed
-   copy. On the 14 changes no test reveals, every other strategy reports a failure the change did not cause in 57%
-   to 94% of its replays; the adaptive method in none, because it keeps each test's pass rate on the current app
-   and acts only on a flip. A pipeline should do the same rather than treat every red test as a regression.
-5. **Measure the model's noise before trusting a verdict.** Gemma's five runs agree on every test of the current
-   app and disagree on four (change, test) pairs over the 43 changes, and a second recording with three repetitions
-   reproduces its ground truth on all but two labels; Qwen's disagree on 357 and gpt-oss's on 577, both "reveal"
-   every benign change, and five repetitions settle neither vote. The baseline runs one test at a time and the
-   changed copies in batches, and that alone flips some tests; the rest varies under identical conditions. An empty
-   change, recorded like the others, measures the noise floor; record it per model and per serving setup.
-6. **CASPER and the bandit have their place.** CASPER needs no diff: a model or provider update, or a prompt-level
-   change in a system the team does not own. For AEM its representatives are the natural first pass after a model
-   update, when every test is affected and the question is which behaviours drifted; its slices could also serve
-   as the adaptive method's groups of near-duplicate tests. The bandit learns from the outcomes of earlier changes
-   and from the tests it has run; with no history it has only the tests' risk to go on. The change-aware
-   strategies cover edits to skills, code and settings; the two kinds combine.
+1. **Record traces; do not maintain a map.** Hand-written dependency metadata misses what shared skills, harness
+   code and settings reach; dependencies read from traces recover it (§5.1). One instrumentation of the agent
+   runtime (the testbed exports OpenTelemetry spans) replaces a test-to-component map that nobody keeps current.
+2. **Read the diff.** The strategies that read the diff and the traces find most regressions early; the two that do
+   not, CASPER's slices and the risk-aware bandit, sit near a random order and find their first revealing test late
+   (§5.1).
+3. **Stop when confident, with a safety net.** The adaptive method finds nearly as much as the best full-budget
+   strategy for a small fraction of the tokens and returns the rest; its price is a ceiling on narrow regressions
+   (§5.1). The mandatory rule covers the safety properties for under one extra test per change and catches a change
+   the stopping rule alone misses (§5.3). The catalog of properties is where that policy lives: whoever sets the
+   mandatory flag decides what the pipeline never skips.
+4. **Discount the tests the model already fails.** The tests Gemma fails on the current app fail on nearly every
+   changed copy too, and every other strategy reports some of those failures as the change's; the adaptive method
+   keeps each test's pass rate and acts only on a flip (§5.1). A pipeline should do the same rather than treat
+   every red test as a regression.
+5. **Measure the model's noise before trusting a verdict.** Gemma's vote is stable; Qwen's and gpt-oss's are not,
+   partly because the baseline runs one test at a time and the changed copies in batches, partly because some
+   answers vary under identical conditions (§5.4). An empty change, recorded like the others, measures the noise
+   floor; record it per model and per serving setup.
+6. **CASPER and the bandit have their place.** CASPER needs no diff and is the natural first pass after a model
+   update; the bandit learns from outcomes and, without history, has only the tests' risk to go on (*Where CASPER
+   fits*, §5.1). The change-aware strategies cover edits to skills, code and settings; the two kinds combine.
 7. **Text is a strong, cheap baseline.** TF-IDF similarity between the diff and the tests' text has the best
-   detection when the whole budget is spent (93%, and all of the changes that break a safety property). It never
-   stops, so it spends everything on benign changes too; it is the fallback order to keep in any pipeline.
-8. **Not yet covered.** Real version history instead of mutants; a second system under test (tau2-bench); suites
-   large enough for slicing to pay; re-planning after a failed step (recorded on a branch, awaiting the AEM team's
-   decision); tuning the stopping threshold, the priors and the discount; time rather than tokens as the budget.
+   detection when the whole budget is spent, and it never stops (§5.1, §5.2); it is the fallback order to keep in
+   any pipeline.
+8. **Not yet covered.** The roadmap (§6).
 
 ---
 
-## 6. Models, the prototype, and a second system under test
-
-- **ContentOps on the three models.** Gemma 4 E4B, Qwen3.8-27B and gpt-oss-120b, served with vLLM on the GPU server
-  or the SLURM cluster, every answer recordable so that a rerun costs nothing (`docs/EXPERIMENT.md` §3 and §4). A
-  43-change × 5-rep recording of the 180 tests is about 39k runs (timings in `docs/EXPERIMENT.md` §7).
-- **The prototype** (`traceeval check`, `docs/EXPERIMENT.md` §5) runs the adaptive method on one change, live, and
-  stops with a verdict and its probability that the change broke something. A recording made with the same model
-  supplies the baseline traces, the costs and the other changes to calibrate from.
-- **tau2-bench** (designed, not yet implemented). The airline domain comes first: 50 tasks, with a reward
-  computed from the database state and the agent's communication, and no model judge. The local model plays both
-  the agent and the user, and the controlled changes mutate the policy and the tool code. The replay evaluator
-  and the strategies run unchanged on the parsed history.
-
----
-
-## 7. Roadmap
+## 6. Roadmap
 
 | Phase | Deliverable | Status |
 |---|---|---|
@@ -630,23 +566,16 @@ of the suite's tokens unless said otherwise.
 | 2. Methods | baselines + cost-aware + predictive + adaptive Bayesian selector with stopping | done, with the mandatory-coverage rule (§5.3); open: tuning ε, the priors and the discount |
 | 3. Method improvements | (a) test-level learned sensitivities (per test × component-kind reveal history) instead of kind-level; (b) IR relevance inside the Bayesian likelihood; (c) CASPER-style slices and the Risk-Aware Adaptive Evaluation bandit as reproduced baselines | (a) done; (b) done as an option (§5.2); (c) done: `casper_slices` and `risk_aware_ts` (§5.1) |
 | 4. Models | ContentOps with three models (local vLLM): all changes × K reps | done: Gemma (`runs/gemma7`); Qwen's (`runs/qwen7`) and gpt-oss's (`runs/gptoss7`) recordings of the same app are spoiled by run-to-run variation and are not used for the results (§5.4) |
-| 5. External SUT | tau2-bench airline adapter; 12 mutations (6 policy, 4 tool-code, 2 benign); same evaluation | after the demo for the AEM team |
-| 6. Scale/robustness | more mutations (mutation operators generated systematically: step deletion/swap/condition negation in procedures, argument swaps in adapters, config boundary values), equivalent-mutant analysis, sensitivity to K and to budget definitions (time vs. tokens), ablations of each model ingredient, more repetitions for the models whose answers vary (five recorded for all three models: Gemma's vote is stable across repetitions and recordings, Qwen's and gpt-oss's do not settle, §5.4) | with the paper |
-| 7. Paper | see §8 | drafting can start from this document and the report |
+| 5. Second system under test | tau2-bench, a public benchmark of tool-using agents with a simulated user (`docs/REFERENCES.md`): the airline domain, 50 tasks with a reward computed from the database state and the agent's communication, no model judge; the local model plays both the agent and the user, the controlled changes mutate the policy and the tool code (12 mutations: 6 policy, 4 tool-code, 2 benign), and the replay evaluator and the strategies run unchanged | after the demo for the AEM team |
+| 6. Scale/robustness | more mutations (mutation operators generated systematically: step deletion/swap/condition negation in procedures, argument swaps in adapters, config boundary values), equivalent-mutant analysis, sensitivity to K and to budget definitions (time vs. tokens), ablations of each model ingredient, more repetitions for the models whose answers vary (five recorded for all three models, §5.4) | with the paper |
+| 7. Paper | see §7 | drafting can start from this document and the report |
 
-A model's own mistakes and blind spots shape the ground truth: which changes a test reveals depends on the model
-(`docs/EXPERIMENT.md` §6 and §7). Two parts of the method follow from this. Each test's own record (§3.1) is there
-because kind-level sensitivities alone let the method spend on cheap tests that merely call a changed function.
-Stopping at the first failure of a test that passed on the original app is there because a failure the model also
-produces on the original app says nothing about the change.
-
-The prototype includes the items of the AEM team's wish list, checked one by one in `docs/AEM_ALIGNMENT.md` §2.
-After the demo come re-planning after a failed step, built on a branch and waiting for one product decision
-(`docs/AEM_ALIGNMENT.md` §4.1), then tau2-bench.
+Re-planning after a failed step is built on a branch and waits for one product decision (`docs/AEM_ALIGNMENT.md`
+§4.1).
 
 ---
 
-## 8. Paper
+## 7. Paper
 
 The draft is `docs/paper/main.tex` (build with `latexmk -pdf main`): what a team needs, how the testbed was built,
 the abstractions, the methods, the evaluation with its threats, the take-aways, and the conclusion with future
@@ -656,11 +585,11 @@ EMNLP, with the testbed as the headline.
 
 ---
 
-## 9. Questions still to settle with the AEM team
+## 8. Questions still to settle with the AEM team
 
-The follow-up questions with the AEM team (`docs/AEM_ALIGNMENT.md` §1) answered part of this list: nightly and
-model-update runs, prompt → answer and prompt → tool-call datasets, the thresholds and mandatory properties
-wanted, and budgets with early stopping.
+The AEM team's written answers (`docs/AEM_ALIGNMENT.md` §1) settled part of this list: nightly and model-update
+runs, prompt → answer and prompt → tool-call datasets, the thresholds and mandatory properties wanted, and budgets
+with early stopping.
 
 1. Change identification. Is the diff available per PR or nightly batch, and does the platform keep skills,
    prompts and config under version control together with the harness code? The change-set extractor assumes

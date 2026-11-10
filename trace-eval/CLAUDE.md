@@ -45,8 +45,8 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
 - `traceeval/spec/` — spec-driven development layer: clause catalog (`catalog.yaml`) and model, one checker per
   clause kind (`checks/`), product model, demo PRs, runner, report, drafting with a model (`draft.py`).
   Specs live in `traceeval/specs/FS-*.yaml` as catalog templates + slots (see `docs/SDD_GUIDE.md`).
-- `tests/` — pytest; `runs/` — experiment outputs (git-ignored); `docs/` — guide, plan, related work, references, results, and
-  the paper draft (`docs/paper/`, LaTeX).
+- `tests/` — pytest; `runs/` — experiment outputs (git-ignored); `docs/` — guide, plan, related work, references,
+  results, and the paper draft (`docs/paper/`, LaTeX).
 
 ## Conventions
 
@@ -55,18 +55,20 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
   (`code:<file>::<fn>`, `code:<file>`, `line:<file>:<n>`, `tool:`, `skill:<name>#procedure|#prose|#meta`,
   `agent:<name>.<field>`, `config:<key>`, `fixture:<name>`; property sources may also cite `spec:<id>`); do not
   invent parallel schemes.
-- Strategies may use only baseline history, change sets and *other* variants' outcomes (`ctx.train_variants`);
-  never the variant under evaluation.
+- Strategies may use only baseline history, change sets and *other* variants' outcomes (`ctx.train_variants`; a
+  variant is a copy of the app with one change applied); never the variant under evaluation.
 - Change sets hold code only: comments, docstrings, blank lines and formatting add no component and no diff
   line (`mutation/changeset.py`), so no strategy and no probability may depend on them.
 - Mutation operators assert their anchors; a new mutation labelled a regression must be revealed by ≥ 1 test under
-  at least one model, and one labelled benign by none (the report's section 1 gives the counts).
+  at least one model, and one labelled benign by none (section 1 of `docs/results/gemma7/report.md` gives the
+  counts).
 - A test's `properties` must be ids from `traceeval/catalog/properties.yaml` (the catalog of properties, a feature
-  the AEM team asked for; see docs/AEM_ALIGNMENT.md); add a property there before using it. A test that runs a
-  multi-agent workflow end to end names it (`workflow: W1`), an id from `traceeval/catalog/workflows.yaml`. A
-  feature in `traceeval/catalog/features.yaml` lists its parts as component ids; a case that needs a setting at
-  another value sets it in `config:` (by dotted key); a new tool, skill or setting users
-  would see belongs to a feature.
+  the AEM team asked for; see docs/AEM_ALIGNMENT.md); add a property there before using it.
+- A test that runs a multi-agent workflow end to end names it (`workflow: W1`), an id from
+  `traceeval/catalog/workflows.yaml`.
+- A feature in `traceeval/catalog/features.yaml` lists its parts as component ids; a new tool, skill or setting
+  users would see belongs to a feature.
+- A case that needs a setting at another value sets it in `config:` (by dotted key).
 - Keep the catalog passing on the baseline, apart from Gemma's known mistakes (`KNOWN_MODEL_MISTAKES` in
   `tests/test_sut.py`).
 - Derive seeds from names with a stable function of their characters (`experiment/evaluate.py` sums the
@@ -78,14 +80,16 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
   error or tool crash fails the test as TOOL_ERROR.
 - Demo PRs in `traceeval/spec/prs.py` are mutations too (literal anchors, same rule); every PR's expected
   verdict is checked by `tests/test_sdd.py` and flagged in the sdd report when it differs.
-- A new kind of clause is a template in `traceeval/spec/catalog.yaml` (and a row in `docs/SDD_GUIDE.md`);
-  the checkers only ever see expanded clauses. Specs reference the application by name (tools, config keys,
-  functions, cases); `validate_spec` reports names the current product model does not have.
+- A new clause template is an entry in `traceeval/spec/catalog.yaml` and a row in `docs/SDD_GUIDE.md` §3; a new
+  kind also needs a checker (`docs/STUDY_GUIDE.md` §4). The checkers only ever see expanded clauses. Specs
+  reference the application by name (tools, config keys, functions, cases); `validate_spec` reports names the
+  current product model does not have.
 
 ## Gotchas
 
 - Reformatting files under `traceeval/sut/` can move the literal text anchors used in
-  `traceeval/mutation/catalog.py` (the table is excluded from the formatter); run `pytest` afterwards and re-anchor failures.
+  `traceeval/mutation/catalog.py` (the table is excluded from the formatter); run `pytest` afterwards and re-anchor
+  failures.
 - Skills' `## Procedure` blocks are shown to the model as numbered steps
   (`sut/harness/skills.py::render_procedure`: included skills written out, settings with their values);
   the YAML in them must stay parseable and its step keys are documented in `sut/harness/skills.py`.

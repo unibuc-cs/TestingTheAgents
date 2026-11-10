@@ -1,12 +1,12 @@
-# Bringing the testbed closer to AEM
+# The testbed against AEM's requirements
 
 This document checks the testbed against what Adobe asked for and what Adobe ships, describes the features built
 for it (section 3), and plans the next steps (section 4). The "today" column of section 2 says what is done.
 
 ## 1. What Adobe's platform looks like
 
-From Adobe's requirements, the AEM team's answers to the follow-up questions, Adobe's Agent Orchestrator deck and
-Adobe's public documentation:
+From Adobe's requirements, the AEM team's written answers to our questions about their test practice, Adobe's
+Agent Orchestrator deck and Adobe's public documentation:
 
 - **More than 50 agents** for AEM workflows, tested with unit, integration and end-to-end tests and with
   statistical evals over datasets ("prompt → expected answer", "prompt → expected tool call"), run nightly and on
@@ -16,11 +16,11 @@ Adobe's public documentation:
   the next, verifies results, re-plans when a step fails, and asks the user for approval before acting. The
   deck's example: "launch a journey for recently signed-up customers…" runs an Audience Agent, a Journey Agent,
   a Content Agent and a Personalization Agent in turn, with an approval in between.
-- **AEM's agents** (Experience League): the Brand Experience Agent (experience production: content updates,
-  forms), the Content Advisor Agent (asset discovery, content variations), the Governance or Brand Governance
-  Agent (brand, security and regulatory policy checks, permissions), the Site Optimization Agent (detects and
-  deploys website fixes: traffic, engagement, broken links), the Data Insights Agent (analytics questions), the
-  LLM Optimization Agent, the Product Support Agent.
+- **AEM's agents** (Experience League, Adobe's documentation site): the Brand Experience Agent (experience
+  production: content updates, forms), the Content Advisor Agent (asset discovery, content variations), the
+  Governance or Brand Governance Agent (brand, security and regulatory policy checks, permissions), the Site
+  Optimization Agent (detects and deploys website fixes: traffic, engagement, broken links), the Data Insights
+  Agent (analytics questions), the LLM Optimization Agent, the Product Support Agent.
 - **What the AEM team said they do not have yet and want in the prototype** (the AEM team's answers to the
   follow-up questions): workflows (they only have features), a catalog of evaluators and properties with thresholds
   ("prompt, properties and threshold do not exist, but they would like it, and a category of properties too"),
@@ -37,14 +37,14 @@ Adobe's public documentation:
 | statistical evals over datasets | yes (50 routing items, 24 intent items); pass-rate thresholds per property | — |
 | tests that run several agents from one prompt | yes: six workflows of two to five specialists (§3.3), each with a variant where a step must stop | — |
 | plans, data passed between agents, approvals, re-planning | yes: the orchestrator plans (`make_plan`), gives each step its own instruction and the ids of the earlier steps, and asks a person before publishing, scheduling or taking pages down (`request_approval`) | re-planning after a failed step: our routing skill says stop; Qwen re-plans on its own (WF1-02, WF5-02; [EXPERIMENT.md](EXPERIMENT.md) §6). Built on a branch and recorded with three models (§4.1) |
-| workflows as a coverage dimension | yes: `catalog/workflows.yaml` lists the six; the report shows the workflows no test covers, declared (named by a test) and observed (a recorded run delegates to exactly its agents, in order), and the change coverage gives the share of the affected workflows the executed tests ran | — |
+| workflows as a coverage dimension | yes: `catalog/workflows.yaml` lists the six; suite and change coverage count them (§3.5) | — |
 | a catalog of properties with categories and thresholds | yes: `traceeval/catalog/properties.yaml`, pass rates against thresholds and property coverage in the report; a model can draft it from the requirements, for people to edit (`traceeval properties draft`; Qwen's draft in §3.4) | — |
-| coverage over agents, features, skills, tools, tool error paths, config, setting values, properties, workflows, paths, risk (declared, observed, required) | yes: suite coverage per dimension and change coverage per strategy in the report and in `traceeval check`; the method tests every mandatory property a change may affect (§3.5) | — |
+| coverage over the requirements' dimensions, declared, observed and required | yes: suite coverage per dimension and change coverage per strategy in the report and in `traceeval check`; the method tests every mandatory property a change may affect (§3.5) | — |
 | per-test metadata (agents, skills, tools, workflow, risk, cost, history) | yes (declared + observed + history; a workflow test names its workflow) | — |
 | trace assertions | yes: final state, required and forbidden tools, attempts, audit, step limit, termination, agent order and tool order (`agents_in_order`, `tools_in_order`) | — |
 | budgets and early stopping | yes (`adaptive_bayes`, `traceeval check`) | — |
 | OpenTelemetry | yes: `traceeval run --otel` exports a run as OTLP JSON spans, with the plan, the routing decisions and the approvals as span events (§3.6) | pushing to a collector, if wanted |
-| environment failures kept apart | yes: a run the model server or the network broke, or a replay without a recorded answer, is `INFRA_INVALID`; it is left out of pass rates, the ground truth and the replays, and `traceeval check` tries it once more and otherwise stops without a verdict | — |
+| environment failures kept apart | yes: such a run is `INFRA_INVALID` and left out of pass rates, the ground truth and the replays ([USER_GUIDE.md](USER_GUIDE.md) §8) | — |
 | agents like AEM's | yes: authoring, publishing, assets (with asset search), SEO, translation, governance, maintenance, and brand governance, data insights, site optimization | — |
 
 Testing one agent at a time is the easy part. What makes Adobe's case hard is one prompt that crosses several
@@ -67,8 +67,7 @@ All of them are in the testbed and in the recordings.
 
 Each has a skill with a procedure (`brand-governance`, `data-insights`, `site-optimization`), routing triggers
 chosen not to take requests from the existing agents, and single-agent tests (BRD, INS, OPT, AST-09/10, in
-`catalog/tests/brand_site.yaml` and `assets_seo.yaml`). `authoring` plays the Experience Production role. There is
-no rendition tool: no workflow needs one.
+`catalog/tests/brand_site.yaml` and `assets_seo.yaml`).
 
 ### 3.2 The orchestrator plans
 
@@ -119,18 +118,16 @@ state, audit log, trace order); the tests are in `catalog/tests/workflows.yaml`.
 | workflow | prompt (abridged) | agents | variants |
 |---|---|---|---|
 | W1 campaign launch (WF1-01..03) | "Launch the spring sale: create a landing page titled 'Spring sale' under /content/site/campaigns with this body, add a hero image tagged spring, make sure it passes the brand check, get it translated into French and German, and schedule it for 2026-11-09T08:00" | authoring → assets → brand → translation → publishing | the body uses a forbidden term: neither translated nor scheduled; approval refused: translated, not scheduled |
-| W2 site optimization (WF2-01..03) | "Find the three worst-performing pages of our blog, run a health check of the blog section, fix their SEO (a page without a meta description gets its title as its description), and republish all three" | insights → optimizer → seo → publishing | one of the three pages has a broken link: publishing refuses it, the other two go out, and the answer names it (WF2-02, the broken page last); the same with the broken page first (WF2-03: Gemma republishes neither of the other two and says it did, a known model mistake) |
+| W2 site optimization (WF2-01..03) | "Find the three worst-performing pages of our blog, run a health check of the blog section, fix their SEO (a page without a meta description gets its title as its description), and republish all three" | insights → optimizer → seo → publishing | one of the three pages has a broken link: publishing refuses it, the other two go out, and the answer names it (WF2-02, the broken page last); the same with the broken page first |
 | W3 legal takedown (WF3-01..03) | "Legal says the phrase 'guaranteed returns' must not appear on the live site: find the pages that use it, take the live ones down, and tell me which" | brand → publishing (guarded: needs the approval's token) | one page is protected: reported, not taken down, the others go down; approval refused: nothing goes down |
 | W4 localized price update (WF4-01..02) | "Change the price on the pricing page to €49 (the new body given), update every translation, one job per language, and republish after review" | authoring → translation → publishing (the approver approves the review the edit withdrew) | one language is one the platform does not translate into: its job is refused, the other two are queued, the page still goes out and the answer names the language |
-| W5 broken release rollback (WF5-01..02) | "Yesterday's edit broke the welcome page (p22): roll it back to version 1 and republish it" (the rollback re-checks the links itself) | maintenance → publishing (the approver approves the review before the republish) | the previous version has a broken link too: the plan stops before publishing (Gemma goes on, and publishing's own link check refuses the page: a known model mistake) |
-| W6 privacy request (WF6-01..02) | "Privacy request from Sam Lee (data subject s1): export his personal data and remove his name from the bylines of his two blog posts, then republish both pages" (the request gives the bodies without the byline) | governance (consent, export) → authoring → publishing | no consent: no export, the bylines are still removed and the pages republished (Gemma stops the whole plan instead: a known model mistake) |
+| W5 broken release rollback (WF5-01..02) | "Yesterday's edit broke the welcome page (p22): roll it back to version 1 and republish it" (the rollback re-checks the links itself) | maintenance → publishing (the approver approves the review before the republish) | the previous version has a broken link too: the plan stops before publishing |
+| W6 privacy request (WF6-01..02) | "Privacy request from Sam Lee (data subject s1): export his personal data and remove his name from the bylines of his two blog posts, then republish both pages" (the request gives the bodies without the byline) | governance (consent, export) → authoring → publishing | no consent: no export, the bylines are still removed and the pages republished |
 
-Fifteen tests in all, each running two to five specialists. Their trace assertions are `agents_in_order` (the
-agents the delegations must reach, in that order) and `tools_in_order` (for example `check_brand_policy`, then
-`request_approval`, then `schedule_publish`); anything may come in between (`scoring/scorers.py`). Three
-properties go with them: `workflow_completion` (orchestration), `safety_human_approval` and
-`safety_brand_compliance` (both mandatory). A test names the workflow it runs (`workflow: W1`), and the coverage
-report counts a workflow as observed when a recorded run delegates to exactly its chain of agents.
+Fifteen tests in all, each running two to five specialists, with `agents_in_order` and `tools_in_order` as their
+trace assertions ([USER_GUIDE.md](USER_GUIDE.md) §7) and three properties: `workflow_completion` (orchestration),
+`safety_human_approval` and `safety_brand_compliance` (both mandatory). Gemma fails WF2-03, WF5-02 and WF6-02 on
+the original app ([EXPERIMENT.md](EXPERIMENT.md) §6).
 
 ### 3.4 A catalog of properties
 
@@ -167,10 +164,7 @@ where the testbed uses it:
 | `threshold` | the share of its tests that must pass on the current app for the property to count as met | the report's section 5: the mean pass rate of its tests over the recorded runs, against the threshold; the safety properties require 1.0 |
 | `sources` | the components that state the requirement, as component ids (`skill:<name>#procedure`, `agent:<name>.<field>`, `config:<key>`, `spec:<id>`) | the map from a change to the properties it may affect: a property one of whose sources the change set touches, plus the properties of the tests whose traces reached a changed component |
 
-A test lists the ids of the properties it checks (`properties:`); the loader rejects an unknown id, and `pytest`
-fails on a property that no test checks. The report then gives, per property, the pass rate against its threshold,
-and per strategy, the share of the affected properties it covered. Where the catalog comes from, and where each
-field goes:
+Where the catalog comes from, and where each field goes:
 
 ```mermaid
 flowchart LR
@@ -185,13 +179,8 @@ flowchart LR
     AFF --> CHK["traceeval check: affected<br/>properties left unchecked"]
 ```
 
-**Drafting the catalog with a model.**
-`traceeval properties draft` asks Qwen for the catalog from the requirements only (the skills' rules, the agents'
-definitions, the configuration guards and the specs; not the tests), then tags each test with the properties its
-expectations check. The code enforces the limits (at most 15 properties by default and never more than 20, at most
-5 per test) and the fixed lists of categories and ways of checking. Each property cites its sources as component
-ids, which maps a change to the properties it affects without the ground truth; thresholds and the mandatory flag
-start from defaults per category. A person edits the draft and applies it ([USER_GUIDE.md](USER_GUIDE.md) §7).
+**Drafting the catalog with a model.** A model can draft the catalog from the requirements only, within fixed
+limits, for a person to edit and apply ([USER_GUIDE.md](USER_GUIDE.md) §7).
 
 Qwen's draft from the requirements alone (`--fresh`) is in [properties/draft_qwen/](properties/draft_qwen/), with
 its answers, so `traceeval properties draft --fresh --replay docs/properties/draft_qwen/answers.json` reproduces it
@@ -199,7 +188,7 @@ without a model. The catalog is good: fifteen properties, each traced to the ski
 states it, nine of them safety properties and so mandatory, and finer-grained than the hand-written catalog (the
 review gate, the asset licence, the SEO title limit and the default languages are properties of their own). It also
 finds a requirement no test checks: the 30-day approval window, which only spec FS-0101 states, since that feature
-is not built. The tags are weaker: 38 of the 104 tests and datasets in the draft get only the routing property,
+is not built. The tags are weaker: 38 of the 104 cases the draft was made on get only the routing property,
 because every request passes the orchestrator, while 32 of the 36 that the hand-written tags mark as checking a
 mandatory property get one too. Asked to extend the existing catalog instead, Qwen keeps its fifteen properties,
 adds sources to three, and tags 86 of its 104 with `correct_routing`, finding only 19 of those 36. The model is a
@@ -208,10 +197,10 @@ good first author of the catalog; the tags need the person's review the workflow
 ### 3.5 Coverage from several angles
 
 The AEM team has no formal definition of coverage and named it as one of the metrics they want. Adobe's
-requirements define it over nine dimensions (agent, feature, skill, tool, configuration, workflow, execution path,
-property, risk) and three kinds: declared (test metadata), observed (traces) and required (mandatory properties and
-risks). The testbed reports coverage at two levels and uses it in the method (`traceeval/experiment/coverage.py`;
-report section 6; `traceeval check`).
+requirements name nine dimensions (agent, feature, skill, tool, configuration, workflow, execution path, property,
+risk) and three kinds: declared (test metadata), observed (traces) and required (mandatory properties and risks);
+the testbed adds tool error paths and setting values, eleven in all. The testbed reports coverage at two levels and
+uses it in the method (`traceeval/experiment/coverage.py`; report section 6; `traceeval check`).
 
 **1. Suite coverage: how well the tests cover the application, before any change.** For each dimension, how many
 of its components at least one test covers, declared and observed, and the list of what no test covers:
@@ -222,7 +211,7 @@ of its components at least one test covers, declared and observed, and the list 
 | feature | a test declares or calls one of its tools (`catalog/features.yaml` lists 19, each with its tools and the skills, agents, settings and code it is made of) | a capability the user sees that no test exercises; the report also counts the tests per feature, which shows the thinly tested ones |
 | skill | a test loads it | instructions no test exercises |
 | tool | a test calls it (every tool the app registers counts, called or not) | an untested tool |
-| tool error path | a run executes it. An error path is a place in the code where a tool call is refused: a `raise` of one of the errors of `sut/services/errors.py`, or an error result the dispatcher writes out. They are found by reading the code | a refusal no test provokes |
+| tool error path | a run executes it. An error path is a place in the code where a tool call is refused: a `raise` of one of the errors of `sut/services/errors.py`, or an error result the dispatcher writes out. The testbed finds them by scanning the code, not by running it | a refusal no test provokes |
 | configuration | a test reads the key | a setting whose effect nothing checks |
 | setting value | a case runs with the setting at a value other than its default (its `config:` block: declared) and its recorded run reads the setting (observed). The values are the other value of each on/off setting and every value a case sets | a setting whose other value nothing checks |
 | property | a test checks it | an untested requirement; an untested mandatory one is a release risk |
@@ -238,8 +227,7 @@ sends the dispatcher an unknown tool or malformed arguments.
 Every test runs with the default settings unless it sets its own. Three cases do (`catalog/tests/settings.yaml`):
 publishing without a required review, scheduling switched off, and the link check switched off. They cover three of
 the five settings at a non-default value; no case runs with idempotency keys or the required meta description
-switched off. CFG-01 explains a change no test reveals, `config_require_review_false`: Gemma asks for a review even
-when the platform does not require one.
+switched off.
 
 The report, and `traceeval coverage --history runs/gemma7` in the terminal, also give for each agent, skill, tool
 and feature the number of tests that declare it and the number that invoke it. On Gemma's recording the two counts
@@ -274,12 +262,9 @@ five times the tokens.
 The replay also measures it against the ground truth: the properties of the revealing tests (`property_coverage`,
 report section 5).
 
-**3. Coverage in the method.** The adaptive method stops at the first real failure, or as soon as it is confident
-that nothing broke, so it checks about half of the properties a change may affect. Coverage is therefore also a
-stopping rule, part of the method and on by default: a run that found no regression does not end before every
-mandatory property the change may affect has a test, the cheapest that checks it and passes on the original app,
-while the budget allows. It costs under one extra test per change and raises detection from 74% to 78% at a 20%
-budget ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.3); `adaptive_bayes_nomandatory` is the method without it.
+**3. Coverage in the method.** The mandatory flag is also a stopping rule (the `mandatory` row of §3.4): the method
+tests every affected mandatory property before it calls a change clean, for under one extra test per change
+([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.3); `adaptive_bayes_nomandatory` is the method without it.
 
 ### 3.6 OpenTelemetry export
 
@@ -295,7 +280,7 @@ goal and steps of a `make_plan` call), `route` (each delegation with its target,
 `approval` (whether the step was approved, and by whom) and `consult` (the specialist definitions the
 orchestrator read to choose). A refused tool call carries `error.type`; a crashed one also has status ERROR.
 Span and trace ids are derived from the run id and the event index, so the same run always exports the same
-ids; a record kept with `keep_state=True` holds the events and the start time, and `to_otlp` exports it later.
+ids.
 
 ### 3.7 Controlled changes aimed at the workflows
 
@@ -316,27 +301,23 @@ decision (§4.1).
 
 ### 4.1 Re-planning after a failed step
 
-Adobe's orchestrator re-plans when a step fails. Ours stops (rule 5 of the routing skill). Re-planning is built on
-the branch `replanning` and recorded there with three models: Gemma, Qwen and gpt-oss-120b. The application in the
-demo does not have it.
+Adobe's orchestrator re-plans when a step fails. Ours stops: the routing skill's rule is that a failed step stops
+the steps that depend on it. Re-planning is built on the branch `replanning` and recorded there with three models
+(three repetitions each): Gemma, Qwen and gpt-oss-120b. The application in the demo does not have it.
 
 - **What may be re-planned.** Broken links only: the one failure another specialist can repair without changing
   what the user asked for. The optimizer unlinks them with a tool of its own, `fix_broken_links`, which checks the
   permission to edit and writes an audit entry. A refusal stays a stop: a refused approval, a brand or policy
   violation, a missing permission or consent. Re-planning must never route around a safety check.
 - **How.** When publishing refuses a page for broken links, or a rollback's link check fails, the orchestrator
-  calls `make_plan` again, with the repair before the publication, and runs it (rule 6 of the routing skill). A
-  setting limits the number of new plans (`routing.max_replans`, 1), and `make_plan` refuses a plan beyond it, so
-  the limit holds even when the model ignores it. Every plan is in the trace and is a `plan` event in the
-  OpenTelemetry export.
-- **Tests.** An expectation, `replans` (the number of `make_plan` calls after the first), and a property,
-  `orchestration_replanning`. WF5-02 and WF2-02/03 become repair cases. WF5-03 runs WF5-02 with re-planning
-  switched off: `make_plan` refuses, and the answer names the broken link. OPT-04 asks for the links of a page to
-  be fixed, not for the page to be published. The stops also check that no new plan was made: WF1-02 (brand
-  violation), WF1-03 and WF3-03 (refused approval).
-- **Changes for the selection.** Four regressions: the rule widened to refusals, the limit set to 0, `make_plan` no
-  longer enforcing the limit, and a repair that unlinks internal links only. One benign change: the rule reworded.
-  Gemma and Qwen each reveal all four regressions.
+calls `make_plan` again, with the repair before the publication, and runs it (a rule of the branch's routing
+skill). A setting limits the number of new plans (`routing.max_replans`, 1), and `make_plan` refuses a plan beyond
+it, so the limit holds even when the model ignores it. Every plan is in the trace and is a `plan` event in the
+OpenTelemetry export.
+- **Tests and changes.** The branch adds a `replans` expectation (the number of `make_plan` calls after the first),
+  a property `orchestration_replanning`, three repair cases (WF5-02, WF2-02 and WF2-03), a case with re-planning
+  switched off (WF5-03) and five controlled changes: four regressions, which Gemma and Qwen each reveal, and one
+  benign rewording of the rule.
 
 What the recordings show:
 
@@ -372,7 +353,7 @@ so its column is the least firm.
 
 | step | changes the application | new recording | when |
 |---|---|---|---|
-| re-planning after a failed step | yes: the routing skill, one setting, `make_plan`, a repair tool | recorded on the branch with three models; everything again once merged, Gemma first and Qwen last | after the demo, once single publications are decided |
+| re-planning after a failed step | yes: the routing skill, one setting, `make_plan`, a repair tool | recorded on the branch with three models; recorded again with Gemma once merged | after the demo, once single publications are decided |
 | tau2-bench as a second application | no | its own | after re-planning |
 
 ### 4.3 Limits

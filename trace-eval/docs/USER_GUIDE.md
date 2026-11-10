@@ -2,16 +2,13 @@
 
 Read the README first. This guide adds what you need to work inside the repository.
 
-## 1. Data flow
+## 1. Where a run lives
 
-The README's diagram is the whole loop. Every test runs K times (`--reps`) on the original app, with its traces,
-costs and pass rates recorded, and K times on each changed copy, which gives the ground truth. A strategy then
-picks tests from the change set, the traces, the costs and the pass rates, and "executing" a test means looking up
-its recorded outcome under that change. The runs are recorded once, with the model on the GPU server, and replayed
-thousands of times. `runs/<name>/` holds the edited copies (`variants/`), the recordings (`history/*.jsonl`) and
-the results (`results/`). `traceeval check` (`experiment/check.py`) runs the same loop live, for one change: there,
-"execute" runs the test with the model, and a recording supplies only the baseline traces, the costs and the other
-changes.
+The README's diagram is the loop. A run of the experiment lives in `runs/<name>/` at the repository root: the
+edited copies (`variants/`), the recordings (`history/*.jsonl`) and the results (`results/`)
+([EXPERIMENT.md](EXPERIMENT.md) §5). `traceeval check` (`experiment/check.py`) runs the same loop live, for one
+change: there, "execute" runs the test with the model, and a recording supplies only the baseline traces, the costs
+and the other changes.
 
 ## 2. Vocabulary
 
@@ -24,17 +21,14 @@ Paths are relative to `traceeval/`.
   check it, whether it is mandatory and its threshold. A test lists the ids of the properties it checks. This
   catalog, the workflows below and the coverage report are features the AEM team asked for
   ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md)).
-- **Plan / workflow**: a request that needs several specialists. The orchestrator writes a plan (`make_plan`) and
-  delegates its steps one at a time, each with its own instruction and the ids of earlier steps
-  (`route_to_agent(agent, task, context)`). It asks a person before publishing, scheduling or taking pages down
-  (`request_approval`). The workflow tests are in `catalog/tests/workflows.yaml`. Each one names the workflow it
-  runs end to end (`workflow: W1`), one of the six listed in `catalog/workflows.yaml` (W1 campaign launch, W2 site
-  optimization, W3 legal takedown, W4 localized price update, W5 broken release rollback, W6 privacy request) with
-  the chain of specialists a plan for it delegates to.
+- **Workflow**: a request that needs several specialists, run by a plan ([CONTENTOPS.md](CONTENTOPS.md)). A test
+  that runs one end to end names it (`workflow: W1`), an id from `catalog/workflows.yaml`: W1 campaign launch, W2
+  site optimization, W3 legal takedown, W4 localized price update, W5 broken release rollback, W6 privacy request
+  ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.3).
 - **Declared dependencies**: the `declared:` block a test author writes. It is deliberately incomplete.
 - **Observed dependencies**: the components the trace shows the run touched (`agent:x`, `skill:x`, `tool:x`,
   `config:key`, `code:file::function`, `line:file:n`).
-- **Change set**: the diff turned into components with the same identifiers (`traceeval/mutation/changeset.py`).
+- **Change set**: the diff turned into components with the same identifiers (`mutation/changeset.py`).
   Comments, docstrings, blank lines and formatting are left out, so they add no component and no diff line.
 - **Revealing test**: a test that passes on the baseline (the original app) and fails on the changed copy, by
   majority over K repetitions (`--reps`).
@@ -53,7 +47,7 @@ Paths are relative to `traceeval/`.
 | how the orchestrator plans | `sut/skills/routing/SKILL.md`, `sut/tools/control_tools.py`, `runtime.py` (`_delegate`) |
 | how a test is run and scored | `experiment/executor.py` (`run_case`), `scoring/scorers.py` |
 | how a change becomes components | `mutation/catalog.py` (data), `mutation/changeset.py` |
-| the baselines | `selection/strategies.py` (about 150 lines) |
+| the baselines | `selection/strategies.py` (about 150 lines); two optional ones in `selection/extras.py`, `observed_diverse` (the observed selection, one behaviour group at a time) and `history_ml` (a logistic regression on the other changes' outcomes; needs scikit-learn), which `--strategies all` includes |
 | two published methods, reproduced | `selection/reproduced.py` (CASPER's slices, Risk-Aware Adaptive Evaluation's bandit; each docstring says what was adapted) |
 | the proposed method | `selection/adaptive_bayes.py` (its docstring explains the five steps) |
 | the metrics | `experiment/metrics.py`, `experiment/evaluate.py` |
@@ -171,13 +165,9 @@ match code by line number, so record again after editing the app's code.
 
 ## 6. The controlled changes
 
-The experiment plants 43 known changes in copies of the app (`mutation/catalog.py`) and measures how well each
-strategy finds them. Of these, 34 are regressions, which at least one test should reveal, and 9 are benign changes,
-which no test should reveal. Each change is in the set for a reason: a kind of change (code, skill, prompt,
-config), a reach (one test or dozens), or a trap for selection. The last column counts the revealing tests, those
-that pass on the original app and fail on the changed copy, in Gemma's recording of the current app (`runs/gemma7`:
-180 tests, five repetitions). The other models' recordings are not clean ground truths
-([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4), so they have no column.
+The 43 changes (`mutation/catalog.py`): what each does, why it is in the set (a kind of change, a reach, or a trap
+for selection), and the number of tests that reveal it in `runs/gemma7`. The other models' recordings are not clean
+ground truths ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4), so they have no column.
 
 | change | what it does | why it is in the set | revealing tests (Gemma) |
 |---|---|---|---|
@@ -233,27 +223,20 @@ that pass on the original app and fail on the changed copy, in Gemma's recording
 | `benign_brand_skill_prose_reworded` | the brand-governance skill's prose is reworded, procedure and rules untouched | a wording change on one of the AEM-style agents | 0 |
 | `benign_routing_guidance_reordered` | three bullets of the routing skill's guidance move to the top | a prompt edit on the skill every request reads | 0 |
 
-A 0 above means that no test reveals the change under that model. It is a fact about the model and does not
-indicate a bug in the testbed; the report's section 1 shows such a change with 0. RESEARCH_PLAN §4.3 gives the
-criteria a change must meet to be in the set.
+A 0 means that no test reveals the change under that model, a fact about the model rather than a bug in the testbed
+(§4). RESEARCH_PLAN §4.3 gives the criteria a change must meet to be in the set.
 
 ## 7. How to extend
 
 - **Property**: add an entry to `catalog/properties.yaml` (id, category, description, `checked_by`, `mandatory`,
   `threshold`, `sources`) before a test uses it. The loader rejects a test that names an unknown property, and
   `pytest` fails if a property has no test. What each field means and where the testbed uses it is in
-  [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.4. Two fields take values from fixed lists. The category is one of
-  correctness, safety, resilience, orchestration, efficiency, quality. `checked_by` is a subset of state (the
-  final application state), trace (tool calls, agents, audit, steps), judge (a model reads the answer) and
-  dataset (prompt -> expected item).
+  [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.4.
 
-  Instead of writing the catalog by hand, you can run `traceeval properties draft`. A model (Qwen) then drafts
-  the catalog from the requirements (the skills' rules, the agents, the config guards and the specs, but not the
-  tests), with at most 15 properties (`--max`, up to 20) and 5 per test (`--per-test`), and tags the tests. Edit
-  `catalog/properties.draft.yaml`, read `properties.draft.md`, then run `traceeval properties apply`. Thresholds
-  and the mandatory flag start from defaults per category, and entries already in the catalog keep what a person
-  wrote (unless `--fresh`). Qwen's draft is in
-  [properties/draft_qwen/](properties/draft_qwen/) ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.4).
+  Instead of writing the catalog by hand, run `traceeval properties draft`: a model drafts it from the requirements
+  and tags the tests ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.4). Edit `catalog/properties.draft.yaml`, read
+  `properties.draft.md`, then run `traceeval properties apply`; entries already in the catalog keep what a person
+  wrote (unless `--fresh`).
 - **Test**: add a YAML entry. `expect` supports `route_to`, `state` (`[path, op, value]` with `==`, `!=`, `len`,
   `contains`, `in`, `>=`, `<=`, `absent`, `exists`), `tools_required`, `tools_forbidden`, `tools_not_attempted`,
   `tool_attempts`, `tool_results`, `audit`, `response_contains`, `response_excludes`, `max_steps`, `termination`,
@@ -266,9 +249,9 @@ criteria a change must meet to be in the set.
     wording. An item that is a list is a set of alternatives. The comparison ignores case, and typographic
     hyphens, spaces and quotes count as the plain ones (some models write "risk-free" with a non-breaking hyphen).
   - A run that ends with an answer must not end with an empty one (check `answered`).
-  - A test can also set `fixture_patch` and `fault_profile` (`transient_once:<tool>`, `ack_timeout_once:<tool>`,
-    `permanent_down:<tool>`). The approver's answer is fixture data:
-    `fixture_patch: {approvals.decision: refuse}` makes the approver refuse.
+  - A test can also set `fixture_patch` and `fault_profile` (one of the three profiles in
+    [CONTENTOPS.md](CONTENTOPS.md)). The approver's answer is fixture data: `fixture_patch: {approvals.decision:
+    refuse}` makes the approver refuse.
 
   `pytest` checks, on Gemma's recorded answers, that the whole catalog passes on the baseline apart from Gemma's
   known mistakes, so record the new case's answers (§8).
@@ -288,7 +271,7 @@ criteria a change must meet to be in the set.
   for example `tool_errors: {unpublish_page: approval_required}`. Any other error fails the test as
   `tool_error:<tool>`, unless a later call of the same tool succeeded. A crash in tool or service code (any
   exception other than a `ToolError`) always fails it as `crash:<tool>`. Both are classified `TOOL_ERROR`.
-  `tool_errors: "*"` allows any error, and a scenario added by a spec in `traceeval/specs/`
+  `tool_errors: "*"` allows any error, and a scenario added by a spec in `specs/`
   ([SDD_GUIDE.md](SDD_GUIDE.md)) that writes its own `expect` gets it by default.
 - **Change**: add a `Mutation(...)` to the table in `mutation/catalog.py` with `replace`, `delete_line`,
   `delete_block` or `append` edits. Anchors are literal text, so reformatting `sut/` breaks them, and the
@@ -302,20 +285,9 @@ criteria a change must meet to be in the set.
 
 ## 8. Gotchas
 
-- A run broken by the environment is `INFRA_INVALID` and does not count as a failure. This happens when the
-  model server or the network did not answer, or when a replay had no recorded answer. Pass rates, the ground
-  truth and the replays leave such runs out, and the report's header counts them. `traceeval check` retries such
-  a run once and, if it is still invalid, stops without a verdict.
-- The tests replay Gemma's recorded answers, keyed by the exact request. After a change to anything a prompt is
-  built from (a skill, an agent, a config value, a tool, a case), the replay misses (`INFRA_INVALID` with
-  `CacheMiss`). Record the missing answers with `TRACEEVAL_BACKEND=vllm pytest -q` and commit the cassette, the
-  file of recorded answers (EXPERIMENT.md §5).
-- Test texts share vocabulary with skills and config keys, which is why the text-retrieval baseline `ir_tfidf`
-  is strong here.
-- `observed_diverse` (the observed selection, one behaviour group at a time) and `history_ml` (a logistic
-  regression trained on the other changes' outcomes; needs scikit-learn) are optional baselines in
-  `selection/extras.py`; `--strategies all` includes them.
-- `casper_slices` and `risk_aware_ts` reproduce two published methods and ignore the diff by design. They are in
-  the default comparison so that the report shows what change-awareness adds.
-- `runs/` is git-ignored and large (it holds line-level coverage). To keep a run, copy its `results/` into
-  `docs/results/`.
+- A run the environment broke is `INFRA_INVALID` ([EXPERIMENT.md](EXPERIMENT.md) §1): `traceeval check` retries
+  such a run once and otherwise stops without a verdict.
+- A change to anything a prompt is built from (a skill, an agent, a config value, a tool, a case) makes the replay
+  miss (`INFRA_INVALID` with `CacheMiss`); record the missing answers again ([EXPERIMENT.md](EXPERIMENT.md) §5).
+- `runs/` is git-ignored and large; to keep a run, copy its `results/` into `docs/results/`
+  ([EXPERIMENT.md](EXPERIMENT.md) §5).

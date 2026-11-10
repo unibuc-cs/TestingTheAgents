@@ -1,73 +1,74 @@
 # DRAFT - generated from a change request; review, edit, then rename to .yaml to confirm.
-# note: setting_in_range:publishing.review_max_age_days (key): config key publishing.review_max_age_days is not in the current configuration - the request introduces it
-# note: function_contract:review_age_ok (function): services/workflow.py::review_age_ok is not in the current code - the request introduces it
+# note: setting_in_range:publishing.approval_validity_days (key): config key publishing.approval_validity_days is not in the current configuration - the request introduces it
+# note: function_contract:approval_is_valid (function): services/workflow.py::approval_is_valid is not in the current code - the request introduces it
+# error: function_contract:approval_is_valid (inputs): inputs must map each name to int, bool or str
 id: FS-0101
-title: Editorial approvals expire after a configurable number of days
+title: Approvals must expire
 intent: |
-  An approval is valid for a configurable number of days (30 to start). Publishing or scheduling a page whose approval is older is refused with a message that asks for a new review, and the refusal is audited. Approving a review records the approval date.
+  Editorial approvals should be valid for a configurable number of days (default 30) instead of forever. When a reviewer approves a page, the approval date must be recorded so the expiry can be computed. Publishing or scheduling a page whose approval has expired must be refused with a clear message and the refusal must be visible in the audit log.
 clauses:
 - use: setting_in_range
   with:
-    key: publishing.review_max_age_days
+    key: publishing.approval_validity_days
     min: 1
     max: 365
     value: 30
+  require: L4
 - use: function_contract
   with:
-    function: services/workflow.py::review_age_ok
-    inputs:
-      age_days: int
-      max_age_days: int
-    assume: max_age_days >= 1
-    ensures: result == (0 <= age_days <= max_age_days)
+    function: services/workflow.py::approval_is_valid
+    inputs: run, page_id
+    ensures: approval_age(run, page_id) <= config('publishing.approval_validity_days')
+    assume: approval_age(run, page_id) is not None
+    examples: 5
   require: L5
+- use: function_in_layer
+  with:
+    function: approval_is_valid
+    file: services/workflow.py
+  require: L4
+- use: forbid_literal_in
+  with:
+    value: 30
+    dirs:
+    - tools/
+    - skills/
+  require: L4
 - use: always_on_calls
   with:
     tools:
     - publish_page
     - schedule_publish
-    where: approval_age(run, event.args.page_id) <= config('publishing.review_max_age_days')
-- use: scenario
+    where: approval_age(run, event.args.page_id) <= config('publishing.approval_validity_days')
+  require: L3
+- use: always_in_audit
   with:
-    case:
-      agent: orchestrator
-      request: Please publish the stale-approval page
-      context:
-        user_id: bob
-        page_id: p11
-    expect:
-      state:
-      - - pages.p11.status
-        - ==
-        - draft
-      audit:
-      - action: publish_refused
-        page_id: p11
-        count: 1
-      response_contains:
-      - new review
+    actions:
+    - publish_page
+    - schedule_publish
+    where: event.status == 'error' and 'expired' in event.message
+  require: L3
 - use: scenario
   with:
     case: PUB-01
+    context:
+      page_id: welcome
+      approval_age_days: 5
+    expect: run.passed
+  require: L1
 - use: scenario
   with:
     case: PUB-01
-    fixture_patch:
-      pages.p4.review.approved_on: '2026-09-28'
-- use: function_in_layer
+    context:
+      page_id: welcome
+      approval_age_days: 31
+    expect: not run.passed and 'request a new review' in run.message
+  require: L1
+- use: scenario
   with:
-    function: review_age_ok
-    file: services/workflow.py
-- use: forbid_literal_in
-  with:
-    value: 30
-    dirs:
-    - services/workflow.py
-    - tools
-    - skills
-- use: forbid_import_in
-  with:
-    module: datetime
-    dirs:
-    - tools
-    - harness
+    case: PUB-01
+    context:
+      page_id: welcome
+      approval_age_days: 30
+    expect: run.passed
+  require: L1

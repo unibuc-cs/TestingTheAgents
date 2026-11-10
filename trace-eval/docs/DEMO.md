@@ -2,17 +2,18 @@
 
 This is the walkthrough for the demo to the AEM team. Every command runs from the repository root in a terminal,
 with the documents open next to it. Commands marked *replay* need no model.
-Commands marked *live* need Gemma on the GPU server, started an hour before with `scripts/gpu_remote.sh up gemma`.
+Commands marked *live* need Gemma on the GPU server, started well before the demo with `scripts/gpu_remote.sh up
+gemma` (it takes a few minutes, and the GPUs may be busy).
 Section 4 says what to do if the server is down. What comes after the demo is in
 [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4.
 
 ## Before the demo
 
 ```bash
-scripts/gpu_remote.sh status            # both GPUs of the GPU server (fmi0) free? then:
+scripts/gpu_remote.sh status            # GPU0 of the GPU server (fmi0) free? then:
 scripts/gpu_remote.sh up gemma          # a few minutes; "ready" at the end
 pytest -q                               # green (the known model mistakes are expected failures inside the tests)
-ls runs/gemma7/variants                 # the recording of the current app, for the live check
+ls runs/gemma7/history runs/gemma7/variants   # the recording and the changed copies the live check needs
 ```
 
 Open these in the editor: `docs/CONTENTOPS.md` (the figure), `traceeval/catalog/tests/publishing.yaml` (PUB-01),
@@ -71,19 +72,13 @@ which takes two pages down with the approver's token, since `unpublish_page` is 
 check the agent order, the tool order, the final state, the audit log and the page ids in the answer.
 
 Mention the variants: in WF3-02 a protected page stays up and is reported, and in WF3-03 a refused approval takes
-nothing down. Then mention the other workflows:
-
-- W1, a campaign launch across five agents.
-- W2, site optimization through insights, optimizer, seo and publishing, two of them modelled on AEM's agents.
-- W4, a price change translated into each language and republished after review. A language the platform does
-  not have fails without stopping the others.
-- W5, a broken release rolled back and republished.
-- W6, a privacy request: the data exported, the bylines removed, the pages republished.
+nothing down. The other five workflows are in
+[AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.3's table; name W1 (five agents) and W2 (two agents modelled on AEM's).
 
 Open `runs/otel/wf3-01.json`. It holds the run span, the agent spans nested by delegation, and the tool and
 model-call spans. The orchestrator's span carries its decisions as span events, called cognition events:
-`consult`, `plan`, `route`, `approval`, `route`. The file is OTLP JSON, the OpenTelemetry format a collector
-accepts on `/v1/traces`.
+`consult`, `plan`, `route`, `approval`, `route`. The file is OTLP JSON ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md)
+§3.6).
 
 Then show why the checks look at the final state rather than at the answer:
 
@@ -102,7 +97,8 @@ prove that the state changed.
 
 ```bash
 traceeval mutations                                        # the 43 controlled changes, with their category
-cat runs/gemma7/variants/skill_routing_drop_approval/diff.patch   # the orchestrator no longer asks a person before publishing
+# the orchestrator no longer asks a person before publishing:
+cat runs/gemma7/variants/skill_routing_drop_approval/diff.patch
 traceeval check skill_routing_drop_approval --history runs/gemma7 --budget 0.2     # live
 ```
 
@@ -126,13 +122,11 @@ skill_routing_drop_approval: changed skill:routing#prose
 REGRESSION: WF3-03 failed
 2 runs, 23,096 tokens (1% of the suite), 16 s (the whole suite takes about 375 s, one test at a time); P(something broke) = 1.00
 coverage: 100% of the changed components exercised, 20% of the 15 affected properties checked, 17% of the 6 affected workflows run, 100% of the 3 affected features reached
-invoked: 2 of 11 agents, 2 of 13 skills, 4 of 32 tools, 4 of 19 features
-not checked: answer_quality, efficiency, resilience_fail_safe, resilience_idempotency, resilience_retry, safety_authorization (mandatory), safety_brand_compliance (mandatory), safety_guarded_mutation (mandatory), safety_no_broken_publish (mandatory), safety_privacy (mandatory), task_completion, tool_trajectory
-workflows not run: W1, W2, W4, W5, W6
+... then what the tests invoked, the properties left unchecked and the workflows not run
 ```
 
 Live, the token counts can differ slightly from these, because decoding on the GPU server is nearly but not exactly
-repeatable ([EXPERIMENT.md](EXPERIMENT.md) section 3). The tests and the verdict stay the same.
+repeatable ([EXPERIMENT.md](EXPERIMENT.md) §3). The tests and the verdict stay the same.
 
 WF3-03 is the legal takedown in which the person refuses the approval. Without the rule, the orchestrator skips
 the approval and sends the takedown to publishing. The dispatcher refuses the call because it carries no approval
@@ -147,53 +141,44 @@ traceeval check benign_skill_prose_reflow --history runs/gemma7 --budget 0.2    
 
 It ends with "no regression: the method is confident nothing broke" after nine tests and 4% of the suite's tokens,
 with P(something broke) = 0.05. Before it ends, it has run a test of every mandatory property the change may
-affect, because the catalog's `mandatory` flag acts as a stopping rule. The coverage lines in the output are the
-change coverage the requirements ask for: changed components exercised, affected properties checked, affected
-workflows run and affected features reached. The features are the unit the AEM team suggested: this change affects
+affect, because the catalog's `mandatory` flag acts as a stopping rule. The coverage lines are the change coverage
+of [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5. The features are the unit the AEM team suggested: this change affects
 three (publish, schedule, take a page down), and the nine tests reached all three.
 
-If the GPU server is down, run both checks with `--backend replay`. The rehearsal's answers are recorded, so the
-same tests run with the same outcomes, and the timings read 0 seconds. If the server stops answering during a
+If the GPU server is down, run both checks with `--backend replay`: both are recorded in
+`tests/cassettes/gemma.jsonl` ([EXPERIMENT.md](EXPERIMENT.md) §5), so the same tests run with the same outcomes,
+and the timings read 0 seconds. If the server stops answering during a
 check, the check says so and gives no verdict. The run is marked `INFRA_INVALID`, the environment's fault rather
 than the change's.
 
 ## 5. The evidence over all changes (4 minutes)
 
 Open `docs/results/gemma7/report.md`, the replay of every strategy on every change, from the recording of the
-current app:
+current app ([USER_GUIDE.md](USER_GUIDE.md) §4 says how to read it):
 
-- Section 1 is the ground truth: each change with the number of tests that reveal it, and the testbed sanity line.
-  Of the 34 regressions, 29 are revealed. Gemma ignores the other five either way: it does not act on a review
-  flag, on a length limit it has to work out for itself, or on a skill's rule that a broken asset reference does
-  not block. No benign change fails a test.
-- Section 2 and `figures/detection_vs_cost.png` show detection against the tokens and time actually spent. At a
-  20% budget, hand-written dependencies find 62% of the regressions, traces 86%, TF-IDF 93%, and the adaptive
-  method 78% for 3% of the tokens, which puts it at the left of the figure. It catches 84% of the changes that
-  break a safety property.
-- Section 3 gives the tokens spent on benign changes and the reasons each strategy stopped. The adaptive method
-  never calls a benign change a regression.
-- Section 5 lists the catalog of properties, each with its category, mandatory flag, threshold and pass rate.
-- Section 6 gives the coverage of the suite per dimension and the change coverage per strategy. The dimensions are
-  agents, features, skills, tools, tool error paths, configuration, setting values, properties, workflows,
-  execution paths and risk, each declared and observed, with what no test covers. Every feature has a test, but the
-  tests reach only 15 of the 31 places where a tool refuses: a gap no other dimension shows. Below it, each agent,
-  skill, tool and feature has the number of tests that declare it and the number that invoke it. The assets agent,
-  for instance, is declared by 37 tests and invoked by 17, because the routing datasets stop at the hand-off.
-  `traceeval coverage --history runs/gemma7` prints the same in the terminal.
+- Section 1, the ground truth: 29 of the 34 regressions are revealed and no benign change fails a test; the five
+  Gemma cannot see are in [EXPERIMENT.md](EXPERIMENT.md) §7.
+- Section 2 and `figures/detection_vs_cost.png`: detection against the tokens actually spent. At a 20% budget,
+  hand-written dependencies find 62% of the regressions, traces 86%, TF-IDF 93%, and the adaptive method 78% for 3%
+  of the tokens, which puts it at the left of the figure; it catches 84% of the changes that break a safety
+  property.
+- Section 3: the tokens spent on benign changes, and why the adaptive method stopped; it never calls a benign
+  change a regression.
+- Section 5: the catalog of properties, with each property's pass rate against its threshold.
+- Section 6: the coverage of [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5. Point at the `not covered` column (the
+  tests reach 15 of the 31 places where a tool refuses) and at one declared-against-invoked gap. `traceeval
+  coverage --history runs/gemma7` prints the same in the terminal.
 
-Mention one finding: the mandatory-coverage rule is what catches `skill_publish_drop_link_validation`. Without the
-rule, the method calls that change clean. With it, the method must test the mandatory "no broken publish" property
-before stopping, and that test fails. The reading of the results by research question is
-[RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.1, and the take-aways its §5.5.
+Mention the finding of [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.3: the mandatory rule is what catches the publishing
+skill without its link check. The reading of the results by research question is its §5.1, and the take-aways its
+§5.5.
 
 ## 6. The catalog of properties, drafted by a model (1 minute)
 
-`traceeval/catalog/properties.yaml` gives each property a category, how it is checked, a mandatory flag, a
-threshold, and the components it comes from. The mandatory flag drives the method's last step, the threshold the
-report's verdict per property, and the sources the map from a change to the properties it may affect
-([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.4). `traceeval properties draft` has a model write this catalog from the
-requirements only (skills, agents, configuration guards, specs), within fixed limits, and tag the tests. A person
-then edits the draft and applies it.
+`traceeval/catalog/properties.yaml`: the fields and what uses them are [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.4's
+table; open the file and point at `mandatory` and `sources`. `traceeval properties draft` has a model write this
+catalog from the requirements only, within fixed limits, and tag the tests; a person then edits the draft and
+applies it.
 
 Show `docs/properties/draft_qwen/properties.draft.md`, Qwen's draft from the requirements alone. It has fifteen
 properties, each with the components it comes from, and one requirement that no test checks: the 30-day approval
@@ -207,8 +192,9 @@ against them. Every verdict is as expected, with the clause that failed and the 
 cases:
 
 - FS-0101's rule is proven for all inputs.
-- A correct implementation in the wrong layer is caught by the placement check.
-- A proven function that is never called is caught by a scenario.
+- A correct implementation in the wrong layer is caught by the placement check, the clause that says which layer
+  must hold a rule.
+- A proven function that is never called is caught by a scenario, a test the spec adds.
 
 `traceeval sdd` replays it in about a minute. [SDD_DEMO.md](SDD_DEMO.md) has the summary.
 
@@ -222,11 +208,10 @@ cases:
   it schedules the launch page right after requesting a review (WF1-01), goes on to publishing after the rollback's
   link check failed (WF5-02) and stops a whole plan after a refused export (WF6-02); [EXPERIMENT.md](EXPERIMENT.md)
   §6 lists them. A test the model already fails cannot reveal a change, which is why the method discounts it.
-- *Why only Gemma's numbers?* Qwen's and gpt-oss's recordings of the same app are not clean ground truths: some of
-  their answers differ between a test run alone and in a batch, and some vary from run to run, so even a change
-  that alters nothing appears to break a few tests. A larger model does not automatically give a cleaner ground
-  truth. The lesson for Adobe is to measure first how much the answers vary under the real serving setup
-  ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4).
+- *Why only Gemma's numbers?* Qwen's and gpt-oss's recordings of the same app are not clean ground truths
+  ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4): a change that alters nothing appears to break a few tests. A larger
+  model does not automatically give a cleaner ground truth, and the lesson for Adobe is to measure first how much
+  the answers vary under the real serving setup.
 - *How would this run at Adobe?* Nightly full-suite runs provide the recordings the method learns from. For each
   change, `traceeval check` selects the tests, orders them and decides when to stop. The traces are OpenTelemetry,
   and the catalog of properties maps onto the metrics of DeepEval, the evaluation library the AEM team uses.
@@ -237,5 +222,5 @@ cases:
 ## Questions for the AEM team
 
 Close with the questions for the AEM team, the re-planning decision first: should a single publish request for a
-page with a broken link be repaired or refused? [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §9 keeps the list, with what
+page with a broken link be repaired or refused? [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §8 keeps the list, with what
 each answer decides.

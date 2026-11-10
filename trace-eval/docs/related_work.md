@@ -214,7 +214,7 @@ Fault-injection work that can generate a ground truth or serve as a contrast:
 
 ## Venues and framing
 
-See RESEARCH_PLAN §8. ASE is a natural fit (AgentChaos appeared there); ISSTA favours the mutation and oracle
+See RESEARCH_PLAN §7. ASE is a natural fit (AgentChaos appeared there); ISSTA favours the mutation and oracle
 angle.
 
 ## References

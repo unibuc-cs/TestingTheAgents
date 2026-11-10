@@ -14,9 +14,8 @@ ground truth: which tests fail under which change. After that, comparing the str
 replay the recordings: strategy X would have run these tests, so it would or would not have caught this change, for
 this many tokens.
 
-Each agent's decisions come from a model: Gemma 4 E4B, a small open model from Google, Qwen3.8-27B, or
-gpt-oss-120b. Recording costs GPU time, which is why we use the GPU server (section 4). Replaying recorded answers
-is free (section 5).
+Recording costs GPU time, which is why we use the GPU server (section 4). Replaying recorded answers is free
+(section 5).
 
 ## 2. What happens when one test runs
 
@@ -44,21 +43,13 @@ sequenceDiagram
     X->>X: checks on state, tool calls, answer
 ```
 
-1. The **runner** ([`experiment/runner.py`](../traceeval/experiment/runner.py)) starts the case through the
-   **executor** ([`experiment/executor.py`](../traceeval/experiment/executor.py)), which builds a fresh app
-   from the fixtures.
-2. The **runtime** ([`sut/harness/runtime.py`](../traceeval/sut/harness/runtime.py)) runs the orchestrator.
-   At every step it asks the agent's backend "what next?". With a model backend
-   ([`backends/llm_openai.py`](../traceeval/sut/harness/backends/llm_openai.py)), that is one model call.
-3. Gemma picks `route_to_agent(publishing)`. The runtime then runs the publishing agent the same way: model
-   call, tool call, result, model call again, until Gemma answers in plain text.
-4. Every tool call goes through the **dispatcher**
-   ([`sut/harness/dispatcher.py`](../traceeval/sut/harness/dispatcher.py)), which checks permissions,
-   retries transient failures, injects the faults the test asks for, and records everything in the trace.
-5. The **scorers** ([`scoring/scorers.py`](../traceeval/scoring/scorers.py)) check the result against the
-   case's `expect` block. For PUB-01 they check that the request was routed to publishing, that page `p4` is
-   now `published`, that the required tools were called and `request_review` was not, that the audit log has
-   one `publish_page`, and that the answer is not empty.
+The runner ([`experiment/runner.py`](../traceeval/experiment/runner.py)) starts the case through the executor,
+which builds a fresh app from the fixtures; the path through the orchestrator, the specialist, the dispatcher and
+the scorers is the one [CONTENTOPS.md](CONTENTOPS.md) shows. What this page adds is the model call. At every step
+the runtime ([`sut/harness/runtime.py`](../traceeval/sut/harness/runtime.py)) asks the agent's backend
+([`backends/llm_openai.py`](../traceeval/sut/harness/backends/llm_openai.py)) "what next?", which is one model
+call. Gemma picks `route_to_agent(publishing)`, and the runtime runs the publishing agent the same way: model call,
+tool call, result, model call again, until Gemma answers in plain text.
 
 ### What Gemma sees
 
@@ -101,7 +92,7 @@ option picks who plays the agents:
 | backend | what it is | when to use it |
 |---|---|---|
 | `hf` (default) | Gemma in this Python process, on a local GPU, one call at a time | a quick look at one case, no server needed |
-| `vllm` | Gemma served by vLLM on the GPU server (GPU0), reached through an SSH tunnel; many calls at once | recording experiments with Gemma |
+| `vllm` | Gemma served by vLLM (the server that runs a model and answers over an OpenAI-style API) on the GPU server (GPU0), reached through an SSH tunnel; many calls at once | recording experiments with Gemma |
 | `llm` | an OpenAI-compatible endpoint: by default Qwen on the GPU server (GPU1), or the one named by `TRACEEVAL_LLM_BASE_URL` and `TRACEEVAL_LLM_MODEL` | recording experiments with Qwen or gpt-oss-120b; a model behind OpenAI's API would use it too |
 | `replay` | Gemma's recorded answers, no model (`tests/cassettes/gemma.jsonl`, or the file named by `TRACEEVAL_CACHE`) | the test suite and the spec-driven development (SDD) demo; running a recorded experiment again |
 
@@ -116,8 +107,7 @@ The models are wired in slightly differently:
   repository, only its default URL and model name. Qwen's thinking mode is turned off on the server, so it answers
   directly, as Gemma does.
 - **gpt-oss-120b (`llm`).** It is reached the same way as Qwen. It reasons before it answers, so it needs more room
-  per answer (`TRACEEVAL_LLM_MAX_TOKENS=4096`). It writes typographic hyphens, spaces and quotes, which the answer
-  checks read as the plain ones.
+  per answer (`TRACEEVAL_LLM_MAX_TOKENS=4096`).
 
 Two cases, SEO-07 and PUB-20, have a rubric. Once their fixed checks pass, a model also judges the answer against
 the rubric. By default the judge is the model playing the agents; `TRACEEVAL_JUDGE=gemma` or `qwen` picks one
@@ -167,7 +157,7 @@ repository root in Git Bash or any other bash shell. It knows three models, call
 | `gptoss` | `openai/gpt-oss-120b` (4-bit weights, about 65 GB), one copy split over both GPUs | 0 and 1 | 18102 | `--backend llm` with `TRACEEVAL_LLM_BASE_URL=http://127.0.0.1:18102/v1` and `TRACEEVAL_LLM_MODEL=openai/gpt-oss-120b` and `TRACEEVAL_LLM_MAX_TOKENS=4096` |
 
 Gemma and Qwen use different GPUs and ports, so both can run at the same time, each with its own experiment.
-gpt-oss needs both GPUs; Gemma and Qwen then run on the SLURM cluster.
+gpt-oss needs both GPUs; Gemma and Qwen then run on the university's cluster (below).
 
 ### What lives where
 
@@ -212,9 +202,8 @@ scripts/gpu_remote.sh down      # stop every server and close the tunnels: frees
 scripts/gpu_remote.sh down qwen # or just one of them
 ```
 
-Qwen is the slower model. When Gemma isn't needed, `TRACEEVAL_GPUS=0,1 scripts/gpu_remote.sh up qwen` puts a
-copy of Qwen on each GPU, and vLLM shares the requests between the copies. Run the changes with `--workers 64`
-in that case.
+Qwen is the slower model. When Gemma isn't needed, put a copy of Qwen on each GPU (`TRACEEVAL_GPUS`, in the
+settings below) and run the changes with `--workers 64`.
 
 `up` does four things:
 
@@ -232,11 +221,10 @@ reserved while it runs, even when idle.
 
 ### More GPUs: the SLURM cluster, and several servers in one run
 
-More H100 GPUs are available through the university's cluster, whose jobs are scheduled by SLURM (login
-`ciprian.paduraru@hpc-ctrl01.acc-ub.local`). Its GPU node, `hpc-nodegpu01`, is the same machine as fmi0. It
-has 8 H100s, of which SLURM hands out 4. Each of our jobs asks for 2. Two jobs may run at once, one per model,
-each with its own job name and port, when the other users leave the GPUs free. The same script drives the
-cluster with `TRACEEVAL_SITE=hpc`:
+More H100 GPUs are available through the university's cluster, whose jobs are scheduled by SLURM (the login is in
+the settings table). Its GPU node, `hpc-nodegpu01`, is the same machine as fmi0. It has 8 H100s, of which SLURM
+hands out 4. Each of our jobs asks for 2. Two jobs may run at once, one per model, each with its own job name and
+port, when the other users leave the GPUs free. The same script drives the cluster with `TRACEEVAL_SITE=hpc`:
 
 ```bash
 TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen     # a SLURM job for 2 GPUs (8 hours at most), tunnel on port 18111
@@ -253,11 +241,10 @@ outside it, such as another user's server or one started on fmi0, and may hand o
 does happen, so check `TRACEEVAL_SITE=hpc scripts/gpu_remote.sh status` and, if needed, ask the cluster's
 admin which GPUs are free.
 
-To use both sites in one run, list both servers in the URL variable, separated by commas. Each request goes to
-the next server in turn (`traceeval/llm/chat.py::Servers`), so a server listed twice gets twice the requests.
-List the cluster's server twice when it holds a copy of the model on each of its two GPUs. Decoding is greedy,
-so the servers give the same answers apart from rare one-off differences, which a split run makes somewhat
-more frequent (section 7). For Qwen:
+To use both sites in one run, list both servers in the URL variable, separated by commas. Each request goes to the
+next server in turn (`traceeval/llm/chat.py::Servers`), so a server listed twice gets twice the requests. List the
+cluster's server twice when it holds a copy of the model on each of its two GPUs. The servers give the same answers
+apart from rare one-off differences, which a split run makes somewhat more frequent (section 3). For Qwen:
 
 ```bash
 # Qwen on fmi0's GPU1 and on the cluster's two GPUs: a third of the requests to fmi0, two thirds to the cluster
@@ -318,10 +305,10 @@ with the same options.
 - **`report`** writes `runs/gemma7/results/report.md`. Its first section is the sanity check: every
   regression must be revealed by at least one test, and no benign change by any.
 
-`--reps 1` is good for a first look. For a ground truth you'll rely on, use `--reps 3`. Greedy decoding on vLLM is
-not perfectly repeatable (section 3), and the majority vote over the repetitions takes care of that for Gemma
-(section 7). For a model whose answers vary more, no number of repetitions settles it
-([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4).
+`--reps 1` is good for a first look. For a ground truth you'll rely on, `--reps 3` suffices for Gemma (section 7);
+the recording of record used 5. The majority vote over the repetitions absorbs the one-off differences of section
+3; for a model whose answers vary more, no number of repetitions settles it ([RESEARCH_PLAN.md](RESEARCH_PLAN.md)
+§5.4).
 
 The work folder is git-ignored; to keep a run, copy its `results/` into `docs/results/`. It holds:
 
@@ -359,10 +346,7 @@ traceeval check skill_routing_drop_approval --history runs/gemma7 --budget 0.2  
 traceeval check my-sut-copy --history runs/qwen7 --backend llm                    # a changed copy of traceeval/sut
 ```
 
-The method picks the most informative test for its cost and runs it on the changed app; the outcome decides
-what runs next. The check stops at the first test that passed on the original app and fails now (a
-regression), when the method is sure nothing broke, or when the budget is spent. Before it ends without a
-regression, every mandatory property the change may affect gets a test, as far as the budget allows.
+It runs the loop of [USER_GUIDE.md](USER_GUIDE.md) §5 live, on the changed app.
 
 The check prints each test as it runs, and then:
 
@@ -370,18 +354,12 @@ The check prints each test as it runs, and then:
   `no failure within the budget`, or `nothing to test` for a change that touches no code;
 - the tokens and seconds spent;
 - the method's probability that the change broke something;
-- the change coverage: the share of the changed components the tests exercised, of the properties the change
-  may affect that they checked, of the affected workflows they ran, of the affected features they reached and
-  of the refusals in the changed code they reached;
-- what they left out: the affected properties left unchecked (marked when mandatory), the workflows not run, the
-  features not reached and the refusals not reached;
+- the change coverage ([USER_GUIDE.md](USER_GUIDE.md) §4) and what the tests left out: the affected properties left
+  unchecked (marked when mandatory), the workflows not run, the features not reached and the refusals not reached;
 - what the tests invoked: how many of the application's agents, skills, tools and features.
 
-`--history` gives the method what it knows beforehand: each test's cost, the code it runs on the original
-app, and how the other changes showed up in the tests. Record the history with the same model, and record it
-again whenever the app's code changes, since code is matched by line number. `traceeval experiment --reps 1`
-is enough for this. A changed copy of the app is compared with `traceeval/sut`, so copy that folder before
-editing it.
+`--history` is a recording made with the same model (the README); `traceeval experiment --reps 1` is enough for it.
+A changed copy of the app is compared with `traceeval/sut`, so copy that folder before editing it.
 
 ### Recorded answers: running without a model
 
@@ -419,9 +397,6 @@ mind:
   `<seo_title> has more than 60 characters` instead of `len(...) > ...`.
 - **Tool results sit on the model's turn.** Gemma was trained with each tool result attached to the turn that
   asked for it, and [`chat.py`](../traceeval/llm/chat.py) converts the conversation to that form.
-- **Checks look for facts rather than wording.** A test checks for a phrase only when it is a fact the answer
-  has to report, such as a job id, a path or which link is broken. A check that the answer contains *broken*
-  would fail a model that says "invalid".
 - **An empty answer gets one reminder.** When the model ends its turn without any text, the backend asks once
   for the answer the step prepared, and the `answered` check fails a run that still ends empty.
 - **The orchestrator is told the rules it would otherwise improvise.** A request that no specialist owns goes
@@ -467,15 +442,9 @@ the baseline, one test at a time, and under two minutes per change with the chan
 two SLURM GPUs, and gpt-oss's (`docs/results/gptoss7/`) three and a half hours on both of fmi0's GPUs; neither is a
 clean ground truth, for the reasons given below.
 
-| | Gemma 4 E4B |
-|---|---|
-| original app | 172 of 180 pass |
-| regressions revealed | 29 of 34 |
-| benign changes that fail a test | none of 9 |
-| sanity line of the report | VIOLATED (the five below) |
-
-The changes that no test reveals are misses of the model rather than of the testbed, and they stay in the
-set:
+On the original app 172 of 180 tests pass, 29 of the 34 regressions are revealed and no benign change is, so the
+report's sanity line says VIOLATED for the five below, misses of the model rather than of the testbed, which stay
+in the set:
 
 | change | why no test reveals it under Gemma |
 |---|---|
@@ -484,14 +453,11 @@ set:
 | `skill_linkval_ignore_assets` | it stops at a broken asset reference even when the skill says it does not block |
 
 Gemma's five runs of each test agree on the original app and disagree on only four (change, test) pairs over all 43
-changes; the majority vote absorbs them. A second recording with three repetitions, whose report is not kept,
-reproduces this ground truth on all but two (change, test) labels, so three repetitions suffice for Gemma.
+changes; the majority vote absorbs them, and three repetitions suffice.
 
-Qwen's and gpt-oss's recordings are not clean ground truths: every benign change appears revealed by a few tests,
-because some answers differ between the baseline, run one test at a time, and the changed copies, run many at a
-time, and some vary even under identical conditions. The 116 baseline runs of Qwen's recording that a dropped
-tunnel broke are left out, so about 110 of its tests have four valid baseline runs instead of five. The analysis is
-in [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4; the models are used as they are served, and the results are Gemma's.
+Qwen's and gpt-oss's recordings are not clean ground truths ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4). The 116
+baseline runs of Qwen's recording that a dropped tunnel broke are left out, so about 110 of its tests have four
+valid baseline runs instead of five. The models are used as they are served, and the results are Gemma's.
 
 ## 8. Where to look in the code
 
@@ -502,10 +468,7 @@ in [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4; the models are used as they are s
 | [`traceeval/llm/cache.py`](../traceeval/llm/cache.py) | recorded answers: the cache in front of a model, and `replay` without one |
 | [`traceeval/sut/harness/backends/llm_openai.py`](../traceeval/sut/harness/backends/llm_openai.py) | one agent's conversation with the model: system prompt, tool calls, results |
 | [`traceeval/sut/harness/skills.py`](../traceeval/sut/harness/skills.py) | skills, and `render_procedure`, which writes a procedure as plain steps |
-| [`traceeval/sut/harness/runtime.py`](../traceeval/sut/harness/runtime.py) | the agent loop and delegation |
 | [`traceeval/experiment/runner.py`](../traceeval/experiment/runner.py) | runs the suite on the original app and on each change, sequentially or in parallel |
-| [`traceeval/scoring/scorers.py`](../traceeval/scoring/scorers.py) | the checks, and the model judge (`judge_answer`) |
-| [`traceeval/experiment/check.py`](../traceeval/experiment/check.py) | the prototype: one change checked live with the proposed method |
 | [`traceeval/cli.py`](../traceeval/cli.py) | the `traceeval` command |
 
 For the rest of the repository (strategies, report, SDD), see [USER_GUIDE.md](USER_GUIDE.md) and

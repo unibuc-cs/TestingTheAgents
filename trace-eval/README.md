@@ -34,7 +34,7 @@ flowchart LR
 - **The tests** live in [`traceeval/catalog/`](traceeval/catalog/) as YAML. Each has a request, a context and
   checks on the final state, the tool calls and the answer. Each test names the properties it checks, ids from a
   catalog of properties ([`properties.yaml`](traceeval/catalog/properties.yaml)): behavioural requirements such as
-  "a page is never published with broken links", some of them mandatory.
+  "a page is never published with broken links", some of them release blockers.
 - **A traced run** of every test on the current app records, per test, the components it touched (agents, skills,
   tools, config keys, code lines), its cost in tokens and its pass rate. These are its observed dependencies, as
   opposed to the declared ones its author wrote.
@@ -46,7 +46,7 @@ flowchart LR
 - **The strategies** in [`traceeval/selection/`](traceeval/selection/) pick tests under a token budget from the
   change set, the traces, the costs and the pass rates, and from the outcomes of the other recorded changes. They
   never see the outcome of the change under evaluation. Six are baselines, two are published methods reproduced
-  (CASPER's slices and Risk-Aware Adaptive Evaluation's bandit, neither of which reads the diff;
+  (CASPER and Risk-Aware Adaptive Evaluation, neither of which reads the diff;
   [docs/REFERENCES.md](docs/REFERENCES.md)), and `adaptive_bayes` is the proposed method.
 - **The report** compares the strategies: the regressions caught for the tokens and the time spent, the changes
   that break a safety property, what is spent on changes that break nothing, whether the adaptive method stops at
@@ -54,7 +54,7 @@ flowchart LR
 
 ## Run it
 
-The tests and the spec-driven development (SDD) demo replay Gemma's recorded answers, stored in
+The test suite (`pytest`) and the spec-driven development (SDD) demo replay Gemma's recorded answers, stored in
 [`tests/cassettes/`](tests/cassettes/), so they need no GPU and no API key:
 
 ```bash
@@ -104,11 +104,11 @@ what it actually spends:
 | `adaptive_bayes`: the proposed method | 78% | 2.9% | 3.2% |
 
 The adaptive method is the only one that stops on its own: it ends as soon as it is confident, and it never calls a
-change that breaks nothing a regression. `declared` and `observed` also spend less than the budget, but only
-because they run out of tests to select. Its misses are mostly narrow regressions, revealed by one to five tests,
+change that breaks nothing a regression. Its misses are mostly narrow regressions, revealed by one to five tests,
 where it concludes too early that nothing broke. Of the 21 changes that break a safety property, it catches 84%.
-The two reproduced methods look at the traces and the outcomes but not at the diff, and sit between random (56%)
-and the change-aware strategies. The full numbers are in the [Gemma report](docs/results/gemma7/report.md), and the
+`declared` and `observed` also spend less than the budget, but only because they run out of tests to select. The
+two reproduced methods look at the traces and the outcomes but not at the diff, and sit between random (56%) and
+the change-aware strategies. The full numbers are in the [Gemma report](docs/results/gemma7/report.md), and the
 take-aways of the experiments in [RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.5.
 
 Qwen3.8-27B's and gpt-oss-120b's recordings of the same app are not clean ground truths: some of their answers vary
@@ -119,14 +119,10 @@ they are served, so these recordings are reported as a finding rather than as re
 ## Built for Adobe's AEM team
 
 The AEM team (Adobe Experience Manager, Adobe's content management system) listed what they lack today and want in
-the prototype, and the testbed has it: a catalog of properties with categories, mandatory flags and thresholds,
-which a model can draft from the requirements for people to edit; coverage of the suite and of each change over
-agents, features, skills, tools, tool error paths, settings, properties, workflows and risk; mandatory properties
-as a stopping rule; selection, prioritization and stopping under a token budget; per-test metadata and trace
-assertions; six workflows of two to five agents with plans, approvals and a step that must stop; agents modelled on
-AEM's; environment failures kept apart from the agents' failures; and OpenTelemetry export of the traces.
-[docs/AEM_ALIGNMENT.md](docs/AEM_ALIGNMENT.md) checks each requirement and holds the follow-up questions and the
-next steps.
+the prototype, and the testbed has it: a catalog of properties, some of them release blockers; coverage of the
+suite and of each change; workflows of two to five agents with plans and approvals; budgets with early stopping;
+and OpenTelemetry export of the traces. [docs/AEM_ALIGNMENT.md](docs/AEM_ALIGNMENT.md) checks each requirement in
+its §2, with the AEM team's answers, and its §4 has the next steps.
 
 ## Spec-driven development on the same testbed
 
@@ -138,9 +134,8 @@ the layer and [docs/SDD_DEMO.md](docs/SDD_DEMO.md) has the results.
 
 ## How to read the documentation
 
-[docs/README.md](docs/README.md) lists the documents by what you want to do, with the reading order. In short: this
-README, then [docs/CONTENTOPS.md](docs/CONTENTOPS.md) for the application, [docs/USER_GUIDE.md](docs/USER_GUIDE.md)
-to work in the repository, [docs/EXPERIMENT.md](docs/EXPERIMENT.md) to record with a model,
-[docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) for the research, [docs/AEM_ALIGNMENT.md](docs/AEM_ALIGNMENT.md) for
-Adobe's requirements and [docs/DEMO.md](docs/DEMO.md) for the walkthrough. Each document uses only what the ones
-before it define. [CLAUDE.md](CLAUDE.md) holds the conventions for coding agents working in the repository.
+[docs/README.md](docs/README.md) lists the documents by what you want to do. The reading order is README, then
+[docs/CONTENTOPS.md](docs/CONTENTOPS.md), [docs/USER_GUIDE.md](docs/USER_GUIDE.md),
+[docs/EXPERIMENT.md](docs/EXPERIMENT.md), [docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md),
+[docs/AEM_ALIGNMENT.md](docs/AEM_ALIGNMENT.md) and [docs/DEMO.md](docs/DEMO.md), each document using only what the
+ones before it define. [CLAUDE.md](CLAUDE.md) holds the conventions for coding agents working in the repository.

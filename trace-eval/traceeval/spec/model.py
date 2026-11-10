@@ -256,6 +256,8 @@ def validate_spec(spec: Spec, model, catalog: dict | None = None) -> list[tuple[
                     ast.parse(str(v), mode="eval")
                 except SyntaxError as exc:
                     out.append(("error", f"{where}: expression does not parse ({exc.msg})"))
-            elif stype == "inputs" and not all(t in ("int", "bool", "str") for t in dict(v).values()):
-                out.append(("error", f"{where}: input types must be int, bool or str"))
+            elif stype == "inputs" and (
+                not isinstance(v, dict) or not all(t in ("int", "bool", "str") for t in v.values())
+            ):  # a model may write the inputs as prose ("run, page_id"): an error in the draft, not a crash
+                out.append(("error", f"{where}: inputs must map each name to int, bool or str"))
     return out

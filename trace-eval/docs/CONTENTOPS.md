@@ -41,10 +41,8 @@ holds the brand guidelines, the site's analytics, and who approves consequential
 
 ![ContentOps: the user, the orchestrator, the specialists, the shared skills, the dispatcher, tools, services, state and configuration](figures/contentops_agents.svg)
 
-*One request, top to bottom. The orchestrator hands the request to one specialist, or, for a request that
-needs several, plans the steps and hands them over one at a time. A specialist follows its skill's procedure.
-Every tool call it makes passes through the dispatcher. The tools pass the work on to the services, which
-change the data and write the audit log.*
+*One request, top to bottom: the user, the orchestrator, a specialist with its skill, the dispatcher, the tools,
+the services, the data and the settings.*
 
 Each layer is a folder or file you can open:
 
@@ -57,7 +55,7 @@ Each layer is a folder or file you can open:
 | Data | An in-memory copy of a JSON file with the users, pages, assets, consents, translation jobs, brand guidelines, analytics, approver and audit log, plus a memory of idempotency keys | [`fixtures/base.json`](../traceeval/sut/fixtures/base.json), [`services/state.py`](../traceeval/sut/services/state.py) |
 | Harness | What runs the agents: the agent loop, the dispatcher that every tool call passes through, the skill loader, fault injection and retries | [`sut/harness/`](../traceeval/sut/harness/) |
 | Settings | The step budgets (per agent and per request), retries, idempotency keys, disabled and guarded tools, the default agent, the review and scheduling switches, SEO limits, default languages and the slow-page limit | [`config/runtime.yaml`](../traceeval/sut/config/runtime.yaml) |
-| Backends | What makes the decisions: a model, behind an OpenAI-style chat client. Gemma 4 E4B by default (on the local GPU, on a GPU server, or replayed from its recorded answers), or any OpenAI-compatible endpoint that supports tool calling | [`harness/backends/`](../traceeval/sut/harness/backends/), [`traceeval/llm/chat.py`](../traceeval/llm/chat.py) |
+| Backends | What makes the decisions: a model, behind an OpenAI-style chat client ([EXPERIMENT.md](EXPERIMENT.md) §3) | [`harness/backends/`](../traceeval/sut/harness/backends/), [`traceeval/llm/chat.py`](../traceeval/llm/chat.py) |
 
 ## The agents, and how they work together
 
@@ -95,11 +93,8 @@ Click an agent to see its definition, or a skill to read its procedure:
 The last three agents, and asset search, are modelled on AEM's Brand Governance, Data Insights, Site
 Optimization and Content Advisor agents ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md)).
 
-† A *guarded* tool. The dispatcher refuses the call unless the request carries an approval token, but it
-only checks that a token is there, not whose it is. The services check the rest: `approve_review` needs the
-named reviewer's own token and a role that may approve, and `export_user_data` needs the requesting user's own
-token and the `export_data` permission. `unpublish_page` gets no such check, so any token will do, but a
-protected page never goes down.
+† A *guarded* tool: the dispatcher refuses the call unless the request carries an approval token. What the services
+check on top of that is under "Who enforces which rule".
 
 ### The shared skills
 
@@ -164,9 +159,9 @@ tool it hits ([`faults.py`](../traceeval/sut/harness/faults.py)):
 
 The application is small but realistic. It has enough layers (instructions, skills, tools, services, settings,
 harness) that a change can land in the wrong one. It has enough rules (gates, retries, budgets) that a change can
-break one without touching the feature it was aimed at. Finally, the model decodes greedily (it always takes its
-most likely next token), and the app has no wall clock (timestamps come from a counter) and no randomness. A run
-therefore replays exactly from recorded answers, so the whole catalog can be run again and again for free.
+break one without touching the feature it was aimed at. Finally, the app has no wall clock (timestamps come from a
+counter) and no randomness, which is what lets a run replay exactly from recorded answers
+([EXPERIMENT.md](EXPERIMENT.md) §5).
 
-To follow a single request through the code, see [STUDY_GUIDE.md §1.1](STUDY_GUIDE.md#11-one-run-end-to-end).
-The test scenarios that exercise the platform are in [`traceeval/catalog/tests/`](../traceeval/catalog/tests/).
+The test scenarios that exercise the platform are in [`traceeval/catalog/tests/`](../traceeval/catalog/tests/);
+[USER_GUIDE.md](USER_GUIDE.md) §3 says where to look in the code.
