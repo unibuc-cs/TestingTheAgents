@@ -216,5 +216,6 @@ cases:
 - *How would this run at Adobe?* Nightly full-suite runs provide the recordings the method learns from. For each
   change, `traceeval check` selects the tests, orders them and decides when to stop. The traces are
   OpenTelemetry, and the catalog of properties maps onto DeepEval's metrics.
-- *What is next?* Re-planning after a failed step, and tau2-bench, a public agent benchmark, as a second
-  application ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4).
+- *What is next?* Re-planning after a failed step is built on a branch and recorded with three models. It waits for
+  one decision: whether a single publication with a broken link is repaired or refused
+  ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4.1). Then tau2-bench, a public agent benchmark, as a second application.
