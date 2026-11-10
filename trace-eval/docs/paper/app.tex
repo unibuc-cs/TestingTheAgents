@@ -1,0 +1,35 @@
+% ContentOps, the application under test (the figure of section 2). No numbers on the figure: it shows the shape.
+\begin{tikzpicture}[
+  node distance=6mm and 5mm,
+  box/.style={draw, rounded corners=2pt, align=center, font=\small, inner sep=4pt, minimum height=9mm},
+  shared/.style={box, fill=black!8},
+  arr/.style={-{Stealth[length=2mm]}, thick},
+  lbl/.style={font=\scriptsize, fill=white, inner sep=1pt}
+]
+\node[box, text width=46mm] (req) {a request in plain language,\\or a dataset prompt};
+\node[box, text width=74mm, below=of req] (orch) {\textbf{orchestrator}, with the routing skill:\\delegate to one specialist, or plan the steps, hand the ids\\one step reports to the next, ask a person before going live};
+\node[box, text width=118mm, below=of orch] (spec)
+  {\textbf{specialists}, each following its own skill (prose rules and a procedure the model reads as numbered steps):\\
+   authoring, publishing, SEO, assets, translation, governance, maintenance, brand governance, data insights,
+   site optimization};
+\node[shared, text width=118mm, below=of spec] (inc)
+  {\textbf{shared skills}, written into every skill that includes them:\\
+   governance checks (every specialist that changes something) and link validation (the specialists that write,
+   publish or roll back)};
+\node[shared, text width=80mm, below=of inc] (disp)
+  {\textbf{harness}: the agent loop and the dispatcher every tool call passes through:\\schema check, permission and
+   approval gates, retries with idempotency keys, fault injection};
+\node[box, text width=32mm, right=of disp] (cfg) {\textbf{configuration}:\\limits, flags, defaults,\\read by skills and\\by the dispatcher};
+\node[box, text width=36mm, below=of disp.south west, anchor=north west] (tools) {\textbf{tools}: thin adapters\\with a schema and a kind\\(read, write, guarded)};
+\node[box, text width=46mm, right=of tools] (svc) {\textbf{services}: pages and versions, review and publish, links, SEO, roles, consent and audit, translation, brand, analytics};
+\node[box, text width=24mm, right=of svc] (state) {\textbf{state}:\\in-memory, loaded\\from a fixture};
+\draw[arr] (req) -- (orch);
+\draw[arr] (orch) -- node[lbl] {delegates, one step at a time} (spec);
+\draw[arr] (inc) -- node[lbl] {included} (spec);
+\draw[arr] (spec.west) -- ++(-4mm,0) |- node[lbl, pos=0.75] {tool calls} (disp.west);
+\draw[arr] (disp) -- (tools);
+\draw[arr] (tools) -- (svc);
+\draw[arr] (svc) -- (state);
+\draw[arr] (cfg.west) -- (disp.east);
+\draw[arr] (cfg.east) -- ++(3mm,0) |- node[lbl, pos=0.25, right] {settings shown in the steps} (spec.east);
+\end{tikzpicture}
