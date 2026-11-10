@@ -73,8 +73,8 @@ Recording an experiment needs the model, served from the GPU server (see
 
 ```bash
 scripts/gpu_remote.sh up gemma
-traceeval experiment --backend vllm --workdir runs/gemma5 --reps 3    # about an hour
-# -> runs/gemma5/results/report.md  (tables + 3 figures)
+traceeval experiment --backend vllm --workdir runs/gemma7 --reps 5    # about two hours
+# -> runs/gemma7/results/report.md  (tables + 3 figures)
 scripts/gpu_remote.sh down
 ```
 
@@ -82,7 +82,7 @@ The prototype, `traceeval check`, checks one change live. The proposed method pi
 changed app with the real model, the outcome decides what runs next, and the check ends with a verdict.
 
 ```bash
-traceeval check skill_routing_drop_approval --history runs/gemma5 --budget 0.2      # a change from the catalog
+traceeval check skill_routing_drop_approval --history runs/gemma7 --budget 0.2      # a change from the catalog
 traceeval check path/to/my-copy-of-sut --history runs/qwen7 --backend llm           # your own edit, with Qwen
 ```
 
@@ -91,32 +91,32 @@ method what each test costs and which code it runs.
 
 ## Main results
 
-The results come from Gemma's recording of the current app (`runs/gemma5`: 176 of the 180 tests, 43 changes, three
-repetitions per test; CFG-01 to CFG-03 and WF2-03 are not in it). Of the 34 regressions, 29 are revealed by at
-least one test. Gemma ignores the other five either way: it behaves the same with or without the change. No benign
-change, one meant to break nothing, fails a test. A second recording with five repetitions and all 180 tests
-reproduces this ground truth on all but two (change, test) labels. The table gives the share of those 29 that
-each strategy detects with a nominal budget of 20% of the full-suite tokens, and what it actually spends:
+The results come from Gemma's recording of the current app (`runs/gemma7`: 180 tests, 43 changes, five repetitions
+per test). Of the 34 regressions, 29 are revealed by at least one test. Gemma ignores the other five either way: it
+behaves the same with or without the change. No benign change, one meant to break nothing, fails a test. A second
+recording with three repetitions reproduces this ground truth on all but two (change, test) labels. The table gives
+the share of those 29 that each strategy detects with a nominal budget of 20% of the full-suite tokens, and what it
+actually spends:
 
 | strategy | detected | tokens spent | time spent |
 |---|---|---|---|
-| `declared`: hand-written dependencies | 61% | 6.8% | 6.9% |
-| `observed`: dependencies seen in traces | 86% | 15% | 15% |
-| `ir_tfidf`: text similarity to the diff | 92% | 20% | 20% |
-| `casper_slices`: CASPER's slices, reproduced | 50% | 20% | 22% |
-| `risk_aware_ts`: Risk-Aware Adaptive Evaluation, reproduced | 59% | 20% | 21% |
-| `adaptive_bayes`: the proposed method | 79% | 2.9% | 3.1% |
+| `declared`: hand-written dependencies | 62% | 6.8% | 7.1% |
+| `observed`: dependencies seen in traces | 86% | 15% | 16% |
+| `ir_tfidf`: text similarity to the diff | 93% | 20% | 20% |
+| `casper_slices`: CASPER's slices, reproduced | 59% | 20% | 23% |
+| `risk_aware_ts`: Risk-Aware Adaptive Evaluation, reproduced | 57% | 20% | 22% |
+| `adaptive_bayes`: the proposed method | 78% | 2.9% | 3.2% |
 
 The adaptive method is the only one that leaves budget unspent. It stops as soon as it is confident, and it never
 calls a change that breaks nothing a regression. Its misses are mostly narrow regressions, revealed by one to
 five tests, where it concludes too early that nothing broke. Of the 21 changes that break a safety property, it
-catches 86%. The two reproduced methods look at the traces and the outcomes but not at the diff, and sit between
-random (52%) and the change-aware strategies. The full numbers are in the
-[Gemma report](docs/results/gemma5/report.md), and the take-aways of the experiments in
+catches 84%. The two reproduced methods look at the traces and the outcomes but not at the diff, and sit between
+random (56%) and the change-aware strategies. The full numbers are in the
+[Gemma report](docs/results/gemma7/report.md), and the take-aways of the experiments in
 [RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.5.
 
-Qwen3.8-27B's recording of the same app is not a clean ground truth, and five repetitions instead of three do not
-mend it. It records every benign change as revealed by three to six tests, for two reasons. Seven tests answer
+Qwen3.8-27B's recording of the same app is not a clean ground truth, and five repetitions do not mend it. It
+records every benign change as revealed by three to six tests, for two reasons. Seven tests answer
 differently when run 64 at a time than when run one at a time: the case it judges itself, the one at the
 60-character boundary, four long workflows and one more. And some of its answers vary from run to run even under
 identical conditions. gpt-oss-120b, a third model, varies even more. The models are used as they are served, so

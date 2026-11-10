@@ -1,5 +1,5 @@
 % TRACE-Eval: the paper draft. Build with: latexmk -pdf main   (MiKTeX or TeX Live; pdflatex + bibtex)
-% The numbers are those of docs/results/gemma5/report.md; the figure of section 5 is that report's.
+% The numbers are those of docs/results/gemma7/report.md; the figure of section 5 is that report's.
 \documentclass[11pt,a4paper]{article}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
@@ -46,11 +46,11 @@ discounted. The posterior over the $2^{|C(\Delta)|}$ subsets of broken component
 maximises the expected information gain per token; the run stops with \regression{} at the first failure of a test
 that used to pass, with \clean{} when $P(\text{some component broken} \mid \text{outcomes}) < \varepsilon$, and not
 before every mandatory property $\Delta$ may affect has been tested. We evaluate on a testbed: a multi-agent
-content-operations application whose agents are played by an open model (Gemma~4 E4B), 176 tests, 43 controlled
-changes applied as file edits, and a ground truth measured per model by majority over three runs. Declared
-dependencies miss 39\% of the regressions; trace-informed selection finds 86\% within 20\% of the full-suite tokens;
-two published methods reproduced on the testbed, CASPER's slices and a risk-aware bandit, find 50\% and 59\%
-because neither reads the change; the proposed method finds 79\% for 3\% of the tokens, 86\% of the changes that
+content-operations application whose agents are played by an open model (Gemma~4 E4B), 180 tests, 43 controlled
+changes applied as file edits, and a ground truth measured per model by majority over five runs. Declared
+dependencies miss 38\% of the regressions; trace-informed selection finds 86\% within 20\% of the full-suite tokens;
+two published methods reproduced on the testbed, CASPER's slices and a risk-aware bandit, find 59\% and 57\%
+because neither reads the change; the proposed method finds 78\% for 3\% of the tokens, 84\% of the changes that
 break a safety property, and gives no false verdict on the 14 changes no test reveals.
 \end{abstract}
 
@@ -127,7 +127,7 @@ regression testing adapted to token costs (Section~\ref{sec:abstractions}); a me
 the granularity of code lines, skill procedures, agent fields and configuration keys, maps it to tests through
 dependencies observed in traces, ranks tests by expected information per token in a Bayesian model whose
 sensitivities are calibrated from history, and stops with a verdict (Section~\ref{sec:method}); a testbed with a
-multi-agent application, 176 tests, 43 controlled changes and a mutation-based ground truth derived per model, on
+multi-agent application, 180 tests, 43 controlled changes and a mutation-based ground truth derived per model, on
 which strategies are compared by offline replay (Section~\ref{sec:setup}); and an evaluation against six baselines
 and two published methods reproduced on the testbed (Section~\ref{sec:evaluation}).
 
@@ -616,22 +616,23 @@ detection and coverage hold, and does the stopping rule give the right verdict? 
 methods, which do not read the change, find on the same testbed?
 
 \paragraph{Protocol.}
-The full suite runs $K = 3$ times on the current version with coverage contexts, which gives the observed
-dependencies, costs and pass rates, and $K = 3$ times on each of the 43 changed copies, which gives the ground
+The full suite runs $K = 5$ times on the current version with coverage contexts, which gives the observed
+dependencies, costs and pass rates, and $K = 5$ times on each of the 43 changed copies, which gives the ground
 truth. Every strategy is then replayed offline: for every change, budget in $\{2, 5, 10, 20, 30, 50, 100\}\%$ of
 the full-suite tokens and five seeds, the strategy sees the baseline facts and the change set, and each test it
 runs is answered from a recorded run of that changed copy. The method calibrates on the other 42 changes, never
 on the one under test.
 
 \paragraph{Ground truth.}
-On the current version 170 of 176 tests pass. The six failures are the model's own mistakes, which clearer
-wording did not fix: it schedules a page without an approved review, requests a review nobody asked for, applies
-an over-long title, goes on to publishing after a failed link check, and stops a whole plan after a refused step
-the other steps do not depend on. Of the 34 regressions, 29 are revealed by at least one test. The model does not
-act on the five remaining guards (a review flag, a length limit, a non-blocking asset reference) with or without
-the change, so it behaves the same, wrongly, on both versions. No benign change fails a test. Across the 43
-changes the three runs disagreed on five (change, test) pairs, which the majority vote absorbs. The 29 revealed
-regressions and the 14 changes no test reveals are the population below.
+On the current version 172 of 180 tests pass. The eight failures are the model's own mistakes, which clearer
+wording did not fix: it schedules a page without an approved review, requests a review nobody asked for and where
+none is required, applies an over-long title, goes on to publishing after a failed link check, reports pages as
+republished that were not, and stops a whole plan after a refused step the other steps do not depend on. Of the 34
+regressions, 29 are revealed by at least one test. The model does not act on the five remaining guards (a review
+flag, a length limit, a non-blocking asset reference) with or without the change, so it behaves the same, wrongly,
+on both versions. No benign change fails a test. Across the 43 changes the five runs disagreed on four (change,
+test) pairs, which the majority vote absorbs. The 29 revealed regressions and the 14 changes no test reveals are
+the population below.
 
 \begin{table}[t]
 \centering\small
@@ -643,15 +644,15 @@ Five seeds; the last three columns are shares of the full-suite tokens.}
 \toprule
 strategy & 2\% & 5\% & 10\% & 20\% & 50\% & 100\% & spent@20 & spent@100 & benign@100 \\
 \midrule
-\strat{full}            & 0.00 & 0.14 & 0.21 & 0.34 & 0.90 & 0.99 & 0.20 & 0.98 & 1.00 \\
-\strat{random}          & 0.17 & 0.21 & 0.33 & 0.52 & 0.84 & 0.99 & 0.20 & 0.98 & 1.00 \\
-\strat{declared}        & 0.45 & 0.55 & 0.55 & 0.61 & 0.61 & 0.61 & 0.07 & 0.10 & 0.13 \\
-\strat{ir\_tfidf}       & 0.59 & 0.70 & 0.71 & 0.92 & 0.99 & 0.99 & 0.20 & 0.98 & 0.99 \\
-\strat{observed}        & 0.48 & 0.62 & 0.69 & 0.86 & 0.86 & 0.99 & 0.15 & 0.49 & 0.32 \\
-\strat{cost\_aware}     & 0.38 & 0.59 & 0.62 & 0.83 & 0.86 & 0.99 & 0.20 & 0.98 & 0.99 \\
-\strat{casper\_slices}  & 0.17 & 0.28 & 0.43 & 0.50 & 0.88 & 0.99 & 0.20 & 0.98 & 1.00 \\
-\strat{risk\_aware\_ts} & 0.12 & 0.27 & 0.43 & 0.59 & 0.81 & 0.99 & 0.20 & 0.98 & 1.00 \\
-\strat{adaptive\_bayes} & 0.59 & 0.76 & 0.79 & 0.79 & 0.83 & 0.83 & 0.03 & 0.03 & 0.20 \\
+\strat{full}            & 0.00 & 0.14 & 0.24 & 0.34 & 0.90 & 1.00 & 0.20 & 0.98 & 1.00 \\
+\strat{random}          & 0.09 & 0.22 & 0.37 & 0.56 & 0.86 & 1.00 & 0.20 & 0.98 & 1.00 \\
+\strat{declared}        & 0.45 & 0.59 & 0.55 & 0.62 & 0.62 & 0.62 & 0.07 & 0.11 & 0.14 \\
+\strat{ir\_tfidf}       & 0.59 & 0.69 & 0.76 & 0.93 & 1.00 & 1.00 & 0.20 & 0.98 & 0.99 \\
+\strat{observed}        & 0.48 & 0.62 & 0.69 & 0.86 & 0.86 & 1.00 & 0.15 & 0.49 & 0.33 \\
+\strat{cost\_aware}     & 0.38 & 0.55 & 0.62 & 0.86 & 0.86 & 1.00 & 0.20 & 0.98 & 0.99 \\
+\strat{casper\_slices}  & 0.17 & 0.28 & 0.52 & 0.59 & 0.90 & 1.00 & 0.20 & 0.98 & 1.00 \\
+\strat{risk\_aware\_ts} & 0.11 & 0.28 & 0.35 & 0.57 & 0.83 & 1.00 & 0.20 & 0.98 & 1.00 \\
+\strat{adaptive\_bayes} & 0.61 & 0.74 & 0.78 & 0.78 & 0.81 & 0.81 & 0.03 & 0.03 & 0.20 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -667,60 +668,61 @@ one of the 14 changes no test reveals.}
 \toprule
 strategy & APFD & $\mathrm{APFD}_c$ & first detection & safety@10 & safety@20 & false alarm \\
 \midrule
-\strat{full}            & 0.63 & 0.57 & 0.19 & 0.10 & 0.24 & 0.71 \\
-\strat{random}          & 0.56 & 0.53 & 0.14 & 0.36 & 0.57 & 0.63 \\
-\strat{declared}        & 0.81 & 0.76 & 0.025 & 0.52 & 0.55 & 0.51 \\
-\strat{ir\_tfidf}       & 0.78 & 0.77 & 0.040 & 0.79 & 0.98 & 0.70 \\
-\strat{observed}        & 0.75 & 0.79 & 0.048 & 0.57 & 0.81 & 0.57 \\
-\strat{cost\_aware}     & 0.75 & 0.78 & 0.056 & 0.57 & 0.76 & 0.91 \\
-\strat{casper\_slices}  & 0.59 & 0.54 & 0.12 & 0.50 & 0.60 & 0.57 \\
-\strat{risk\_aware\_ts} & 0.60 & 0.61 & 0.13 & 0.55 & 0.73 & 0.71 \\
-\strat{adaptive\_bayes} & 0.83 & 0.81 & 0.017 & 0.86 & 0.86 & 0.00 \\
+\strat{full}            & 0.63 & 0.58 & 0.19 & 0.14 & 0.24 & 0.72 \\
+\strat{random}          & 0.54 & 0.54 & 0.14 & 0.41 & 0.60 & 0.69 \\
+\strat{declared}        & 0.81 & 0.76 & 0.028 & 0.52 & 0.57 & 0.58 \\
+\strat{ir\_tfidf}       & 0.78 & 0.77 & 0.040 & 0.86 & 1.00 & 0.71 \\
+\strat{observed}        & 0.75 & 0.79 & 0.049 & 0.57 & 0.81 & 0.58 \\
+\strat{cost\_aware}     & 0.74 & 0.77 & 0.060 & 0.57 & 0.81 & 0.94 \\
+\strat{casper\_slices}  & 0.58 & 0.52 & 0.12 & 0.62 & 0.71 & 0.57 \\
+\strat{risk\_aware\_ts} & 0.60 & 0.60 & 0.14 & 0.47 & 0.71 & 0.76 \\
+\strat{adaptive\_bayes} & 0.83 & 0.81 & 0.017 & 0.84 & 0.84 & 0.00 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=0.85\textwidth]{../results/gemma5/figures/detection_vs_cost.png}
+  \includegraphics[width=0.85\textwidth]{../results/gemma7/figures/detection_vs_cost.png}
   \caption{Detection of the 29 revealed regressions against the tokens actually spent, every strategy and
   budget. The adaptive method sits at the left: it stops.}
   \label{fig:detection}
 \end{figure}
 
 \paragraph{Selection (RQ1).}
-Declared metadata caps detection at 61\% however large the budget (Table~\ref{tab:detection}), because shared
+Declared metadata caps detection at 62\% however large the budget (Table~\ref{tab:detection}), because shared
 skills reached through an include, harness code and most configuration keys are not declared. The observed
 dependencies recover full selection recall at half the suite's cost and reach 86\% within a 20\% budget. The
 argument for trace-informed selection holds.
 
 \paragraph{Prioritization (RQ2).}
-The informed strategies raise $\mathrm{APFD}_c$ from 0.53 (random) to 0.76--0.81 (Table~\ref{tab:order}). The
+The informed strategies raise $\mathrm{APFD}_c$ from 0.54 (random) to 0.76--0.81 (Table~\ref{tab:order}). The
 adaptive method's order is the best and finds the first regression soonest, after 1.7\% of the suite's tokens.
-The two reproduced methods order no better than random (0.54 and 0.61) and find their first regression after
-12--13\% of the suite, where the change-aware strategies need 2--6\%.
+The two reproduced methods order no better than random (0.52 and 0.60) and find their first regression after
+12--14\% of the suite, where the change-aware strategies need 2--6\%.
 
 \paragraph{Budget and verdicts (RQ3).}
-The adaptive method is the only strategy that returns budget. It finds 76\% of the regressions at a 5\% budget
-and 79\% at 20\%, for under 3\% of the tokens, and spends a tenth of the suite on a benign change at a 20\%
-budget (Figure~\ref{fig:detection}). TF-IDF over the diff is the strongest selector at 20\% (92\%) and the
-strongest on the safety-breaking changes (98\%), and it spends the whole budget every time, on benign changes
-too. The adaptive method's ceiling is 83\%: on a regression that only one to five tests reveal it can become
-confident that nothing broke before reaching them (145 of 1,015 replays of regressions ended \clean). The changes
-it misses at 20\% are the delegation that drops the ids of earlier steps, the loop that stops six steps early,
-retries without idempotency keys, the routing skill without its brand gate, the authoring skill without its
-metadata step, and the combined change, which runs out of budget.
+The adaptive method is the only strategy that returns budget. It finds 74\% of the regressions at a 5\% budget and
+78\% at 20\%, for under 3\% of the tokens, and spends a tenth of the suite on a benign change at a 20\% budget
+(Figure~\ref{fig:detection}). TF-IDF over the diff is the strongest selector at 20\% (93\%) and the strongest on
+the safety-breaking changes (all of them), and it spends the whole budget every time, on benign changes too. The
+adaptive method's ceiling is 81\%: on a regression that only one to five tests reveal it can become confident that
+nothing broke before reaching them (145 of 1,015 replays of regressions ended \clean). The changes it misses at
+20\% are the delegation that drops the ids of earlier steps, the loop that stops six steps early, retries without
+idempotency keys, the routing skill without its brand gate, the authoring skill without its metadata step, and the
+combined change, on which it runs out of tests that could still move its estimate; the governance skill without its
+consent step it catches in three of five seeds.
 
-The six tests that fail on the current version fail on every changed copy too. A strategy that runs one sees a
-failure the change did not cause: on the 14 changes no test reveals, this happens to \strat{full} in 71\% of its
-replays, to \strat{cost\_aware} in 91\%, to the bandit in 71\% and to CASPER's slices in 57\%
+The eight tests that fail on the current version fail on nearly every changed copy too. A strategy that runs one
+sees a failure the change did not cause: on the 14 changes no test reveals, this happens to \strat{full} in 72\% of
+its replays, to \strat{cost\_aware} in 94\%, to the bandit in 76\% and to CASPER's slices in 57\%
 (Table~\ref{tab:order}). The adaptive method discounts a test by its failures on the current version
 (Equation~\ref{eq:likelihood}) and stops only on a test that used to pass, so it gave no \regression{} verdict on
 any of these changes in 490 replays.
 
 \paragraph{The text factor.}
 The tilt $\tau_t$ can use word overlap (the default), the TF-IDF similarity of \strat{ir\_tfidf}, or no text at
-all (Table~\ref{tab:text}). TF-IDF brings forward the one test that reveals a narrow change and gains up to four
+all (Table~\ref{tab:text}). TF-IDF brings forward the one test that reveals a narrow change and gains up to five
 points while spending less; without any text the method loses ten points. Text matters, and coverage and history
 carry most of the result. The testbed is textual, since tests, skills and configuration keys share vocabulary,
 which favours any text measure.
@@ -734,9 +736,9 @@ which favours any text measure.
 \toprule
 budget & word overlap & TF-IDF & no text & \strat{ir\_tfidf} alone \\
 \midrule
-5\%  & 0.76 (2.1\%) & 0.79 (2.0\%) & 0.62 (2.4\%) & 0.70 (5\%) \\
-20\% & 0.79 (2.9\%) & 0.83 (2.4\%) & 0.69 (3.5\%) & 0.92 (20\%) \\
-50\% & 0.83 (2.9\%) & 0.83 (2.4\%) & 0.69 (4.5\%) & 0.99 (50\%) \\
+5\%  & 0.74 (2.1\%) & 0.79 (1.9\%) & 0.57 (2.4\%) & 0.69 (5\%) \\
+20\% & 0.78 (2.9\%) & 0.83 (2.4\%) & 0.68 (3.5\%) & 0.93 (20\%) \\
+50\% & 0.81 (2.9\%) & 0.83 (2.4\%) & 0.68 (4.6\%) & 1.00 (50\%) \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -744,45 +746,43 @@ budget & word overlap & TF-IDF & no text & \strat{ir\_tfidf} alone \\
 \paragraph{The mandatory rule.}
 Without the rule, a run that found no regression had tested every mandatory property the change may affect in
 33\% of the replays at a 20\% budget; with it, in 90\%, for 0.8 extra tests per change on average, and detection
-rose from 76\% to 79\%. The rule is also a detector: it catches the publishing skill without its link validation,
+rose from 74\% to 78\%. The rule is also a detector: it catches the publishing skill without its link validation,
 which the model alone calls clean, because the method must test the mandatory property ``no broken publish''
 before ending, and that test fails. The rule never caused a false verdict. Below a 10\% budget it often cannot
 afford the extra test.
 
 \paragraph{The reproduced methods (RQ4), and where CASPER fits.}
-CASPER's slices and the risk-aware bandit find 50\% and 59\% of the regressions at a 20\% budget, between random
-(52\%) and the change-aware strategies (83--92\%). The bandit's impact is the test's risk, so it does better on
-the changes that break a safety property (73\% at 20\%, 94\% at 50\%), and it rewards any failure, so it runs the
-model's red tests early. Neither stops. These numbers measure what the diff is worth, not CASPER in its own
-setting. CASPER was built for changes that have no diff a test can be mapped to: a model upgrade, a provider's
-silent update, a prompt-level change whose effect spreads through the model's behaviour. A platform sees both
-kinds of change. The change-aware strategies cover the edits to skills, code and settings; CASPER's
-representatives are the natural first pass after a model update, when every test is affected and the question is
-which behaviours drifted. The two could be combined: the slices can serve as the near-duplicate groups of the
-adaptive method, and a slice whose representatives drifted can enter the model as a changed component. On this
-testbed every change is an edit with a diff and the suite is small (176 tests, twelve slices), which is the case
-slicing has least to offer.
+CASPER's slices and the risk-aware bandit find 59\% and 57\% of the regressions at a 20\% budget, close to random
+(56\%) and far from the change-aware strategies (86--93\%). The bandit's impact is the test's risk, so it does
+better on the changes that break a safety property (71\% at 20\%, 98\% at 50\%), and it rewards any failure, so it
+runs the model's red tests early. Neither stops. These numbers measure what the diff is worth, not CASPER in its
+own setting. CASPER was built for changes that have no diff a test can be mapped to: a model upgrade, a provider's
+silent update, a prompt-level change whose effect spreads through the model's behaviour. A platform sees both kinds
+of change. The change-aware strategies cover the edits to skills, code and settings; CASPER's representatives are
+the natural first pass after a model update, when every test is affected and the question is which behaviours
+drifted. The two could be combined: the slices can serve as the near-duplicate groups of the adaptive method, and a
+slice whose representatives drifted can enter the model as a changed component. On this testbed every change is an
+edit with a diff and the suite is small (180 tests, twelve slices), which is the case slicing has least to offer.
 
 \paragraph{Other models.}
-The same application was recorded with Qwen3.8-27B and with gpt-oss-120b, served as they are, with greedy
-decoding and five repetitions instead of three. Neither recording is a clean ground truth, and the five
-repetitions do not settle either vote. Qwen passes 173 of the 180 tests on the current version and reveals every
-regression, but it also ``reveals'' every benign change, by three to six tests under the majority over five runs
-and by two to four under the first three, including a change whose change set is empty; the two votes differ on 75
-(change, test) pairs, and its runs disagree on 357 pairs against Gemma's five. Seven tests carry the variation: the
-case Qwen judges itself, the one at a length boundary, four long workflows and one more. Two of them pass one at a
-time, as the baseline runs, and fail in a batch, as the changed copies run; vLLM's batch-invariant mode, which
-would make greedy decoding exactly repeatable, does not support the model's attention layers. Recording the
-baseline the way the changes are recorded does not help either: with the empty change as the reference, every
-other benign change still flips two to five tests. gpt-oss-120b varies more: the benign changes flip two to five
-tests under the majority over five runs and one to four under the first three; thirteen tests carry the variation,
-mostly long workflows that pass one at a time on the current version and fail in a batch on nearly every changed
-copy, whichever the change. A larger model is not automatically a cleaner ground truth, and a pipeline should
-measure how much its model's answers vary under the serving setup the selection will run on before trusting a
-ground truth or a stopping rule. The empty change measures exactly that. Gemma, recorded again the same way,
-gives the opposite picture: its five runs disagree on four pairs, no benign change is revealed, and the ground
-truth of the first recording is reproduced on all but two labels, the two pairs that sit at the majority line, and
-every strategy's detection within a few points of Table~ef{tab:detection}.
+The same application was recorded with Qwen3.8-27B and with gpt-oss-120b, served as they are, with greedy decoding
+and five repetitions, like Gemma. Neither recording is a clean ground truth, and the five repetitions do not settle
+either vote. Qwen passes 173 of the 180 tests on the current version and reveals every regression, but it also
+``reveals'' every benign change, by three to six tests under the majority over five runs and by two to four under
+the first three, including a change whose change set is empty; the two votes differ on 75 (change, test) pairs, and
+its runs disagree on 357 pairs against Gemma's four. Seven tests carry the variation: the case Qwen judges itself,
+the one at a length boundary, four long workflows and one more. Two of them pass one at a time, as the baseline
+runs, and fail in a batch, as the changed copies run; vLLM's batch-invariant mode, which would make greedy decoding
+exactly repeatable, does not support the model's attention layers. Recording the baseline the way the changes are
+recorded does not help either: with the empty change as the reference, every other benign change still flips two to
+five tests. gpt-oss-120b varies more: the benign changes flip two to five tests under the majority over five runs
+and one to four under the first three; thirteen tests carry the variation, mostly long workflows that pass one at a
+time on the current version and fail in a batch on nearly every changed copy, whichever the change. A larger model
+is not automatically a cleaner ground truth, and a pipeline should measure how much its model's answers vary under
+the serving setup the selection will run on before trusting a ground truth or a stopping rule. The empty change
+measures exactly that. Gemma, recorded a second time with three repetitions, gives the opposite picture: its runs
+disagree on five pairs, no benign change is revealed, the ground truth above is reproduced on all but two labels,
+the two pairs that sit at the majority line, and every strategy's detection is within a few points.
 
 \paragraph{Threats to validity.}
 The regressions are mutants, not real changes; they were written to resemble regressions a team would ship, and
@@ -802,30 +802,30 @@ single failure would need repetitions \cite{miller2024error,bjarnason2026randomn
 What the experiments say, in the order a team would act on them. The numbers are Gemma's, at a budget of 20\% of
 the suite's tokens unless said otherwise.
 \begin{enumerate}
-  \item \textbf{Record traces; do not maintain a map.} Hand-written dependency metadata finds 61\% of the
+  \item \textbf{Record traces; do not maintain a map.} Hand-written dependency metadata finds 62\% of the
         regressions at any budget, because shared skills, harness code and settings are reached without being
         declared. Dependencies read from traces find 86\%, and everything at 100\%. One instrumentation of the
         agent runtime replaces a test-to-component map that nobody keeps current.
-  \item \textbf{Read the diff.} The strategies that use the change find 79\% to 92\% of the regressions; the two
-        that do not, CASPER's slices and the risk-aware bandit, find 50\% and 59\%, near a random order's 52\%, and
-        their first revealing test comes after 12\% to 13\% of the suite's tokens instead of 2\% to 6\%.
-  \item \textbf{Stop when confident, with a safety net.} The adaptive method finds 79\% for 3\% of the tokens and
-        returns the rest. Its ceiling is 83\%: on a regression that one to five tests reveal it can stop too early.
+  \item \textbf{Read the diff.} The strategies that use the change find 78\% to 93\% of the regressions; the two
+        that do not, CASPER's slices and the risk-aware bandit, find 59\% and 57\%, near a random order's 56\%, and
+        their first revealing test comes after 12\% to 14\% of the suite's tokens instead of 2\% to 6\%.
+  \item \textbf{Stop when confident, with a safety net.} The adaptive method finds 78\% for 3\% of the tokens and
+        returns the rest. Its ceiling is 81\%: on a regression that one to five tests reveal it can stop too early.
         The mandatory rule covers the safety properties for under one extra test per change, and on this
         application catches the publishing skill without its link check, which the stopping rule alone misses. The
         catalog of properties is where that policy lives: whoever sets the mandatory flag decides what the pipeline
         never skips.
-  \item \textbf{Discount the tests the model already fails.} Six tests fail on the current version, and on every
-        changed copy. On the 14 changes no test reveals, every other strategy reports a failure the change did not
-        cause in 51\% to 91\% of its replays; the adaptive method in none, because it keeps each test's pass rate
-        on the current version and acts only on a flip.
-  \item \textbf{Measure the model's noise before trusting a verdict.} Gemma's three runs agree on every test of the
-        current version and disagree on five (change, test) pairs over the 43 changes with three repetitions, on
-        four with five, and a second recording reproduces its ground truth on all but two labels; Qwen's disagree
-        on 357 and gpt-oss's on 577, both ``reveal'' every benign change, and five repetitions instead of three
-        settle neither vote. The baseline runs one test at a time and the changed copies in batches, and that alone flips some
-        tests; the rest varies under identical conditions. An empty change, recorded like the others, measures the
-        noise floor; record it per model and per serving setup.
+  \item \textbf{Discount the tests the model already fails.} Eight tests fail on the current version, and on nearly
+        every changed copy. On the 14 changes no test reveals, every other strategy reports a failure the change
+        did not cause in 57\% to 94\% of its replays; the adaptive method in none, because it keeps each test's
+        pass rate on the current version and acts only on a flip.
+  \item \textbf{Measure the model's noise before trusting a verdict.} Gemma's five runs agree on every test of the
+        current version and disagree on four (change, test) pairs over the 43 changes, and a second recording with
+        three repetitions reproduces its ground truth on all but two labels; Qwen's disagree on 357 and gpt-oss's
+        on 577, both ``reveal'' every benign change, and five repetitions settle neither vote. The baseline runs
+        one test at a time and the changed copies in batches, and that alone flips some tests; the rest varies
+        under identical conditions. An empty change, recorded like the others, measures the noise floor; record it
+        per model and per serving setup.
   \item \textbf{CASPER and the bandit have their place.} CASPER needs no diff: a model or provider update, or a
         prompt-level change in a system the team does not own. Its representatives are the natural first pass after
         a model update, and its slices could serve as the adaptive method's groups of near-duplicate tests. The
@@ -833,7 +833,7 @@ the suite's tokens unless said otherwise.
         only the tests' risk to go on. The change-aware strategies cover edits to skills, code and settings; the two
         kinds combine.
   \item \textbf{Text is a strong, cheap baseline.} TF-IDF similarity between the diff and the tests' text has the
-        best detection when the whole budget is spent (92\%, and 98\% on the changes that break a safety property).
+        best detection when the whole budget is spent (93\%, and all of the changes that break a safety property).
         It never stops, so it spends everything on benign changes too; it is the fallback order to keep in any
         pipeline.
   \item \textbf{Not yet covered.} Real version history instead of mutants; a second system under test; suites
@@ -845,9 +845,9 @@ the suite's tokens unless said otherwise.
 
 After a change to an agent system, the diff is worth reading. Mapped to tests through the dependencies observed
 in traces, it finds 86\% of the regressions within a fifth of the suite's tokens where hand-written metadata
-finds 61\%, and the two closest published methods, which do not read it, find 50\% and 59\%. A Bayesian model
+finds 62\%, and the two closest published methods, which do not read it, find 59\% and 57\%. A Bayesian model
 over the changed components, with sensitivities calibrated from the record of earlier changes, turns selection,
-prioritization and stopping into one decision: it finds 79\% of the regressions for 3\% of the tokens, orders the
+prioritization and stopping into one decision: it finds 78\% of the regressions for 3\% of the tokens, orders the
 suite best, gives no false verdict on the changes no test reveals, and tests every mandatory property a change
 may affect before it calls the change clean. The price is a ceiling on narrow regressions, which the mandatory
 rule lowers for the properties that matter most.

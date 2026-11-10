@@ -113,7 +113,7 @@ Everything else is plumbing (loaders, tracing, report).
     tool call is refused, reached when a run executes it. A workflow is declared by the tests that name it, and
     observed when a run delegates to exactly its agents, in order. Then, for each agent, skill, tool and feature,
     the number of tests that declare it and the number that invoke it in their recorded runs. `traceeval coverage
-    --history runs/gemma5` prints this part in the terminal.
+    --history runs/gemma7` prints this part in the terminal.
   - Then each change, without the ground truth (`experiment/coverage.py`): the share of the changed components the
     executed tests exercised, the share of the properties the change may affect that they checked, how often a run
     that found no regression tested every affected mandatory property, the share of the affected workflows they
@@ -131,7 +131,7 @@ estimates a **sensitivity**: the probability that the test fails if that part is
 tells it the most per token (high sensitivity, low cost). A sensitive test that passes is strong evidence that
 nothing broke. The sensitivity is the product of four factors (`selection/adaptive_bayes.py::sensitivity`). The
 examples are for `code_retry_drop_idempotency` (retried writes lose their idempotency key, §6), with the numbers
-of `runs/gemma5`:
+of `runs/gemma7`:
 
 ```mermaid
 flowchart LR
@@ -153,8 +153,8 @@ flowchart LR
 
 | factor | what it is | example |
 |---|---|---|
-| kind ratio | for the other recorded changes of this kind, the fraction of the tests each one touched that caught it, averaged over those changes | for a code change, tests that ran a changed line caught it 21% of the time on average: 6 of the 12 tests that ran the changed line of the link check caught `code_links_external_lenient`, but only 5 of the 176 that ran the changed line of the agent loop caught `code_termination_off_by_six`. Tests that only called a changed function, without running the changed line, caught nothing (the 1% floor). A ratio learned from one or two changes is padded with 2 changes' worth of a default for its kind, so it stays near that default |
-| test record | the number of other recorded changes of this kind that touched the test and that it caught, over the number an average touched test would have caught; both are padded with 2 (`prior_strength`) | AUT-02 caught 3 where an average test would have caught 1.05: (3 + 2) / (1.05 + 2) = 1.64. AUT-13 caught none of an expected 1.05: (0 + 2) / (1.05 + 2) = 0.66 |
+| kind ratio | for the other recorded changes of this kind, the fraction of the tests each one touched that caught it, averaged over those changes | for a code change, tests that ran a changed line caught it 19% of the time on average: 6 of the 12 tests that ran the changed line of the link check caught `code_links_external_lenient`, but only 5 of the 180 that ran the changed line of the agent loop caught `code_termination_off_by_six`. Tests that only called a changed function, without running the changed line, caught nothing (the 1% floor). A ratio learned from one or two changes is padded with 2 changes' worth of a default for its kind, so it stays near that default |
+| test record | the number of other recorded changes of this kind that touched the test and that it caught, over the number an average touched test would have caught; both are padded with 2 (`prior_strength`) | AUT-02 caught 3 where an average test would have caught 1.03: (3 + 2) / (1.03 + 2) = 1.65. AUT-13 caught none of an expected 1.03: (0 + 2) / (1.03 + 2) = 0.66 |
 | coverage | how often the test ran the changed code in its runs on the original app, from 0 to 1. When an agent loses a tool or a skill, it is how often the test used that tool or skill, because the agent's other tests cannot notice the loss | PUB-12 runs the changed line of `harness/retry.py` in every run: 1.0 |
 | tilt | the text similarity between the test and the diff (0.5 to 1.5), plus 0.5 if the test's author declared the dependency. The similarity is word overlap by default. `adaptive_bayes_tfidf` uses TF-IDF instead (word overlap that gives rare words more weight), and `adaptive_bayes_notext` uses no text at all. `--strategies adaptive_bayes adaptive_bayes_tfidf adaptive_bayes_notext` compares the three (RESEARCH_PLAN §5.2) | a test whose request mentions publishing gets more weight for a change to the publishing skill |
 
@@ -193,7 +193,7 @@ strategy finds them. Of these, 34 are regressions, which at least one test shoul
 changes, which no test should reveal. Each change is in the set for a reason: a kind of change (code, skill,
 prompt, config), a reach (one test or dozens), or a trap for selection. The last column counts the revealing
 tests, those that pass on the original app and fail on the changed copy, in Gemma's recording of the current app
-(`runs/gemma5`: 176 tests, three repetitions). Qwen's recording of the same app is not a clean ground truth
+(`runs/gemma7`: 180 tests, five repetitions). Qwen's recording of the same app is not a clean ground truth
 ([EXPERIMENT.md](EXPERIMENT.md) §7), so it has no column.
 
 | change | what it does | why it is in the set | revealing tests (Gemma) |
@@ -212,17 +212,17 @@ tests, those that pass on the original app and fail on the changed copy, in Gemm
 | `skill_publish_drop_link_validation` | publishing no longer validates links | a change to a skill's procedure rather than to code. No test declares the link-check skill. The method alone calls the change clean, and the mandatory-coverage rule catches it | 4 |
 | `skill_publish_drop_permission_check` | publishing no longer checks the user's permission | a safety rule enforced only in a skill: nothing below it stops the write | 3 |
 | `skill_authoring_drop_metadata` | new pages no longer get SEO metadata | a removed step that one test notices | 1 |
-| `skill_translation_wrong_default` | translation uses en-US instead of the configured languages | a skill that ignores a configuration value | 3 |
+| `skill_translation_wrong_default` | translation uses en-US instead of the configured languages | a skill that ignores a configuration value | 4 |
 | `skill_rollback_drop_permission_check` | rollback no longer checks the permission; the service still refuses | defence in depth: the data stays safe and only the behaviour shows the mistake | 1 |
 | `skill_rollback_restores_latest` | rollback restores the latest version instead of the requested one | a wrong argument in a procedure step | 3 |
 | `skill_linkval_ignore_assets` | the shared link-validation skill lets broken asset references through | a change to a skill included by others, reaching tests that never name it | 0 |
-| `skill_governance_drop_consent` | user data is exported without checking consent | a privacy rule enforced in a skill | 6 |
+| `skill_governance_drop_consent` | user data is exported without checking consent | a privacy rule enforced in a skill | 5 |
 | `skill_seo_drop_length_guard` | SEO no longer refuses over-long titles | a guard the model must apply itself, and Gemma ignores the limit anyway; reused by the SDD demo (FS-0104) | 0 |
 | **Agent definitions** | | | |
 | `prompt_governance_consent_tool_removed` | the governance agent loses the `check_consent` tool | a change to an agent's tool list | 7 |
 | `prompt_seo_tool_removed` | the SEO agent loses `set_page_metadata` | the same for a tool that writes | 8 |
 | **Configuration** | | | |
-| `config_disable_validate_links` | a feature flag turns link validation off everywhere | one key with a wide reach: the broad change in the set | 48 |
+| `config_disable_validate_links` | a feature flag turns link validation off everywhere | one key with a wide reach: the broad change in the set | 49 |
 | `config_require_review_false` | pages no longer need an approved review before publishing | a policy switch in configuration; Gemma's own mistake hides it | 0 |
 | `config_max_tool_calls_5` | each agent's step budget drops from 12 to 5 tool calls | a value that limits every agent; long tasks fail | 10 |
 | `config_retries_0` | temporary tool failures are no longer retried | a change only the tests with an injected fault notice; reused by the SDD demo (FS-0105) | 8 |

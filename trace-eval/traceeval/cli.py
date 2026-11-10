@@ -10,12 +10,12 @@ traceeval run --test PUB-01 [--backend hf|vllm|llm|replay] [--otel trace.json]  
     TRACEEVAL_JUDGE=gemma|qwen picks the model that judges the cases with a rubric (default: the agents' model)
     --otel also writes the run's trace as OpenTelemetry spans, in OTLP JSON (agents, tools, model calls, skills;
     plan, routing, approvals and consulted agents as span events)
-traceeval baseline --workdir runs/gemma5 --reps 3
-traceeval mutants  --workdir runs/gemma5 --reps 3 [--only id ...]
-traceeval evaluate --workdir runs/gemma5 --seeds 10
-traceeval report   --workdir runs/gemma5
-traceeval experiment --workdir runs/gemma5   (baseline + mutants + evaluate + report)
-traceeval check <mutation id | changed copy of traceeval/sut> --history runs/gemma5 [--budget 0.2] [--backend vllm]
+traceeval baseline --workdir runs/gemma7 --reps 5
+traceeval mutants  --workdir runs/gemma7 --reps 5 [--only id ...]
+traceeval evaluate --workdir runs/gemma7 --seeds 10
+traceeval report   --workdir runs/gemma7
+traceeval experiment --workdir runs/gemma7   (baseline + mutants + evaluate + report)
+traceeval check <mutation id | changed copy of traceeval/sut> --history runs/gemma7 [--budget 0.2] [--backend vllm]
     check one change live with the proposed method; --history is an experiment recorded with the same model;
     prints the verdict and the change coverage
 traceeval properties draft [--max 15] [--per-test 5] [--fresh] [--replay a.json] [--save-response a.json]
@@ -247,13 +247,13 @@ def main(argv=None):
 
     ck = sub.add_parser("check")
     ck.add_argument("change", help="a mutation id (see traceeval mutations) or a changed copy of traceeval/sut")
-    ck.add_argument("--history", required=True, help="an experiment recorded with the same model, e.g. runs/gemma5")
+    ck.add_argument("--history", required=True, help="an experiment recorded with the same model, e.g. runs/gemma7")
     ck.add_argument("--budget", type=float, default=0.2, help="at most this fraction of the full suite's tokens")
     ck.add_argument("--backend", default="vllm", choices=BACKENDS, help="who plays the agents (default: vllm, Gemma)")
     ck.set_defaults(fn=cmd_check)
 
     cv = sub.add_parser("coverage")
-    cv.add_argument("--history", required=True, help="a recorded experiment, e.g. runs/gemma5")
+    cv.add_argument("--history", required=True, help="a recorded experiment, e.g. runs/gemma7")
     cv.set_defaults(fn=cmd_coverage)
 
     pp = sub.add_parser("properties")

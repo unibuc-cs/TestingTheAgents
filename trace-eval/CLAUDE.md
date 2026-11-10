@@ -11,10 +11,10 @@ pip install -e ".[dev,ml]"          # or: uv pip install --python .venv -e ".[de
 pytest -q                           # ~90 s; must stay green; replays Gemma's recorded answers (tests/cassettes/)
 ruff check traceeval tests          # rules and line length come from pyproject.toml
 ruff format traceeval tests         # see "Gotchas" before formatting sut/
-traceeval experiment --backend vllm --workdir runs/gemma5 --reps 3   # full experiment, Gemma on the GPU server, about an hour
+traceeval experiment --backend vllm --workdir runs/gemma7 --reps 5   # full experiment, Gemma on the GPU server, about two hours
 traceeval experiment --backend llm --workdir runs/qwen7 --reps 5     # the same with Qwen (scripts/gpu_remote.sh up qwen)
-traceeval check skill_routing_drop_approval --history runs/gemma5   # the prototype: one change, live
-traceeval coverage --history runs/gemma5                            # coverage of the suite, per dimension and component
+traceeval check skill_routing_drop_approval --history runs/gemma7   # the prototype: one change, live
+traceeval coverage --history runs/gemma7                            # coverage of the suite, per dimension and component
 traceeval run --test PUB-01 --backend replay --otel trace.json   # one case; its trace as OpenTelemetry spans
 traceeval sdd --workdir runs/sdd                                 # spec-driven development demo, replayed
 traceeval properties draft [--fresh] | apply                     # a model drafts the catalog of properties; you edit

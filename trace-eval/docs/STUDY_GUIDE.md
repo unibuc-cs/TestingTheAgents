@@ -34,7 +34,7 @@ After a change to a skill, a prompt, harness code or a config key, which cases s
 stop? The 43 mutations give the ground truth: which change breaks which case. The baseline traces, recorded
 on the unchanged application, give the observed dependencies of each case. The strategies in
 `traceeval/selection/` rank cases under a token budget, and they are compared by replaying recorded outcomes
-(`docs/results/gemma5/report.md`). The SDD layer reuses the executor, the catalog, the recorder with
+(`docs/results/gemma7/report.md`). The SDD layer reuses the executor, the catalog, the recorder with
 coverage, the mutation machinery, the change-set extraction and the `observed` selection strategy.
 
 ## 2. How SDD connects to it

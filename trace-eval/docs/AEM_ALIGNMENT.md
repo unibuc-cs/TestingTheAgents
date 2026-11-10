@@ -229,19 +229,18 @@ of its components at least one test covers, declared and observed, and the list 
 | execution path | the distinct agent and tool sequences the traces show | counted, not a share |
 | risk | the tests per risk level | an unprotected critical feature |
 
-On Gemma's recording every feature has a test; the thinnest are the site health check (four tests), scheduling and
-page analytics (five each). The tests reach 13 of the 31 places where a tool refuses. No test asks for the data of
-a person the platform does not know, has a service refuse a user for a missing role, schedules a page while
-scheduling is switched off, or sends the dispatcher an unknown tool or malformed arguments.
+On Gemma's recording every feature has a test; the thinnest are the site health check (five tests), then
+scheduling, page analytics and rollback (six each). The tests reach 15 of the 31 places where a tool refuses. No
+test asks for the data of a person the platform does not know, has a service refuse a user for a missing role, or
+sends the dispatcher an unknown tool or malformed arguments.
 
 Every test runs with the default settings unless it sets its own. Three cases do (`catalog/tests/settings.yaml`):
 publishing without a required review, scheduling switched off, and the link check switched off. They cover three of
 the five settings at a non-default value; no case runs with idempotency keys or the required meta description
 switched off. CFG-01 explains a change no test reveals, `config_require_review_false`: Gemma asks for a review even
-when the platform does not require one. The three cases are not in the recording of the current app, so its report
-counts them as declared, not observed.
+when the platform does not require one.
 
-The report, and `traceeval coverage --history runs/gemma5` in the terminal, also give for each agent, skill, tool
+The report, and `traceeval coverage --history runs/gemma7` in the terminal, also give for each agent, skill, tool
 and feature the number of tests that declare it and the number that invoke it. On Gemma's recording the two counts
 disagree in telling ways. The routing datasets name the agent a request should go to, but only the hand-off runs,
 so the assets agent is declared by 37 tests and invoked by 17. The `governance-checks` skill, which every
@@ -264,8 +263,8 @@ requirements section 8.1), so `traceeval check` prints it after its verdict:
 - the share of the refusals in the changed code they reached, for a change to a function that can refuse a tool
   call. `traceeval check` names the ones no executed test reached.
 
-`traceeval check` also prints what its tests invoked, out of what the application has ("invoked: 3 of 11 agents, 5
-of 13 skills, 5 of 32 tools, 5 of 19 features").
+`traceeval check` also prints what its tests invoked, out of what the application has ("invoked: 2 of 11 agents, 2
+of 13 skills, 4 of 32 tools, 4 of 19 features").
 
 On Gemma's recording, at a budget of 20% of the suite's tokens, the tests the adaptive method runs reach 89% of the
 affected features: it stops once it is confident. The trace-based strategy (`observed`) reaches all of them, for
@@ -310,8 +309,9 @@ down): covering a change is not revealing it, the case the method is built for.
 ## 4. Next steps
 
 The demo for the AEM team shows the testbed, the features of section 3 and the method on Gemma's recording, with
-one change checked live ([DEMO.md](DEMO.md)). The questions for the AEM team close the walkthrough. One item of section 2 is open: re-planning after a failed step.
-It is built and recorded on a branch, and waits for one product decision (§4.1).
+one change checked live ([DEMO.md](DEMO.md)). The questions for the AEM team close the walkthrough. One item of
+section 2 is open: re-planning after a failed step. It is built and recorded on a branch, and waits for one product
+decision (§4.1).
 
 ### 4.1 Re-planning after a failed step
 
@@ -365,9 +365,9 @@ The branch is merged after the demo, once that decision is made. Gemma's known m
 replay answers are recorded again.
 
 gpt-oss-120b, served as [EXPERIMENT.md](EXPERIMENT.md) §4 describes, varies more from run to run than the other two
-models. Tests that pass in all three runs on the original app fail in up to half of their runs on the changed
-copies, so every benign change appears to break a few tests. Three repetitions are too few for it to give a ground
-truth, and five do not settle its vote either ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4).
+models. Tests that pass on the original app fail on the changed copies, whichever the change, so every benign
+change appears to break a few tests, and five repetitions do not settle its vote
+([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4).
 
 ### 4.2 Order
 
@@ -387,11 +387,10 @@ truth, and five do not settle its vote either ([RESEARCH_PLAN.md](RESEARCH_PLAN.
 - **Gemma does not go on with the other pages when one fails inside a step.** With the broken page ranked first
   (WF2-03), it sends all three pages to publishing in one step, publishing stops at the broken link, and the
   orchestrator neither republishes the other two nor says so; it claims it did. Only the checks on the final state
-  catch it. WF2-03 is not in the recordings, which hold 176 of the 180 tests (nor are the three cases with settings
-  of their own); it replays in the demo ([DEMO.md](DEMO.md) §3).
-- **A one-off difference between runs.** A benign change that a single failing run reveals, or a regression no
-  test reveals, shows as VIOLATED on the report's sanity line. Three repetitions and the majority vote absorb most
-  of it.
+  catch it. WF2-03 replays in the demo ([DEMO.md](DEMO.md) §3).
+- **A one-off difference between runs.** A benign change that a single failing run reveals, or a regression no test
+  reveals, shows as VIOLATED on the report's sanity line. Several repetitions and the majority vote absorb most of
+  it.
 
 Sources: [Overview of agents in AEM](https://experienceleague.adobe.com/en/docs/experience-manager-cloud-service/content/ai-in-aem/agents/overview),
 [Agentic AI in Experience Cloud](https://experienceleague.adobe.com/en/docs/core-services/interface/features/agentic-ai?lang=en),

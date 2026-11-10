@@ -12,13 +12,13 @@ in [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4.
 scripts/gpu_remote.sh status            # both fmi0 GPUs free? then:
 scripts/gpu_remote.sh up gemma          # a few minutes; "ready" at the end
 pytest -q                               # green (the known model mistakes are expected failures inside the tests)
-ls runs/gemma5/variants                 # the recording of the current app, for the live check
+ls runs/gemma7/variants                 # the recording of the current app, for the live check
 ```
 
 Open these in the editor: `docs/CONTENTOPS.md` (the figure), `traceeval/catalog/tests/publishing.yaml` (PUB-01),
 `traceeval/catalog/tests/workflows.yaml` (WF3-01), `traceeval/catalog/properties.yaml`,
 `traceeval/catalog/features.yaml`,
-`docs/results/gemma5/report.md` and its figures, and `docs/sdd/report.md`.
+`docs/results/gemma7/report.md` and its figures, and `docs/sdd/report.md`.
 
 ## The terms used below
 
@@ -109,8 +109,8 @@ prove that the state changed.
 
 ```bash
 traceeval mutations                                        # the 43 controlled changes, with their category
-cat runs/gemma5/variants/skill_routing_drop_approval/diff.patch   # the orchestrator no longer asks a person before publishing
-traceeval check skill_routing_drop_approval --history runs/gemma5 --budget 0.2     # live
+cat runs/gemma7/variants/skill_routing_drop_approval/diff.patch   # the orchestrator no longer asks a person before publishing
+traceeval check skill_routing_drop_approval --history runs/gemma7 --budget 0.2     # live
 ```
 
 The change removes one rule from the orchestrator's routing skill: ask a person before a step that publishes,
@@ -140,12 +140,13 @@ What the check prints:
 ```text
 skill_routing_drop_approval: changed skill:routing#prose
   DS-ROUTING/r41         pass                                       3,935 tokens
-  MNT-03                 pass                                       6,468 tokens
-  WF3-03                 FAIL required:request_approval,response~not approved,tool_error:unpublish_page  14,708 tokens
+  WF3-03                 FAIL required:request_approval,response~not approved,tool_error:unpublish_page  19,161 tokens
 REGRESSION: WF3-03 failed
-3 runs, 25,111 tokens (1% of the suite), 22 s (the whole suite takes about 361 s, one test at a time); P(something broke) = 1.00
-coverage: 100% of the changed components exercised, 27% of the 15 affected properties checked, 17% of the 6 affected workflows run, 100% of the 3 affected features reached
-invoked: 3 of 11 agents, 5 of 13 skills, 5 of 32 tools, 5 of 19 features
+2 runs, 23,096 tokens (1% of the suite), 16 s (the whole suite takes about 375 s, one test at a time); P(something broke) = 1.00
+coverage: 100% of the changed components exercised, 20% of the 15 affected properties checked, 17% of the 6 affected workflows run, 100% of the 3 affected features reached
+invoked: 2 of 11 agents, 2 of 13 skills, 4 of 32 tools, 4 of 19 features
+not checked: answer_quality, efficiency, resilience_fail_safe, resilience_idempotency, resilience_retry, safety_authorization (mandatory), safety_brand_compliance (mandatory), safety_guarded_mutation (mandatory), safety_no_broken_publish (mandatory), safety_privacy (mandatory), task_completion, tool_trajectory
+workflows not run: W1, W2, W4, W5, W6
 ```
 
 Live, the token counts can differ slightly from these, because decoding on the GPU server is nearly but not exactly
@@ -153,17 +154,17 @@ repeatable ([EXPERIMENT.md](EXPERIMENT.md) section 3). The tests and the verdict
 
 WF3-03 is the legal takedown in which the person refuses the approval. Without the rule, the orchestrator skips
 the approval and sends the takedown to publishing. The dispatcher refuses the call because it carries no approval
-token, so the pages stay up, and the test fails because no one was asked. The method needed three tests and one
+token, so the pages stay up, and the test fails because no one was asked. The method needed two tests and one
 percent of the suite's tokens.
 
 Then a change that breaks nothing:
 
 ```bash
-traceeval check benign_skill_prose_reflow --history runs/gemma5 --budget 0.2     # live
+traceeval check benign_skill_prose_reflow --history runs/gemma7 --budget 0.2     # live
 ```
 
 It ends with "no regression: the method is confident nothing broke" after nine tests and 4% of the suite's tokens,
-with P(something broke) = 0.04. Before it ends, it has run a test of every mandatory property the change may
+with P(something broke) = 0.05. Before it ends, it has run a test of every mandatory property the change may
 affect, because the catalog's `mandatory` flag acts as a stopping rule. The coverage lines in the output are the
 change coverage the requirements ask for: changed components exercised, affected properties checked, affected
 workflows run and affected features reached. The features are the unit the AEM team suggested: this change affects
@@ -176,15 +177,15 @@ than the change's.
 
 ## 5. The evidence over all changes (4 minutes)
 
-Open `docs/results/gemma5/report.md`, the replay of every strategy on every change, from the recording of the
+Open `docs/results/gemma7/report.md`, the replay of every strategy on every change, from the recording of the
 current app:
 
 - Section 1 is the ground truth: each change with the number of tests that reveal it, and the testbed sanity
   line. Of the 34 regressions, 29 are revealed. Gemma ignores the other five either way: it does not act on a
   review flag, or on a length limit it has to work out for itself. No benign change fails a test.
 - Section 2 and `figures/detection_vs_cost.png` show detection against the tokens and time actually spent. At a
-  20% budget, hand-written dependencies find 61% of the regressions, traces 86%, TF-IDF 92%, and the adaptive
-  method 79% for 3% of the tokens, which puts it at the left of the figure. It catches 86% of the changes that
+  20% budget, hand-written dependencies find 62% of the regressions, traces 86%, TF-IDF 93%, and the adaptive
+  method 78% for 3% of the tokens, which puts it at the left of the figure. It catches 84% of the changes that
   break a safety property.
 - Section 3 gives the tokens spent on benign changes and the reasons each strategy stopped. The adaptive method
   never calls a benign change a regression.
@@ -192,10 +193,10 @@ current app:
 - Section 6 gives the coverage of the suite per dimension and the change coverage per strategy. The dimensions
   are agents, features, skills, tools, tool error paths, configuration, properties, workflows, execution paths
   and risk, each declared and observed, with what no test covers. Every feature has a test, but the tests reach
-  only 13 of the 31 places where a tool refuses: a gap no other dimension shows. Below it, each agent, skill,
+  only 15 of the 31 places where a tool refuses: a gap no other dimension shows. Below it, each agent, skill,
   tool and feature has the number of tests that declare it and the number that invoke it. The assets agent,
   for instance, is declared by 37 tests and invoked by 17, because the routing datasets stop at the hand-off.
-  `traceeval coverage --history runs/gemma5` prints the same in the terminal.
+  `traceeval coverage --history runs/gemma7` prints the same in the terminal.
 
 Mention one finding: the mandatory-coverage rule is what catches `skill_publish_drop_link_validation`. Without
 the rule, the method calls that change clean. With it, the method must test the mandatory "no broken publish"
@@ -231,7 +232,7 @@ cases:
 
 - *Does the ground truth depend on the model?* Yes. A change a model cannot see, because it ignores the guard
   with or without the change, is a fact about the model, and the report says which changes these are. The
-  ground truth is Gemma's: three repetitions per test and a majority vote. A second recording with five
+  ground truth is Gemma's: five repetitions per test and a majority vote. A second recording with three
   repetitions reproduces it on all but two (change, test) labels.
 - *Why are some workflow tests red?* They are Gemma's own mistakes on the original app, not faults of the
   testbed. In WF1-01 it schedules the launch page after requesting a review, instead of having the approver
@@ -245,9 +246,9 @@ cases:
   answer differently when run 64 at a time than when run one at a time, so even a change that alters nothing
   appears to break them. A larger model does not automatically give a cleaner ground truth: some of Qwen's answers
   vary from run to run, and vLLM, the model server, has a switch for repeatable decoding that does not support
-  Qwen3.8. gpt-oss-120b, a third model, varies even more, and five repetitions instead of three settle neither
-  model's vote. The models are used as they are served. The lesson for Adobe is to measure first how much the answers vary under the real serving setup
-  (RESEARCH_PLAN §5.4).
+  Qwen3.8. gpt-oss-120b, a third model, varies even more, and five repetitions settle neither model's vote. The
+  models are used as they are served. The lesson for Adobe is to measure first how much the answers vary under the
+  real serving setup (RESEARCH_PLAN §5.4).
 - *How would this run at Adobe?* Nightly full-suite runs provide the recordings the method learns from. For each
   change, `traceeval check` selects the tests, orders them and decides when to stop. The traces are
   OpenTelemetry, and the catalog of properties maps onto DeepEval's metrics.
@@ -305,70 +306,69 @@ draft in `docs/paper/`.
 
 ## What the results say
 
-A test reveals a change when it passes on the current app and fails on the changed copy, by majority over the three
+A test reveals a change when it passes on the current app and fails on the changed copy, by majority over the five
 runs of each; the revealing tests of a change are its ground truth, measured after the fact and never shown to a
 strategy. The report compares the strategies on Gemma's recording: 29 regressions that at least one test reveals,
 14 changes that none does (nine benign, five that Gemma cannot see), seven budgets from 2% to 100% of the suite's
 tokens, five replay seeds.
 
-- *Hand-written metadata is not enough.* `declared` tops out at 61% of the regressions however large the budget,
+- *Hand-written metadata is not enough.* `declared` tops out at 62% of the regressions however large the budget,
   because shared skills, harness code and most settings are reached without being declared. The traces recover
   that: `observed` reaches 86% at a 20% budget and everything at 100%.
-- *The diff is worth a lot.* The two methods that ignore it, CASPER's slices and the bandit, find 50% and 59% at
-  20%, close to a random order's 52%; the strategies that read it find 79% to 92%. Their first revealing test comes
-  after 12% to 13% of the suite's tokens, against 2% to 6% for the change-aware strategies. The tests were written
+- *The diff is worth a lot.* The two methods that ignore it, CASPER's slices and the bandit, find 59% and 57% at
+  20%, close to a random order's 56%; the strategies that read it find 78% to 93%. Their first revealing test comes
+  after 12% to 14% of the suite's tokens, against 2% to 6% for the change-aware strategies. The tests were written
   for the app, not for the changes, and the changes were written to resemble real regressions; which test reveals
   which change was measured afterwards, and no strategy is told.
-- *Text alone is strong, but spends everything.* TF-IDF over the diff has the best detection at 20% (92%) and the
-  best over the changes that break a safety property (98%), and it always spends the whole budget, on benign
-  changes too. The adaptive method reaches 79% for 3% of the tokens, and 76% already at a 5% budget, where TF-IDF
-  is at 70%.
+- *Text alone is strong, but spends everything.* TF-IDF over the diff has the best detection at 20% (93%) and the
+  best over the changes that break a safety property (all of them), and it always spends the whole budget, on
+  benign changes too. The adaptive method reaches 78% for 3% of the tokens, and 74% already at a 5% budget, where
+  TF-IDF is at 69%.
 - *Stopping is what saves tokens, and it has a price.* The adaptive method returns the budget: 3% of the suite
-  spent on regressions, a tenth on benign changes at a 20% budget and a fifth at 100%. Its ceiling is 83%, because
+  spent on regressions, a tenth on benign changes at a 20% budget and a fifth at 100%. Its ceiling is 81%, because
   on a change that only one to five tests reveal it can become confident nothing broke before reaching them. The
   mandatory rule lowers that risk for the safety properties: before calling a change clean it tests every mandatory
   property the change may affect, for under one extra test per change, and on this app that is what catches the
   publishing skill without its link check.
-- *Red tests on the current app mislead the others.* Six tests fail on the current app, Gemma's own mistakes, and
-  fail on every changed copy too. A strategy that runs one sees a failure the change did not cause: on the 14
-  changes no test reveals, this happens to `full` in 71% of its replays, to the bandit in 71%, to CASPER's slices
-  in 57% and to the adaptive method in none, because it discounts a test by its failures on the current app and
-  stops only on a test that used to pass.
+- *Red tests on the current app mislead the others.* Eight tests fail on the current app, Gemma's own mistakes, and
+  fail on nearly every changed copy too. A strategy that runs one sees a failure the change did not cause: on the
+  14 changes no test reveals, this happens to `full` in 72% of its replays, to the bandit in 76%, to CASPER's
+  slices in 57% and to the adaptive method in none, because it discounts a test by its failures on the current app
+  and stops only on a test that used to pass.
 - *The order is good, not only the stopping.* Read as a plain order with no stopping, the adaptive method has the
-  highest cost-weighted APFD (0.81, against 0.53 for random and 0.76 to 0.79 for the other change-aware strategies)
+  highest cost-weighted APFD (0.81, against 0.54 for random and 0.76 to 0.79 for the other change-aware strategies)
   and the earliest first detection (1.7% of the suite's tokens).
-- *Where the ground truth comes from.* Gemma's three runs agreed on all but five (change, test) pairs over the 43
+- *Where the ground truth comes from.* Gemma's five runs agree on all but four (change, test) pairs over the 43
   changes; Qwen's and gpt-oss's answers vary too much from run to run for the same majority rule, and five
-  repetitions instead of three settle neither vote, which is why only Gemma's numbers are reported.
+  repetitions settle neither vote, which is why only Gemma's numbers are reported.
 
 ## Take-aways
 
 What the experiments say, in the order a team would act on them. The numbers are Gemma's, at a budget of 20% of the
 suite's tokens unless said otherwise.
 
-1. **Record traces; do not maintain a map.** Hand-written dependency metadata finds 61% of the regressions at any
+1. **Record traces; do not maintain a map.** Hand-written dependency metadata finds 62% of the regressions at any
    budget, because shared skills, harness code and settings are reached without being declared. Dependencies read
    from traces find 86%, and everything at 100%. One instrumentation of the agent runtime (the testbed exports
    OpenTelemetry spans) replaces a test-to-component map that nobody keeps current.
-2. **Read the diff.** The strategies that use the change find 79% to 92% of the regressions; the two that do not,
-   CASPER's slices and the risk-aware bandit, find 50% and 59%, near a random order's 52%, and their first
-   revealing test comes after 12% to 13% of the suite's tokens instead of 2% to 6%.
-3. **Stop when confident, with a safety net.** The adaptive method finds 79% for 3% of the tokens and returns the
-   rest. Its ceiling is 83%: on a regression that one to five tests reveal it can stop too early. The mandatory
+2. **Read the diff.** The strategies that use the change find 78% to 93% of the regressions; the two that do not,
+   CASPER's slices and the risk-aware bandit, find 59% and 57%, near a random order's 56%, and their first
+   revealing test comes after 12% to 14% of the suite's tokens instead of 2% to 6%.
+3. **Stop when confident, with a safety net.** The adaptive method finds 78% for 3% of the tokens and returns the
+   rest. Its ceiling is 81%: on a regression that one to five tests reveal it can stop too early. The mandatory
    rule covers the safety properties for under one extra test per change, and on this app catches the publishing
    skill without its link check, which the stopping rule alone misses. The catalog of properties is where that
    policy lives: whoever sets the mandatory flag decides what the pipeline never skips.
-4. **Discount the tests the model already fails.** Six tests fail on the current app, and on every changed copy.
-   On the 14 changes no test reveals, every other strategy reports a failure the change did not cause in 51% to
-   91% of its replays; the adaptive method in none, because it keeps each test's pass rate on the current app and
-   acts only on a flip. A pipeline should do the same rather than treat every red test as a regression.
-5. **Measure the model's noise before trusting a verdict.** Gemma's runs agree on every test of the current app
-   and disagree on five (change, test) pairs over the 43 changes with three repetitions, on four with five, and a
-   second recording reproduces its ground truth on all but two labels; Qwen's disagree on 357 and gpt-oss's on
-   577, both "reveal" every benign change, and five repetitions instead of three settle neither vote. The
-   baseline runs one test at a time and the changed copies in batches, and that alone flips some tests; the rest
-   varies under identical conditions. An empty change, recorded like the others, measures the noise floor; record
-   it per model and per serving setup.
+4. **Discount the tests the model already fails.** Eight tests fail on the current app, and on nearly every changed
+   copy. On the 14 changes no test reveals, every other strategy reports a failure the change did not cause in 57%
+   to 94% of its replays; the adaptive method in none, because it keeps each test's pass rate on the current app
+   and acts only on a flip. A pipeline should do the same rather than treat every red test as a regression.
+5. **Measure the model's noise before trusting a verdict.** Gemma's five runs agree on every test of the current
+   app and disagree on four (change, test) pairs over the 43 changes, and a second recording with three repetitions
+   reproduces its ground truth on all but two labels; Qwen's disagree on 357 and gpt-oss's on 577, both "reveal"
+   every benign change, and five repetitions settle neither vote. The baseline runs one test at a time and the
+   changed copies in batches, and that alone flips some tests; the rest varies under identical conditions. An empty
+   change, recorded like the others, measures the noise floor; record it per model and per serving setup.
 6. **CASPER and the bandit have their place.** CASPER needs no diff: a model or provider update, or a prompt-level
    change in a system the team does not own. For AEM its representatives are the natural first pass after a model
    update, when every test is affected and the question is which behaviours drifted; its slices could also serve
@@ -376,7 +376,7 @@ suite's tokens unless said otherwise.
    and from the tests it has run; with no history it has only the tests' risk to go on. The change-aware
    strategies cover edits to skills, code and settings; the two kinds combine.
 7. **Text is a strong, cheap baseline.** TF-IDF similarity between the diff and the tests' text has the best
-   detection when the whole budget is spent (92%, and 98% on the changes that break a safety property). It never
+   detection when the whole budget is spent (93%, and all of the changes that break a safety property). It never
    stops, so it spends everything on benign changes too; it is the fallback order to keep in any pipeline.
 8. **Not yet covered.** Real version history instead of mutants; a second system under test (tau2-bench); suites
    large enough for slicing to pay; re-planning after a failed step (recorded on a branch, awaiting the AEM team's

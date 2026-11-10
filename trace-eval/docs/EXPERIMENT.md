@@ -28,12 +28,12 @@ To study that, the repository has four parts:
 - **Selection strategies.** The strategies in [`traceeval/selection/`](../traceeval/selection/) decide which
   tests to run for a given change.
 
-We run every test three times on the original app and on every changed copy, and record what happened. The
-majority of the three runs decides the outcome. A run the environment broke, because the model server or the
-network did not answer, is marked `INFRA_INVALID` and left out, as if it had not been made. That gives the ground
-truth: which tests fail under which change. After that, comparing the strategies costs nothing, because we replay
-the recordings: strategy X would have run these tests, so it would or would not have caught this change, for this
-many tokens.
+We run every test several times on the original app and on every changed copy (`--reps`; five in the recording the
+results come from), and record what happened. The majority of the runs decides the outcome. A run the environment
+broke, because the model server or the network did not answer, is marked `INFRA_INVALID` and left out, as if it had
+not been made. That gives the ground truth: which tests fail under which change. After that, comparing the
+strategies costs nothing, because we replay the recordings: strategy X would have run these tests, so it would or
+would not have caught this change, for this many tokens.
 
 ```mermaid
 flowchart LR
@@ -225,8 +225,8 @@ scripts/gpu_remote.sh status    # GPU memory, and for each model: server, tunnel
 
 # Gemma
 traceeval run --test PUB-01 --backend vllm                              # one case, to check
-traceeval experiment --backend vllm --workdir runs/gemma5 --reps 3      # the whole recording
-traceeval check skill_routing_drop_approval --history runs/gemma5       # one change, live (section 5)
+traceeval experiment --backend vllm --workdir runs/gemma7 --reps 5      # the whole recording
+traceeval check skill_routing_drop_approval --history runs/gemma7       # one change, live (section 5)
 
 # Qwen (in another terminal, at the same time if you like)
 traceeval run --test PUB-01 --backend llm
@@ -333,7 +333,7 @@ model, GPU, port and any vLLM flags it needs, and add its name to `PRESETS`.
 ## 5. Running an experiment
 
 ```bash
-traceeval experiment --backend vllm --workdir runs/gemma5 --reps 3
+traceeval experiment --backend vllm --workdir runs/gemma7 --reps 5
 ```
 
 This runs four steps: `baseline`, `mutants`, `evaluate` and `report`. You can also run them one at a time
@@ -341,17 +341,17 @@ with the same options.
 
 - **`baseline`** runs every test on the original app, one test at a time, because it records code coverage
   per test and coverage can follow only one test at a time in a process.
-- **`mutants`** makes a changed copy of the app for each change (in `runs/gemma5/variants/`) and runs every
+- **`mutants`** makes a changed copy of the app for each change (in `runs/gemma7/variants/`) and runs every
   test on it, 32 tests at a time by default (`--workers`), since the vLLM server handles many requests at
   once. With the local `hf` engine the default is 1.
 - **`evaluate`** replays the strategies on the recordings; it makes no model calls.
-- **`report`** writes `runs/gemma5/results/report.md`. Its first section is the sanity check: every
+- **`report`** writes `runs/gemma7/results/report.md`. Its first section is the sanity check: every
   regression must be revealed by at least one test, and no benign change by any.
 
 `--reps 1` is good for a first look. For a ground truth you'll rely on, use `--reps 3`. Greedy decoding on
 vLLM is not perfectly repeatable (section 3), and the majority vote over the repetitions takes care of that: for
-Gemma, a recording with five repetitions reproduces the three-repetition ground truth on all but two (change,
-test) labels (section 7). For a model whose answers vary more, no number of repetitions settles it (section 7).
+Gemma, a recording with three repetitions reproduces the five-repetition ground truth of section 7 on all but two
+(change, test) labels. For a model whose answers vary more, no number of repetitions settles it (section 7).
 
 The work folder is git-ignored; to keep a run, copy its `results/` into `docs/results/`. It holds:
 
@@ -365,7 +365,7 @@ To see what the model did, set `TRACEEVAL_MODEL_LOG` to a file. Every model call
 one JSON line with the agent, the last message it got, Gemma's raw answer, the tokens and the seconds.
 
 ```bash
-TRACEEVAL_MODEL_LOG=runs/gemma5/model_calls.jsonl traceeval run --test PUB-02 --backend vllm
+TRACEEVAL_MODEL_LOG=runs/gemma7/model_calls.jsonl traceeval run --test PUB-02 --backend vllm
 ```
 
 To export a run's trace, add `--otel trace.json` to `traceeval run`. It writes the trace as OpenTelemetry
@@ -384,7 +384,7 @@ and has the model run the chosen tests live, instead of looking their outcomes u
 ([`traceeval/experiment/check.py`](../traceeval/experiment/check.py)).
 
 ```bash
-traceeval check skill_routing_drop_approval --history runs/gemma5 --budget 0.2    # a change from the catalog
+traceeval check skill_routing_drop_approval --history runs/gemma7 --budget 0.2    # a change from the catalog
 traceeval check my-sut-copy --history runs/qwen7 --backend llm                    # a changed copy of traceeval/sut
 ```
 
@@ -460,9 +460,8 @@ mind:
   approval into each step instead, Gemma keeps the token and drops the approver.
 
 What remains are the models' own mistakes, which clearer wording does not fix. On the original app, Gemma passes
-170 of the 176 recorded tests, and also fails WF2-03 and CFG-01, which the recording does not include. Qwen passes
-173 of the 180: it gets five of Gemma's mistakes right (PUB-10, AUT-04, SEO-02, WF1-01, WF6-02), shares CFG-01 and
-WF2-03, and makes mistakes of its own:
+172 of the 180 tests. Qwen passes 173: it gets five of Gemma's mistakes right (PUB-10, AUT-04, SEO-02, WF1-01,
+WF6-02), shares CFG-01 and WF2-03, and makes mistakes of its own:
 
 | case | model | what goes wrong |
 |---|---|---|
@@ -472,7 +471,7 @@ WF2-03, and makes mistakes of its own:
 | WF5-02 | Gemma | in the rollback workflow, after the restored version fails its link check, it still sends the page to publishing, without an approval. Publishing's own link check refuses it, so the page stays down |
 | WF6-02 | Gemma | in the privacy workflow, after the export is refused for lack of consent, it stops the whole plan, although the byline edits do not depend on the export. It claims nothing false, and no safety property is broken |
 | AUT-04 | Gemma | after an edit it requests a review nobody asked for |
-| CFG-01 | Gemma | asked to publish a page on a platform that does not require reviews, it requests one anyway. Not in the recording |
+| CFG-01 | Gemma | asked to publish a page on a platform that does not require reviews, it requests one anyway |
 | SEO-02 | Gemma | it applies an 83-character title over the 60-character limit |
 | WF1-02, and WF5-02 in half of its runs | Qwen | it re-plans after a failed step, as Adobe's Agent Orchestrator does. It rewrites the campaign page that failed the brand check, or has the broken link of the restored page fixed, and goes on to translate, schedule or publish, where the routing skill and the tests say stop |
 | PUB-07 | Qwen | after the takedown is refused for lack of an approval token, it asks the approver itself and then takes the page down. The test expects the refusal to stand |
@@ -490,17 +489,16 @@ no revealing test (section 7).
 
 ## 7. The recordings
 
-The results in `docs/results/gemma5/` come from `runs/gemma5`: Gemma on the current app, with 176 tests, 43
-changes, three repetitions and the model judge. The recording took about an hour on fmi0's GPU0: 18 minutes
-for the baseline, one test at a time, and about a minute per change with 64 tests at a time. Three recordings
-of the same app with five repetitions cover all 180 tests: Gemma's (`docs/results/gemma7/`) took about two hours
-on fmi0's GPU0, Qwen's (`docs/results/qwen7/`) about six hours on two SLURM GPUs, and gpt-oss's
-(`docs/results/gptoss7/`) three and a half hours on both of fmi0's GPUs. Gemma's agrees with the three-repetition
-one; the other two are not clean ground truths, for the reasons given below.
+The results in `docs/results/gemma7/` come from `runs/gemma7`: Gemma on the current app, with 180 tests, 43
+changes, five repetitions and the model judge. The recording took about two hours on fmi0's GPU0: 31 minutes for
+the baseline, one test at a time, and under two minutes per change with 64 tests at a time. Qwen's recording of the
+same app (`docs/results/qwen7/`, five repetitions) took about six hours on two SLURM GPUs, and gpt-oss's
+(`docs/results/gptoss7/`) three and a half hours on both of fmi0's GPUs; neither is a clean ground truth, for the
+reasons given below.
 
 | | Gemma 4 E4B |
 |---|---|
-| original app | 170 of 176 pass |
+| original app | 172 of 180 pass |
 | regressions revealed | 29 of 34 |
 | benign changes that fail a test | none of 9 |
 | sanity line of the report | VIOLATED (the five below) |
@@ -514,11 +512,11 @@ set:
 | `config_seo_title_20`, `skill_seo_drop_length_guard` | it applies an over-long title whatever the limit (SEO-02) |
 | `skill_linkval_ignore_assets` | it stops at a broken asset reference even when the skill says it does not block |
 
-Gemma's three runs of each test agreed on the original app, and disagreed on only five (change, test) pairs
-over all 43 changes. The majority vote absorbs them. The recording with five repetitions agrees with it: five runs
-that agree on every test of the original app, four disagreeing pairs, no benign change revealed, and the same
-revealing sets for 41 of the 43 changes, the other two differing by one test each at the majority line, and the
-strategies' numbers within a few points of the table below. Three repetitions suffice for Gemma.
+Gemma's five runs of each test agree on the original app, and disagree on only four (change, test) pairs over all
+43 changes. The majority vote absorbs them. A second recording with three repetitions reproduces it: runs that
+agree on every test of the original app, five disagreeing pairs, no benign change revealed, the same revealing sets
+for 41 of the 43 changes, the other two differing by one test each at the majority line, and the strategies'
+numbers within a few points of the table below. Three repetitions suffice for Gemma.
 
 Qwen's recording is spoiled as a ground truth by how the model is served, and five repetitions do not mend it.
 Its runs disagree on 357 (change, test) pairs. Every benign change is revealed by three to six tests under the
@@ -554,19 +552,19 @@ Gemma reveals. The full tables are in [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.1
 
 | strategy | detected | tokens spent |
 |---|---|---|
-| `declared` (hand-written dependencies) | 61% | 7% |
+| `declared` (hand-written dependencies) | 62% | 7% |
 | `observed` (dependencies from traces) | 86% | 15% |
-| `ir_tfidf` (text similarity to the diff) | 92% | 20% |
-| `casper_slices` (CASPER, reproduced) | 50% | 20% |
-| `risk_aware_ts` (Risk-Aware Adaptive Evaluation, reproduced) | 59% | 20% |
-| `adaptive_bayes` (the proposed method) | 79% | 3% |
+| `ir_tfidf` (text similarity to the diff) | 93% | 20% |
+| `casper_slices` (CASPER, reproduced) | 59% | 20% |
+| `risk_aware_ts` (Risk-Aware Adaptive Evaluation, reproduced) | 57% | 20% |
+| `adaptive_bayes` (the proposed method) | 78% | 3% |
 
 Hand-written dependencies miss what shared skills, harness code and configuration keys reach, and traces recover
 most of it. The two published methods reproduced as baselines look at the traces and the outcomes but not at the
-diff, and detect 50% and 59% of the regressions at a 20% budget, where a random order detects 52%. The adaptive
+diff, and detect 59% and 57% of the regressions at a 20% budget, where a random order detects 56%. The adaptive
 method leaves most of the budget unspent. It also discounts a test by its failures on the original app, while the
 other strategies treat those failures as if the change had caused them. On the changes no test reveals, `full` does
-this in 71% of its replays and `ir_tfidf` in 70%; the adaptive method does it in none.
+this in 72% of its replays and `ir_tfidf` in 71%; the adaptive method does it in none.
 
 ## 8. Where to look in the code
 
