@@ -779,7 +779,10 @@ tests under the majority over five runs and one to four under the first three; t
 mostly long workflows that pass one at a time on the current version and fail in a batch on nearly every changed
 copy, whichever the change. A larger model is not automatically a cleaner ground truth, and a pipeline should
 measure how much its model's answers vary under the serving setup the selection will run on before trusting a
-ground truth or a stopping rule. The empty change measures exactly that.
+ground truth or a stopping rule. The empty change measures exactly that. Gemma, recorded again the same way,
+gives the opposite picture: its five runs disagree on four pairs, no benign change is revealed, and the ground
+truth of the first recording is reproduced on all but two labels, the two pairs that sit at the majority line, and
+every strategy's detection within a few points of Table~ef{tab:detection}.
 
 \paragraph{Threats to validity.}
 The regressions are mutants, not real changes; they were written to resemble regressions a team would ship, and
@@ -817,9 +820,10 @@ the suite's tokens unless said otherwise.
         cause in 51\% to 91\% of its replays; the adaptive method in none, because it keeps each test's pass rate
         on the current version and acts only on a flip.
   \item \textbf{Measure the model's noise before trusting a verdict.} Gemma's three runs agree on every test of the
-        current version and disagree on five (change, test) pairs over the 43 changes; Qwen's disagree on 357 and
-        gpt-oss's on 577, both ``reveal'' every benign change, and five repetitions instead of three settle neither
-        vote. The baseline runs one test at a time and the changed copies in batches, and that alone flips some
+        current version and disagree on five (change, test) pairs over the 43 changes with three repetitions, on
+        four with five, and a second recording reproduces its ground truth on all but two labels; Qwen's disagree
+        on 357 and gpt-oss's on 577, both ``reveal'' every benign change, and five repetitions instead of three
+        settle neither vote. The baseline runs one test at a time and the changed copies in batches, and that alone flips some
         tests; the rest varies under identical conditions. An empty change, recorded like the others, measures the
         noise floor; record it per model and per serving setup.
   \item \textbf{CASPER and the bandit have their place.} CASPER needs no diff: a model or provider update, or a

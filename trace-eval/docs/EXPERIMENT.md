@@ -349,7 +349,9 @@ with the same options.
   regression must be revealed by at least one test, and no benign change by any.
 
 `--reps 1` is good for a first look. For a ground truth you'll rely on, use `--reps 3`. Greedy decoding on
-vLLM is not perfectly repeatable (section 3), and the majority vote over the repetitions takes care of that.
+vLLM is not perfectly repeatable (section 3), and the majority vote over the repetitions takes care of that: for
+Gemma, a recording with five repetitions reproduces the three-repetition ground truth on all but two (change,
+test) labels (section 7). For a model whose answers vary more, no number of repetitions settles it (section 7).
 
 The work folder is git-ignored; to keep a run, copy its `results/` into `docs/results/`. It holds:
 
@@ -490,10 +492,11 @@ no revealing test (section 7).
 
 The results in `docs/results/gemma5/` come from `runs/gemma5`: Gemma on the current app, with 176 tests, 43
 changes, three repetitions and the model judge. The recording took about an hour on fmi0's GPU0: 18 minutes
-for the baseline, one test at a time, and about a minute per change with 64 tests at a time. Qwen's and
-gpt-oss's recordings of the same app have five repetitions and all 180 tests: Qwen's (`docs/results/qwen7/`) took
-about six hours on two SLURM GPUs, gpt-oss's (`docs/results/gptoss7/`) three and a half hours on both of fmi0's
-GPUs. Neither is a clean ground truth, for the reasons given below.
+for the baseline, one test at a time, and about a minute per change with 64 tests at a time. Three recordings
+of the same app with five repetitions cover all 180 tests: Gemma's (`docs/results/gemma7/`) took about two hours
+on fmi0's GPU0, Qwen's (`docs/results/qwen7/`) about six hours on two SLURM GPUs, and gpt-oss's
+(`docs/results/gptoss7/`) three and a half hours on both of fmi0's GPUs. Gemma's agrees with the three-repetition
+one; the other two are not clean ground truths, for the reasons given below.
 
 | | Gemma 4 E4B |
 |---|---|
@@ -512,7 +515,10 @@ set:
 | `skill_linkval_ignore_assets` | it stops at a broken asset reference even when the skill says it does not block |
 
 Gemma's three runs of each test agreed on the original app, and disagreed on only five (change, test) pairs
-over all 43 changes. The majority vote absorbs them.
+over all 43 changes. The majority vote absorbs them. The recording with five repetitions agrees with it: five runs
+that agree on every test of the original app, four disagreeing pairs, no benign change revealed, and the same
+revealing sets for 41 of the 43 changes, the other two differing by one test each at the majority line, and the
+strategies' numbers within a few points of the table below. Three repetitions suffice for Gemma.
 
 Qwen's recording is spoiled as a ground truth by how the model is served, and five repetitions do not mend it.
 Its runs disagree on 357 (change, test) pairs. Every benign change is revealed by three to six tests under the

@@ -231,7 +231,8 @@ cases:
 
 - *Does the ground truth depend on the model?* Yes. A change a model cannot see, because it ignores the guard
   with or without the change, is a fact about the model, and the report says which changes these are. The
-  ground truth is Gemma's: three repetitions per test and a majority vote.
+  ground truth is Gemma's: three repetitions per test and a majority vote. A second recording with five
+  repetitions reproduces it on all but two (change, test) labels.
 - *Why are some workflow tests red?* They are Gemma's own mistakes on the original app, not faults of the
   testbed. In WF1-01 it schedules the launch page after requesting a review, instead of having the approver
   approve it as in PUB-10. In WF5-02 it goes on to publishing after the rollback's link check failed, and
@@ -361,12 +362,13 @@ suite's tokens unless said otherwise.
    On the 14 changes no test reveals, every other strategy reports a failure the change did not cause in 51% to
    91% of its replays; the adaptive method in none, because it keeps each test's pass rate on the current app and
    acts only on a flip. A pipeline should do the same rather than treat every red test as a regression.
-5. **Measure the model's noise before trusting a verdict.** Gemma's three runs agree on every test of the current
-   app and disagree on five (change, test) pairs over the 43 changes; Qwen's disagree on 357 and gpt-oss's on 577,
-   both "reveal" every benign change, and five repetitions instead of three settle neither vote. The baseline
-   runs one test at a time and the changed copies in batches, and that alone flips some tests; the rest varies
-   under identical conditions. An empty change, recorded like the others, measures the noise floor; record it per
-   model and per serving setup.
+5. **Measure the model's noise before trusting a verdict.** Gemma's runs agree on every test of the current app
+   and disagree on five (change, test) pairs over the 43 changes with three repetitions, on four with five, and a
+   second recording reproduces its ground truth on all but two labels; Qwen's disagree on 357 and gpt-oss's on
+   577, both "reveal" every benign change, and five repetitions instead of three settle neither vote. The
+   baseline runs one test at a time and the changed copies in batches, and that alone flips some tests; the rest
+   varies under identical conditions. An empty change, recorded like the others, measures the noise floor; record
+   it per model and per serving setup.
 6. **CASPER and the bandit have their place.** CASPER needs no diff: a model or provider update, or a prompt-level
    change in a system the team does not own. For AEM its representatives are the natural first pass after a model
    update, when every test is affected and the question is which behaviours drifted; its slices could also serve

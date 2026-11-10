@@ -530,6 +530,16 @@ Both were recorded on the same app with five repetitions instead of three, Qwen3
 The question the five repetitions answer is whether a majority vote settles where three did not. It does not, for
 either model.
 
+Gemma, recorded the same way for comparison (`runs/gemma7`, report in `docs/results/gemma7/`: 180 tests, five
+repetitions), gives the opposite picture. Its five runs agree on every test of the original app (172 pass, 8 fail)
+and disagree on four (change, test) pairs over the 43 changes; no benign change is revealed, 29 of the 34
+regressions are, and the votes over three and over five runs differ on two labels, the two pairs that sit at the
+majority line (DS-INTENTS/i20 under `skill_governance_drop_consent`, WF4-01 under
+`skill_translation_wrong_default`). Those two are also the only labels on which this recording and `runs/gemma5`
+disagree over their 176 common tests. Gemma's ground truth is stable across repetitions and across recordings, and
+three repetitions suffice for it. The strategies' numbers on it are within a few points of §5.1's: at a 20% budget
+the adaptive method detects 78% for 2.9% of the tokens, traces 86%, TF-IDF 93% and declared metadata 62%.
+
 Qwen passes 173 of the 180 tests on the original app. It gets five of Gemma's mistakes right (PUB-10, AUT-04,
 SEO-02, WF1-01, WF6-02), shares two (CFG-01, WF2-03) and makes its own: where the routing skill says to stop after
 a failed step, it re-plans, as Adobe's Agent Orchestrator does, repairing the page that failed the brand check or
@@ -584,12 +594,13 @@ Gemma's (§5.1), at a budget of 20% of the suite's tokens unless said otherwise.
    On the 14 changes no test reveals, every other strategy reports a failure the change did not cause in 51% to
    91% of its replays; the adaptive method in none, because it keeps each test's pass rate on the current app and
    acts only on a flip. A pipeline should do the same rather than treat every red test as a regression.
-5. **Measure the model's noise before trusting a verdict.** Gemma's three runs agree on every test of the current
-   app and disagree on five (change, test) pairs over the 43 changes; Qwen's disagree on 357 and gpt-oss's on 577,
-   both "reveal" every benign change, and five repetitions instead of three settle neither vote. The baseline
-   runs one test at a time and the changed copies in batches, and that alone flips some tests; the rest varies
-   under identical conditions. An empty change, recorded like the others, measures the noise floor; record it per
-   model and per serving setup.
+5. **Measure the model's noise before trusting a verdict.** Gemma's runs agree on every test of the current app
+   and disagree on five (change, test) pairs over the 43 changes with three repetitions, on four with five, and a
+   second recording reproduces its ground truth on all but two labels; Qwen's disagree on 357 and gpt-oss's on
+   577, both "reveal" every benign change, and five repetitions instead of three settle neither vote. The
+   baseline runs one test at a time and the changed copies in batches, and that alone flips some tests; the rest
+   varies under identical conditions. An empty change, recorded like the others, measures the noise floor; record
+   it per model and per serving setup.
 6. **CASPER and the bandit have their place.** CASPER needs no diff: a model or provider update, or a prompt-level
    change in a system the team does not own. For AEM its representatives are the natural first pass after a model
    update, when every test is affected and the question is which behaviours drifted; its slices could also serve
@@ -634,7 +645,7 @@ Gemma's (§5.1), at a budget of 20% of the suite's tokens unless said otherwise.
 | 3. Method improvements | (a) test-level learned sensitivities (per test × component-kind reveal history) instead of kind-level; (b) IR relevance inside the Bayesian likelihood; (c) CASPER-style slices and the Risk-Aware Adaptive Evaluation bandit as reproduced baselines | (a) done; (b) done as an option (§5.2); (c) done: `casper_slices` and `risk_aware_ts` (§5.1) |
 | 4. Real LLM | ContentOps on real models (local vLLM): all variants × K reps under three models | done: Gemma (`runs/gemma5`); Qwen's (`runs/qwen7`) and gpt-oss's (`runs/gptoss7`) five-repetition recordings of the same app are spoiled by run-to-run variation and are not used for the results (§5.4) |
 | 5. External SUT | tau2-bench airline adapter; 12 mutations (6 policy, 4 tool-code, 2 benign); same evaluation | after the demo for the AEM team |
-| 6. Scale/robustness | more mutations (mutation operators generated systematically: step deletion/swap/condition negation in procedures, argument swaps in adapters, config boundary values), equivalent-mutant analysis, sensitivity to K and to budget definitions (time vs. tokens), ablations of each model ingredient, more repetitions for the models whose answers vary (five recorded for Qwen and gpt-oss: they do not settle the vote, §5.4) | with the paper |
+| 6. Scale/robustness | more mutations (mutation operators generated systematically: step deletion/swap/condition negation in procedures, argument swaps in adapters, config boundary values), equivalent-mutant analysis, sensitivity to K and to budget definitions (time vs. tokens), ablations of each model ingredient, more repetitions for the models whose answers vary (five recorded for all three models: Gemma's vote is stable across repetitions and recordings, Qwen's and gpt-oss's do not settle, §5.4) | with the paper |
 | 7. Paper | see §8 | drafting can start from this document and the report |
 
 A model's own mistakes and blind spots shape the ground truth: which changes a test reveals depends on the model

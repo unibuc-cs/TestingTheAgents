@@ -94,8 +94,9 @@ method what each test costs and which code it runs.
 The results come from Gemma's recording of the current app (`runs/gemma5`: 176 of the 180 tests, 43 changes, three
 repetitions per test; CFG-01 to CFG-03 and WF2-03 are not in it). Of the 34 regressions, 29 are revealed by at
 least one test. Gemma ignores the other five either way: it behaves the same with or without the change. No benign
-change, one meant to break nothing, fails a test. The table gives the share of those 29 that each strategy detects
-with a nominal budget of 20% of the full-suite tokens, and what it actually spends:
+change, one meant to break nothing, fails a test. A second recording with five repetitions and all 180 tests
+reproduces this ground truth on all but two (change, test) labels. The table gives the share of those 29 that
+each strategy detects with a nominal budget of 20% of the full-suite tokens, and what it actually spends:
 
 | strategy | detected | tokens spent | time spent |
 |---|---|---|---|
