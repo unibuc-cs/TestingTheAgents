@@ -36,8 +36,8 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
 - `traceeval/tracing/` — trace recorder, coverage contexts, OpenTelemetry export (`otel.py`).
 - `traceeval/scoring/` — deterministic scorers, and the model judge for cases with a rubric (`TRACEEVAL_JUDGE`).
 - `traceeval/mutation/` — controlled changes (patch operators), change-set extraction.
-- `traceeval/selection/` — `strategies.py` baselines, `adaptive_bayes.py` the proposed method (two text variants and
-  one ablation without its mandatory-coverage rule), `reproduced.py` two published methods (CASPER, Risk-Aware
+- `traceeval/selection/` — `strategies.py` baselines, `adaptive_bayes.py` the proposed method (two text variants
+  and one ablation without its mandatory-coverage rule), `reproduced.py` two published methods (CASPER, Risk-Aware
   Adaptive Evaluation) as baselines, `extras.py` optional baselines.
 - `traceeval/experiment/` — SUT loader, executor, history, runner, replay evaluator, metrics, coverage, report;
   `check.py`, the prototype (one change checked live).
@@ -62,8 +62,8 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
 - Mutation operators assert their anchors; a new mutation labelled a regression must be revealed by ≥ 1 test under
   at least one model, and one labelled benign by none (section 1 of `docs/results/gemma7/report.md` gives the
   counts).
-- A test's `properties` must be ids from `traceeval/catalog/properties.yaml` (the catalog of properties, a feature
-  the AEM team asked for; see docs/AEM_ALIGNMENT.md); add a property there before using it.
+- A test's `properties` must be ids from `traceeval/catalog/properties.yaml` (the catalog of properties; see
+  docs/AEM_ALIGNMENT.md); add a property there before using it.
 - A test that runs a multi-agent workflow end to end names it (`workflow: W1`), an id from
   `traceeval/catalog/workflows.yaml`.
 - A feature in `traceeval/catalog/features.yaml` lists its parts as component ids; a new tool, skill or setting
@@ -71,11 +71,11 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
 - A case that needs a setting at another value sets it in `config:` (by dotted key).
 - Keep the catalog passing on the baseline, apart from Gemma's known mistakes (`KNOWN_MODEL_MISTAKES` in
   `tests/test_sut.py`).
-- Derive seeds from names with a stable function of their characters (`experiment/evaluate.py` sums the
-  character codes), never `hash()`: str hashes are salted per process,
-  so runs would differ from one process to the next. Hypothesis searches run with `derandomize=True` for the
-  same reason. Idempotency keys are derived from the operation (request id, tool, arguments, earlier
-  successes of that call; `sut/harness/dispatcher.py`), never random.
+- Derive seeds from names with a stable function of their characters (`experiment/evaluate.py` sums the character
+  codes), never `hash()`: str hashes are salted per process, so runs would differ from one process to the next.
+  Hypothesis searches run with `derandomize=True` for the same reason. Idempotency keys are derived from the
+  operation (request id, tool, arguments, earlier successes of that call; `sut/harness/dispatcher.py`), never
+  random.
 - A test that expects a tool error declares it (`expect.tool_errors: {tool: code}`); any other unrecovered tool
   error or tool crash fails the test as TOOL_ERROR.
 - Demo PRs in `traceeval/spec/prs.py` are mutations too (literal anchors, same rule); every PR's expected

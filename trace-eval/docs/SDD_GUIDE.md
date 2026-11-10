@@ -1,10 +1,8 @@
 # Spec-driven development in TRACE-Eval
 
-This page is the reference for the spec-driven development (SDD) layer of the repository. It explains what a
-spec is, where its clauses come from (the catalog), how a spec gets written (a model drafts it and a person
-confirms it), how a pull request (PR) is judged against it, and what the assurance rungs mean.
-[SDD_DEMO.md](SDD_DEMO.md) has the demo results, [STUDY_GUIDE.md](STUDY_GUIDE.md) a reading plan of the
-layer's code, and [CONTENTOPS.md](CONTENTOPS.md) the application the specs describe.
+The reference for the spec-driven development (SDD) layer. [SDD_DEMO.md](SDD_DEMO.md) has the demo results,
+[STUDY_GUIDE.md](STUDY_GUIDE.md) a reading plan of the layer's code, and [CONTENTOPS.md](CONTENTOPS.md) the
+application the specs describe.
 
 ## 1. The idea in one paragraph
 
@@ -111,8 +109,8 @@ traceeval sdd draft --request request.md --id FS-0106 [--save-response answer.js
 traceeval sdd draft --request request.md --id FS-0106 --replay answer.json      # no model needed
 ```
 
-The drafting model is the `llm` backend's ([EXPERIMENT.md](EXPERIMENT.md) §3). It receives the catalog, the request
-and a *slice of the product model*: every tool with its kind and the service functions behind it, every
+The `llm` backend's model does the drafting ([EXPERIMENT.md](EXPERIMENT.md) §3). It receives the catalog, the
+request and a *slice of the product model*: every tool with its kind and the service functions behind it, every
 configuration key with its value, every skill with the tools it calls, the code paths that change a page status,
 and every recorded case. It must answer in JSON, with template names and slot values only.
 

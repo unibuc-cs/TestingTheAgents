@@ -1,6 +1,6 @@
 # TRACE-Eval and the SDD layer: a study guide
 
-This guide is a plan for reading the code of the spec-driven development (SDD) layer in two to three hours. Read
+Two to three hours of reading through the code of the spec-driven development (SDD) layer, in order. Read
 [SDD_GUIDE.md](SDD_GUIDE.md) first; this guide uses its vocabulary (clause, template, kind, rung). Paths are
 relative to `traceeval/`, except `docs/` and `tests/`, which are at the repository root. The diagrams are images
 rendered from the Mermaid sources in `docs/diagrams/`.
@@ -28,7 +28,7 @@ Open these three files side by side as you read:
 - `sut/skills/publishing-workflow/SKILL.md`, whose Procedure the model reads as numbered steps;
 - `sut/harness/dispatcher.py`, where every tool call is governed and recorded.
 
-### 1.2 Test selection in one sentence
+### 1.2 What the SDD layer reuses
 
 Test selection is the README's subject; the SDD layer reuses the executor, the catalog, the recorder with coverage,
 the mutation machinery, the change-set extraction and the `observed` strategy (§2.1).
@@ -79,8 +79,8 @@ verdict.
 
 ## 3. The five examples
 
-[SDD_DEMO.md](SDD_DEMO.md) describes the five requests, their correct PRs and what each one demonstrates, in
-its section "The five requests, chosen for diversity". The verdicts are in `docs/sdd/report.md`.
+[SDD_DEMO.md](SDD_DEMO.md) has the five requests, their correct PRs and what each one shows (its section "The five
+requests, one of each kind of change"). The verdicts are in `docs/sdd/report.md`.
 
 ### 3.1 FS-0101 in detail
 
@@ -140,9 +140,6 @@ To extend the layer:
 - a new product-model query is a method on `ProductModel`;
 - a new helper for clause expressions is a function in `context.py`, added to `CheckContext.env` and described in
   `draft.py`'s `HELPERS`.
-
-[SDD_GUIDE.md](SDD_GUIDE.md) explains the clause catalog (a spec is templates plus slots), the drafting
-command `traceeval sdd draft` and the rung each clause requires.
 
 ## 5. Suggested two to three hours
 

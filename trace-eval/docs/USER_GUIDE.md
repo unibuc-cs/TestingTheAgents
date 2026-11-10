@@ -70,8 +70,8 @@ Everything else is plumbing (loaders, tracing, report).
   changes that break a safety property, meaning that one of their revealing tests checks a safety property.
 - Section 3 gives the tokens spent on changes that break nothing. Its stop-reason table shows whether the
   adaptive strategy said `clean` on benign changes and `regression` on regressions.
-- Section 4 gives selection recall (the share of the revealing tests inside the selected subset) and the
-  prioritization quality of the complete order, by APFD and APFD_c (`experiment/metrics.py`; the papers are in
+- Section 4 gives selection recall (the share of the revealing tests inside the selected subset) and how well the
+  complete order is prioritized, by APFD and APFD_c (`experiment/metrics.py`; the papers are in
   [REFERENCES.md](REFERENCES.md)). Both score an order of the whole suite with every test run and no stopping, so
   they measure prioritization alone. Each revealing test counts as one fault, found when that test runs.
   - APFD (Rothermel et al. 2001) is the area under the curve of faults found against tests run. With n tests, m
@@ -90,15 +90,14 @@ Everything else is plumbing (loaders, tracing, report).
     passed, followed by the rest in cost-aware order.
 - Section 5 covers the catalog of properties: each property's pass rate on the original app against its
   threshold and, per strategy, the share of the properties a change breaks that the strategy's tests exercised.
-- Section 6 measures coverage, first of the suite, then of each change. For the suite: per dimension (agent,
-  feature, skill, tool, tool error path, configuration, setting value, property, workflow, execution path, risk),
-  how many components the tests declare and the traces show, and what no test covers; then, per agent, skill, tool
-  and feature, the tests that declare it and the tests that invoke it (`traceeval coverage --history runs/gemma7`
-  prints this part). For each change, without the ground truth: the share of the changed components the executed
-  tests exercised, of the properties the change may affect that they checked, of the affected workflows they ran
-  and of the affected features they reached, and how often a run that found no regression tested every affected
-  mandatory property. [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5 defines each dimension and what "affected" means;
-  `traceeval check` prints the same figures for the change it checks.
+- Section 6 measures coverage, first of the suite, then of each change. For the suite, per dimension (agent,
+  feature, skill, tool, tool error path, configuration, setting value, property, workflow, execution path, risk):
+  what the tests declare, what the traces show, what nothing covers. Then, per agent, skill, tool and feature: the
+  tests that declare it and the tests that invoke it (`traceeval coverage --history runs/gemma7` prints this part).
+  For each change, without the ground truth, four shares: changed components the executed tests exercised; affected
+  properties they checked; affected workflows they ran; affected features they reached. And how often a run that
+  found no regression tested every affected mandatory property. [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5 defines
+  each dimension and what "affected" means; `traceeval check` prints the same figures for the change it checks.
 - `replay.csv` has one row per (change, strategy, budget, seed), for slicing the results yourself.
 
 ## 5. How the adaptive method weighs a test
@@ -137,22 +136,27 @@ flowchart LR
 
 A test with no known link to the changed part gets a small fixed sensitivity (`indirect`, 0.02).
 
-**Mandatory properties (step 5 of the docstring).** A run that found no regression does not end until every
-mandatory property the change may affect has a test. For each one not yet checked, the method runs the cheapest
-test that checks it and passes on the original app, as long as the budget allows. A failure there is a
-regression, as usual. The rule turns the catalog's mandatory flag into a guarantee at almost no cost
-(RESEARCH_PLAN §5.3). `adaptive_bayes_nomandatory` is the method without the rule: an ablation, that is, a
-variant with one part removed to measure what that part contributes.
+### Mandatory properties
 
-**Weights.** Each factor has its own setting. `prior_strength` sets how far a short record can move a test (a
-larger value makes the record count less), the tilt has a fixed range, and `indirect` sets the floor. The factors
-are not weighted further against each other, because with a few dozen changes extra weights would mostly fit
-noise. The ablation of the text factor is in RESEARCH_PLAN §5.2; those of the other factors are on the roadmap.
+A run that found no regression does not end until every mandatory property the change may affect has a test. For
+each one not yet checked, the method runs the cheapest test that checks it and passes on the original app, as long
+as the budget allows. A failure there is a regression, as usual. The rule turns the catalog's mandatory flag into a
+guarantee at almost no cost (RESEARCH_PLAN §5.3). `adaptive_bayes_nomandatory` is the method without the rule: an
+ablation, that is, a variant with one part removed to measure what that part contributes.
 
-**Where the records come from.** Nothing is stored apart from the recordings. Each time the method runs, it
-recomputes the kind ratios and every test's record from the recording it is given (`runs/<name>`, or `--history`
-for `traceeval check`), using every recorded change except the one being evaluated. The records therefore grow
-as more changes are recorded. This command adds a change to an existing recording, and the next run uses it:
+### Weights
+
+Each factor has its own setting. `prior_strength` sets how far a short record can move a test (a larger value makes
+the record count less), the tilt has a fixed range, and `indirect` sets the floor. The factors are not weighted
+further against each other, because with a few dozen changes extra weights would mostly fit noise. Only the text
+factor has been ablated so far (RESEARCH_PLAN §5.2).
+
+### Where the records come from
+
+Nothing is stored apart from the recordings. Each time the method runs, it recomputes the kind ratios and every
+test's record from the recording it is given (`runs/<name>`, or `--history` for `traceeval check`), using every
+recorded change except the one being evaluated. The records therefore grow as more changes are recorded. This
+command adds a change to an existing recording, and the next run uses it:
 
 ```
 traceeval mutants --workdir runs/<name> --only <change> --backend <the recording's>

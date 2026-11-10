@@ -26,13 +26,13 @@ Ciprian Păduraru · University of Bucharest · the results are in `docs/results
 
 ---
 
-## 0. What this document is
+## 0. Reading order
 
-The research design and the testbed that makes it runnable, in reading order: the problem (§1), the abstractions
-the method rests on (§2), the methods (§3), the evaluation environment (§4), the results and the take-aways (§5),
-the roadmap (§6), the paper (§7) and the open questions for the AEM team (§8).
-The research problem is kept general: any agent platform built from skills, prompts, tools, harness code and
-configuration. AEM, Adobe's platform, is the motivating instance, and the method does not depend on it.
+In reading order: the problem (§1), the abstractions the method rests on (§2), the methods (§3), the evaluation
+environment (§4), the results and the take-aways (§5), the roadmap (§6), the paper (§7) and the open questions for
+the AEM team (§8). The research problem is kept general: any agent platform built from skills, prompts, tools,
+harness code and configuration. AEM, Adobe's platform, is the motivating instance, and the method does not depend
+on it.
 
 **Design decisions**
 
@@ -133,9 +133,9 @@ for dependencies:
   orchestrator consulted, the skills loaded (with version and digest), the tools called (with status and
   attempts), the configuration keys read, and the code functions and lines executed (coverage.py dynamic
   contexts, one context per test and repetition).
-- **Required** dependencies are the properties and risks that must always be evaluated, which are the mandatory
-  properties of the catalog of properties (the safety ones). The adaptive method tests every mandatory property a
-  change may affect before it ends without a regression (step 5, §5.3).
+- **Required** dependencies are what must always be evaluated: the catalog's mandatory properties, the safety ones.
+  The adaptive method tests every mandatory property a change may affect before it ends without a regression (step
+  5, §5.3).
 
 ### 2.4 Cost model
 
@@ -202,10 +202,10 @@ truth. One by one:
   risk is highest. It does not read the diff either, and any failure counts as a find.
 - `adaptive_bayes` is the proposed method. For every changed component it keeps the probability that the component
   is broken, and for every test the probability that the test fails if it is, calibrated on the other recorded
-  changes and on the test's own record. It runs the test with the most information per token, updates after each
-  outcome, stops at the first failure of a test that passed on the current app, or when the probability that
-  anything is broken is small, and before ending without a regression it runs a test of every mandatory property
-  the change may affect. It is the only strategy that stops, and the only one with a verdict.
+  changes and on the test's own record. It runs the test with the most information per token and updates after each
+  outcome. It stops at the first failure of a test that passed on the current app, or when the probability that
+  anything is broken is small; before it ends without a regression it runs a test of every mandatory property the
+  change may affect. It is the only strategy that stops, and the only one with a verdict.
 
 The same strategies, placed in the literature:
 
@@ -239,12 +239,12 @@ components).
 *Likelihood (step 2).* P(t fails | B) = 1 − (1 − f_t) ∏_{c∈B} (1 − s_tc). The sensitivity s_tc of test t to
 component c is s_tc = r_kind(c) · lift_t,kind(c) · freq_t(c) · tilt_t, where
 
-- r_kind is the empirical reveal ratio learned from the other recorded changes: the fraction of statically
-  impacted tests that actually revealed a change of that kind. Kinds separate, for example, tests that executed
-  the changed line from tests that executed only the changed function, and agent fields are calibrated per field.
-  The ratio encodes the fact that coverage does not imply detection, with measured numbers instead of hand-set
-  constants. A ratio learned from few changes is padded toward a default for its kind (m = 2 changes' worth, as
-  below), so that one earlier change cannot make a whole kind look certain.
+- r_kind is the empirical reveal ratio learned from the other recorded changes: the fraction of statically impacted
+  tests that actually revealed a change of that kind. Kinds separate, for example, tests that executed the changed
+  line from tests that executed only the changed function, and agent fields are calibrated per field. The ratio is
+  where "covered is not revealed" enters the model, as measured numbers rather than hand-set constants. A ratio
+  learned from few changes is padded toward a default for its kind (m = 2 changes' worth, as below), so that one
+  earlier change cannot make a whole kind look certain.
 - lift_t,k = (O_tk + m) / (E_tk + m) is the test's own record on the earlier changes of kind k that impacted it.
   O_tk is how many of them it revealed, E_tk how many an average impacted test would have revealed (the sum of
   those changes' reveal rates), and m = 2 pads a short record. A test that ran many changed functions and never
@@ -279,7 +279,7 @@ it, while the budget allows (§5.3).
 
 ### 3.2 Why these baselines
 
-They cover the design space of the literature: classic RTS/TCP on declared coverage (Rothermel), IR-based TCP (Saha
+They cover the families in the literature: classic RTS/TCP on declared coverage (Rothermel), IR-based TCP (Saha
 2015), cost-cognizant TCP (Elbaum 2001), predictive test selection (Machalica 2019) and diversity-based ordering
 (LTM, Pan et al.; `docs/REFERENCES.md`). CASPER (2026) and Risk-Aware Adaptive Evaluation (2026) are the closest
 external competitors (`docs/related_work.md`), and both are reproduced on the testbed (`selection/reproduced.py`,
@@ -297,12 +297,12 @@ rather than by a model of the signals; the budget is in tokens; and each test ru
 
 `docs/CONTENTOPS.md` describes the application: an orchestrator and ten specialists, thirteen skills, 32 tools over
 deterministic services, a harness with a dispatcher, retries, fault injection and step budgets, and one
-configuration file. The structure is deliberate, so that selection is hard and defence-in-depth questions can be
-discussed. Some components are shared and have a wide blast radius: `governance-checks` and `link-validation` are
-included by several skills, `check_permission` is available to eight of the ten specialists and `get_page` to six,
-and the retry helper wraps every tool call. Others are narrow: the approval gate matters to one test. Some policies
-are enforced only in skills (publish permission), others also in tools (approval tokens). Mutations of a skill's
-prose and of its procedure are separate components (`#prose`, `#procedure`, §2.2).
+configuration file. The structure is deliberate: selection has to be hard, and there has to be something to say
+about defence in depth. Some components are shared and have a wide blast radius: `governance-checks` and
+`link-validation` are included by several skills, `check_permission` is available to eight of the ten specialists
+and `get_page` to six, and the retry helper wraps every tool call. Others are narrow: the approval gate matters to
+one test. Some policies are enforced only in skills (publish permission), others also in tools (approval tokens).
+Mutations of a skill's prose and of its procedure are separate components (`#prose`, `#procedure`, §2.2).
 
 ### 4.2 Eval catalog
 
@@ -346,10 +346,10 @@ other models' recordings are the subject of §5.4.
 ### 4.4 Protocol and metrics
 
 The recording is `docs/EXPERIMENT.md` §5's `baseline` and `mutants` steps with K repetitions; a 43-change × 5-rep
-recording of the 180 tests is about 39k runs. `evaluate` then replays: for every (change, strategy, budget ∈ {2, 5,
-10, 20, 30, 50, 100}% of the full-suite tokens, seed), the strategy selects from the baseline facts and the change
-set only, each execution is answered from the recorded runs of that variant (a random repetition supplies the
-outcome and cost), and adaptive strategies interact sequentially. The metrics:
+recording of the 180 tests is about 39k runs. `evaluate` then replays, once per (change, strategy, budget, seed),
+with the budget one of 2, 5, 10, 20, 30, 50 or 100% of the full-suite tokens. The strategy sees the baseline facts
+and the change set only. Each execution is answered from the recorded runs of that variant (a random repetition
+supplies the outcome and cost), and adaptive strategies interact sequentially. The metrics:
 
    - change coverage, which needs no ground truth (`docs/USER_GUIDE.md` §4; the dimensions are defined in
      `docs/AEM_ALIGNMENT.md` §3.5);
@@ -403,10 +403,10 @@ methods' after 12–14%. The report's sections 2 and 4 hold the full tables; tim
 - *RQ4.* The adaptive method is the only one that returns budget: it catches 74% of the regressions at a 5% budget
   and 78% at 20%, for under 3% of the tokens. Its ceiling is 81%. On narrow regressions, revealed by one to five
   tests, it can stop with a "clean" verdict before reaching them (145 of 1,015 replays of regressions). The changes
-  it misses at a 20% budget are the delegation that drops the ids of earlier steps, the agent loop that stops six
-  steps early, retries without idempotency keys, the routing skill without its brand gate, the authoring skill
-  without its metadata step, and the combined change, on which it runs out of tests that could still move its
-  estimate; the governance skill without its consent step it catches in three of five seeds.
+  it misses at a 20% budget: the delegation that drops the ids of earlier steps; the agent loop that stops six
+  steps early; retries without idempotency keys; the routing skill without its brand gate; the authoring skill
+  without its metadata step; the combined change, where it runs out of tests that could still move its estimate.
+  The governance skill without its consent step it catches in three of five seeds.
 - *Critical regressions.* Of the 21 changes that break a safety property, the adaptive method catches 84% from a
   10% budget on, `observed` 81% and TF-IDF all of them at 20% (spending the whole 20%).
 - *Red tests on the original app.* Gemma's eight failing tests fail on nearly every changed copy too, so a strategy
@@ -494,14 +494,14 @@ runs differ on two labels only, the two pairs at the majority line (DS-INTENTS/i
 `skill_governance_drop_consent`, WF4-01 under `skill_translation_wrong_default`).
 
 Qwen passes 173 of the 180 tests on the original app (`docs/EXPERIMENT.md` §6). Its recording is not a clean ground
-truth. Every regression is revealed, but so is every benign change, by three to six tests under the majority over
-five runs and by two to four under the first three, the empty change (`benign_code_comment_docstring`, whose change
-set is empty) included; the two votes differ on 75 (change, test) pairs and on the revealing sets of 40 of the 43
-changes, and a change's own runs disagree on 357 pairs. Seven tests carry the variation: one of the two cases a
-model judges against a rubric (PUB-20), the 60-character boundary (SEO-05), four long workflows (WF2-01, WF2-02,
-WF4-02, WF5-02) and AUT-05. Twenty-nine of the 34 regressions have a revealing test outside the seven. CASPER's
-twenty representatives include SEO-05, WF5-02 and WF2-02, which "reveal" 40, 34 and 15 of the 43 changes, so its
-slices appear to detect 90% of the changes at a 20% budget there.
+truth. Every regression is revealed, but so is every benign change: by three to six tests under the majority over
+five runs, by two to four under the first three, the empty change (`benign_code_comment_docstring`, whose change
+set is empty) included. The two votes differ on 75 (change, test) pairs and on the revealing sets of 40 of the 43
+changes; a change's own runs disagree on 357 pairs. Seven tests carry the variation: one of the two cases a model
+judges against a rubric (PUB-20), the 60-character boundary (SEO-05), four long workflows (WF2-01, WF2-02, WF4-02,
+WF5-02) and AUT-05. Twenty-nine of the 34 regressions have a revealing test outside the seven. CASPER's twenty
+representatives include SEO-05, WF5-02 and WF2-02, which "reveal" 40, 34 and 15 of the 43 changes, so its slices
+appear to detect 90% of the changes at a 20% budget there.
 
 gpt-oss passes 153 of the 180 tests and varies more. The benign changes are "revealed" by two to five tests under
 the majority over five runs and by one to four under the first three; the two votes differ on 95 pairs, and a
@@ -519,7 +519,7 @@ five under Qwen (WF4-01 and WF5-02 in nearly all of them) and one to four under 
 batching, the tests that pass one at a time and fail in a batch; the rest is run-to-run variation under identical
 conditions.
 
-Qwen and gpt-oss are used as they are served, like Gemma. Their recordings stand as this finding, and the results
+Qwen and gpt-oss are used as they are served, like Gemma. Their recordings are kept for this finding; the results
 are Gemma's. The lesson for a pipeline is to measure how much the model's answers vary from run to run under the
 serving setup the selection will run on, before trusting a ground truth or a stopping rule. The empty change
 measures exactly that.
@@ -554,7 +554,6 @@ of the suite's tokens unless said otherwise.
 7. **Text is a strong, cheap baseline.** TF-IDF similarity between the diff and the tests' text has the best
    detection when the whole budget is spent, and it never stops (§5.1, §5.2); it is the fallback order to keep in
    any pipeline.
-8. **Not yet covered.** The roadmap (§6).
 
 ---
 

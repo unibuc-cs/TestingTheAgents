@@ -35,7 +35,7 @@ They talk to the platform in plain language. Some requests from the test catalog
 
 The platform answers in prose and, when the request calls for it, changes its data: pages with their
 versions, links and metadata; assets; translation jobs; and an audit log that records every change. It also
-holds the brand guidelines, the site's analytics, and who approves consequential steps.
+holds the brand guidelines, the site's analytics, and who approves the sensitive steps.
 
 ## How it is built
 
@@ -124,13 +124,13 @@ and is recorded. At the end, the final data and the answer are scored against wh
 The rules sit in three places, and the difference matters: when a change removes a check from a skill,
 usually nothing below the skill catches the mistake.
 
-The harness checks every tool call. The dispatcher refuses a call when the tool does not exist, when the
-settings have switched it off, when this agent is not allowed to use it, when it is guarded and the request
-has no approval token, or when the arguments do not fit. A call that gets through runs with fault injection,
-and transient failures are retried. Write tools also get an idempotency key, a key that identifies the
-operation so that a service can recognise a repeat. It is derived from the request, the tool, its arguments
-and how often that call has already gone through. A retry, or a failed write the agent repeats, is then not
-applied twice by the services that honour the key. Every call leaves a `tool.call` event in the trace.
+The harness checks every tool call. The dispatcher refuses a call when the tool does not exist, when the settings
+have switched it off, when this agent is not allowed to use it, when it is guarded and the request has no approval
+token, or when the arguments do not fit. A call that gets through runs with fault injection, and transient failures
+are retried. Write tools also get an idempotency key, a key that identifies the operation so that a service can
+recognise a repeat. It is derived from the request, the tool, its arguments and how often that call has already
+gone through. Services that honour the key then apply it once, whether it comes back as a retry or as a write the
+agent repeats after a failure. Every call leaves a `tool.call` event in the trace.
 
 Around the dispatcher, the agent loop limits how many steps each agent may take, how many the whole request may
 take (delegations count too), and how deep delegation may go. The code is in

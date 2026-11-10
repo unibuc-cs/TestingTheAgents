@@ -5,8 +5,8 @@ in what order, and when can we stop? The aim is to spend fewer tokens and less t
 
 This repository is a testbed for that question: a small, working multi-agent application whose agents are played by
 a model, a catalog of tests, a set of controlled changes with known effects, and nine selection strategies, one of
-which, `adaptive_bayes`, is the method this project proposes. The strategies are compared by replaying recorded
-runs, and `traceeval check` runs the proposed method live on one change.
+which, `adaptive_bayes`, is ours. The strategies are compared by replaying recorded
+runs, and `traceeval check` runs our method live on one change.
 
 ## The pieces, and how they fit
 
@@ -47,7 +47,7 @@ flowchart LR
   change set, the traces, the costs and the pass rates, and from the outcomes of the other recorded changes. They
   never see the outcome of the change under evaluation. Six are baselines, two are published methods reproduced
   (CASPER and Risk-Aware Adaptive Evaluation, neither of which reads the diff;
-  [docs/REFERENCES.md](docs/REFERENCES.md)), and `adaptive_bayes` is the proposed method.
+  [docs/REFERENCES.md](docs/REFERENCES.md)), and `adaptive_bayes` is ours.
 - **The report** compares the strategies: the regressions caught for the tokens and the time spent, the changes
   that break a safety property, what is spent on changes that break nothing, whether the adaptive method stops at
   the right moment, and the coverage of the suite and of each change.
@@ -75,8 +75,8 @@ traceeval experiment --backend vllm --workdir runs/gemma7 --reps 5    # about tw
 scripts/gpu_remote.sh down
 ```
 
-The prototype, `traceeval check`, checks one change live. The proposed method picks a test, the test runs live on
-the changed app, the outcome decides what runs next, and the check ends with a verdict.
+The prototype, `traceeval check`, checks one change live. Our method picks a test, the test runs live on the
+changed app, the outcome decides what runs next, and the check ends with a verdict.
 
 ```bash
 traceeval check skill_routing_drop_approval --history runs/gemma7 --budget 0.2      # a change from the catalog
@@ -90,9 +90,9 @@ method what each test costs and which code it runs.
 
 The results come from Gemma's recording of the current app (`runs/gemma7`: 180 tests, 43 changes, five repetitions
 per test). Of the 34 regressions, 29 are revealed by at least one test. Gemma ignores the other five either way: it
-behaves the same with or without the change. No benign change, one meant to break nothing, fails a test. The table
-gives the share of those 29 that each strategy detects with a nominal budget of 20% of the full-suite tokens, and
-what it actually spends:
+behaves the same with or without the change. A benign change is one meant to break nothing; none of them fails a
+test. The table gives the share of those 29 that each strategy detects with a nominal budget of 20% of the
+full-suite tokens, and what it actually spends:
 
 | strategy | detected | tokens spent | time spent |
 |---|---|---|---|
@@ -101,28 +101,34 @@ what it actually spends:
 | `ir_tfidf`: text similarity to the diff | 93% | 20% | 20% |
 | `casper_slices`: CASPER's slices, reproduced | 59% | 20% | 23% |
 | `risk_aware_ts`: Risk-Aware Adaptive Evaluation, reproduced | 57% | 20% | 22% |
-| `adaptive_bayes`: the proposed method | 78% | 2.9% | 3.2% |
+| `adaptive_bayes`: our method | 78% | 2.9% | 3.2% |
 
-The adaptive method is the only one that stops on its own: it ends as soon as it is confident, and it never calls a
-change that breaks nothing a regression. Its misses are mostly narrow regressions, revealed by one to five tests,
-where it concludes too early that nothing broke. Of the 21 changes that break a safety property, it catches 84%.
-`declared` and `observed` also spend less than the budget, but only because they run out of tests to select. The
-two reproduced methods look at the traces and the outcomes but not at the diff, and sit between random (56%) and
-the change-aware strategies. The full numbers are in the [Gemma report](docs/results/gemma7/report.md), and the
+The adaptive method is the only one that stops on its own: it ends as soon as it is confident, and it never flags a
+benign change as a regression. Its misses are mostly narrow regressions, revealed by one to five tests, where it
+concludes too early that nothing broke. Of the 21 changes that break a safety property, it catches 84%. `declared`
+and `observed` also spend less than the budget, but only because they run out of tests to select. The two
+reproduced methods look at the traces and the outcomes but not at the diff, and sit between random (56%) and the
+change-aware strategies. The full numbers are in the [Gemma report](docs/results/gemma7/report.md), and the
 take-aways of the experiments in [RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.5.
 
 Qwen3.8-27B's and gpt-oss-120b's recordings of the same app are not clean ground truths: some of their answers vary
 from run to run and with batching, so every benign change appears revealed by a few tests. The models are used as
-they are served, so these recordings are reported as a finding rather than as results
+they are served, so these two recordings are a finding, not a result
 ([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.4).
 
 ## Built for Adobe's AEM team
 
 The AEM team (Adobe Experience Manager, Adobe's content management system) listed what they lack today and want in
-the prototype, and the testbed has it: a catalog of properties, some of them release blockers; coverage of the
-suite and of each change; workflows of two to five agents with plans and approvals; budgets with early stopping;
-and OpenTelemetry export of the traces. [docs/AEM_ALIGNMENT.md](docs/AEM_ALIGNMENT.md) checks each requirement in
-its §2, with the AEM team's answers, and its §4 has the next steps.
+the prototype, and the testbed has it:
+
+- a catalog of properties, some of them release blockers;
+- coverage of the suite and of each change;
+- workflows of two to five agents with plans and approvals;
+- budgets with early stopping;
+- OpenTelemetry export of the traces.
+
+[docs/AEM_ALIGNMENT.md](docs/AEM_ALIGNMENT.md) checks each requirement in its §2, with the AEM team's answers, and
+its §4 has the next steps.
 
 ## Spec-driven development on the same testbed
 
@@ -134,8 +140,6 @@ the layer and [docs/SDD_DEMO.md](docs/SDD_DEMO.md) has the results.
 
 ## How to read the documentation
 
-[docs/README.md](docs/README.md) lists the documents by what you want to do. The reading order is README, then
-[docs/CONTENTOPS.md](docs/CONTENTOPS.md), [docs/USER_GUIDE.md](docs/USER_GUIDE.md),
-[docs/EXPERIMENT.md](docs/EXPERIMENT.md), [docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md),
-[docs/AEM_ALIGNMENT.md](docs/AEM_ALIGNMENT.md) and [docs/DEMO.md](docs/DEMO.md), each document using only what the
-ones before it define. [CLAUDE.md](CLAUDE.md) holds the conventions for coding agents working in the repository.
+[docs/README.md](docs/README.md) lists the documents by what you want to do and gives the reading order; each
+document uses only what the ones before it define. [CLAUDE.md](CLAUDE.md) holds the conventions for coding agents
+working in the repository.

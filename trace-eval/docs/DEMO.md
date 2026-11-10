@@ -1,11 +1,9 @@
 # Demo walkthrough (20 minutes)
 
-This is the walkthrough for the demo to the AEM team. Every command runs from the repository root in a terminal,
-with the documents open next to it. Commands marked *replay* need no model.
-Commands marked *live* need Gemma on the GPU server, started well before the demo with `scripts/gpu_remote.sh up
-gemma` (it takes a few minutes, and the GPUs may be busy).
-Section 4 says what to do if the server is down. What comes after the demo is in
-[AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4.
+Every command runs from the repository root in a terminal, with the documents open next to it. Commands marked
+*replay* need no model. Commands marked *live* need Gemma on the GPU server, started well before the demo with
+`scripts/gpu_remote.sh up gemma` (it takes a few minutes, and the GPUs may be busy). Section 4 says what to do if
+the server is down. What comes after the demo is in [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4.
 
 ## Before the demo
 
@@ -24,8 +22,8 @@ Open these in the editor: `docs/CONTENTOPS.md` (the figure), `traceeval/catalog/
 ## The terms used below
 
 Test, property, change, change set, "reveals", strategy and budget are the README's terms
-([USER_GUIDE.md](USER_GUIDE.md) §2 lists them). The strategies are described in
-[RESEARCH_PLAN.md](RESEARCH_PLAN.md) §3 and the results in its §5.
+([USER_GUIDE.md](USER_GUIDE.md) §2 lists them). [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §3 has the strategies, §5 the
+results.
 
 ## 1. The question (2 minutes)
 
@@ -147,9 +145,8 @@ three (publish, schedule, take a page down), and the nine tests reached all thre
 
 If the GPU server is down, run both checks with `--backend replay`: both are recorded in
 `tests/cassettes/gemma.jsonl` ([EXPERIMENT.md](EXPERIMENT.md) §5), so the same tests run with the same outcomes,
-and the timings read 0 seconds. If the server stops answering during a
-check, the check says so and gives no verdict. The run is marked `INFRA_INVALID`, the environment's fault rather
-than the change's.
+and the timings read 0 seconds. If the server stops answering during a check, the check says so and gives no
+verdict. The run is marked `INFRA_INVALID`, the environment's fault rather than the change's.
 
 ## 5. The evidence over all changes (4 minutes)
 
@@ -170,20 +167,19 @@ current app ([USER_GUIDE.md](USER_GUIDE.md) §4 says how to read it):
   coverage --history runs/gemma7` prints the same in the terminal.
 
 Mention the finding of [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.3: the mandatory rule is what catches the publishing
-skill without its link check. The reading of the results by research question is its §5.1, and the take-aways its
-§5.5.
+skill without its link check. Its §5.1 goes through the results by research question, and §5.5 has the take-aways.
 
 ## 6. The catalog of properties, drafted by a model (1 minute)
 
-`traceeval/catalog/properties.yaml`: the fields and what uses them are [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.4's
-table; open the file and point at `mandatory` and `sources`. `traceeval properties draft` has a model write this
-catalog from the requirements only, within fixed limits, and tag the tests; a person then edits the draft and
+[AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.4 has the table of `traceeval/catalog/properties.yaml`'s fields and what
+uses them; open the file and point at `mandatory` and `sources`. `traceeval properties draft` has a model write
+this catalog from the requirements only, within fixed limits, and tag the tests; a person then edits the draft and
 applies it.
 
 Show `docs/properties/draft_qwen/properties.draft.md`, Qwen's draft from the requirements alone. It has fifteen
 properties, each with the components it comes from, and one requirement that no test checks: the 30-day approval
-window of spec FS-0101. The point to make is that the model writes a good catalog, but its tags of the tests need
-a person's review, since many tests get only the routing property.
+window of spec FS-0101. The point to make is that the model writes a good catalog, but someone has to check how it
+tagged the tests, since many get only the routing property.
 
 ## 7. Spec-driven development, the add-on (2 minutes)
 

@@ -1,7 +1,7 @@
 # The testbed against AEM's requirements
 
-This document checks the testbed against what Adobe asked for and what Adobe ships, describes the features built
-for it (section 3), and plans the next steps (section 4). The "today" column of section 2 says what is done.
+Where the testbed stands against what Adobe asked for and what Adobe ships (section 2), the features built to close
+the gaps (section 3), and what comes next (section 4). The "today" column of section 2 says what is done.
 
 ## 1. What Adobe's platform looks like
 
@@ -21,13 +21,12 @@ Agent Orchestrator deck and Adobe's public documentation:
   Governance or Brand Governance Agent (brand, security and regulatory policy checks, permissions), the Site
   Optimization Agent (detects and deploys website fixes: traffic, engagement, broken links), the Data Insights
   Agent (analytics questions), the LLM Optimization Agent, the Product Support Agent.
-- **What the AEM team said they do not have yet and want in the prototype** (the AEM team's answers to the
-  follow-up questions): workflows (they only have features), a catalog of evaluators and properties with thresholds
-  ("prompt, properties and threshold do not exist, but they would like it, and a category of properties too"),
-  per-test metadata (agents, skills, tools, workflows, risk, history, cost), budgets with early stopping, trace
-  assertions (agent order, tool order, forbidden actions, turn limits, final state), and OpenTelemetry traces
-  including "cognition events". Failures caused by the environment (a service down) must not count against the
-  agent.
+- **What they do not have yet and want in the prototype** (their answers to our follow-up questions): workflows
+  (they only have features), a catalog of evaluators and properties with thresholds ("prompt, properties and
+  threshold do not exist, but they would like it, and a category of properties too"), per-test metadata (agents,
+  skills, tools, workflows, risk, history, cost), budgets with early stopping, trace assertions (agent order, tool
+  order, forbidden actions, turn limits, final state), and OpenTelemetry traces including "cognition events".
+  Failures caused by the environment (a service down) must not count against the agent.
 
 ## 2. Where the testbed stands
 
@@ -53,8 +52,6 @@ is also the hardest case for test selection, the point of the research, and the 
 section 3.3.
 
 ## 3. The features
-
-All of them are in the testbed and in the recordings.
 
 ### 3.1 Agents modelled on AEM's
 

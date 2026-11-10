@@ -1,7 +1,7 @@
 # The documentation
 
 Start with the repository [README](../README.md): the question, the pieces, how to run it, the main results. Then
-pick by what you want to do. The diagrams are Mermaid, which GitHub draws, and PyCharm too with the
+pick by what you want to do. The diagrams are Mermaid: GitHub renders them, and so does PyCharm with the
 Mermaid plugin.
 
 ## By what you want to do
@@ -15,7 +15,7 @@ Mermaid plugin.
 | the research: the problem, the abstractions, the methods, the results, the take-aways, the roadmap | [RESEARCH_PLAN.md](RESEARCH_PLAN.md) |
 | Adobe's platform, what the AEM team asked for, the features built for it, the next steps | [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) |
 | give or follow the demo for the AEM team, command by command | [DEMO.md](DEMO.md) |
-| the full results of a recording: tables and figures | [results/gemma7/report.md](results/gemma7/report.md), the results of record; [results/qwen7/](results/qwen7/report.md) and [results/gptoss7/](results/gptoss7/report.md), the other two models |
+| the full results of a recording: tables and figures | [results/gemma7/report.md](results/gemma7/report.md), the results the README quotes; [results/qwen7/](results/qwen7/report.md) and [results/gptoss7/](results/gptoss7/report.md), the other two models |
 | spec-driven development: what a spec is, how a pull request is judged against it, the assurance rungs | [SDD_GUIDE.md](SDD_GUIDE.md), then [SDD_DEMO.md](SDD_DEMO.md) for the results and [sdd/report.md](sdd/report.md) for the full report |
 | read the code of the spec-driven development layer, with diagrams, in two to three hours | [STUDY_GUIDE.md](STUDY_GUIDE.md) |
 | the literature, the references and the paper | [related_work.md](related_work.md), [REFERENCES.md](REFERENCES.md), `paper/main.tex` (build with `latexmk -pdf main`) |
@@ -24,7 +24,7 @@ Mermaid plugin.
 ## Reading order
 
 Each document uses only what the ones before it define, so a first reading goes top to bottom. The spec-driven
-development documents and the literature sit aside the main line.
+development documents and the literature branch off the main line.
 
 ```mermaid
 flowchart TD

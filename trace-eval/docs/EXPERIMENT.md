@@ -1,18 +1,16 @@
 # Running the experiment
 
-This page explains how the experiment runs the agents on the models: Gemma 4 E4B, Qwen3.8-27B and gpt-oss-120b. It
-covers where the models run, how the GPU server is wired in, and what to type. Start with sections 1 and 4, and
-look up the rest when you need it.
+How to run the agents on Gemma 4 E4B, Qwen3.8-27B and gpt-oss-120b: where the models run, how the GPU server is
+wired in, and what to type. Start with sections 1 and 4 and look the rest up when you need it.
 
 ## 1. Recording, in two minutes
 
-The README says what the testbed is. This page is about recording it. Every test runs several times on the original
-app and on every changed copy (`--reps`; five in the recording the results come from), and what happened is
-recorded. The majority of the runs decides the outcome. A run the environment broke, because the model server or
-the network did not answer, is marked `INFRA_INVALID` and left out, as if it had not been made. That gives the
-ground truth: which tests fail under which change. After that, comparing the strategies costs nothing, because we
-replay the recordings: strategy X would have run these tests, so it would or would not have caught this change, for
-this many tokens.
+The README says what the testbed is. Every test runs several times on the original app and on every changed copy
+(`--reps`; five in the recording the results come from), and what happened is recorded. The majority of the runs
+decides the outcome. A run the environment broke, because the model server or the network did not answer, is marked
+`INFRA_INVALID` and left out, as if it had not been made. That gives the ground truth: which tests fail under which
+change. After that, comparing the strategies costs nothing, because we replay the recordings: strategy X would have
+run these tests, so it would or would not have caught this change, for this many tokens.
 
 Recording costs GPU time, which is why we use the GPU server (section 4). Replaying recorded answers is free
 (section 5).
@@ -45,8 +43,8 @@ sequenceDiagram
 
 The runner ([`experiment/runner.py`](../traceeval/experiment/runner.py)) starts the case through the executor,
 which builds a fresh app from the fixtures; the path through the orchestrator, the specialist, the dispatcher and
-the scorers is the one [CONTENTOPS.md](CONTENTOPS.md) shows. What this page adds is the model call. At every step
-the runtime ([`sut/harness/runtime.py`](../traceeval/sut/harness/runtime.py)) asks the agent's backend
+the scorers is the one [CONTENTOPS.md](CONTENTOPS.md) shows. The part it does not show is the model call. At every
+step the runtime ([`sut/harness/runtime.py`](../traceeval/sut/harness/runtime.py)) asks the agent's backend
 ([`backends/llm_openai.py`](../traceeval/sut/harness/backends/llm_openai.py)) "what next?", which is one model
 call. Gemma picks `route_to_agent(publishing)`, and the runtime runs the publishing agent the same way: model call,
 tool call, result, model call again, until Gemma answers in plain text.
@@ -68,8 +66,7 @@ reads:
 ...
 ```
 
-The procedure is the skill's own statement of the workflow, so a change to it changes what the model is told
-to do.
+The procedure is where the skill spells out the workflow, so editing it changes what the model is told to do.
 
 ### What Gemma writes
 
@@ -305,10 +302,10 @@ with the same options.
 - **`report`** writes `runs/gemma7/results/report.md`. Its first section is the sanity check: every
   regression must be revealed by at least one test, and no benign change by any.
 
-`--reps 1` is good for a first look. For a ground truth you'll rely on, `--reps 3` suffices for Gemma (section 7);
-the recording of record used 5. The majority vote over the repetitions absorbs the one-off differences of section
-3; for a model whose answers vary more, no number of repetitions settles it ([RESEARCH_PLAN.md](RESEARCH_PLAN.md)
-§5.4).
+`--reps 1` is good for a first look. For a ground truth you'll rely on, `--reps 3` is enough for Gemma (section 7);
+the recording the results come from used 5. The majority vote over the repetitions absorbs the one-off differences
+of section 3; for a model whose answers vary more, no number of repetitions settles it
+([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4).
 
 The work folder is git-ignored; to keep a run, copy its `results/` into `docs/results/`. It holds:
 
@@ -371,7 +368,7 @@ randomness, so a run that starts from recorded answers sends the same prompts ag
   `traceeval sdd` do this by default, from `tests/cassettes/gemma.jsonl`.
 - **`TRACEEVAL_CACHE=<file>`** with `--backend hf` or `vllm` answers what the file has, asks Gemma for the rest
   and adds those answers to the file. Running the same experiment again then costs nothing.
-- **When the app changes a prompt** through a skill, an agent definition, a config value or a tool result,
+- When the app changes a prompt through a skill, an agent definition, a config value or a tool result,
   the recorded answer no longer matches, and a replay run ends as `INFRA_INVALID` with `CacheMiss`. Start
   Gemma, run `TRACEEVAL_BACKEND=vllm pytest -q`, which replays what it can and records the rest, and commit
   the cassette, the file of recorded answers. To drop answers that nothing asks for any more, delete the file
@@ -389,17 +386,17 @@ scripts/gpu_remote.sh down
 A model does not follow a skill the way a script would, and the prompts and checks are written with that in
 mind:
 
-- **Procedures are plain steps.** A skill's `## Procedure` block is shown to the model as numbered sentences,
+- Procedures are plain steps. A skill's `## Procedure` block is shown to the model as numbered sentences,
   with included skills written out and settings filled in (section 2). Shown the procedure as raw YAML, Gemma
   calls `say` and `governance-checks` as tools.
-- **Conditions are spelled out.** A step says `If <request_review> is given and true:`, because
+- Conditions are spelled out. A step says `If <request_review> is given and true:`, because
   `If <request_review>:` reads as an order. It says `fetch.review_approved is false` instead of `not ...`, and
   `<seo_title> has more than 60 characters` instead of `len(...) > ...`.
-- **Tool results sit on the model's turn.** Gemma was trained with each tool result attached to the turn that
+- Tool results sit on the model's turn. Gemma was trained with each tool result attached to the turn that
   asked for it, and [`chat.py`](../traceeval/llm/chat.py) converts the conversation to that form.
-- **An empty answer gets one reminder.** When the model ends its turn without any text, the backend asks once
+- An empty answer gets one reminder. When the model ends its turn without any text, the backend asks once
   for the answer the step prepared, and the `answered` check fails a run that still ends empty.
-- **The orchestrator is told the rules it would otherwise improvise.** A request that no specialist owns goes
+- The orchestrator is told the rules it would otherwise improvise. A request that no specialist owns goes
   to the agent named by `routing.default_agent`; without that setting, Qwen answers "Hello there" itself.
   Every request is delegated, and a specialist's answer goes to the user as it is. A plan is only for parts
   owned by different specialists. The runtime holds an approval for the steps after it: asked to copy the
@@ -437,14 +434,14 @@ no revealing test (section 7).
 
 The results in `docs/results/gemma7/` come from `runs/gemma7`: Gemma on the current app, with 180 tests, 43
 changes, five repetitions and the model judge. The recording took about two hours on fmi0's GPU0: 31 minutes for
-the baseline, one test at a time, and under two minutes per change with the changed copies run many tests at a time
-(`--workers`). Qwen's recording of the same app (`docs/results/qwen7/`, five repetitions) took about six hours on
-two SLURM GPUs, and gpt-oss's (`docs/results/gptoss7/`) three and a half hours on both of fmi0's GPUs; neither is a
-clean ground truth, for the reasons given below.
+the baseline, one test at a time, and under two minutes per change, because the changed copies run many tests at
+once (`--workers`). Qwen's recording of the same app (`docs/results/qwen7/`, five repetitions) took about six hours
+on two SLURM GPUs, and gpt-oss's (`docs/results/gptoss7/`) three and a half hours on both of fmi0's GPUs; neither
+is a clean ground truth, for the reasons given below.
 
 On the original app 172 of 180 tests pass, 29 of the 34 regressions are revealed and no benign change is, so the
-report's sanity line says VIOLATED for the five below, misses of the model rather than of the testbed, which stay
-in the set:
+report's sanity line says VIOLATED for the five changes below. They are misses of the model, not of the testbed,
+and they stay in the set:
 
 | change | why no test reveals it under Gemma |
 |---|---|
@@ -453,11 +450,12 @@ in the set:
 | `skill_linkval_ignore_assets` | it stops at a broken asset reference even when the skill says it does not block |
 
 Gemma's five runs of each test agree on the original app and disagree on only four (change, test) pairs over all 43
-changes; the majority vote absorbs them, and three repetitions suffice.
+changes; the majority vote absorbs them, and three repetitions are enough.
 
 Qwen's and gpt-oss's recordings are not clean ground truths ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4). The 116
 baseline runs of Qwen's recording that a dropped tunnel broke are left out, so about 110 of its tests have four
-valid baseline runs instead of five. The models are used as they are served, and the results are Gemma's.
+valid baseline runs instead of five. We take the models as they are served, with no re-runs or filtering to make
+them agree with themselves, so the results are Gemma's.
 
 ## 8. Where to look in the code
 

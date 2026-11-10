@@ -26,40 +26,39 @@ traceeval sdd draft --request docs/sdd/draft_example/request.md --id FS-0101 \
 
 A copy of the report is in [`docs/sdd/report.md`](sdd/report.md).
 
-A spec is prose intent plus clauses of five kinds, settings, contracts, trace rules, examples and placement;
+A spec is prose intent plus clauses of five kinds (settings, contracts, trace rules, examples and placement);
 [SDD_GUIDE.md](SDD_GUIDE.md) §3 holds the catalog of templates and §5 the rungs.
 
-## The five requests, chosen for diversity
+## The five requests, one of each kind of change
 
 - **FS-0101 approvals expire after 30 days**: new feature, 4 files (config, workflow service, publish adapters,
-  skill prose), 45 diff lines. It demonstrates:
-  - a **proof** (L5) of the rule for all inputs, which catches a future-dated approval no fixture has
+  skill prose), 45 diff lines. It shows:
+  - a proof (L5) of the rule for all inputs, which catches a future-dated approval no fixture has
   - an off-by-one error
   - the same logic in the wrong layer (placement fails, and the contract cannot find the function in the service)
   - a proven function that is never wired in
   - a correct but branchy implementation that the prover cannot translate, reported *with a gap* because the clause
     requires L5
 - **FS-0102 guarded operations need a *valid* token and record the approver**: security fix, 2 files (permissions
-  service, dispatcher), 13 diff lines. It demonstrates:
-  - the spec first **exposes a weakness of the current code** (any made-up token passes)
+  service, dispatcher), 13 diff lines. It shows:
+  - the spec first finds a hole in the current code: any made-up token passes
   - the property and an example catch a self-approved variant
   - a lookup written inside the harness is caught only by placement
 - **FS-0103 nothing goes live without a clean link check of its current version**: defence in depth, 2 files (links
-  service, workflow service), 22 diff lines. It demonstrates:
-  - the rule moves from a skill procedure (a prompt) into the service and is **proven**
+  service, workflow service), 22 diff lines. It shows:
+  - the rule moves from a skill procedure (a prompt) into the service and is proven
   - a gate that ignores the check's version is missed by 200 random examples and found by the solver
-  - a **temporal** rule (`precedes`) with completeness against the product model
+  - a temporal rule (`precedes`) with completeness against the product model
   - a skill reordering is stopped by the service gate and still rejected
-- **FS-0104 SEO title limit raised to 70**: configuration only, 1 file, 2 diff lines. It demonstrates:
-  - a property over **agent behaviour** (titles of every length)
+- **FS-0104 SEO title limit raised to 70**: configuration only, 1 file, 2 diff lines. It shows:
+  - a property over agent behaviour (titles of every length)
   - boundary examples computed from config
   - a hard-coded constant that only placement tells apart from the correct PR (with Gemma, every FS-0104 PR also
-    fails the title property
-  - see below)
+    fails the title property; see below)
 - **FS-0105 retried publishing writes never duplicate**: bug fix, 2 files (workflow service, publish adapters), 33
-  diff lines. It demonstrates:
+  diff lines. It shows:
   - the spec, quantified over the write tools the publishing skill uses (from the product model:
-    `schedule_publish`, `unpublish_page`, `approve_review`), **finds a latent defect** in the current code
+    `schedule_publish`, `unpublish_page`, `approve_review`), finds a bug that was already in the current code
   - a partial fix is caught by the same quantifier
 
 ## What the report shows per PR
@@ -69,10 +68,9 @@ clauses, the rung each clause reached, and the cost: clause runs, change-selecte
 TRACE-Eval's observed-dependency selection), tokens and seconds. For each request it also shows which checks
 will run and the agent brief ([SDD_GUIDE.md](SDD_GUIDE.md) §6).
 
-The headline numbers are these. The brief is 9–20% of the repository (12% on average), and all 25 verdicts are as
-expected. Every wrong PR is rejected, and the report names the clause, the counterexample or the misplaced code.
-Two rules are proven for all inputs (FS-0101, FS-0103). Two specs find defects in the current app before any PR is
-written (FS-0102, FS-0105).
+The brief is 9–20% of the repository (12% on average), and all 25 verdicts are as expected. Every wrong PR is
+rejected, and the report names the clause, the counterexample or the misplaced code. Two rules are proven for all
+inputs (FS-0101, FS-0103). Two specs find defects in the current app before any PR is written (FS-0102, FS-0105).
 
 ## With Gemma playing the agents
 
@@ -85,7 +83,7 @@ Playing the agents with a model has three consequences.
     DS-INTENTS/i02 and i05 Gemma publishes or schedules without one, so those regression cases fail.
   - Under FS-0104 `pr_config_70`, Gemma applies an over-long title whatever the limit (as in SEO-02). The
     property over title lengths, the boundary scenario and the monitor over the SEO runs all find such a title.
-- Several wrong PRs are caught in additional ways. FS-0101 `pr_in_adapter` and `pr_unwired` let through Gemma's
+- Several wrong PRs are also caught a second way. FS-0101 `pr_in_adapter` and `pr_unwired` let through Gemma's
   scheduling of an unapproved page (PUB-10), which the service version refuses; the monitor catches both.
   FS-0103 `pr_gate_ignores_version` lets through the unchecked publish and schedule of i02 and i05, and the
   `precedes` rule catches it. The wrong FS-0104 PRs fail the title property too, as the correct one does.
