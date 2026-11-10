@@ -36,7 +36,7 @@ repository, in its parent folder: `Agent_Test_Prioritization_Requirements.md`, `
 | shared components, changes to skills, harness and config | yes (ContentOps, 43 controlled changes, ten of them aimed at the workflows) | — |
 | statistical evals over datasets | yes (50 routing items, 24 intent items); pass-rate thresholds per property | — |
 | tests that run several agents from one prompt | **done**: six workflows of two to five specialists (§3.3), each with a variant where a step must stop | — |
-| plans, data passed between agents, approvals, re-planning | **done**: the orchestrator plans (`make_plan`), gives each step its own instruction and the ids of the earlier steps, and asks a person before publishing, scheduling or taking pages down (`request_approval`) | re-planning after a failed step: our routing skill says stop; Qwen re-plans on its own (WF1-02, WF5-02; [EXPERIMENT.md](EXPERIMENT.md) §6). Planned in §4.1 |
+| plans, data passed between agents, approvals, re-planning | **done**: the orchestrator plans (`make_plan`), gives each step its own instruction and the ids of the earlier steps, and asks a person before publishing, scheduling or taking pages down (`request_approval`) | re-planning after a failed step: our routing skill says stop; Qwen re-plans on its own (WF1-02, WF5-02; [EXPERIMENT.md](EXPERIMENT.md) §6). Built on a branch and recorded with three models (§4.1) |
 | workflows as a coverage dimension | **done**: `catalog/workflows.yaml` lists the six; the report shows the workflows no test covers, declared (named by a test) and observed (a recorded run delegates to exactly its agents, in order), and the change coverage gives the share of the affected workflows the executed tests ran | — |
 | a catalog of properties with categories and thresholds | **done**: `traceeval/catalog/properties.yaml`, pass rates against thresholds and property coverage in the report; a model can draft it from the requirements, for people to edit (`traceeval properties draft`; Qwen's draft in §3.4) | — |
 | coverage over agents, features, skills, tools, tool error paths, config, setting values, properties, workflows, paths, risk (declared, observed, required) | **done**: suite coverage per dimension and change coverage per strategy in the report and in `traceeval check`; the method tests every mandatory property a change may affect (§3.5) | — |
@@ -268,42 +268,70 @@ down): covering a change is not revealing it, the case the method is built for.
 The demo on Thursday 12 November 2026 shows the testbed, the features of section 3 and the method on Gemma's
 recording, with one change checked live ([DEMO.md](DEMO.md)). Everything it needs is in place and rehearsed.
 
-One item of section 2 is open: re-planning after a failed step. It changes the orchestrator's instructions, which
-every recorded answer depends on, so it needs a new recording of every model.
+One item of section 2 is open: re-planning after a failed step. It is built and recorded on a branch, and waits
+for one product decision (§4.1).
 
 ### 4.1 Re-planning after a failed step
 
-Adobe's orchestrator re-plans when a step fails. Ours stops (rule 5 of the routing skill). Qwen already re-plans
-on its own in WF1-02 and WF5-02; Gemma does not. Re-planning is useful only within limits a test can check, so
-the plan starts from them.
+Adobe's orchestrator re-plans when a step fails. Ours stops (rule 5 of the routing skill). Re-planning is built on
+the branch `replanning` and recorded there with three models: Gemma, Qwen and gpt-oss-120b. The application in the
+demo does not have it.
 
-- **What may be re-planned.** A step that failed for a reason another specialist can repair without changing what
-  the user asked for: a broken link, a missing meta description, an image without alt text. A refusal stays a
-  stop: a refused approval, a brand or policy violation, a missing permission or consent. Re-planning must never
-  route around a safety check.
-- **How.** The orchestrator calls `make_plan` again, with the repair step before the step that failed, and runs
-  the rest. A setting limits the number of new plans (`routing.max_replans`, 1), and `make_plan` refuses a plan
-  beyond it, so the limit holds even when the model ignores it. Every plan is in the trace and is a `plan` event in
-  the OpenTelemetry export.
+- **What may be re-planned.** Broken links only: the one failure another specialist can repair without changing
+  what the user asked for. The optimizer unlinks them with a new tool, `fix_broken_links`, which checks the
+  permission to edit and writes an audit entry. A refusal stays a stop: a refused approval, a brand or policy
+  violation, a missing permission or consent. Re-planning must never route around a safety check.
+- **How.** When publishing refuses a page for broken links, or a rollback's link check fails, the orchestrator
+  calls `make_plan` again, with the repair before the publication, and runs it (rule 6 of the routing skill). A
+  setting limits the number of new plans (`routing.max_replans`, 1), and `make_plan` refuses a plan beyond it, so
+  the limit holds even when the model ignores it. Every plan is in the trace and is a `plan` event in the
+  OpenTelemetry export.
 - **Tests.** A new expectation, `replans` (the number of `make_plan` calls after the first), and a property,
-  `orchestration_replanning`. WF5-02 (the previous version has a broken link too) and WF2-02/03 (one of the three
-  pages has a broken link) become repair cases: the link is fixed and the pages go out, after the approval. The
-  stops stay as they are and also check that no new plan was made: WF1-02 (brand violation), WF1-03 and WF3-03
-  (refused approval).
-- **Changes for the selection.** The rule widened to refusals (a brand violation gets reworded and published,
-  which WF1-02 should reveal), the limit set to 0 (re-planning off, revealed by the repair cases), `make_plan` no
-  longer enforcing the limit, and a benign rewording of the rule.
-- **Cost.** The routing skill is in every orchestrator prompt, so every recorded answer changes: the replay
-  answers of the test suite, Gemma's recording of the experiment (about an hour) and the recorded live check are
-  all made again, the results in the documents rewritten, and Qwen recorded last. Gemma may not re-plan well; a
-  case it fails becomes a known model mistake, which is a result in itself: re-planning depends on the model, not
-  only on its instructions.
+  `orchestration_replanning`. WF5-02 and WF2-02/03 become repair cases. WF5-03 runs WF5-02 with re-planning
+  switched off: `make_plan` refuses, and the answer names the broken link. OPT-04 asks for the links of a page to
+  be fixed, not for the page to be published. The stops also check that no new plan was made: WF1-02 (brand
+  violation), WF1-03 and WF3-03 (refused approval).
+- **Changes for the selection.** Four regressions: the rule widened to refusals, the limit set to 0, `make_plan` no
+  longer enforcing the limit, and a repair that unlinks internal links only. One benign change: the rule reworded.
+  Gemma and Qwen each reveal all four regressions.
+
+What the recordings show:
+
+| case | expected | Gemma | Qwen | gpt-oss |
+|---|---|---|---|---|
+| WF5-02 | the restored page has a broken link: a new plan fixes it and republishes the page | re-plans | re-plans | stops |
+| WF5-03 | the same with re-planning switched off: the run stops and names the link | right | right | right |
+| WF2-02 | one of three pages is refused for a broken link: a new plan fixes it and publishes it | does not re-plan | re-plans | does not re-plan |
+| WF2-03 | the same, with the broken page ranked first | fails | fails | fails |
+| OPT-04 | the links of a page fixed, the page not published | publishes it | right | right |
+| WF1-02, WF1-03, WF3-03 | a refusal stays a stop, without a new plan | WF3-03 fails | right | WF1-03 and WF3-03 fail |
+| PUB-02, PUB-03, PUB-21 | one page to publish, with a broken link: refused, the link named | right | fixed and published | fixed and published (PUB-02, PUB-03) |
+
+- **Whether the orchestrator re-plans depends on the model more than on the rule.** Qwen follows the rule inside
+  plans, Gemma only after a rollback, and gpt-oss not at all. The limit holds under all three, because `make_plan`
+  enforces it.
+- **The rule changes cases it does not concern.** Under Gemma, the three W3 cases now fail (it takes the pages down
+  without the approval), and AUT-02/03 pass in two runs of three, which is enough for some benign changes to appear
+  to break them. Each wording of the rule that was tried moved some case of this kind.
+- **Qwen and gpt-oss also repair a single publication.** The rule does not limit re-planning to plans. Asked to
+  publish one page that has a broken link, they have the link removed and publish the page, where PUB-02, PUB-03
+  and PUB-21 expect a refusal that names the link. Whether a single request should be repaired or refused is a
+  product decision. If repaired, these become repair cases; if refused, the rule needs a limit that Gemma follows
+  too, and the wording "in a plan" broke the W3 cases under Gemma.
+
+The branch is merged after the demo, once that decision is made. Gemma's known mistakes change with it, and the
+replay answers are recorded again.
+
+gpt-oss-120b, served as [EXPERIMENT.md](EXPERIMENT.md) §4 describes, varies more from run to run than the other two
+models. Tests that pass in all three runs on the original app fail in up to half of their runs on the changed
+copies, so every benign change appears to break a few tests. Three repetitions are too few for it to give a ground
+truth.
 
 ### 4.2 Order
 
 | step | changes the application | new recording | when |
 |---|---|---|---|
-| re-planning after a failed step | yes: the routing skill, one setting, `make_plan` | everything, Gemma first and Qwen last | after the demo |
+| re-planning after a failed step | yes: the routing skill, one setting, `make_plan`, a repair tool | recorded on the branch with three models; everything again once merged, Gemma first and Qwen last | after the demo, once single publications are decided |
 | tau2-bench as a second application | no | its own | after re-planning |
 
 ### 4.3 Limits to mention in the demo
