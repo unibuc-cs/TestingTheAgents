@@ -365,10 +365,8 @@ What the recordings show:
 The branch is merged after the demo, once that decision is made. Gemma's known mistakes change with it, and the
 replay answers are recorded again.
 
-gpt-oss-120b, served as [EXPERIMENT.md](EXPERIMENT.md) §4 describes, varies more from run to run than the other two
-models. Tests that pass on the original app fail on the changed copies, whichever the change, so every benign
-change appears to break a few tests, and five repetitions do not settle its vote
-([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4).
+gpt-oss-120b varies more from run to run than the other two models ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4),
+so its column is the least firm.
 
 ### 4.2 Order
 
@@ -377,21 +375,14 @@ change appears to break a few tests, and five repetitions do not settle its vote
 | re-planning after a failed step | yes: the routing skill, one setting, `make_plan`, a repair tool | recorded on the branch with three models; everything again once merged, Gemma first and Qwen last | after the demo, once single publications are decided |
 | tau2-bench as a second application | no | its own | after re-planning |
 
-### 4.3 Limits to mention in the demo
+### 4.3 Limits
 
-- **Some workflow cases fail under Gemma on the original app**, so they cannot reveal a change under Gemma.
-  WF1-01 schedules the launch page after requesting a review, as in PUB-10. WF5-02 goes on to publishing after the
-  rollback's link check failed, and publishing's own link check refuses the page. WF6-02 stops the whole plan
-  after a refused export, although the byline edits do not depend on it. They show that the ground truth belongs
-  to the model, and WF5-02 shows defence in depth at work. Qwen gets WF1-01 and WF6-02 right, and in WF5-02 it
-  re-plans and has the broken link fixed.
-- **Gemma does not go on with the other pages when one fails inside a step.** With the broken page ranked first
-  (WF2-03), it sends all three pages to publishing in one step, publishing stops at the broken link, and the
-  orchestrator neither republishes the other two nor says so; it claims it did. Only the checks on the final state
-  catch it. WF2-03 replays in the demo ([DEMO.md](DEMO.md) §3).
-- **A one-off difference between runs.** A benign change that a single failing run reveals, or a regression no test
-  reveals, shows as VIOLATED on the report's sanity line. Several repetitions and the majority vote absorb most of
-  it.
+Three limits go with the results. Some tests fail under Gemma on the original app, the model's own mistakes
+([EXPERIMENT.md](EXPERIMENT.md) §6), so they cannot reveal a change; WF2-03 among them, which replays in the demo
+([DEMO.md](DEMO.md) §3). A one-off difference between runs can make a benign change look revealed or a regression
+look invisible, which the report's sanity line shows as VIOLATED; several repetitions and the majority vote absorb
+most of it ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4). And the ground truth belongs to the model: Qwen gets some
+of Gemma's cases right and makes mistakes of its own.
 
 Sources: [Overview of agents in AEM](https://experienceleague.adobe.com/en/docs/experience-manager-cloud-service/content/ai-in-aem/agents/overview),
 [Agentic AI in Experience Cloud](https://experienceleague.adobe.com/en/docs/core-services/interface/features/agentic-ai?lang=en),

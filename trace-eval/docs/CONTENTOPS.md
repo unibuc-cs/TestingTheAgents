@@ -115,19 +115,6 @@ Two skills are shared, for the steps every specialist does the same way:
 Specialists *include* these skills rather than copying them, so a change to a shared skill changes every
 agent that includes it. Test selection has to follow that ripple.
 
-### Where the tools live
-
-| File | Tools |
-|---|---|
-| [`content_tools.py`](../traceeval/sut/tools/content_tools.py) | `search_pages`, `get_page`, `create_page`, `update_page_content`, `set_page_metadata`, `list_versions`, `rollback_page` |
-| [`publish_tools.py`](../traceeval/sut/tools/publish_tools.py) | `validate_links`, `request_review`, `approve_review`†, `publish_page`, `schedule_publish`, `unpublish_page`† |
-| [`asset_tools.py`](../traceeval/sut/tools/asset_tools.py) | `upload_asset`, `search_assets`, `get_asset`, `attach_asset` |
-| [`translation_tools.py`](../traceeval/sut/tools/translation_tools.py) | `create_translation_job`, `get_translation_status`, and also `get_seo_report` |
-| [`governance_tools.py`](../traceeval/sut/tools/governance_tools.py) | `check_permission`, `check_consent`, `export_user_data`†, `get_audit_log` |
-| [`control_tools.py`](../traceeval/sut/tools/control_tools.py) | `route_to_agent`, which the agent loop handles itself and which never reaches the dispatcher; `make_plan` and `request_approval` |
-| [`brand_tools.py`](../traceeval/sut/tools/brand_tools.py) | `get_brand_guidelines`, `check_brand_policy` |
-| [`site_tools.py`](../traceeval/sut/tools/site_tools.py) | `get_page_metrics`, `audit_site`, `fix_alt_text` |
-
 ### One request, step by step
 
 ![One run of a case, end to end](figures/guide_2_run.png)

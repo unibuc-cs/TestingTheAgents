@@ -4,26 +4,14 @@ Read the README first. This guide adds what you need to work inside the reposito
 
 ## 1. Data flow
 
-```mermaid
-flowchart LR
-    T["test catalog"] --> B["run every test K times<br/>on the original app"]
-    B --> H["traces, costs,<br/>pass rates"]
-    M["changes"] --> V["edited copies<br/>of the app"]
-    V --> D["diff → change set"]
-    V --> R["run every test K times<br/>on each copy"]
-    R --> G["which tests fail<br/>under which change"]
-    H --> S["strategy: picks tests from the change set,<br/>the traces, the costs and the pass rates"]
-    D --> S
-    S --> E["execute = look up the recorded outcome<br/>of that test under that change"]
-    G --> E
-    E --> X["metrics → report"]
-```
-
-The terms in the picture are defined in §2.
-The runs are recorded once, with the model on the GPU server, and then replayed thousands of times.
-`runs/<name>/` holds the edited copies (`variants/`), the recordings (`history/*.jsonl`) and the results
-(`results/`). `traceeval check` (`experiment/check.py`) runs the same loop live, for one change. There, "execute"
-runs the test with the model, and a recording supplies only the baseline traces, the costs and the other changes.
+The README's diagram is the whole loop. Every test runs K times (`--reps`) on the original app, with its traces,
+costs and pass rates recorded, and K times on each changed copy, which gives the ground truth. A strategy then
+picks tests from the change set, the traces, the costs and the pass rates, and "executing" a test means looking up
+its recorded outcome under that change. The runs are recorded once, with the model on the GPU server, and replayed
+thousands of times. `runs/<name>/` holds the edited copies (`variants/`), the recordings (`history/*.jsonl`) and
+the results (`results/`). `traceeval check` (`experiment/check.py`) runs the same loop live, for one change: there,
+"execute" runs the test with the model, and a recording supplies only the baseline traces, the costs and the other
+changes.
 
 ## 2. Vocabulary
 
@@ -108,23 +96,15 @@ Everything else is plumbing (loaders, tracing, report).
     passed, followed by the rest in cost-aware order.
 - Section 5 covers the catalog of properties: each property's pass rate on the original app against its
   threshold and, per strategy, the share of the properties a change breaks that the strategy's tests exercised.
-- Section 6 measures coverage ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5).
-  - First the suite. For each dimension (agent, feature, skill, tool, tool error path, configuration, setting
-    value, property, workflow, execution path, risk), it shows how many components the tests declare and the traces
-    show, and what no test covers. A feature (`catalog/features.yaml`) is covered by the tests that declare or call
-    one of its tools, and a table counts the tests per feature. A tool error path is a place in the code where a
-    tool call is refused, reached when a run executes it. A workflow is declared by the tests that name it, and
-    observed when a run delegates to exactly its agents, in order. Then, for each agent, skill, tool and feature,
-    the number of tests that declare it and the number that invoke it in their recorded runs. `traceeval coverage
-    --history runs/gemma7` prints this part in the terminal.
-  - Then each change, without the ground truth (`experiment/coverage.py`): the share of the changed components the
-    executed tests exercised, the share of the properties the change may affect that they checked, how often a run
-    that found no regression tested every affected mandatory property, the share of the affected workflows they
-    ran, and the share of the affected features they reached. The properties a change may affect are those whose
-    `sources` it touches and those of the tests that ran a changed component on the original app. The workflows it
-    may affect are those of the same tests. The features it affects are those with a tool or a part it touches.
-    `traceeval check` prints the same figures, names the refusals in the changed code that no executed test
-    reached, and counts the agents, skills, tools and features its tests invoked.
+- Section 6 measures coverage, first of the suite, then of each change. For the suite: per dimension (agent,
+  feature, skill, tool, tool error path, configuration, setting value, property, workflow, execution path, risk),
+  how many components the tests declare and the traces show, and what no test covers; then, per agent, skill, tool
+  and feature, the tests that declare it and the tests that invoke it (`traceeval coverage --history runs/gemma7`
+  prints this part). For each change, without the ground truth: the share of the changed components the executed
+  tests exercised, of the properties the change may affect that they checked, of the affected workflows they ran
+  and of the affected features they reached, and how often a run that found no regression tested every affected
+  mandatory property. [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5 defines each dimension and what "affected" means;
+  `traceeval check` prints the same figures for the change it checks.
 - `replay.csv` has one row per (change, strategy, budget, seed), for slicing the results yourself.
 
 ## 5. How the adaptive method weighs a test
@@ -192,12 +172,12 @@ match code by line number, so record again after editing the app's code.
 ## 6. The controlled changes
 
 The experiment plants 43 known changes in copies of the app (`mutation/catalog.py`) and measures how well each
-strategy finds them. Of these, 34 are regressions, which at least one test should reveal, and 9 are benign
-changes, which no test should reveal. Each change is in the set for a reason: a kind of change (code, skill,
-prompt, config), a reach (one test or dozens), or a trap for selection. The last column counts the revealing
-tests, those that pass on the original app and fail on the changed copy, in Gemma's recording of the current app
-(`runs/gemma7`: 180 tests, five repetitions). Qwen's recording of the same app is not a clean ground truth
-([EXPERIMENT.md](EXPERIMENT.md) §7), so it has no column.
+strategy finds them. Of these, 34 are regressions, which at least one test should reveal, and 9 are benign changes,
+which no test should reveal. Each change is in the set for a reason: a kind of change (code, skill, prompt,
+config), a reach (one test or dozens), or a trap for selection. The last column counts the revealing tests, those
+that pass on the original app and fail on the changed copy, in Gemma's recording of the current app (`runs/gemma7`:
+180 tests, five repetitions). The other models' recordings are not clean ground truths
+([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4), so they have no column.
 
 | change | what it does | why it is in the set | revealing tests (Gemma) |
 |---|---|---|---|
@@ -272,9 +252,8 @@ criteria a change must meet to be in the set.
   tests), with at most 15 properties (`--max`, up to 20) and 5 per test (`--per-test`), and tags the tests. Edit
   `catalog/properties.draft.yaml`, read `properties.draft.md`, then run `traceeval properties apply`. Thresholds
   and the mandatory flag start from defaults per category, and entries already in the catalog keep what a person
-  wrote (unless `--fresh`). Qwen's draft from the requirements alone is in
-  [properties/draft_qwen/](properties/draft_qwen/); review its tags with care ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md)
-  §3.4).
+  wrote (unless `--fresh`). Qwen's draft is in
+  [properties/draft_qwen/](properties/draft_qwen/) ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.4).
 - **Test**: add a YAML entry. `expect` supports `route_to`, `state` (`[path, op, value]` with `==`, `!=`, `len`,
   `contains`, `in`, `>=`, `<=`, `absent`, `exists`), `tools_required`, `tools_forbidden`, `tools_not_attempted`,
   `tool_attempts`, `tool_results`, `audit`, `response_contains`, `response_excludes`, `max_steps`, `termination`,

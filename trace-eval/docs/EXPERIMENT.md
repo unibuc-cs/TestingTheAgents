@@ -4,48 +4,15 @@ This page explains how the experiment runs the agents on the models: Gemma 4 E4B
 covers where the models run, how the GPU server is wired in, and what to type. Start with sections 1 and 4, and
 look up the rest when you need it.
 
-The diagrams are written in Mermaid, which GitHub draws, and PyCharm too with the Mermaid plugin.
+## 1. Recording, in two minutes
 
-## 1. The idea in two minutes
-
-The research question is easy to state. Someone changes an LLM agent system: a skill, a prompt, a line of
-harness code or a config value. Which tests should we run, and when can we stop, so that we still catch the
-change if it broke something, without paying for the whole test suite every time?
-
-To study that, the repository has four parts:
-
-- **An app with agents.** ContentOps is a small content platform with an orchestrator and specialist agents
-  for publishing, authoring, SEO, assets and other areas. A request that needs several specialists gets a
-  plan, which runs one specialist at a time. Each agent follows a skill, a `SKILL.md` file with a step-by-step
-  procedure, and calls tools. The app's data (pages, users, reviews) lives in memory, so a test can't damage
-  anything, and the harness can inject faults such as a tool that fails once. See [CONTENTOPS.md](CONTENTOPS.md).
-- **Tests.** 180 cases: scenario tests in [`traceeval/catalog/tests/`](../traceeval/catalog/tests/) and dataset
-  items in `traceeval/catalog/datasets/`. Each case gives a request ("Please publish the welcome page") and
-  checks the outcome: was the page published, which tools were called, which facts the answer reports.
-- **Changes.** 43 controlled edits in [`traceeval/mutation/catalog.py`](../traceeval/mutation/catalog.py),
-  each labelled *regression* (it should break something) or *benign* (it should not). For example,
-  `config_seo_title_20` lowers the SEO title limit from 60 to 20 characters.
-- **Selection strategies.** The strategies in [`traceeval/selection/`](../traceeval/selection/) decide which
-  tests to run for a given change.
-
-We run every test several times on the original app and on every changed copy (`--reps`; five in the recording the
-results come from), and record what happened. The majority of the runs decides the outcome. A run the environment
-broke, because the model server or the network did not answer, is marked `INFRA_INVALID` and left out, as if it had
-not been made. That gives the ground truth: which tests fail under which change. After that, comparing the
-strategies costs nothing, because we replay the recordings: strategy X would have run these tests, so it would or
-would not have caught this change, for this many tokens.
-
-```mermaid
-flowchart LR
-    T["Test catalog"] --> B["Run every test<br/>on the original app"]
-    M["Controlled changes"] --> V["Changed copies<br/>of the app"]
-    V --> R["Run every test<br/>on each copy"]
-    B --> H[("Recordings<br/>runs/NAME/history")]
-    R --> H
-    H --> G["Ground truth:<br/>which test reveals which change"]
-    G --> S["Replay the strategies<br/>on the recordings"]
-    S --> P["Report<br/>runs/NAME/results/report.md"]
-```
+The README says what the testbed is. This page is about recording it. Every test runs several times on the original
+app and on every changed copy (`--reps`; five in the recording the results come from), and what happened is
+recorded. The majority of the runs decides the outcome. A run the environment broke, because the model server or
+the network did not answer, is marked `INFRA_INVALID` and left out, as if it had not been made. That gives the
+ground truth: which tests fail under which change. After that, comparing the strategies costs nothing, because we
+replay the recordings: strategy X would have run these tests, so it would or would not have caught this change, for
+this many tokens.
 
 Each agent's decisions come from a model: Gemma 4 E4B, a small open model from Google, Qwen3.8-27B, or
 gpt-oss-120b. Recording costs GPU time, which is why we use the GPU server (section 4). Replaying recorded answers
@@ -184,8 +151,9 @@ PC gets in through one SSH tunnel per model, which uses the same key you log in 
 Runs are repeatable, with one caveat. Decoding is greedy (temperature 0), so the same prompt gives the same
 answer. On vLLM this is nearly exact rather than bit-exact: the batch a request lands in can change the
 floating-point arithmetic slightly. Once in a while that flips a token, and with it the rest of the run. With
-Qwen running many cases at once, tests failed under changes that could not have affected them (section 7). That
-is why a ground truth should come from several repetitions (`--reps 3`, majority vote) rather than one.
+Qwen running many cases at once, tests failed under changes that could not have affected them
+([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4). That is why a ground truth should come from several repetitions
+(`--reps 3`, majority vote) rather than one.
 
 ## 4. The GPU server, step by step
 
@@ -199,8 +167,7 @@ repository root in Git Bash or any other bash shell. It knows three models, call
 | `gptoss` | `openai/gpt-oss-120b` (4-bit weights, about 65 GB), one copy split over both GPUs | 0 and 1 | 18102 | `--backend llm` with `TRACEEVAL_LLM_BASE_URL=http://127.0.0.1:18102/v1` and `TRACEEVAL_LLM_MODEL=openai/gpt-oss-120b` and `TRACEEVAL_LLM_MAX_TOKENS=4096` |
 
 Gemma and Qwen use different GPUs and ports, so both can run at the same time, each with its own experiment.
-gpt-oss needs both GPUs; Gemma and Qwen then run on the SLURM cluster. It reasons before it answers, so it
-needs more room per answer than the default 700 tokens.
+gpt-oss needs both GPUs; Gemma and Qwen then run on the SLURM cluster.
 
 ### What lives where
 
@@ -239,7 +206,7 @@ traceeval check skill_routing_drop_approval --history runs/qwen7 --backend llm
 scripts/gpu_remote.sh up gptoss
 export TRACEEVAL_LLM_BASE_URL=http://127.0.0.1:18102/v1 TRACEEVAL_LLM_MODEL=openai/gpt-oss-120b
 export TRACEEVAL_LLM_MAX_TOKENS=4096
-traceeval experiment --backend llm --workdir runs/gptoss --reps 3
+traceeval experiment --backend llm --workdir runs/gptoss7 --reps 5
 
 scripts/gpu_remote.sh down      # stop every server and close the tunnels: frees the GPUs
 scripts/gpu_remote.sh down qwen # or just one of them
@@ -351,10 +318,10 @@ with the same options.
 - **`report`** writes `runs/gemma7/results/report.md`. Its first section is the sanity check: every
   regression must be revealed by at least one test, and no benign change by any.
 
-`--reps 1` is good for a first look. For a ground truth you'll rely on, use `--reps 3`. Greedy decoding on
-vLLM is not perfectly repeatable (section 3), and the majority vote over the repetitions takes care of that: for
-Gemma, a recording with three repetitions reproduces the five-repetition ground truth of section 7 on all but two
-(change, test) labels. For a model whose answers vary more, no number of repetitions settles it (section 7).
+`--reps 1` is good for a first look. For a ground truth you'll rely on, use `--reps 3`. Greedy decoding on vLLM is
+not perfectly repeatable (section 3), and the majority vote over the repetitions takes care of that for Gemma
+(section 7). For a model whose answers vary more, no number of repetitions settles it
+([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4).
 
 The work folder is git-ignored; to keep a run, copy its `results/` into `docs/results/`. It holds:
 
@@ -516,60 +483,15 @@ set:
 | `config_seo_title_20`, `skill_seo_drop_length_guard` | it applies an over-long title whatever the limit (SEO-02) |
 | `skill_linkval_ignore_assets` | it stops at a broken asset reference even when the skill says it does not block |
 
-Gemma's five runs of each test agree on the original app, and disagree on only four (change, test) pairs over all
-43 changes. The majority vote absorbs them. A second recording with three repetitions, whose report is not kept,
-reproduces it: runs that agree on every test of the original app, five disagreeing pairs, no benign change
-revealed, the same revealing sets for 41 of the 43 changes, the other two differing by one test each at the
-majority line, and the strategies' numbers within a few points of the table below. Three repetitions suffice for
-Gemma.
+Gemma's five runs of each test agree on the original app and disagree on only four (change, test) pairs over all 43
+changes; the majority vote absorbs them. A second recording with three repetitions, whose report is not kept,
+reproduces this ground truth on all but two (change, test) labels, so three repetitions suffice for Gemma.
 
-Qwen's recording is spoiled as a ground truth by how the model is served, and five repetitions do not mend it.
-Its runs disagree on 357 (change, test) pairs. Every benign change is revealed by three to six tests under the
-majority over five runs and by two to four under the first three, although a benign change should break nothing;
-the two votes differ on 75 pairs. Seven tests carry the variation: PUB-20, which Qwen judges itself, the
-60-character boundary SEO-05, four long workflows (WF2-01, WF2-02, WF4-02, WF5-02) and AUT-05. PUB-20 and SEO-05
-pass one at a time, as the baseline runs, and fail in most batched runs, as the changed copies run, the empty
-change `benign_code_comment_docstring` included. The cause is the one section 3 describes: greedy decoding on vLLM
-is repeatable only up to batching, and the baseline runs one test at a time, for code coverage, while the
-changed copies run 64 at a time. A larger model is not automatically a cleaner ground truth. Every regression is
-revealed, 29 of the 34 by a test outside those seven, but so is every benign change, so Qwen's strategy numbers
-are not reported as results. The 116 baseline runs that a dropped tunnel broke are left out, so about 110 tests
-have four valid baseline runs instead of five.
-
-Two remedies fall short. vLLM's batch-invariant mode, which makes greedy decoding exactly repeatable, does not
-support Qwen3.8: the server refuses it for the model's linear-attention layers ("not supported for GDN_ATTN").
-Recording the baseline the same way as the changes is not enough either. With the empty change as the reference,
-recorded exactly like the others, every one of the eight other benign changes still has two to five tests that
-fail where the reference passes, WF4-01 and WF5-02 in nearly all of them. Some of Qwen's answers therefore vary
-from run to run even under identical conditions. Like Gemma, Qwen is used as it is served. Its recording stands
-as this finding, and the results are Gemma's.
-
-gpt-oss-120b, OpenAI's open-weights model, served as one copy over both of fmi0's GPUs, passes 153 tests on the
-original app and varies more than Qwen. Five repetitions do not settle its vote either: every benign change is
-revealed by two to five tests under the majority over five runs, by one to four under the first three, and the
-two votes differ on 95 (change, test) pairs. Thirteen tests carry the variation, mostly the long workflows:
-WF1-01 and WF1-03 pass one at a time on the original app and fail on nearly every changed copy, 32 at a time,
-the empty change included; with the empty change as the reference, the eight other benign changes still flip one
-to four tests. Its recording is not used for results either ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4).
-
-The table below compares the strategies at a budget of 20% of the full suite's tokens, on the 29 regressions
-Gemma reveals. The full tables are in [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.1 and in the report.
-
-| strategy | detected | tokens spent |
-|---|---|---|
-| `declared` (hand-written dependencies) | 62% | 7% |
-| `observed` (dependencies from traces) | 86% | 15% |
-| `ir_tfidf` (text similarity to the diff) | 93% | 20% |
-| `casper_slices` (CASPER, reproduced) | 59% | 20% |
-| `risk_aware_ts` (Risk-Aware Adaptive Evaluation, reproduced) | 57% | 20% |
-| `adaptive_bayes` (the proposed method) | 78% | 3% |
-
-Hand-written dependencies miss what shared skills, harness code and configuration keys reach, and traces recover
-most of it. The two published methods reproduced as baselines look at the traces and the outcomes but not at the
-diff, and detect 59% and 57% of the regressions at a 20% budget, where a random order detects 56%. The adaptive
-method leaves most of the budget unspent. It also discounts a test by its failures on the original app, while the
-other strategies treat those failures as if the change had caused them. On the changes no test reveals, `full` does
-this in 72% of its replays and `ir_tfidf` in 71%; the adaptive method does it in none.
+Qwen's and gpt-oss's recordings are not clean ground truths: every benign change appears revealed by a few tests,
+because some answers differ between the baseline, run one test at a time, and the changed copies, run many at a
+time, and some vary even under identical conditions. The 116 baseline runs of Qwen's recording that a dropped
+tunnel broke are left out, so about 110 of its tests have four valid baseline runs instead of five. The analysis is
+in [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4; the models are used as they are served, and the results are Gemma's.
 
 ## 8. Where to look in the code
 

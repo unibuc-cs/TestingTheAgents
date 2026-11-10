@@ -1,7 +1,8 @@
 # The documentation
 
 Start with the repository [README](../README.md): the question, the pieces, how to run it, the main results. Then
-pick by what you want to do.
+pick by what you want to do. The diagrams are Mermaid, which GitHub draws, and PyCharm too with the
+Mermaid plugin.
 
 ## By what you want to do
 

@@ -1,7 +1,7 @@
 # TRACE-Eval
 
-After a change to an LLM agent system (a skill, a prompt, harness code, a config key), which tests should run, in
-what order, and when can we stop? The aim is to spend fewer tokens and less time and still catch regressions.
+After a change to an LLM agent system (a skill, a prompt, the agent runtime, a config key), which tests should run,
+in what order, and when can we stop? The aim is to spend fewer tokens and less time and still catch regressions.
 
 This repository is a testbed for that question: a small, working multi-agent application whose agents are played by
 a model, a catalog of tests, a set of controlled changes with known effects, and nine selection strategies, one of
@@ -32,10 +32,9 @@ flowchart LR
   and one config file. The agents are played by a model: Gemma 4 E4B by default, Qwen3.8-27B or gpt-oss-120b
   through an OpenAI-compatible endpoint. [docs/CONTENTOPS.md](docs/CONTENTOPS.md) describes it.
 - **The tests** live in [`traceeval/catalog/`](traceeval/catalog/) as YAML. Each has a request, a context and
-  deterministic checks on the final state, the tool calls and the answer; two also have their answer judged by a
-  model against a rubric. Each test names the properties it checks, ids from the catalog of properties
-  ([`properties.yaml`](traceeval/catalog/properties.yaml)): a behavioural requirement with a category, how it is
-  checked, a mandatory flag and a threshold.
+  checks on the final state, the tool calls and the answer. Each test names the properties it checks, ids from a
+  catalog of properties ([`properties.yaml`](traceeval/catalog/properties.yaml)): behavioural requirements such as
+  "a page is never published with broken links", some of them mandatory.
 - **A traced run** of every test on the current app records, per test, the components it touched (agents, skills,
   tools, config keys, code lines), its cost in tokens and its pass rate. These are its observed dependencies, as
   opposed to the declared ones its author wrote.
@@ -46,15 +45,12 @@ flowchart LR
   repetitions. A change is a regression when at least one test reveals it.
 - **The strategies** in [`traceeval/selection/`](traceeval/selection/) pick tests under a token budget from the
   change set, the traces, the costs and the pass rates, and from the outcomes of the other recorded changes. They
-  never see the outcome of the change under evaluation. [`strategies.py`](traceeval/selection/strategies.py) holds
-  the baselines, [`reproduced.py`](traceeval/selection/reproduced.py) two published methods reproduced (CASPER's
-  slices and Risk-Aware Adaptive Evaluation's bandit, neither of which reads the diff;
-  [docs/REFERENCES.md](docs/REFERENCES.md)), and [`adaptive_bayes.py`](traceeval/selection/adaptive_bayes.py) the
-  proposed method, with two variants that compare text measures and one without its mandatory-coverage rule.
-- **The report** shows, per strategy, how many regressions it catches for how many tokens and how much time, how
-  many of the changes that break a safety property it catches, what it spends on changes that break nothing, and
-  whether the adaptive method stops at the right moment. It also gives the coverage of the suite and of each
-  change.
+  never see the outcome of the change under evaluation. Six are baselines, two are published methods reproduced
+  (CASPER's slices and Risk-Aware Adaptive Evaluation's bandit, neither of which reads the diff;
+  [docs/REFERENCES.md](docs/REFERENCES.md)), and `adaptive_bayes` is the proposed method.
+- **The report** compares the strategies: the regressions caught for the tokens and the time spent, the changes
+  that break a safety property, what is spent on changes that break nothing, whether the adaptive method stops at
+  the right moment, and the coverage of the suite and of each change.
 
 ## Run it
 
@@ -69,7 +65,8 @@ traceeval sdd --workdir runs/sdd                            # spec-driven develo
 
 Recording an experiment needs the model, served from the GPU server (see
 [docs/EXPERIMENT.md](docs/EXPERIMENT.md)) or from a local GPU with `--backend hf`. `--backend vllm` runs Gemma and
-`--backend llm` runs Qwen or gpt-oss.
+`--backend llm` runs Qwen or gpt-oss, or any other OpenAI-compatible endpoint; the models are used as they are
+served, decoding greedily.
 
 ```bash
 scripts/gpu_remote.sh up gemma
@@ -93,10 +90,9 @@ method what each test costs and which code it runs.
 
 The results come from Gemma's recording of the current app (`runs/gemma7`: 180 tests, 43 changes, five repetitions
 per test). Of the 34 regressions, 29 are revealed by at least one test. Gemma ignores the other five either way: it
-behaves the same with or without the change. No benign change, one meant to break nothing, fails a test. A second
-recording with three repetitions reproduces this ground truth on all but two (change, test) labels
-([docs/EXPERIMENT.md](docs/EXPERIMENT.md) §7). The table gives the share of those 29 that each strategy detects
-with a nominal budget of 20% of the full-suite tokens, and what it actually spends:
+behaves the same with or without the change. No benign change, one meant to break nothing, fails a test. The table
+gives the share of those 29 that each strategy detects with a nominal budget of 20% of the full-suite tokens, and
+what it actually spends:
 
 | strategy | detected | tokens spent | time spent |
 |---|---|---|---|
@@ -115,45 +111,30 @@ The two reproduced methods look at the traces and the outcomes but not at the di
 and the change-aware strategies. The full numbers are in the [Gemma report](docs/results/gemma7/report.md), and the
 take-aways of the experiments in [RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.5.
 
-Qwen3.8-27B's recording of the same app is not a clean ground truth, and five repetitions do not mend it. It
-records every benign change as revealed by three to six tests, for two reasons. Seven tests answer differently when
-run 64 at a time than when run one at a time: one of the two cases it judges against a rubric, the one at the SEO
-title's length limit, four long workflows and one more. And some of its answers vary from run to run even under
-identical conditions. gpt-oss-120b, a third model, varies even more. The models are used as they are served, so
-these recordings are reported as a finding rather than as results ([EXPERIMENT.md](docs/EXPERIMENT.md) §7).
+Qwen3.8-27B's and gpt-oss-120b's recordings of the same app are not clean ground truths: some of their answers vary
+from run to run and with batching, so every benign change appears revealed by a few tests. The models are used as
+they are served, so these recordings are reported as a finding rather than as results
+([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.4).
 
-## Features asked for by Adobe's AEM team
+## Built for Adobe's AEM team
 
 The AEM team (Adobe Experience Manager, Adobe's content management system) listed what they lack today and want in
-the prototype. Their requirements and follow-up questions are summed up in
-[docs/AEM_ALIGNMENT.md](docs/AEM_ALIGNMENT.md), together with the plan and its status.
-
-| feature | status |
-|---|---|
-| Catalog of properties, each with a category, how it is checked, a mandatory flag and a threshold ([`properties.yaml`](traceeval/catalog/properties.yaml)). Reports give pass rates against the thresholds and the share of affected properties each strategy covered | done |
-| Drafting the catalog with a model, from the requirements only (skills' rules, agents, config guards, specs) and within fixed limits, for people to edit: `traceeval properties draft`, then `apply` | done; Qwen's draft is in [`docs/properties/draft_qwen/`](docs/properties/draft_qwen/) |
-| Coverage from several angles, in the report and in `traceeval check`. For the suite: each dimension (agents, features, skills, tools, tool error paths, config, setting values, properties, workflows, execution paths, risk), declared and observed, with what no test covers, and per agent, skill, tool and feature the tests that declare it and the tests that invoke it (`traceeval coverage`). For each change: the changed components exercised, the affected properties checked, the affected workflows run, the affected features reached and the refusals in the changed code reached | done |
-| Mandatory properties in the method: while the budget allows, a run that has found no regression does not end until every mandatory property the change may affect has been tested | done (`adaptive_bayes`) |
-| Test selection, prioritization and stopping under a token budget | done (`adaptive_bayes`, `traceeval check`) |
-| Per-test metadata: agents, skills, tools, config, workflow, risk, cost, history (declared and observed) | done |
-| Trace assertions: final state, required and forbidden tools, attempts, audit, step limit, agent order, tool order | done |
-| Workflows, where one prompt runs 2–5 agents. The orchestrator plans, passes each step its instruction and the ids of earlier steps, asks a person before publishing, scheduling or taking pages down, and stops at a failed step | done: six workflows of two to five agents (campaign launch, site optimization, legal takedown, localized price update, rollback of a broken release, privacy request), each with a variant where a step must stop |
-| Agents modelled on AEM's: brand governance, data insights, site optimization, and asset search in the assets agent | done |
-| Environment failures kept apart. A run broken by the model server or the network is marked `INFRA_INVALID` and left out of pass rates and replays, so it never counts against the agent. `traceeval check` stops instead of giving a verdict | done |
-| OpenTelemetry export of traces (`traceeval run --otel`), with the plan, the routing decisions and the approvals as span events | done |
+the prototype, and the testbed has it: a catalog of properties with categories, mandatory flags and thresholds,
+which a model can draft from the requirements for people to edit; coverage of the suite and of each change over
+agents, features, skills, tools, tool error paths, settings, properties, workflows and risk; mandatory properties
+as a stopping rule; selection, prioritization and stopping under a token budget; per-test metadata and trace
+assertions; six workflows of two to five agents with plans, approvals and a step that must stop; agents modelled on
+AEM's; environment failures kept apart from the agents' failures; and OpenTelemetry export of the traces.
+[docs/AEM_ALIGNMENT.md](docs/AEM_ALIGNMENT.md) checks each requirement and holds the follow-up questions and the
+next steps.
 
 ## Spec-driven development on the same testbed
 
-`traceeval sdd` checks 25 pull requests against five change requests written as machine-checkable specs, kept in
-[`traceeval/specs/`](traceeval/specs/). Each spec is built from clauses picked from a
-[catalog of templates](traceeval/spec/catalog.yaml). Two of the pull requests are the unchanged code, which the
-specs check as it stands. The others change one to four files. The command writes an evidence report: which
-clause failed, the counterexample or the misplaced code, the level of assurance reached and the level required
-(from example-tested up to proven), and what a coding agent had to read and run. `traceeval sdd draft` has a
-model draft a spec from a prose request, for a person to confirm.
-
-Start with [docs/SDD_GUIDE.md](docs/SDD_GUIDE.md) if you are new to spec-driven development, or with
-[docs/SDD_DEMO.md](docs/SDD_DEMO.md) for the results. The report is in [docs/sdd/report.md](docs/sdd/report.md).
+`traceeval sdd` checks 25 pull requests against five change requests written as machine-checkable specs
+([`traceeval/specs/`](traceeval/specs/)) and writes an evidence report: which clause failed and with what
+counterexample, and the level of assurance reached, from example-tested up to proven. `traceeval sdd draft` has a
+model draft a spec from a prose request, for a person to confirm. [docs/SDD_GUIDE.md](docs/SDD_GUIDE.md) explains
+the layer and [docs/SDD_DEMO.md](docs/SDD_DEMO.md) has the results.
 
 ## How to read the documentation
 
@@ -163,6 +144,3 @@ to work in the repository, [docs/EXPERIMENT.md](docs/EXPERIMENT.md) to record wi
 [docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) for the research, [docs/AEM_ALIGNMENT.md](docs/AEM_ALIGNMENT.md) for
 Adobe's requirements and [docs/DEMO.md](docs/DEMO.md) for the walkthrough. Each document uses only what the ones
 before it define. [CLAUDE.md](CLAUDE.md) holds the conventions for coding agents working in the repository.
-
-The models are used as they are served, decoding greedily. The `llm` backend takes any OpenAI-compatible endpoint,
-OpenAI's own API included.

@@ -3,8 +3,8 @@
 This is the walkthrough for the demo to the AEM team. Every command runs from the repository root in a terminal,
 with the documents open next to it. Commands marked *replay* need no model.
 Commands marked *live* need Gemma on the GPU server, started an hour before with `scripts/gpu_remote.sh up gemma`.
-Section 4 says what to do if the server is down. The limits worth mentioning, and what comes after the demo, are
-in [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4.
+Section 4 says what to do if the server is down. What comes after the demo is in
+[AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4.
 
 ## Before the demo
 
@@ -22,24 +22,17 @@ Open these in the editor: `docs/CONTENTOPS.md` (the figure), `traceeval/catalog/
 
 ## The terms used below
 
-- A **test** (or case) is one entry of the catalog: a request, a context and checks on the final state, the tool
-  calls and the answer. It names the **properties** it checks, ids from the catalog of properties.
-- A **change** is one of the controlled edits to a copy of the app; its **change set** is the components the diff
-  touches (code lines and functions, skill procedures and prose, agent fields, config keys).
-- A test **reveals** a change when it passes on the current app and fails on the changed copy, by majority over
-  the recorded runs. The revealing tests of a change are its ground truth, measured after the fact; no strategy is
-  told.
-- A **strategy** decides which tests to run under a **budget** of tokens, from the change set, the traces of the
-  current app, the costs and the pass rates. The strategies are described one by one at the end of this
-  document, and the results after them.
+Test, property, change, change set, "reveals", strategy and budget are the README's terms
+([USER_GUIDE.md](USER_GUIDE.md) §2 lists them). The strategies are described in
+[RESEARCH_PLAN.md](RESEARCH_PLAN.md) §3 and the results in its §5.
 
 ## 1. The question (2 minutes)
 
 Say it in one sentence: after a change to an agent system (a skill, a prompt, harness code, a config key), which
 tests should run, in what order, and when can we stop, so that we spend fewer tokens and still catch regressions.
 
-Then show the README's table "Features asked for by Adobe's AEM team": the catalog of properties, coverage from
-several angles, per-test metadata, trace assertions, workflows, agents modelled on AEM's, budgets with early
+Then show the table of requirements in [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §2: the catalog of properties, coverage
+from several angles, per-test metadata, trace assertions, workflows, agents modelled on AEM's, budgets with early
 stopping, and OpenTelemetry. The next 18 minutes show everything the table marks as done.
 
 ## 2. The application and one test (3 minutes)
@@ -122,18 +115,7 @@ test by its sensitivity to that component, calibrated on the other recorded chan
 test per token first, updates after each outcome, and stops at the first failure of a test that passed on the
 original app.
 
-```mermaid
-flowchart LR
-    CS["change set"] --> S["sensitivity of every test<br/>to each changed component"]
-    H["the recording: traces, costs,<br/>pass rates, the other changes"] --> S
-    S --> P["pick the most informative<br/>test per token"]
-    P --> R["run it on the changed app"]
-    R --> U["update P(something broke)"]
-    U --> P
-    R -->|"a test that used to pass fails"| REG["REGRESSION"]
-    U -->|"P(something broke) small"| M["test every mandatory property<br/>the change may affect"] --> CL["no regression"]
-    P -->|"budget spent"| B["no regression found<br/>within the budget"]
-```
+The loop is pictured in [USER_GUIDE.md](USER_GUIDE.md) §5, which can stay open on screen.
 
 What the check prints:
 
@@ -199,9 +181,10 @@ current app:
   for instance, is declared by 37 tests and invoked by 17, because the routing datasets stop at the hand-off.
   `traceeval coverage --history runs/gemma7` prints the same in the terminal.
 
-Mention one finding: the mandatory-coverage rule is what catches `skill_publish_drop_link_validation`. Without
-the rule, the method calls that change clean. With it, the method must test the mandatory "no broken publish"
-property before stopping, and that test fails.
+Mention one finding: the mandatory-coverage rule is what catches `skill_publish_drop_link_validation`. Without the
+rule, the method calls that change clean. With it, the method must test the mandatory "no broken publish" property
+before stopping, and that test fails. The reading of the results by research question is
+[RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.1, and the take-aways its §5.5.
 
 ## 6. The catalog of properties, drafted by a model (1 minute)
 
@@ -235,21 +218,15 @@ cases:
   with or without the change, is a fact about the model, and the report says which changes these are. The
   ground truth is Gemma's: five repetitions per test and a majority vote. A second recording with three
   repetitions reproduces it on all but two (change, test) labels.
-- *Why are some workflow tests red?* They are Gemma's own mistakes on the original app, not faults of the testbed.
-  In WF1-01 it schedules the launch page right after requesting a review, without waiting for the approval, the
-  same mistake as in PUB-10. In WF5-02 it goes on to publishing after the rollback's link check failed, and
-  publishing's own link check refuses the page: defence in depth. In WF6-02 it stops the whole plan after a refused
-  export, although the byline edits do not depend on it. A test the model already fails cannot reveal a change,
-  which is why the method discounts it. Qwen gets WF1-01 and WF6-02 right. In WF5-02 and WF1-02 it re-plans, as
-  Adobe's Agent Orchestrator does: it has the broken link fixed, or rewrites the page that failed the brand check,
-  and goes on.
-- *Why only Gemma's numbers?* Qwen's recording of the same app is not a clean ground truth. Seven of its tests
-  answer differently when run 64 at a time than when run one at a time, so even a change that alters nothing
-  appears to break them. A larger model does not automatically give a cleaner ground truth: some of Qwen's answers
-  vary from run to run, and vLLM, the model server, has a switch for repeatable decoding that does not support
-  Qwen3.8. gpt-oss-120b, a third model, varies even more, and five repetitions settle neither model's vote. The
-  models are used as they are served. The lesson for Adobe is to measure first how much the answers vary under the
-  real serving setup ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4).
+- *Why are some workflow tests red?* They are Gemma's own mistakes on the original app, not faults of the testbed:
+  it schedules the launch page right after requesting a review (WF1-01), goes on to publishing after the rollback's
+  link check failed (WF5-02) and stops a whole plan after a refused export (WF6-02); [EXPERIMENT.md](EXPERIMENT.md)
+  §6 lists them. A test the model already fails cannot reveal a change, which is why the method discounts it.
+- *Why only Gemma's numbers?* Qwen's and gpt-oss's recordings of the same app are not clean ground truths: some of
+  their answers differ between a test run alone and in a batch, and some vary from run to run, so even a change
+  that alters nothing appears to break a few tests. A larger model does not automatically give a cleaner ground
+  truth. The lesson for Adobe is to measure first how much the answers vary under the real serving setup
+  ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4).
 - *How would this run at Adobe?* Nightly full-suite runs provide the recordings the method learns from. For each
   change, `traceeval check` selects the tests, orders them and decides when to stop. The traces are OpenTelemetry,
   and the catalog of properties maps onto the metrics of DeepEval, the evaluation library the AEM team uses.
@@ -259,128 +236,6 @@ cases:
 
 ## Questions for the AEM team
 
-Their answers decide what comes next ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §9 keeps the list):
-
-- Should a single publish request for a page with a broken link be repaired or refused? Re-planning waits for this
-  answer ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4.1).
-- Is the diff available per pull request or per nightly batch, and are skills, prompts and settings versioned
-  together with the harness code? The change sets assume one tree.
-- Are the traces of the nightly runs kept: tool calls, skills loaded, settings read? The observed dependencies need
-  one traced run per test.
-- Which properties block a release, and which are judged by a model?
-- Is a budget counted in tokens, in time or both, per change or per night? Is a partial run that ends with "nothing
-  broke, with probability p" acceptable?
-
-## The methods, one by one
-
-Each strategy answers the same question, which tests to run on the changed app and in what order, from the same
-inputs: the recording of the current app (traces, costs, pass rates) and the change set. None sees the ground
-truth. The names are those of the report; the formulas are in [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §3 and the paper
-draft in `docs/paper/`.
-
-- `full` runs the suite in catalog order, that is, as the tests are listed in `catalog/tests/*.yaml`, followed
-  by the dataset items. It is the reference, not a method.
-- `random` runs it in a random order, the baseline every method must beat.
-- `declared` runs only the tests whose hand-written metadata names a changed component, riskiest first. This is
-  classic regression test selection on what the authors declared, and the metadata is incomplete on purpose, as it
-  is in practice.
-- `ir_tfidf` ranks every test by how much its text (name, request, expectations) resembles the diff, with words
-  weighted by TF-IDF so that a word every test uses counts little. It is information-retrieval prioritization (as
-  in REPiR, listed in [REFERENCES.md](REFERENCES.md)) and uses no traces.
-- `observed` runs only the tests whose recorded traces touched a changed component (an agent, a skill, a tool, a
-  setting read, a code line executed), ordered by how often they touched it times their risk, divided by cost. This
-  is the trace-informed selection the project argues for.
-- `cost_aware` ranks the whole suite by risk, closeness to the change, failure history and cost, affected tests
-  first and cheap ones before expensive ones. It never stops early, so it always spends the budget.
-- `casper_slices` reproduces CASPER. It groups the tests into slices that behave alike on the current app (tool
-  calls, hand-offs, skills, size of the run), runs two representatives of every slice on the changed app, and then
-  runs first the slices whose representatives failed more than before. It does not read the diff.
-- `risk_aware_ts` reproduces Risk-Aware Adaptive Evaluation. It is a bandit: after each test it refits a model of
-  which tests fail, draws a failure probability for every test still to run, and runs the one whose draw times its
-  risk is highest. It does not read the diff either, and any failure counts as a find.
-- `adaptive_bayes` is the proposed method. For every changed component it keeps the probability that the component
-  is broken, and for every test the probability that the test fails if it is, calibrated on the other recorded
-  changes and on the test's own record. It runs the test with the most information per token, updates after each
-  outcome, stops at the first failure of a test that passed on the current app, or when the probability that
-  anything is broken is small, and before ending without a regression it runs a test of every mandatory property
-  the change may affect. It is the only strategy that stops, and the only one with a verdict.
-
-## What the results say
-
-A test reveals a change when it passes on the current app and fails on the changed copy, by majority over the five
-runs of each; the revealing tests of a change are its ground truth, measured after the fact and never shown to a
-strategy. The report compares the strategies on Gemma's recording: 29 regressions that at least one test reveals,
-14 changes that none does (nine benign, five that Gemma cannot see), seven budgets from 2% to 100% of the suite's
-tokens, five replay seeds.
-
-- *Hand-written metadata is not enough.* `declared` tops out at 62% of the regressions however large the budget,
-  because shared skills, harness code and most settings are reached without being declared. The traces recover
-  that: `observed` reaches 86% at a 20% budget and everything at 100%.
-- *The diff is worth a lot.* The two methods that ignore it, CASPER's slices and the bandit, find 59% and 57% at
-  20%, close to a random order's 56%; the strategies that read it find 78% to 93%. Their first revealing test comes
-  after 12% to 14% of the suite's tokens, against 2% to 6% for the change-aware strategies. The tests were written
-  for the app, not for the changes, and the changes were written to resemble real regressions; which test reveals
-  which change was measured afterwards, and no strategy is told.
-- *Text alone is strong, but spends everything.* TF-IDF over the diff has the best detection at 20% (93%) and the
-  best over the changes that break a safety property (all of them), and it always spends the whole budget, on
-  benign changes too. The adaptive method reaches 78% for 3% of the tokens, and 74% already at a 5% budget, where
-  TF-IDF is at 69%.
-- *Stopping is what saves tokens, and it has a price.* The adaptive method returns the budget: 3% of the suite
-  spent on regressions, a tenth on benign changes at a 20% budget and a fifth at 100%. Its ceiling is 81%, because
-  on a change that only one to five tests reveal it can become confident nothing broke before reaching them. The
-  mandatory rule lowers that risk for the safety properties: before calling a change clean it tests every mandatory
-  property the change may affect, for under one extra test per change, and on this app that is what catches the
-  publishing skill without its link check.
-- *Red tests on the current app mislead the others.* Eight tests fail on the current app, Gemma's own mistakes, and
-  fail on nearly every changed copy too. A strategy that runs one sees a failure the change did not cause: on the
-  14 changes no test reveals, this happens to `full` in 72% of its replays, to the bandit in 76%, to CASPER's
-  slices in 57% and to the adaptive method in none, because it discounts a test by its failures on the current app
-  and stops only on a test that used to pass.
-- *The order is good, not only the stopping.* Read as a plain order with no stopping, the adaptive method has the
-  highest cost-weighted APFD, the share of the revealing tests found as the order proceeds, weighted by the tokens
-  spent ([USER_GUIDE.md](USER_GUIDE.md) §4): 0.81, against 0.54 for random and 0.76 to 0.79 for the other
-  change-aware strategies; and the earliest first detection (1.7% of the suite's tokens).
-- *Where the ground truth comes from.* Gemma's five runs agree on all but four (change, test) pairs over the 43
-  changes; Qwen's and gpt-oss's answers vary too much from run to run for the same majority rule, and five
-  repetitions settle neither vote, which is why only Gemma's numbers are reported.
-
-## Take-aways
-
-What the experiments say, in the order a team would act on them. The numbers are Gemma's, at a budget of 20% of the
-suite's tokens unless said otherwise.
-
-1. **Record traces; do not maintain a map.** Hand-written dependency metadata finds 62% of the regressions at any
-   budget, because shared skills, harness code and settings are reached without being declared. Dependencies read
-   from traces find 86%, and everything at 100%. One instrumentation of the agent runtime (the testbed exports
-   OpenTelemetry spans) replaces a test-to-component map that nobody keeps current.
-2. **Read the diff.** The strategies that read the diff and the traces find 78% to 93% of the regressions,
-   hand-written dependencies alone 62%; the two that do not read the change, CASPER's slices and the risk-aware
-   bandit, find 59% and 57%, near a random order's 56%, and their first revealing test comes after 12% to 14% of
-   the suite's tokens instead of 2% to 6%.
-3. **Stop when confident, with a safety net.** The adaptive method finds 78% for 3% of the tokens and returns the
-   rest. Its ceiling is 81%: on a regression that one to five tests reveal it can stop too early. The mandatory
-   rule covers the safety properties for under one extra test per change, and on this app catches the publishing
-   skill without its link check, which the stopping rule alone misses. The catalog of properties is where that
-   policy lives: whoever sets the mandatory flag decides what the pipeline never skips.
-4. **Discount the tests the model already fails.** Eight tests fail on the current app, and on nearly every changed
-   copy. On the 14 changes no test reveals, every other strategy reports a failure the change did not cause in 57%
-   to 94% of its replays; the adaptive method in none, because it keeps each test's pass rate on the current app
-   and acts only on a flip. A pipeline should do the same rather than treat every red test as a regression.
-5. **Measure the model's noise before trusting a verdict.** Gemma's five runs agree on every test of the current
-   app and disagree on four (change, test) pairs over the 43 changes, and a second recording with three repetitions
-   reproduces its ground truth on all but two labels; Qwen's disagree on 357 and gpt-oss's on 577, both "reveal"
-   every benign change, and five repetitions settle neither vote. The baseline runs one test at a time and the
-   changed copies in batches, and that alone flips some tests; the rest varies under identical conditions. An empty
-   change, recorded like the others, measures the noise floor; record it per model and per serving setup.
-6. **CASPER and the bandit have their place.** CASPER needs no diff: a model or provider update, or a prompt-level
-   change in a system the team does not own. For AEM its representatives are the natural first pass after a model
-   update, when every test is affected and the question is which behaviours drifted; its slices could also serve
-   as the adaptive method's groups of near-duplicate tests. The bandit learns from the outcomes of earlier changes
-   and from the tests it has run; with no history it has only the tests' risk to go on. The change-aware
-   strategies cover edits to skills, code and settings; the two kinds combine.
-7. **Text is a strong, cheap baseline.** TF-IDF similarity between the diff and the tests' text has the best
-   detection when the whole budget is spent (93%, and all of the changes that break a safety property). It never
-   stops, so it spends everything on benign changes too; it is the fallback order to keep in any pipeline.
-8. **Not yet covered.** Real version history instead of mutants; a second system under test (tau2-bench); suites
-   large enough for slicing to pay; re-planning after a failed step (recorded on a branch, awaiting the AEM team's
-   decision); tuning the stopping threshold, the priors and the discount; time rather than tokens as the budget.
+Close with the questions for the AEM team, the re-planning decision first: should a single publish request for a
+page with a broken link be repaired or refused? [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §9 keeps the list, with what
+each answer decides.
