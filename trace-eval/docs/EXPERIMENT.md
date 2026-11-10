@@ -543,13 +543,16 @@ Gemma reveals. The full tables are in [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.1
 | `declared` (hand-written dependencies) | 61% | 7% |
 | `observed` (dependencies from traces) | 86% | 15% |
 | `ir_tfidf` (text similarity to the diff) | 92% | 20% |
+| `casper_slices` (CASPER, reproduced) | 50% | 20% |
+| `risk_aware_ts` (Risk-Aware Adaptive Evaluation, reproduced) | 59% | 20% |
 | `adaptive_bayes` (the proposed method) | 79% | 3% |
 
-Hand-written dependencies miss what shared skills, harness code and configuration keys reach, and traces
-recover most of it. The adaptive method leaves most of the budget unspent. It also discounts a test by its
-failures on the original app, while the other strategies treat those failures as if the change had caused
-them. On the changes no test reveals, `full` does this in 71% of its replays and `ir_tfidf` in 70%; the
-adaptive method does it in none.
+Hand-written dependencies miss what shared skills, harness code and configuration keys reach, and traces recover
+most of it. The two published methods reproduced as baselines look at the traces and the outcomes but not at the
+diff, and detect 50% and 59% of the regressions at a 20% budget, where a random order detects 52%. The adaptive
+method leaves most of the budget unspent. It also discounts a test by its failures on the original app, while the
+other strategies treat those failures as if the change had caused them. On the changes no test reveals, `full` does
+this in 71% of its replays and `ir_tfidf` in 70%; the adaptive method does it in none.
 
 ## 8. Where to look in the code
 

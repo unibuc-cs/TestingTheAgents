@@ -3,6 +3,7 @@
 import ast
 import random
 
+import numpy as np
 import pytest
 import yaml
 
@@ -28,6 +29,7 @@ from traceeval.experiment.sutloader import copy_sut
 from traceeval.mutation import MUTATIONS, get_mutation, materialize_variant
 from traceeval.mutation.changeset import ChangedComponent, ChangeSet, _flatten, _python_components, _yaml_code_lines
 from traceeval.selection import SelectionContext, get_strategy
+from traceeval.selection.reproduced import fit_logistic, kmeans
 from traceeval.sut import SUT_ROOT
 
 COMMENT_ONLY = {"benign_code_comment_docstring", "benign_config_comments_reordered"}
@@ -135,6 +137,20 @@ def test_a_change_affects_the_features_and_the_refusals_it_touches():
     assert {p.code for p in hit} == {"approval_required", "not_found"}
 
 
+def test_reproduced_baselines_helpers():
+    # k-means starts deterministically and finds the three obvious groups
+    X = np.array([[0, 0], [0, 1], [10, 10], [10, 11], [20, 20]], dtype=float)
+    labels, _ = kmeans(X, 3)
+    assert labels[0] == labels[1] and labels[2] == labels[3] and len(set(labels.tolist())) == 3
+    # the logistic regression separates a toy set, and a warm start lands on the same weights
+    Xl = np.hstack([np.ones((6, 1)), np.array([[-2.0], [-1.0], [-0.5], [0.5], [1.0], [2.0]])])
+    y = np.array([0, 0, 0, 1, 1, 1], dtype=float)
+    w = fit_logistic(Xl, y)
+    p = 1 / (1 + np.exp(-(Xl @ w)))
+    assert (p[:3] < 0.5).all() and (p[3:] > 0.5).all()
+    assert np.allclose(fit_logistic(Xl, y, w=w), w)
+
+
 def test_apfd_metrics():
     order = ["a", "b", "c", "d"]
     assert apfd(order, {"a"}) == pytest.approx(1 - 1 / 4 + 1 / 8)
@@ -153,7 +169,7 @@ def test_small_end_to_end_experiment(tmp_path, capsys):
     assert h.revealing_tests("skill_publish_drop_link_validation")
     assert not h.revealing_tests("benign_skill_prose_reflow")
     catalog = {c.id: c for c in load_catalog()}
-    for name in ("declared", "observed", "cost_aware", "ir_tfidf", "adaptive_bayes"):
+    for name in ("declared", "observed", "cost_aware", "ir_tfidf", "casper_slices", "risk_aware_ts", "adaptive_bayes"):
         ctx = SelectionContext(
             h.changesets["skill_publish_drop_link_validation"],
             catalog,
@@ -164,9 +180,9 @@ def test_small_end_to_end_experiment(tmp_path, capsys):
         )
         log = get_strategy(name).run(ctx, make_oracle(h, "skill_publish_drop_link_validation", random.Random(0)))
         assert any(not ok for _, ok, _ in log.steps), name
+        assert len(set(log.executed)) == len(log.executed), name  # no test runs twice
         if name == "adaptive_bayes":  # a test that passed on the original app and now fails ends the run
             assert not log.steps[-1][1] and log.stop_reason == "regression"
-            assert len(set(log.executed)) == len(log.executed)  # no test runs twice
     df = evaluate(work, strategies=["observed", "adaptive_bayes"], budgets=(0.2, 1.0), seeds=1)
     assert set(df.strategy) == {"observed", "adaptive_bayes"}
     # coverage: the suite by dimension, and each run's change coverage (no ground truth needed)

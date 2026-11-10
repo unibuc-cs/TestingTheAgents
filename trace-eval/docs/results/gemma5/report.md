@@ -64,6 +64,8 @@ Fraction of regression-inducing changes detected, by nominal budget (% of full-s
 | ir_tfidf | 0.59 | 0.70 | 0.71 | 0.92 | 0.95 | 0.99 | 0.99 |
 | observed | 0.48 | 0.62 | 0.69 | 0.86 | 0.86 | 0.86 | 0.99 |
 | cost_aware | 0.38 | 0.59 | 0.62 | 0.83 | 0.86 | 0.86 | 0.99 |
+| casper_slices | 0.17 | 0.28 | 0.43 | 0.50 | 0.71 | 0.88 | 0.99 |
+| risk_aware_ts | 0.12 | 0.27 | 0.43 | 0.59 | 0.68 | 0.81 | 0.99 |
 | adaptive_bayes | 0.59 | 0.76 | 0.79 | 0.79 | 0.83 | 0.83 | 0.83 |
 
 Tokens actually spent on those changes (fraction of the full suite):
@@ -76,6 +78,8 @@ Tokens actually spent on those changes (fraction of the full suite):
 | ir_tfidf | 0.020 | 0.050 | 0.100 | 0.200 | 0.300 | 0.499 | 0.980 |
 | observed | 0.017 | 0.045 | 0.087 | 0.152 | 0.214 | 0.317 | 0.489 |
 | cost_aware | 0.021 | 0.050 | 0.099 | 0.199 | 0.299 | 0.499 | 0.980 |
+| casper_slices | 0.020 | 0.050 | 0.100 | 0.200 | 0.300 | 0.499 | 0.982 |
+| risk_aware_ts | 0.020 | 0.050 | 0.100 | 0.200 | 0.300 | 0.500 | 0.982 |
 | adaptive_bayes | 0.012 | 0.021 | 0.025 | 0.029 | 0.029 | 0.029 | 0.029 |
 
 Time spent on those changes (fraction of the full suite's run time, from each test's mean time on the original app):
@@ -88,6 +92,8 @@ Time spent on those changes (fraction of the full suite's run time, from each te
 | ir_tfidf | 0.020 | 0.049 | 0.101 | 0.203 | 0.306 | 0.502 | 0.992 |
 | observed | 0.018 | 0.045 | 0.087 | 0.154 | 0.214 | 0.320 | 0.504 |
 | cost_aware | 0.019 | 0.048 | 0.098 | 0.201 | 0.304 | 0.500 | 0.993 |
+| casper_slices | 0.023 | 0.061 | 0.113 | 0.224 | 0.333 | 0.520 | 0.996 |
+| risk_aware_ts | 0.020 | 0.052 | 0.106 | 0.215 | 0.317 | 0.513 | 0.994 |
 | adaptive_bayes | 0.014 | 0.023 | 0.027 | 0.031 | 0.031 | 0.031 | 0.031 |
 
 Critical regressions: the same detection rate, over the changes that break a safety property only:
@@ -100,6 +106,8 @@ Critical regressions: the same detection rate, over the changes that break a saf
 | ir_tfidf | 0.62 | 0.78 | 0.79 | 0.98 | 0.98 | 0.98 | 0.98 |
 | observed | 0.48 | 0.57 | 0.57 | 0.81 | 0.81 | 0.81 | 0.99 |
 | cost_aware | 0.38 | 0.52 | 0.57 | 0.76 | 0.81 | 0.81 | 0.98 |
+| casper_slices | 0.19 | 0.33 | 0.50 | 0.60 | 0.79 | 0.89 | 0.98 |
+| risk_aware_ts | 0.15 | 0.36 | 0.55 | 0.73 | 0.85 | 0.94 | 0.99 |
 | adaptive_bayes | 0.57 | 0.81 | 0.86 | 0.86 | 0.86 | 0.86 | 0.86 |
 
 ![detection vs cost](figures/detection_vs_cost.png)
@@ -114,6 +122,8 @@ Cost until the first true detection (fraction of the full suite, detected cases 
 | ir_tfidf | 0.040 |
 | observed | 0.048 |
 | cost_aware | 0.056 |
+| casper_slices | 0.121 |
+| risk_aware_ts | 0.129 |
 | adaptive_bayes | 0.017 |
 
 ## 3. Benign changes — wasted budget and stopping
@@ -126,6 +136,8 @@ Cost until the first true detection (fraction of the full suite, detected cases 
 | ir_tfidf | 0.019 | 0.050 | 0.100 | 0.200 | 0.299 | 0.499 | 0.990 |
 | observed | 0.015 | 0.039 | 0.077 | 0.138 | 0.186 | 0.251 | 0.321 |
 | cost_aware | 0.019 | 0.049 | 0.099 | 0.199 | 0.299 | 0.498 | 0.993 |
+| casper_slices | 0.020 | 0.049 | 0.100 | 0.200 | 0.300 | 0.499 | 0.997 |
+| risk_aware_ts | 0.020 | 0.050 | 0.100 | 0.200 | 0.300 | 0.500 | 0.996 |
 | adaptive_bayes | 0.017 | 0.039 | 0.066 | 0.096 | 0.122 | 0.152 | 0.200 |
 
 ![benign waste](figures/benign_waste.png)
@@ -149,6 +161,8 @@ APFD / cost-cognizant APFD of the complete order; selection recall = revealing t
 | ir_tfidf | 0.783 | 0.772 | 1.000 | 1.000 |
 | observed | 0.749 | 0.788 | 1.000 | 0.502 |
 | cost_aware | 0.748 | 0.778 | 1.000 | 1.000 |
+| casper_slices | 0.588 | 0.542 | 1.000 | 1.000 |
+| risk_aware_ts | 0.600 | 0.608 | 1.000 | 1.000 |
 | adaptive_bayes | 0.831 | 0.813 | 1.000 | 1.000 |
 
 ![apfdc](figures/apfdc.png)
@@ -185,6 +199,8 @@ Coverage of the affected properties (those of a change's revealing tests) by the
 | ir_tfidf | 0.59 | 0.73 | 0.84 | 0.90 | 0.92 | 0.97 | 1.00 |
 | observed | 0.43 | 0.65 | 0.80 | 0.93 | 0.98 | 0.98 | 1.00 |
 | cost_aware | 0.55 | 0.71 | 0.83 | 0.94 | 0.98 | 0.98 | 1.00 |
+| casper_slices | 0.42 | 0.74 | 0.80 | 0.86 | 0.92 | 1.00 | 1.00 |
+| risk_aware_ts | 0.49 | 0.67 | 0.77 | 0.86 | 0.91 | 0.96 | 1.00 |
 | adaptive_bayes | 0.51 | 0.58 | 0.61 | 0.61 | 0.63 | 0.63 | 0.63 |
 
 ## 6. Coverage
@@ -306,6 +322,8 @@ Changed components exercised:
 | ir_tfidf | 0.92 | 0.97 | 0.94 | 0.97 | 0.97 | 0.97 | 0.97 |
 | observed | 0.97 | 0.97 | 0.97 | 0.97 | 0.97 | 0.97 | 0.97 |
 | cost_aware | 0.97 | 0.97 | 0.97 | 0.97 | 0.97 | 0.97 | 0.97 |
+| casper_slices | 0.46 | 0.75 | 0.87 | 0.94 | 0.94 | 0.97 | 0.97 |
+| risk_aware_ts | 0.58 | 0.72 | 0.84 | 0.95 | 0.97 | 0.97 | 0.97 |
 | adaptive_bayes | 0.97 | 0.97 | 0.97 | 0.97 | 0.97 | 0.97 | 0.97 |
 
 Affected properties checked:
@@ -318,6 +336,8 @@ Affected properties checked:
 | ir_tfidf | 0.37 | 0.54 | 0.69 | 0.79 | 0.84 | 0.93 | 1.00 |
 | observed | 0.30 | 0.49 | 0.66 | 0.83 | 0.90 | 0.95 | 1.00 |
 | cost_aware | 0.42 | 0.60 | 0.71 | 0.84 | 0.90 | 0.95 | 1.00 |
+| casper_slices | 0.29 | 0.61 | 0.70 | 0.78 | 0.83 | 0.99 | 1.00 |
+| risk_aware_ts | 0.41 | 0.59 | 0.69 | 0.77 | 0.81 | 0.89 | 1.00 |
 | adaptive_bayes | 0.31 | 0.43 | 0.49 | 0.50 | 0.51 | 0.51 | 0.51 |
 
 Runs that found no regression and tested every affected mandatory property (the method's step 5):
@@ -330,6 +350,8 @@ Runs that found no regression and tested every affected mandatory property (the 
 | ir_tfidf | 0.05 | 0.14 | 0.27 | 0.44 | 0.51 | 0.67 | 1.00 |
 | observed | 0.05 | 0.19 | 0.37 | 0.53 | 0.84 | 0.93 | 1.00 |
 | cost_aware | 0.05 | 0.26 | 0.42 | 0.58 | 0.86 | 0.93 | 1.00 |
+| casper_slices | 0.05 | 0.07 | 0.16 | 0.40 | 0.49 | 0.96 | 1.00 |
+| risk_aware_ts | 0.05 | 0.17 | 0.30 | 0.69 | 0.93 | 1.00 | 1.00 |
 | adaptive_bayes | 0.12 | 0.48 | 0.85 | 0.90 | 1.00 | 1.00 | 1.00 |
 
 Affected workflows run (the workflows of the tests that exercised a changed component):
@@ -342,6 +364,8 @@ Affected workflows run (the workflows of the tests that exercised a changed comp
 | ir_tfidf | 0.02 | 0.23 | 0.45 | 0.65 | 0.75 | 0.84 | 1.00 |
 | observed | 0.04 | 0.23 | 0.45 | 0.60 | 0.67 | 0.79 | 1.00 |
 | cost_aware | 0.22 | 0.31 | 0.48 | 0.63 | 0.74 | 0.80 | 1.00 |
+| casper_slices | 0.00 | 0.12 | 0.30 | 0.59 | 0.62 | 0.64 | 1.00 |
+| risk_aware_ts | 0.07 | 0.24 | 0.47 | 0.82 | 0.95 | 1.00 | 1.00 |
 | adaptive_bayes | 0.03 | 0.13 | 0.18 | 0.20 | 0.20 | 0.20 | 0.20 |
 
 Affected features reached (the features with a tool or a part the change touches), over the changes that affect one:
@@ -354,6 +378,8 @@ Affected features reached (the features with a tool or a part the change touches
 | ir_tfidf | 0.85 | 0.93 | 0.94 | 0.98 | 1.00 | 1.00 | 1.00 |
 | observed | 0.74 | 0.79 | 0.91 | 1.00 | 1.00 | 1.00 | 1.00 |
 | cost_aware | 0.84 | 0.86 | 0.96 | 0.98 | 1.00 | 1.00 | 1.00 |
+| casper_slices | 0.19 | 0.64 | 0.81 | 0.97 | 0.97 | 1.00 | 1.00 |
+| risk_aware_ts | 0.34 | 0.69 | 0.84 | 0.97 | 0.99 | 1.00 | 1.00 |
 | adaptive_bayes | 0.80 | 0.87 | 0.89 | 0.89 | 0.89 | 0.89 | 0.89 |
 
 ## How to read this

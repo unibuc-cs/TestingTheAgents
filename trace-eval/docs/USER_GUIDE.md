@@ -57,6 +57,7 @@ runs the test with the model, and a recording supplies only the baseline traces,
 | how a test is run and scored | `experiment/executor.py` (`run_case`), `scoring/scorers.py` |
 | how a change becomes components | `mutation/catalog.py` (data), `mutation/changeset.py` |
 | the baselines | `selection/strategies.py` (about 150 lines) |
+| two published methods, reproduced | `selection/reproduced.py` (CASPER's slices, Risk-Aware Adaptive Evaluation's bandit; each docstring says what was adapted) |
 | the proposed method | `selection/adaptive_bayes.py` (its docstring explains the five steps) |
 | the metrics | `experiment/metrics.py`, `experiment/evaluate.py` |
 | coverage (of the suite, of a change) | `experiment/coverage.py` |
@@ -290,5 +291,7 @@ some candidate changes were left out of the set.
 - Test texts share vocabulary with skills and config keys, which is why the text-retrieval baseline `ir_tfidf`
   is strong here.
 - `history_ml` (needs scikit-learn) and `observed_diverse` are optional. `--strategies all` includes them.
+- `casper_slices` and `risk_aware_ts` reproduce two published methods and ignore the diff by design. They are in
+  the default comparison so that the report shows what change-awareness adds.
 - `runs/` is git-ignored and large (it holds line-level coverage). To keep a run, copy its `results/` into
   `docs/results/`.

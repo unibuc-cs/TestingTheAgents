@@ -15,10 +15,11 @@ search, but their full text has not been checked; they should be read before the
   V1, extracts the signals again, scores the impact of the change with a failure-prediction model trained on V0,
   and ranks slices by the aggregated change in predicted impact. It is evaluated on LLM-agent issue resolution,
   under model changes and prompt changes, across budget levels, against GMM/HDBSCAN (slicing) and random (ranking)
-  baselines. We can reuse the slice abstraction, the behavioural signals derived from traces and the protocol of
-  budget levels. CASPER is not diff-aware: it does not map what changed in a skill, prompt or harness to tests.
-  It also reports no APFD-style metric, has no ground truth from mutations or injected faults, covers a single
-  application domain and has no stopping rule.
+  baselines. It is reproduced as the `casper_slices` strategy (`traceeval/selection/reproduced.py`): slices from
+  behavioural signals of the baseline traces, two representatives per slice, the slices ranked by the shift in
+  their failure rate. CASPER is not diff-aware: it does not map what changed in a skill, prompt or harness to
+  tests. It also reports no APFD-style metric, has no ground truth from mutations or injected faults, covers a
+  single application domain and has no stopping rule.
 - **(Why) Is My Prompt Getting Worse? Rethinking Regression Testing for Evolving LLM APIs.** Ma, Yang, Kästner
   (CMU), arXiv 2311.11123. A case study of silent updates to LLM APIs. It identifies three obstacles to classic
   regression testing (no crisp oracle, brittle prompts, nondeterminism) and recommends slicing the suites.
@@ -68,7 +69,8 @@ search, but their full text has not been checked; they should be read before the
 - **Risk-Aware Adaptive Evaluation.** Maji & Chowdhury (Georgia Tech), arXiv 2609.38914, Sep 2026. Contextual
   Thompson sampling over τ-bench airline scenarios with impact weights. With 6% of the corpus it recovers 86% of
   the impact-weighted failure discovery of an oracle. It competes directly with our allocation of runs, although
-  it ignores the change and depends on impact scores. We plan to use it as a baseline.
+  it ignores the change and depends on impact scores. It is reproduced as the `risk_aware_ts` strategy
+  (`traceeval/selection/reproduced.py`), with a test's risk level as its impact score.
 - **Efficient Evaluation of LLM Performance with Statistical Guarantees (FAQ).** Wu, Nair, Candès, arXiv
   2601.20251, 2026. Active querying over a finite population with valid frequentist confidence intervals. Its
   anytime-valid confidence under adaptive selection is what a budget-aware stopping rule needs.
@@ -195,9 +197,10 @@ Fault-injection work that can generate a ground truth or serve as a contrast:
 ## Closest competitors (ranked)
 
 1. **CASPER** (2608.00378). The same problem in the same community. We differ in diff-awareness, the cost model,
-   stopping, the mutation-based ground truth and evaluation on several systems.
-2. **Risk-Aware Adaptive Evaluation** (2609.38914). Adaptive allocation under a budget on τ-bench; a baseline to
-   reproduce.
+   stopping, the mutation-based ground truth and evaluation on several systems. Reproduced as
+   `casper_slices`.
+2. **Risk-Aware Adaptive Evaluation** (2609.38914). Adaptive allocation under a budget on τ-bench; reproduced as
+   `risk_aware_ts`.
 3. **Efficient Benchmarking of AI Agents** (2603.23749). A baseline that keeps tasks of mid-range difficulty.
 4. **GBV-PD** (2606.28037). Reviewers will ask why it does not apply here: the LLMs are black boxes.
 5. **ATLAS / tinyBenchmarks.** Baselines for adaptive selection with IRT.

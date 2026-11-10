@@ -1,6 +1,6 @@
 """Test selection strategies: the baselines, the proposed adaptive method and the registry."""
 
-from . import adaptive_bayes, extras  # noqa: F401  (registers the strategies)
+from . import adaptive_bayes, extras, reproduced  # noqa: F401  (registers the strategies)
 from .base import SelectionContext, Strategy, affinity, matches
 from .strategies import CORE, STRATEGIES, get_strategy
 

@@ -36,7 +36,8 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
 - `traceeval/scoring/` — deterministic scorers, and the model judge for cases with a rubric (`TRACEEVAL_JUDGE`).
 - `traceeval/mutation/` — controlled changes (patch operators), change-set extraction.
 - `traceeval/selection/` — `strategies.py` baselines, `adaptive_bayes.py` the proposed method (two text variants and
-  one ablation without its mandatory-coverage rule), `extras.py` optional baselines.
+  one ablation without its mandatory-coverage rule), `reproduced.py` two published methods (CASPER, Risk-Aware
+  Adaptive Evaluation) as baselines, `extras.py` optional baselines.
 - `traceeval/experiment/` — SUT loader, executor, history, runner, replay evaluator, metrics, coverage, report;
   `check.py`, the prototype (one change checked live).
 - `traceeval/llm/` — Gemma's client (`chat.py`: prompt, engines, parsing, which model judges) and the answer cache.

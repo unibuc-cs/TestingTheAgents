@@ -152,9 +152,11 @@ pass rate is ≥ 0.5 and the variant pass rate is < 0.5. A test that the model f
 | `observed_diverse` (optional) | observed + "additional" greedy breadth | + behaviour signatures | yes | n/a |
 | `cost_aware` | handoff formula Risk × ChangeAffinity × FailureHistory / ExpectedTokens | observed deps, baseline failures, cost | ranks all (affected first) | no |
 | `history_ml` (optional) | predictive test selection (Machalica et al.) | logistic model over affinity/cost/risk features trained on other changes (leave-one-change-out) | ranks all | no |
+| `casper_slices` | CASPER (Muse et al. 2026), reproduced | behavioural signals of the baseline traces, slices, the outcomes of two representatives per slice on the changed app | ranks slices (runs all) | no |
+| `risk_aware_ts` | Risk-Aware Adaptive Evaluation (Maji & Chowdhury 2026), reproduced | a test's definition and the shape of its baseline runs as context, its risk as impact, the outcomes so far (Thompson sampling) | no (ranks all) | no |
 | `adaptive_bayes` | **proposed** | everything above + sequential inference | yes | yes |
 
-The two optional baselines run only with `--strategies all`; the results in §5 compare the other seven. Two
+The two optional baselines run only with `--strategies all`; the results in §5 compare the other nine. Two
 variants of the proposed method differ from it only in how text is compared (§5.2): `adaptive_bayes_tfidf` and
 `adaptive_bayes_notext`. A third, `adaptive_bayes_nomandatory`, leaves out step 5 (§5.3).
 
@@ -210,7 +212,19 @@ it, while the budget allows (§5.3).
 They cover the design space of the literature: classic RTS/TCP on declared coverage (Rothermel), IR-based TCP
 (Saha 2015), cost-cognizant TCP (Elbaum 2001), predictive test selection (Machalica 2019) and diversity-based
 ordering (Pan/Briand LTM). CASPER (2026) and Risk-Aware Adaptive Evaluation (2026) are the closest external
-competitors (`docs/related_work.md`). Reproducing them on the testbed is roadmap item 3(c).
+competitors (`docs/related_work.md`), and both are reproduced on the testbed (`selection/reproduced.py`,
+roadmap item 3(c)).
+
+Neither looks at the diff. CASPER cuts the suite into slices of tests that behave alike on the original app
+(k-means on ten behavioural signals of the baseline traces, with the baseline outcome as a heavier column), runs
+two representatives of every slice on the changed app, and ranks the slices by the shift in their failure rate; it
+has no stopping rule. Risk-Aware Adaptive Evaluation is a contextual Thompson-sampling bandit: a logistic
+regression on the outcomes so far gives every test a failure probability, a Beta posterior per test mixes it with
+the test's own outcome, and the test whose draw times its risk is highest runs next. It rewards any failure, so a
+test the model already fails counts as a find. The module's docstrings say where the testbed forced an adaptation:
+the replay oracle returns an outcome and a cost, not a trace, so CASPER's slices are scored by their failure rate
+rather than by a model of the signals; the budget is in tokens; and each test runs once, because the models decode
+greedily.
 
 ---
 
@@ -351,12 +365,15 @@ Detection of the 29 regressions Gemma reveals, by nominal budget, and tokens act
 | ir_tfidf | 0.70 | 0.71 | 0.92 | 0.99 | 0.99 | 0.20 | 0.98 | 0.99 |
 | observed | 0.62 | 0.69 | 0.86 | 0.86 | 0.99 | 0.15 | 0.49 | 0.32 |
 | cost_aware | 0.59 | 0.62 | 0.83 | 0.86 | 0.99 | 0.20 | 0.98 | 0.99 |
+| casper_slices (CASPER, reproduced) | 0.28 | 0.43 | 0.50 | 0.88 | 0.99 | 0.20 | 0.98 | 1.00 |
+| risk_aware_ts (Risk-Aware Adaptive Evaluation, reproduced) | 0.27 | 0.43 | 0.59 | 0.81 | 0.99 | 0.20 | 0.98 | 1.00 |
 | adaptive_bayes | 0.76 | 0.79 | 0.79 | 0.83 | 0.83 | 0.03 | 0.03 | 0.20 |
 
-APFD_c of the full prioritized order: random 0.53, full 0.57, declared 0.76 (selection recall 0.53), ir_tfidf
-0.77, cost_aware 0.78, observed 0.79 (selection recall 1.00 at half the suite's cost), adaptive 0.81. Cost to
-first detection, as a fraction of the full suite: adaptive 0.017, declared 0.025, ir_tfidf 0.04, observed 0.05,
-cost_aware 0.06, random 0.14, full 0.19. Time spent follows tokens closely (the report's section 2).
+APFD_c of the full prioritized order: random 0.53, casper_slices 0.54, full 0.57, risk_aware_ts 0.61, declared 0.76
+(selection recall 0.53), ir_tfidf 0.77, cost_aware 0.78, observed 0.79 (selection recall 1.00 at half the suite's
+cost), adaptive 0.81. Cost to first detection, as a fraction of the full suite: adaptive 0.017, declared 0.025,
+ir_tfidf 0.04, observed 0.05, cost_aware 0.06, casper_slices 0.12, risk_aware_ts 0.13, random 0.14, full 0.19. Time
+spent follows tokens closely (the report's section 2).
 
 **Reading.**
 - *RQ1/RQ2.* Declared metadata caps detection at 61%, because shared skills reached through `include`, harness
@@ -378,6 +395,13 @@ cost_aware 0.06, random 0.14, full 0.19. Time spent follows tokens closely (the 
   failures on the original app and gives no "regression" verdict on any of these changes (0 of 490 replays).
 - *IR.* TF-IDF over the diff is the strongest selector at 20% (92%) but spends the whole budget. At 5% the
   adaptive method leads (76% against 70%).
+- *The reproduced methods.* CASPER's slices and the risk-aware bandit do not look at the diff, and it shows: 50%
+  and 59% of the regressions at a 20% budget, between random (52%) and the change-aware strategies (83–92%); an
+  order no better than random's (APFD_c 0.54 and 0.61); and a first detection at 12–13% of the suite, where the
+  change-aware strategies need 2–6%. The bandit's impact score is the test's risk, so it does better on the changes
+  that break a safety property (73% at 20%, 94% at 50%). It rewards any failure, so it also runs Gemma's red tests
+  early: on the changes no test reveals it sees a failure the change did not cause in 71% of its replays, CASPER's
+  slices in 57%. Neither stops: both spend the whole budget on every change.
 
 ### 5.2 Text in the method: an option (roadmap 3(b))
 
@@ -484,7 +508,7 @@ measures exactly that.
 |---|---|---|
 | 1. Testbed | SUT, catalog, tracing, mutations, change sets, record/replay, metrics, report, CLI, tests | done (v0.1) |
 | 2. Methods | baselines + cost-aware + predictive + adaptive Bayesian selector with stopping | done (v0.1), with the mandatory-coverage rule (§5.3); open: tuning ε, the priors and the discount |
-| 3. Method improvements | (a) test-level learned sensitivities (per test × component-kind reveal history) instead of kind-level; (b) IR relevance inside the Bayesian likelihood; (c) CASPER-style slices and the Risk-Aware Adaptive Evaluation bandit as reproduced baselines | (a) done; (b) done as an option (§5.2); (c) open |
+| 3. Method improvements | (a) test-level learned sensitivities (per test × component-kind reveal history) instead of kind-level; (b) IR relevance inside the Bayesian likelihood; (c) CASPER-style slices and the Risk-Aware Adaptive Evaluation bandit as reproduced baselines | (a) done; (b) done as an option (§5.2); (c) done: `casper_slices` and `risk_aware_ts` (§5.1) |
 | 4. Real LLM | ContentOps on real models (local vLLM): all variants × 3 reps under two models | done: Gemma (`runs/gemma5`); Qwen's recording of the same app (`runs/qwen5`) is spoiled by run-to-run variation and is not used for the results (§5.4); gpt-oss-120b, recorded on the re-planning branch, varies even more |
 | 5. External SUT | tau2-bench airline adapter; 12 mutations (6 policy, 4 tool-code, 2 benign); same evaluation | after the demo for the AEM team |
 | 6. Scale/robustness | more mutations (mutation operators generated systematically: step deletion/swap/condition negation in procedures, argument swaps in adapters, config boundary values), equivalent-mutant analysis, sensitivity to K and to budget definitions (time vs. tokens), ablations of each model ingredient, more repetitions for the models whose answers vary (§5.4) | with the paper |
@@ -521,20 +545,20 @@ available.
 
 **Working title.** TRACE-Eval: change-aware, cost-bounded regression test selection for LLM agent systems.
 
-**Abstract (draft).** Agent platforms ship dozens of agents assembled from skills, prompts, tools, harness code
-and configuration, and verify them with tests and statistical evals whose cost is dominated by tokens. After a
-change, teams either re-run everything or guess. We formulate selection, prioritization and budget-aware stopping
-of agent tests as one problem and propose a method that (i) extracts a change set from the diff at the
-granularity of code lines, skill procedures, agent-definition fields and configuration keys, (ii) maps it to tests
-through dependencies *observed* in execution traces rather than declared metadata, (iii) ranks tests by expected
-information per token in a Bayesian model whose sensitivities are calibrated from history, and (iv) stops when
-the posterior probability of a regression is low. We evaluate on a testbed with 180 tests and eval items, 43
-controlled changes with a mutation-based ground truth derived per model, and a working multi-agent application,
-including multi-agent workflows, whose agents are played by open models (a small one, and a mid-size one as a
-second). Declared dependencies miss 39% of the regressions; trace-informed selection finds 86% of them within 20%
-of the full-suite tokens. The adaptive method detects 79% for 3% of the tokens and returns most of the budget on
-benign changes. Unlike the other strategies, it does not mistake the tests the model already fails for
-regressions.
+**Abstract (draft).** Agent platforms ship dozens of agents assembled from skills, prompts, tools, harness code and
+configuration, and verify them with tests and statistical evals whose cost is dominated by tokens. After a change,
+teams either re-run everything or guess. We formulate selection, prioritization and budget-aware stopping of agent
+tests as one problem and propose a method that (i) extracts a change set from the diff at the granularity of code
+lines, skill procedures, agent-definition fields and configuration keys, (ii) maps it to tests through dependencies
+*observed* in execution traces rather than declared metadata, (iii) ranks tests by expected information per token
+in a Bayesian model whose sensitivities are calibrated from history, and (iv) stops when the posterior probability
+of a regression is low. We evaluate on a testbed with 180 tests and eval items, 43 controlled changes with a
+mutation-based ground truth derived per model, and a working multi-agent application, including multi-agent
+workflows, whose agents are played by open models (a small one, and a mid-size one as a second). Declared
+dependencies miss 39% of the regressions; trace-informed selection finds 86% of them within 20% of the full-suite
+tokens. The two closest published methods, reproduced on the testbed, find 50% and 59%, because neither looks at
+the change. The adaptive method detects 79% for 3% of the tokens and returns most of the budget on benign changes.
+Unlike the other strategies, it does not mistake the tests the model already fails for regressions.
 
 **Outline.**
 

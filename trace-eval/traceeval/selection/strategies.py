@@ -7,7 +7,8 @@
     observed    change-based selection on dependencies observed in baseline traces, risk x affinity / cost
     cost_aware  whole-suite ranking by risk x change-affinity x failure-history / expected tokens
 
-The proposed method lives in ``adaptive_bayes.py``; two optional baselines in ``extras.py``.
+The proposed method lives in ``adaptive_bayes.py``, two published methods reproduced as baselines in
+``reproduced.py``, and two optional baselines in ``extras.py``.
 """
 
 import math
@@ -17,7 +18,17 @@ from collections import defaultdict
 from .base import Strategy, affinity, line_hit, weighted_affinity
 
 STRATEGIES: dict[str, Strategy] = {}  # name -> instance, filled by @register
-CORE = ["full", "random", "declared", "ir_tfidf", "observed", "cost_aware", "adaptive_bayes"]
+CORE = [
+    "full",
+    "random",
+    "declared",
+    "ir_tfidf",
+    "observed",
+    "cost_aware",
+    "casper_slices",
+    "risk_aware_ts",
+    "adaptive_bayes",
+]
 
 
 def register(cls):

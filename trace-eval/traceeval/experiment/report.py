@@ -22,6 +22,8 @@ ORDER = [
     "observed_diverse",
     "cost_aware",
     "history_ml",
+    "casper_slices",
+    "risk_aware_ts",
     "adaptive_bayes",
     "adaptive_bayes_tfidf",  # the method's variants, shown when a replay included them
     "adaptive_bayes_notext",

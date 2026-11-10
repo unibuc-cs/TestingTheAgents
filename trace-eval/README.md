@@ -60,7 +60,9 @@ method what each test costs and which code it runs.
 4. Strategies in `traceeval/selection/` pick tests under a token budget. They see the diff of the code without
    comments, the baseline traces (which agents, skills, tools, config keys and code lines each test touched on the
    unchanged app), the test catalog and the outcomes of the other changes. They never see the outcome of the
-   change being evaluated. [`strategies.py`](traceeval/selection/strategies.py) holds the baselines and
+   change being evaluated. [`strategies.py`](traceeval/selection/strategies.py) holds the baselines,
+   [`reproduced.py`](traceeval/selection/reproduced.py) two published methods reproduced as baselines (CASPER's
+   slices and Risk-Aware Adaptive Evaluation's bandit, neither of which looks at the diff) and
    [`adaptive_bayes.py`](traceeval/selection/adaptive_bayes.py) the proposed method. The same file holds two
    variants that compare text measures, `adaptive_bayes_tfidf` and `adaptive_bayes_notext`, and one variant
    without the mandatory-coverage rule, `adaptive_bayes_nomandatory`.
@@ -82,12 +84,16 @@ what it actually spends:
 | `declared`: hand-written dependencies | 61% | 6.8% | 6.9% |
 | `observed`: dependencies seen in traces | 86% | 15% | 15% |
 | `ir_tfidf`: text similarity to the diff | 92% | 20% | 20% |
+| `casper_slices`: CASPER's slices, reproduced | 50% | 20% | 22% |
+| `risk_aware_ts`: Risk-Aware Adaptive Evaluation, reproduced | 59% | 20% | 21% |
 | `adaptive_bayes`: the proposed method | 79% | 2.9% | 3.1% |
 
 The adaptive method is the only one that leaves budget unspent. It stops as soon as it is confident, and it never
 calls a change that breaks nothing a regression. Its misses are mostly narrow regressions, revealed by one to
 five tests, where it concludes too early that nothing broke. Of the 21 changes that break a safety property, it
-catches 86%. The full numbers are in the [Gemma report](docs/results/gemma5/report.md).
+catches 86%. The two reproduced methods look at the traces and the outcomes but not at the diff, and sit between
+random (52%) and the change-aware strategies. The full numbers are in the
+[Gemma report](docs/results/gemma5/report.md).
 
 Qwen3.8-27B's recording of the same app is not a clean ground truth. It records every benign change as revealed by
 two to five tests, for two reasons. Six tests answer differently when run 64 at a time over three servers than when
