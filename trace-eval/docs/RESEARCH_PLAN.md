@@ -213,10 +213,10 @@ flowchart TD
     SENS --> M
     M --> PICK["pick t = argmax of<br/>information gain × risk / c(t)"]
     PICK --> RUN["run t on the changed app"]
-    RUN --> UPD["multiply the posterior<br/>by P(outcome | subset)"]
+    RUN --> UPD["multiply the posterior<br/>by P(outcome given the subset)"]
     UPD --> M
     RUN -->|"fails, and passed<br/>on the original app"| REG["verdict: regression"]
-    UPD -->|"P(some component broken) < ε"| MAND["test every mandatory property<br/>the change may affect"]
+    UPD -->|"P(some component broken) below ε"| MAND["test every mandatory property<br/>the change may affect"]
     MAND --> CLEAN["verdict: clean"]
     PICK -->|"budget spent, or no<br/>informative test left"| BUDG["verdict: budget"]
 ```
