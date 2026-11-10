@@ -5,9 +5,8 @@ for it (section 3), and plans the next steps (section 4). The "today" column of 
 
 ## 1. What Adobe's platform looks like
 
-From the requirements, the follow-up questions with the AEM team and Adobe's Agent Orchestrator deck (outside the
-repository, in its parent folder: `Agent_Test_Prioritization_Requirements.md`, `Docs/Questions_AgentsTesting.docx`,
-`Docs/MDS-11-...pptx`), and from Adobe's public documentation:
+From Adobe's requirements, the AEM team's answers to the follow-up questions, Adobe's Agent Orchestrator deck and
+Adobe's public documentation:
 
 - **More than 50 agents** for AEM workflows, tested with unit, integration and end-to-end tests and with
   statistical evals over datasets ("prompt → expected answer", "prompt → expected tool call"), run nightly and on
@@ -73,7 +72,25 @@ no rendition tool: no workflow needs one.
 ### 3.2 The orchestrator plans
 
 Like Adobe's, the orchestrator has two modes: one specialist for a simple request, a plan for a request that
-needs several (the routing skill, `sut/skills/routing/SKILL.md`).
+needs several (the routing skill, `sut/skills/routing/SKILL.md`). A plan, step by step:
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant O as Orchestrator
+    participant A as Specialist
+    participant P as Person (approver)
+    participant B as Next specialist
+    U->>O: a request that needs several specialists
+    O->>O: make_plan(goal, steps)
+    O->>A: route_to_agent(its own instruction)
+    A-->>O: answer, with the ids it produced
+    O->>P: request_approval(summary)
+    P-->>O: approved, with a token, or refused
+    O->>B: route_to_agent(instruction, context: the ids and the token)
+    B-->>O: answer
+    O-->>U: what each step did, and what was not done
+```
 
 - `make_plan(goal, steps)` writes the plan down; it goes into the trace with the call, as a "cognition event". Each
   step is "agent: instruction".
@@ -151,7 +168,21 @@ where the testbed uses it:
 
 A test lists the ids of the properties it checks (`properties:`); the loader rejects an unknown id, and `pytest`
 fails on a property that no test checks. The report then gives, per property, the pass rate against its threshold,
-and per strategy, the share of the affected properties it covered.
+and per strategy, the share of the affected properties it covered. Where the catalog comes from, and where each
+field goes:
+
+```mermaid
+flowchart LR
+    REQ["requirements: the skills' rules,<br/>agent definitions, config guards, specs"] -->|"traceeval properties draft"| DR["draft catalog and tags,<br/>by a model within fixed limits"]
+    DR -->|"a person edits"| APP["traceeval properties apply"]
+    HAND["entries written by hand"] --> CAT["catalog of properties<br/>properties.yaml"]
+    APP --> CAT
+    CAT -->|"ids"| TESTS["each test lists the<br/>properties it checks"]
+    CAT -->|"threshold"| REP["report: pass rate per property<br/>against its threshold"]
+    CAT -->|"sources"| AFF["the properties a<br/>change may affect"]
+    AFF -->|"mandatory"| MET["adaptive method: before clean,<br/>test every affected mandatory property"]
+    AFF --> CHK["traceeval check: affected<br/>properties left unchecked"]
+```
 
 **Drafting the catalog with a model.**
 `traceeval properties draft` asks Qwen for the catalog from the requirements only (the skills' rules, the agents'
@@ -207,7 +238,7 @@ Every test runs with the default settings unless it sets its own. Three cases do
 publishing without a required review, scheduling switched off, and the link check switched off. They cover three of
 the five settings at a non-default value; no case runs with idempotency keys or the required meta description
 switched off. CFG-01 explains a change no test reveals, `config_require_review_false`: Gemma asks for a review even
-when the platform does not require one. The three cases came after the recording of the current app, so its report
+when the platform does not require one. The three cases are not in the recording of the current app, so its report
 counts them as declared, not observed.
 
 The report, and `traceeval coverage --history runs/gemma5` in the terminal, also give for each agent, skill, tool
@@ -278,9 +309,8 @@ down): covering a change is not revealing it, the case the method is built for.
 
 ## 4. Next steps
 
-The demo on Thursday 12 November 2026 shows the testbed, the features of section 3 and the method on Gemma's
-recording, with one change checked live ([DEMO.md](DEMO.md)). Everything it needs is in place and rehearsed. The
-questions for the AEM team close the walkthrough. One item of section 2 is open: re-planning after a failed step.
+The demo for the AEM team shows the testbed, the features of section 3 and the method on Gemma's recording, with
+one change checked live ([DEMO.md](DEMO.md)). The questions for the AEM team close the walkthrough. One item of section 2 is open: re-planning after a failed step.
 It is built and recorded on a branch, and waits for one product decision (§4.1).
 
 ### 4.1 Re-planning after a failed step
@@ -337,7 +367,7 @@ replay answers are recorded again.
 gpt-oss-120b, served as [EXPERIMENT.md](EXPERIMENT.md) §4 describes, varies more from run to run than the other two
 models. Tests that pass in all three runs on the original app fail in up to half of their runs on the changed
 copies, so every benign change appears to break a few tests. Three repetitions are too few for it to give a ground
-truth.
+truth, and five do not settle its vote either ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4).
 
 ### 4.2 Order
 
@@ -357,8 +387,8 @@ truth.
 - **Gemma does not go on with the other pages when one fails inside a step.** With the broken page ranked first
   (WF2-03), it sends all three pages to publishing in one step, publishing stops at the broken link, and the
   orchestrator neither republishes the other two nor says so; it claims it did. Only the checks on the final state
-  catch it. WF2-03 was added after the recordings, which therefore hold 176 of the 180 tests (the three cases with
-  settings of their own came later too); it replays in the demo ([DEMO.md](DEMO.md) §3).
+  catch it. WF2-03 is not in the recordings, which hold 176 of the 180 tests (nor are the three cases with settings
+  of their own); it replays in the demo ([DEMO.md](DEMO.md) §3).
 - **A one-off difference between runs.** A benign change that a single failing run reveals, or a regression no
   test reveals, shows as VIOLATED on the report's sanity line. Three repetitions and the majority vote absorb most
   of it.

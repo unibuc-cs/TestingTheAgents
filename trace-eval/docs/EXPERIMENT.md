@@ -29,9 +29,11 @@ To study that, the repository has four parts:
   tests to run for a given change.
 
 We run every test three times on the original app and on every changed copy, and record what happened. The
-majority of the three runs decides the outcome. That gives the ground truth: which tests fail under which
-change. After that, comparing the strategies costs nothing, because we replay the recordings: strategy X would
-have run these tests, so it would or would not have caught this change, for this many tokens.
+majority of the three runs decides the outcome. A run the environment broke, because the model server or the
+network did not answer, is marked `INFRA_INVALID` and left out, as if it had not been made. That gives the ground
+truth: which tests fail under which change. After that, comparing the strategies costs nothing, because we replay
+the recordings: strategy X would have run these tests, so it would or would not have caught this change, for this
+many tokens.
 
 ```mermaid
 flowchart LR
@@ -124,8 +126,8 @@ parse it by hand.
 
 ## 3. Where the models run
 
-Gemma 4 E4B, a small model from Google, plays the agents by default. Qwen3.8-27B, released by Alibaba in August
-2026 and about six times bigger, is the second model, so we can check that results hold for more than one model.
+Gemma 4 E4B, a small model from Google, plays the agents by default. Qwen3.8-27B, Alibaba's open model, about six
+times bigger, is the second, so we can check that results hold for more than one model.
 gpt-oss-120b, OpenAI's open-weights model, is a third, served over both of the server's GPUs when they are free.
 The `--backend` option picks who plays the agents:
 
@@ -205,10 +207,10 @@ needs more room per answer than the default 700 tokens.
 | server `~/traceeval-vllm/.venv` | a Python 3.12 environment with vLLM 0.31.0, kept apart from anything else on the server |
 | server `~/traceeval-vllm/gemma.log`, `qwen.log` | each server's log: start-up, errors, request counts |
 | server `~/traceeval-vllm/gemma.pid`, `qwen.pid` | each server's process id, so `down` can stop it |
-| server `~/.cache/huggingface/` | the model weights (both already downloaded) |
+| server `~/.cache/huggingface/` | the model weights |
 | your PC `~/.traceeval-vllm-tunnel-gemma.pid`, `...-qwen.pid` | each tunnel's process id, so `down` can close it |
 
-### Once (already done)
+### Once per server
 
 ```bash
 scripts/gpu_remote.sh setup     # creates ~/traceeval-vllm/.venv on the server, installs vLLM, checks the models
@@ -437,8 +439,8 @@ A model does not follow a skill the way a script would, and the prompts and chec
 mind:
 
 - **Procedures are plain steps.** A skill's `## Procedure` block is shown to the model as numbered sentences,
-  with included skills written out and settings filled in (section 2). When the procedure was shown as raw
-  YAML, Gemma tried to call `say` and `governance-checks` as tools.
+  with included skills written out and settings filled in (section 2). Shown the procedure as raw YAML, Gemma
+  calls `say` and `governance-checks` as tools.
 - **Conditions are spelled out.** A step says `If <request_review> is given and true:`, because
   `If <request_review>:` reads as an order. It says `fetch.review_approved is false` instead of `not ...`, and
   `<seo_title> has more than 60 characters` instead of `len(...) > ...`.
@@ -450,10 +452,10 @@ mind:
 - **An empty answer gets one reminder.** When the model ends its turn without any text, the backend asks once
   for the answer the step prepared, and the `answered` check fails a run that still ends empty.
 - **The orchestrator is told the rules it would otherwise improvise.** A request that no specialist owns goes
-  to the agent named by `routing.default_agent`; without that setting, Qwen answered "Hello there" itself.
+  to the agent named by `routing.default_agent`; without that setting, Qwen answers "Hello there" itself.
   Every request is delegated, and a specialist's answer goes to the user as it is. A plan is only for parts
-  owned by different specialists. The runtime holds an approval for the steps after it: when Gemma was asked
-  to copy the approval into each step instead, it kept the token and dropped the approver.
+  owned by different specialists. The runtime holds an approval for the steps after it: asked to copy the
+  approval into each step instead, Gemma keeps the token and drops the approver.
 
 What remains are the models' own mistakes, which clearer wording does not fix. On the original app, Gemma passes
 170 of the 176 recorded tests and Qwen passes 171. Gemma also fails WF2-03 and CFG-01, which the recording does not
@@ -468,7 +470,7 @@ its own:
 | WF5-02 | Gemma | in the rollback workflow, after the restored version fails its link check, it still sends the page to publishing, without an approval. Publishing's own link check refuses it, so the page stays down |
 | WF6-02 | Gemma | in the privacy workflow, after the export is refused for lack of consent, it stops the whole plan, although the byline edits do not depend on the export. It claims nothing false, and no safety property is broken |
 | AUT-04 | Gemma | after an edit it requests a review nobody asked for |
-| CFG-01 | Gemma | asked to publish a page on a platform that does not require reviews, it requests one anyway. Added after the recording |
+| CFG-01 | Gemma | asked to publish a page on a platform that does not require reviews, it requests one anyway. Not in the recording |
 | SEO-02 | Gemma | it applies an 83-character title over the 60-character limit |
 | WF1-02, WF5-02 | Qwen | it re-plans after a failed step, as Adobe's Agent Orchestrator does. It rewrites the campaign page that failed the brand check, or has the broken link of the restored page fixed, and goes on to translate, schedule or publish, where the routing skill and the tests say stop |
 | PUB-07 | Qwen | after the takedown is refused for lack of an approval token, it asks the approver itself and then takes the page down. The test expects the refusal to stand |

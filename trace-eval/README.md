@@ -3,10 +3,58 @@
 After a change to an LLM agent system (a skill, a prompt, harness code, a config key), which tests should run, in
 what order, and when can we stop? The aim is to spend fewer tokens and less time and still catch regressions.
 
-This repository is a testbed for that question. It contains a small, working multi-agent app whose agents are
-played by a real model (Gemma 4 E4B or Qwen3.8-27B), 180 tests, 43 controlled changes with known effects, and 7
-selection strategies. The strategies are compared by replaying recorded runs. One of them, `adaptive_bayes`, is the
-method this project proposes, and `traceeval check` runs it live on one change.
+This repository is a testbed for that question: a small, working multi-agent application whose agents are played
+by a real model, a catalog of tests, a set of controlled changes with known effects, and nine selection strategies,
+one of which, `adaptive_bayes`, is the method this project proposes. The strategies are compared by replaying
+recorded runs, and `traceeval check` runs the proposed method live on one change.
+
+## The pieces, and how they fit
+
+```mermaid
+flowchart LR
+    subgraph once["recorded once, with the model"]
+        C["test catalog"] --> B["every test on the<br/>current app, traced"]
+        M["controlled changes"] --> V["changed copies<br/>of the app"]
+        V --> R["every test on<br/>each changed copy"]
+    end
+    B --> F["per test: dependencies,<br/>cost, pass rate"]
+    R --> G["ground truth: which test<br/>reveals which change"]
+    V --> D["change set: the diff<br/>as components"]
+    F --> S["a strategy picks tests<br/>under a token budget"]
+    D --> S
+    S --> E["replay: look up the<br/>recorded outcome"]
+    G --> E
+    E --> P["report: detection, cost,<br/>coverage, verdicts"]
+```
+
+- **The application**, ContentOps, lives in [`traceeval/sut/`](traceeval/sut/): an orchestrator and ten specialist
+  agents defined in YAML, skills that each carry a machine-readable procedure, tools over deterministic services,
+  and one config file. A real model plays the agents: Gemma 4 E4B by default, Qwen3.8-27B or gpt-oss-120b through
+  an OpenAI-compatible endpoint. [docs/CONTENTOPS.md](docs/CONTENTOPS.md) describes it.
+- **The tests** live in [`traceeval/catalog/`](traceeval/catalog/) as YAML. Each has a request, a context and
+  deterministic checks on the final state, the tool calls and the answer; two also have their answer judged by a
+  model against a rubric. Each test names the properties it checks, ids from the catalog of properties
+  ([`properties.yaml`](traceeval/catalog/properties.yaml)): a behavioural requirement with a category, how it is
+  checked, a mandatory flag and a threshold.
+- **A traced run** of every test on the current app records, per test, the components it touched (agents, skills,
+  tools, config keys, code lines), its cost in tokens and its pass rate. These are its observed dependencies, as
+  opposed to the declared ones its author wrote.
+- **The changes** are the entries of [`traceeval/mutation/catalog.py`](traceeval/mutation/catalog.py), each applied
+  as an edit to a copy of the app. The diff becomes a change set: the components it touches, in the same
+  identifiers the traces use. Running the whole suite on each changed copy gives the ground truth: a test
+  *reveals* a change when it passes on the current app and fails on the changed copy, by majority over the
+  repetitions. A change is a regression when at least one test reveals it.
+- **The strategies** in [`traceeval/selection/`](traceeval/selection/) pick tests under a token budget from the
+  change set, the traces, the costs and the pass rates, and from the outcomes of the other recorded changes.
+  They never see the outcome of the change under evaluation. [`strategies.py`](traceeval/selection/strategies.py)
+  holds the baselines, [`reproduced.py`](traceeval/selection/reproduced.py) two published methods reproduced
+  (CASPER's slices and Risk-Aware Adaptive Evaluation's bandit, neither of which reads the diff), and
+  [`adaptive_bayes.py`](traceeval/selection/adaptive_bayes.py) the proposed method, with two variants that compare
+  text measures and one without its mandatory-coverage rule.
+- **The report** shows, per strategy, how many regressions it catches for how many tokens and how much time, how
+  many of the changes that break a safety property it catches, what it spends on changes that break nothing, and
+  whether the adaptive method stops at the right moment. It also gives the coverage of the suite and of each
+  change.
 
 ## Run it
 
@@ -19,9 +67,9 @@ pytest -q                                                   # one to two minutes
 traceeval sdd --workdir runs/sdd                            # spec-driven development demo
 ```
 
-Recording an experiment needs the model, served either from the GPU server (see
+Recording an experiment needs the model, served from the GPU server (see
 [docs/EXPERIMENT.md](docs/EXPERIMENT.md)) or from a local GPU with `--backend hf`. `--backend vllm` runs Gemma and
-`--backend llm` runs Qwen.
+`--backend llm` runs Qwen or gpt-oss.
 
 ```bash
 scripts/gpu_remote.sh up gemma
@@ -30,8 +78,8 @@ traceeval experiment --backend vllm --workdir runs/gemma5 --reps 3    # about an
 scripts/gpu_remote.sh down
 ```
 
-The prototype, `traceeval check`, checks one change live. The proposed method picks a test, and the test runs on
-the changed app with the real model. The outcome decides what runs next, and the check ends with a verdict.
+The prototype, `traceeval check`, checks one change live. The proposed method picks a test, the test runs on the
+changed app with the real model, the outcome decides what runs next, and the check ends with a verdict.
 
 ```bash
 traceeval check skill_routing_drop_approval --history runs/gemma5 --budget 0.2      # a change from the catalog
@@ -41,43 +89,13 @@ traceeval check path/to/my-copy-of-sut --history runs/qwen5 --backend llm       
 `--history` points to an experiment recorded with the same model and the same version of the app. It tells the
 method what each test costs and which code it runs.
 
-## What is in it
-
-1. Tests live in [`traceeval/catalog/`](traceeval/catalog/) as YAML. Each has a request, a context, and
-   deterministic checks on the final state, the tool calls and the response. Two of them also have their answer
-   judged by a model against a rubric. The judge is Gemma or Qwen, set with `TRACEEVAL_JUDGE`, and by default it
-   is the model playing the agents.
-2. The app under test, ContentOps, lives in [`traceeval/sut/`](traceeval/sut/) and is described in
-   [docs/CONTENTOPS.md](docs/CONTENTOPS.md). It has [agents](traceeval/sut/agents/) defined in YAML,
-   [skills](traceeval/sut/skills/) that each carry a machine-readable procedure
-   ([example `SKILL.md`](traceeval/sut/skills/publishing-workflow/SKILL.md)), [tools](traceeval/sut/tools/) and a
-   [config file](traceeval/sut/config/runtime.yaml). Gemma 4 E4B plays the agents, locally, on a GPU server, or
-   from its recorded answers. `--backend llm` plays them with Qwen3.8-27B on the GPU server, or with any other
-   OpenAI-compatible endpoint.
-3. Changes are the 43 entries in [`traceeval/mutation/catalog.py`](traceeval/mutation/catalog.py), each applied as
-   an edit to a copy of the app's files. Running the full suite on each change gives the ground truth: which tests
-   reveal which change.
-4. Strategies in `traceeval/selection/` pick tests under a token budget. They see the diff of the code without
-   comments, the baseline traces (which agents, skills, tools, config keys and code lines each test touched on the
-   unchanged app), the test catalog and the outcomes of the other changes. They never see the outcome of the
-   change being evaluated. [`strategies.py`](traceeval/selection/strategies.py) holds the baselines,
-   [`reproduced.py`](traceeval/selection/reproduced.py) two published methods reproduced as baselines (CASPER's
-   slices and Risk-Aware Adaptive Evaluation's bandit, neither of which looks at the diff) and
-   [`adaptive_bayes.py`](traceeval/selection/adaptive_bayes.py) the proposed method. The same file holds two
-   variants that compare text measures, `adaptive_bayes_tfidf` and `adaptive_bayes_notext`, and one variant
-   without the mandatory-coverage rule, `adaptive_bayes_nomandatory`.
-5. The report shows, for each strategy, how many changes it catches for how many tokens and how much time, how
-   many of the changes that break a safety property it catches, how much it spends on harmless changes, and
-   whether the adaptive one stops at the right moment. It also gives the coverage of the suite and of each change.
-
 ## Main results
 
-These results come from a recording in which Gemma 4 E4B played the agents of the current app (176 tests, 43
-changes, three repetitions per test; the other four, WF2-03 and the three cases with settings of their own, came
-later). Of the 34 regressions, 29 are revealed by at least one test. Gemma ignores the other five either way: it
-behaves the same with or without the change. No benign change, one meant to break nothing, fails a test. The table
-gives the share of those 29 that each strategy detects with a nominal budget of 20% of the full-suite tokens, and
-what it actually spends:
+The results come from Gemma's recording of the current app (`runs/gemma5`: 176 of the 180 tests, 43 changes, three
+repetitions per test; CFG-01 to CFG-03 and WF2-03 are not in it). Of the 34 regressions, 29 are revealed by at
+least one test. Gemma ignores the other five either way: it behaves the same with or without the change. No benign
+change, one meant to break nothing, fails a test. The table gives the share of those 29 that each strategy detects
+with a nominal budget of 20% of the full-suite tokens, and what it actually spends:
 
 | strategy | detected | tokens spent | time spent |
 |---|---|---|---|
@@ -135,16 +153,39 @@ model draft a spec from a prose request, for a person to confirm.
 Start with [docs/SDD_GUIDE.md](docs/SDD_GUIDE.md) if you are new to spec-driven development, or with
 [docs/SDD_DEMO.md](docs/SDD_DEMO.md) for the results. The report is in [docs/sdd/report.md](docs/sdd/report.md).
 
-## Further reading
+## How to read the documentation
 
+Each document uses only what the ones before it define.
+
+```mermaid
+flowchart TD
+    R["README<br/>the question, the pieces, the results"] --> A["CONTENTOPS.md<br/>the application under test"]
+    A --> U["USER_GUIDE.md<br/>vocabulary, the report, the method's weights,<br/>the changes, how to extend"]
+    U --> X["EXPERIMENT.md<br/>real models, the GPU server, recording and replay"]
+    X --> P["RESEARCH_PLAN.md<br/>problem, abstractions, methods, results,<br/>take-aways, roadmap"]
+    P --> M["AEM_ALIGNMENT.md<br/>what the AEM team asked for,<br/>and the features built for it"]
+    M --> D["DEMO.md<br/>the walkthrough for the AEM team"]
+    U --> S["SDD_GUIDE.md, SDD_DEMO.md, STUDY_GUIDE.md<br/>spec-driven development, the add-on"]
+    P --> W["related_work.md, REFERENCES.md, paper/<br/>the literature and the paper draft"]
+```
+
+- [docs/CONTENTOPS.md](docs/CONTENTOPS.md): the application, its agents, skills, tools and rules.
+- [docs/USER_GUIDE.md](docs/USER_GUIDE.md): how the pieces fit, how to read the report, how the method weighs a
+  test, the controlled changes, how to add a test, a change or a strategy.
+- [docs/EXPERIMENT.md](docs/EXPERIMENT.md): the experiment with real models. Where the models run, the GPU server
+  script, the recorded answers, the commands to type, and what the recordings show.
+- [docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md): the research framing: the problem, the abstractions, the methods,
+  the results, the take-aways and the roadmap.
+- [docs/AEM_ALIGNMENT.md](docs/AEM_ALIGNMENT.md): Adobe's platform, the AEM team's requirements, and the features
+  built for them.
 - [docs/DEMO.md](docs/DEMO.md): the 20-minute walkthrough for the AEM team, with the commands and what each shows.
-- [docs/EXPERIMENT.md](docs/EXPERIMENT.md): the experiment with Gemma 4 E4B and Qwen3.8-27B. Where the models run, the GPU server script, the recorded answers and the commands to type.
-- [docs/STUDY_GUIDE.md](docs/STUDY_GUIDE.md): the whole repository in diagrams, focused on the SDD layer, with a 2–3 hour reading plan.
-- [docs/USER_GUIDE.md](docs/USER_GUIDE.md): how the pieces fit, how to read the report, how to add a test, a change or a strategy.
-- [docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md): the research framing, opening with a short summary. It covers the research questions, method, results, roadmap and paper plan.
-- [docs/related_work.md](docs/related_work.md): how this work relates to the literature.
-- [CLAUDE.md](CLAUDE.md): conventions for coding agents working in the repo.
+- [docs/SDD_GUIDE.md](docs/SDD_GUIDE.md), [docs/SDD_DEMO.md](docs/SDD_DEMO.md),
+  [docs/STUDY_GUIDE.md](docs/STUDY_GUIDE.md): the spec-driven development layer, its results, and a reading plan
+  for the whole repository in diagrams.
+- [docs/related_work.md](docs/related_work.md), [docs/REFERENCES.md](docs/REFERENCES.md), `docs/paper/`: how this
+  work relates to the literature, the full references, and the paper draft.
+- [CLAUDE.md](CLAUDE.md): conventions for coding agents working in the repository.
 
-Status: prototype v0.1. The agents and the judge run on real models only. Running OpenAI's models through the
-`llm` backend is on hold until API tokens are available. An adapter that adds tau2-bench, a public agent
-benchmark, as a second system under test is planned ([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §6).
+The agents and the judge run on real models only, used as they are served. Running a model behind OpenAI's API
+through the `llm` backend waits for API tokens. An adapter that adds tau2-bench, a public agent benchmark, as a
+second system under test is planned ([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §6).

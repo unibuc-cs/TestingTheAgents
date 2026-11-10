@@ -4,16 +4,22 @@ Read the README first. This guide adds what you need to work inside the reposito
 
 ## 1. Data flow
 
-```
- test catalog ────────┐                                 ┌─ strategy picks tests from: the change set +
-                      ▼                                 │  baseline traces + costs + pass rates
- baseline app ──► run all tests K× ──► traces, costs ───┤
-                                                        ├─► "execute" = look up the recorded outcome
- changes ────► edited copies ──────► diff ─► change set ┤   of that test under that change
-       │                                                │
-       └─────► run all tests K× ──► which tests fail ───┘─► metrics ─► report
+```mermaid
+flowchart LR
+    T["test catalog"] --> B["run every test K times<br/>on the original app"]
+    B --> H["traces, costs,<br/>pass rates"]
+    M["changes"] --> V["edited copies<br/>of the app"]
+    V --> D["diff → change set"]
+    V --> R["run every test K times<br/>on each copy"]
+    R --> G["which tests fail<br/>under which change"]
+    H --> S["strategy: picks tests from the change set,<br/>the traces, the costs and the pass rates"]
+    D --> S
+    S --> E["execute = look up the recorded outcome<br/>of that test under that change"]
+    G --> E
+    E --> X["metrics → report"]
 ```
 
+The terms in the picture are defined in §2.
 The runs are recorded once, with the model on the GPU server, and then replayed thousands of times.
 `runs/<name>/` holds the edited copies (`variants/`), the recordings (`history/*.jsonl`) and the results
 (`results/`). `traceeval check` (`experiment/check.py`) runs the same loop live, for one change. There, "execute"
@@ -126,6 +132,24 @@ tells it the most per token (high sensitivity, low cost). A sensitive test that 
 nothing broke. The sensitivity is the product of four factors (`selection/adaptive_bayes.py::sensitivity`). The
 examples are for `code_retry_drop_idempotency` (retried writes lose their idempotency key, §6), with the numbers
 of `runs/gemma5`:
+
+```mermaid
+flowchart LR
+    K["kind ratio<br/>(other changes of this kind)"] --> S["sensitivity of the test<br/>to the changed part"]
+    L["test record<br/>(what it caught before)"] --> S
+    C["coverage<br/>(how often it ran the part)"] --> S
+    W["tilt<br/>(text similarity, declared)"] --> S
+    S --> I["information per token"]
+    F["pass rate on the<br/>original app"] --> I
+    O["cost in tokens"] --> I
+    I --> P["pick the next test"]
+    P --> U["run it, update<br/>the probabilities"]
+    U --> Q{"stop?"}
+    Q -->|"a test that used<br/>to pass fails"| REG["regression"]
+    Q -->|"nothing broken,<br/>with high probability"| MAN["test every affected<br/>mandatory property"] --> CL["clean"]
+    Q -->|"budget spent"| BU["budget"]
+    Q -->|"no"| P
+```
 
 | factor | what it is | example |
 |---|---|---|

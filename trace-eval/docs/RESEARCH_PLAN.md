@@ -2,8 +2,7 @@
 
 **Change-aware, cost-bounded selection, prioritization and stopping of tests and evals for LLM agent systems**
 
-Ciprian Păduraru · University of Bucharest · working document, 9 November 2026 · status: prototype v0.1 running on
-real models, results in `docs/results/gemma5/report.md`
+Ciprian Păduraru · University of Bucharest · the results are in `docs/results/gemma5/report.md`
 
 ---
 
@@ -14,9 +13,9 @@ real models, results in `docs/results/gemma5/report.md`
 - **Method.** Map the diff to components (code lines and functions, skill procedures, agent fields, config keys)
   and match them to tests through the dependencies observed in traces. Rank tests by expected information per
   token in a Bayesian model whose sensitivities are calibrated from history, and stop when the probability of a
-  regression is low. The method is `adaptive_bayes`; six baselines run alongside it.
+  regression is low. The method is `adaptive_bayes`; eight other strategies run alongside it.
 - **Testbed.** A small multi-agent app (`traceeval/sut`) whose agents are played by a real model (Gemma 4 E4B, and
-  Qwen3.8-27B as a second model), 180 tests (the recordings hold 176; four came later) and 43 controlled changes
+  Qwen3.8-27B as a second model), 180 tests (the recordings hold 176) and 43 controlled changes
   applied as file edits (9 of them benign). Full-suite runs with three repetitions give the ground truth, and
   strategies are compared by offline replay.
 - **Results (§5, Gemma).** Hand-written dependencies catch 61% of the regressions. Trace-based selection catches
@@ -38,18 +37,17 @@ real models, results in `docs/results/gemma5/report.md`
 
 ## 0. What this document is
 
-This plan merges five inputs into one research design and one runnable testbed: the requirements captured from
-the July 2026 discussion with Georgiana (Adobe, AEM agent platform), the state-of-the-art report with APFD/APFD_c
-and reliability metrics, the OpenTelemetry-based prioritization sketch, the TRACE-Eval/Pi handoff, and the local
-Muse Glimmer/vLLM setup notes. Where the inputs disagreed, the decisions below say which way we went and why. The
-research problem is kept general: any agent platform built from skills, prompts, tools, harness code and
-configuration. AEM is the motivating instance, and the method does not depend on it.
+The research design and the testbed that makes it runnable, in reading order: the problem (§1), the abstractions
+the method rests on (§2), the methods (§3), the evaluation environment (§4), the results and the take-aways (§5),
+the models and the prototype (§6), the roadmap (§7), the paper (§8) and the open questions for the AEM team (§9).
+The research problem is kept general: any agent platform built from skills, prompts, tools, harness code and
+configuration. AEM, Adobe's platform, is the motivating instance, and the method does not depend on it.
 
 **Design decisions**
 
 | Topic | Decision | Reason |
 |---|---|---|
-| System under test (SUT) | A purpose-built mini content-operations platform ("ContentOps": pages, assets, publishing, SEO, translation, governance, rollback) is the primary SUT. tau2-bench, with the local vLLM model playing both the agent and the user, is the second SUT (designed, not yet implemented; see §6). | The primary SUT gives a multi-agent structure with shared components built in on purpose (the hard case Georgiana described) and full control over mutations. Its agents run on a local model, and recorded answers make reruns free and exact. tau2-bench adds external validity. |
+| System under test (SUT) | A purpose-built mini content-operations platform ("ContentOps": pages, assets, publishing, SEO, translation, governance, rollback) is the primary SUT. tau2-bench, with the local vLLM model playing both the agent and the user, is the second SUT (designed, not yet implemented; see §6). | The primary SUT gives a multi-agent structure with shared components built in on purpose (the hard case the AEM team describes) and full control over mutations. Its agents run on a local model, and recorded answers make reruns free and exact. tau2-bench adds external validity. |
 | Agent runtime | A pure Python harness with an OpenAI-compatible LLM backend. Pi is not used in the prototype. | It is the shortest path, and the harness code must itself be mutable and instrumentable (coverage contexts). A Pi adapter remains possible later. |
 | Observability | Our own trace recorder with an OpenTelemetry-compatible event model (agent, skill, tool, config and llm events) and an OTLP JSON exporter (`tracing/otel.py`), rather than Phoenix/OpenInference as a dependency. | No services in the loop, and the export needs no dependency. |
 | Oracles | Deterministic checks (final state, tool trajectories, audit log, response substrings). An LLM judge (Gemma or Qwen, against the case's rubric) runs only for explicitly marked answer-quality properties, and only after the deterministic checks pass. | Regression tracking must not depend on judge noise (see "LLM-as-a-judge bottleneck" in the prototype report). |
@@ -88,7 +86,38 @@ is what makes it testable.
 
 ## 2. Models underlying the method
 
-### 2.1 Change model (what a diff becomes)
+### 2.1 Tests and their facts
+
+A test (a case of the catalog, `traceeval/catalog/`) is a request to the application with a context, and
+expectations on what must be true afterwards: the final state, the tools called and not called, the audit log,
+facts in the answer, and for workflows the order of agents and tools. Each test also carries the facts the methods
+use:
+
+- a **risk** level, critical, high, medium or low, which the metrics read as a severity of 4, 3, 2 or 1;
+- the **properties** it checks, ids from the catalog of properties (`properties.yaml`: category, how it is
+  checked, a mandatory flag, a threshold and the components it comes from; `docs/AEM_ALIGNMENT.md` §3.4). The
+  mandatory ones, the safety properties, are the required dependencies of §2.3;
+- its **declared dependencies**, the metadata its author wrote;
+- its **cost** and its **pass rate**, measured on the original app (§2.4, §2.5);
+- its **behaviour signature**: the agents, tools, fault profile and dataset of its baseline runs. Tests with the
+  same signature are near-duplicates, whose outcomes are correlated.
+
+The diff and the tests meet in one vocabulary of components, defined in §2.2 and used on both sides:
+
+```mermaid
+flowchart LR
+    subgraph change["the change"]
+        DF["diff of the two trees"] --> CS["change set: components<br/>code, line, tool, skill part,<br/>agent field, config key"]
+    end
+    subgraph tests["the tests"]
+        DC["declared block,<br/>written by the author"] --> DEP["dependencies of a test"]
+        TR["traces of the<br/>baseline runs"] --> DEP
+        PR["catalog of properties:<br/>the mandatory ones are required"] --> DEP
+    end
+    CS <-->|"the same identifiers"| DEP
+```
+
+### 2.2 Change model (what a diff becomes)
 
 The extractor (`traceeval/mutation/changeset.py`) turns a diff into *components* with the same identifiers used
 for dependencies:
@@ -102,7 +131,7 @@ for dependencies:
 | `config:<dotted.key>` | `config:runtime.retries` | Changes of the effective value only. |
 | comments and formatting | — | Left out. Comments, docstrings, blank lines, YAML comments and the order of config mappings add no component, file or diff line, so no selector or probability depends on them. |
 
-### 2.2 Dependency model (declared · observed · required)
+### 2.3 Dependency model (declared · observed · required)
 
 - **Declared** dependencies are the metadata a test author wrote (the `declared:` block in the catalog). They are
   incomplete on purpose, as in practice: shared skills reached through `include`, harness code and most
@@ -115,14 +144,14 @@ for dependencies:
   properties of the catalog of properties (the safety ones). The adaptive method tests every mandatory property a
   change may affect before it ends without a regression (step 5, §5.3).
 
-### 2.3 Cost model
+### 2.4 Cost model
 
 c(t) = agent tokens (prompt + completion over all LLM calls in the delegation chain) + judge tokens (only when a
 judge runs). Latency is recorded alongside. Tokens come from the model server's usage fields, so a case that
 delegates, retries or reads long skills costs more. A full-suite run of the 176 recorded tests costs about 2.0M
 tokens under Gemma and 2.4M under Qwen.
 
-### 2.4 Outcome model
+### 2.5 Outcome model and ground truth
 
 A test run ends in one of five outcomes:
 
@@ -137,6 +166,18 @@ An INFRA_INVALID run is left out, as if it had not been made. Of the other outco
 ground truth. With K repetitions per variant, the ground truth "t reveals Δ" is a *majority flip*: the baseline
 pass rate is ≥ 0.5 and the variant pass rate is < 0.5. A test that the model fails on the original app
 (f(t) = 1 − baseline pass rate) cannot reveal anything, and f(t) is a direct input to the selectors.
+
+```mermaid
+flowchart LR
+    B["K runs on the original app"] --> PB["majority: pass?"]
+    V["K runs on the changed copy"] --> PV["majority: fail?"]
+    PB --> AND{"both?"}
+    PV --> AND
+    AND -->|"yes"| REV["the test reveals the change"]
+    AND -->|"no"| NO["it does not"]
+    I["a run the environment broke<br/>(INFRA_INVALID)"] -.->|"left out"| B
+    I -.->|"left out"| V
+```
 
 ---
 
@@ -161,6 +202,24 @@ variants of the proposed method differ from it only in how text is compared (§5
 `adaptive_bayes_notext`. A third, `adaptive_bayes_nomandatory`, leaves out step 5 (§5.3).
 
 ### 3.1 The proposed method: adaptive Bayesian selection with budget-aware stopping
+
+The loop in one picture; the paragraphs below define each box:
+
+```mermaid
+flowchart TD
+    IN1["change set C(Δ),<br/>priors π_c by kind"] --> M["posterior over the subsets<br/>of broken components"]
+    IN2["traces: φ_t(c), costs c(t),<br/>fail rates f_t"] --> SENS["sensitivities s_tc,<br/>calibrated on the other changes"]
+    IN3["earlier changes with<br/>their revealing tests"] --> SENS
+    SENS --> M
+    M --> PICK["pick t = argmax of<br/>information gain × risk / c(t)"]
+    PICK --> RUN["run t on the changed app"]
+    RUN --> UPD["multiply the posterior<br/>by P(outcome | subset)"]
+    UPD --> M
+    RUN -->|"fails, and passed<br/>on the original app"| REG["verdict: regression"]
+    UPD -->|"P(some component broken) < ε"| MAND["test every mandatory property<br/>the change may affect"]
+    MAND --> CLEAN["verdict: clean"]
+    PICK -->|"budget spent, or no<br/>informative test left"| BUDG["verdict: budget"]
+```
 
 *Hypotheses.* Each changed component c is broken with a prior π_c that depends on its kind: ≈ 0.45–0.5 for code,
 skill, config and agent components, ≈ 0.12–0.15 for prompt wording and prose. The posterior is kept exactly over
@@ -580,8 +639,8 @@ because kind-level sensitivities alone let the method spend on cheap tests that 
 Stopping at the first failure of a test that passed on the original app is there because a failure the model also
 produces on the original app says nothing about the change.
 
-The prototype includes these items from the AEM team's wish list (`docs/AEM_ALIGNMENT.md`, whose §4 is the dated
-plan for the demo of 12 November 2026):
+The prototype includes these items from the AEM team's wish list (`docs/AEM_ALIGNMENT.md`, whose §4 says what
+comes after the demo):
 
 - the catalog of properties, drafted by a model from the requirements;
 - coverage reports, with workflows as a coverage dimension, and the mandatory-coverage rule (§5.3);
@@ -641,7 +700,7 @@ mutation-based ground truth, APFD_c. The alternative is NeurIPS D&B or EMNLP, wi
 
 ---
 
-## 9. Questions still to settle with Georgiana
+## 9. Questions still to settle with the AEM team
 
 The follow-up questions with the AEM team (`docs/AEM_ALIGNMENT.md` §1) answered part of this list: nightly and
 model-update runs, prompt → answer and prompt → tool-call datasets, the thresholds and mandatory properties
@@ -661,9 +720,3 @@ wanted, and budgets with early stopping.
 6. Re-planning. Should a single publish request for a page with a broken link be repaired or refused? The
    re-planning branch waits for this answer (`docs/AEM_ALIGNMENT.md` §4.1).
 
----
-
-*Repository: `trace-eval/` (the README lists the commands). Inputs synthesized:
-Agent_Test_Prioritization_Requirements.md; Agent Test Prioritization Prototype.docx;
-agent_test_prioritization_summary.md; TRACE-Eval_Pi_Harness_Handoff.md;
-muse-glimmer-local-setup-and-agent-workflows.md.*

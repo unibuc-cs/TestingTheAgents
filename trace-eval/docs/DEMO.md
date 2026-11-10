@@ -1,7 +1,7 @@
 # Demo walkthrough (20 minutes)
 
-This is the walkthrough for the demo to the AEM team on Thursday 12 November 2026. Every command runs from the
-repository root in a terminal, with the documents open next to it. Commands marked *replay* need no model.
+This is the walkthrough for the demo to the AEM team. Every command runs from the repository root in a terminal,
+with the documents open next to it. Commands marked *replay* need no model.
 Commands marked *live* need Gemma on the GPU server, started an hour before with `scripts/gpu_remote.sh up gemma`.
 Section 4 says what to do if the server is down. The limits worth mentioning, and what comes after the demo, are
 in [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4.
@@ -19,6 +19,19 @@ Open these in the editor: `docs/CONTENTOPS.md` (the figure), `traceeval/catalog/
 `traceeval/catalog/tests/workflows.yaml` (WF3-01), `traceeval/catalog/properties.yaml`,
 `traceeval/catalog/features.yaml`,
 `docs/results/gemma5/report.md` and its figures, and `docs/sdd/report.md`.
+
+## The terms used below
+
+- A **test** (or case) is one entry of the catalog: a request, a context and checks on the final state, the tool
+  calls and the answer. It names the **properties** it checks, ids from the catalog of properties.
+- A **change** is one of the controlled edits to a copy of the app; its **change set** is the components the diff
+  touches (code lines and functions, skill procedures and prose, agent fields, config keys).
+- A test **reveals** a change when it passes on the current app and fails on the changed copy, by majority over
+  the recorded runs. The revealing tests of a change are its ground truth, measured after the fact; no strategy is
+  told.
+- A **strategy** decides which tests to run under a **budget** of tokens, from the change set, the traces of the
+  current app, the costs and the pass rates. The strategies are described one by one at the end of this
+  document, and the results after them.
 
 ## 1. The question (2 minutes)
 
@@ -107,7 +120,22 @@ and nothing in the code changes.
 While it runs, narrate what the method does. It reads the change set (`skill:routing#prose`) and weighs every
 test by its sensitivity to that component, calibrated on the other recorded changes. It runs the most informative
 test per token first, updates after each outcome, and stops at the first failure of a test that passed on the
-original app. The output of a rehearsal:
+original app.
+
+```mermaid
+flowchart LR
+    CS["change set"] --> S["sensitivity of every test<br/>to each changed component"]
+    H["the recording: traces, costs,<br/>pass rates, the other changes"] --> S
+    S --> P["pick the most informative<br/>test per token"]
+    P --> R["run it on the changed app"]
+    R --> U["update P(something broke)"]
+    U --> P
+    R -->|"a test that used to pass fails"| REG["REGRESSION"]
+    U -->|"P(something broke) small"| M["test every mandatory property<br/>the change may affect"] --> CL["no regression"]
+    P -->|"budget spent"| B["no regression found<br/>within the budget"]
+```
+
+What the check prints:
 
 ```text
 skill_routing_drop_approval: changed skill:routing#prose
@@ -216,8 +244,8 @@ cases:
   differently when run 64 at a time than when run one at a time, so even a change that alters nothing appears to
   break them. A larger model does not automatically give a cleaner ground truth: some of Qwen's answers vary from
   run to run, and vLLM, the model server, has a switch for repeatable decoding that does not support Qwen3.8.
-  gpt-oss-120b, a third model recorded on the re-planning branch, varies even more. The models are used as they are
-  served. The lesson for Adobe is to measure first how much the answers vary under the real serving setup
+  gpt-oss-120b, a third model, varies even more, and five repetitions do not settle its vote. The models are used
+  as they are served. The lesson for Adobe is to measure first how much the answers vary under the real serving setup
   (RESEARCH_PLAN §5.4).
 - *How would this run at Adobe?* Nightly full-suite runs provide the recordings the method learns from. For each
   change, `traceeval check` selects the tests, orders them and decides when to stop. The traces are
