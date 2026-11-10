@@ -266,10 +266,9 @@ down): covering a change is not revealing it, the case the method is built for.
 ## 4. Next steps
 
 The demo on Thursday 12 November 2026 shows the testbed, the features of section 3 and the method on Gemma's
-recording, with one change checked live ([DEMO.md](DEMO.md)). Everything it needs is in place and rehearsed.
-
-One item of section 2 is open: re-planning after a failed step. It is built and recorded on a branch, and waits
-for one product decision (§4.1).
+recording, with one change checked live ([DEMO.md](DEMO.md)). Everything it needs is in place and rehearsed. The
+questions for the AEM team close the walkthrough. One item of section 2 is open: re-planning after a failed step.
+It is built and recorded on a branch, and waits for one product decision (§4.1).
 
 ### 4.1 Re-planning after a failed step
 

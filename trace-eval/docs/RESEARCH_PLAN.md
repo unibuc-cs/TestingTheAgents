@@ -426,7 +426,7 @@ On this app the rule is also a detector. It catches `skill_publish_drop_link_val
 calls clean: before ending, the method must test the mandatory property `safety_no_broken_publish`, and that test
 fails. The rule never caused a false verdict. Below a 10% budget it often cannot afford the extra test.
 
-### 5.4 Qwen on the same app: why its recording is not a ground truth
+### 5.4 Qwen and gpt-oss: why their recordings are not a ground truth
 
 Qwen3.8-27B (`runs/qwen5`: the same protocol, on one GPU of the server and two SLURM GPUs) passes 171 of the 176
 tests on the original app. It gets five of Gemma's six mistakes right and makes its own. In particular, where the
@@ -446,21 +446,27 @@ GDN_ATTN"). Recording the baseline the way the changes are recorded is not enoug
 recorded exactly like the others, as the reference, seven of the eight other benign changes still flip one to
 five tests, so some of Qwen's answers vary from run to run even under identical conditions.
 
-Qwen is used as it is served, like Gemma. Its recording stands as this finding, and the results are Gemma's. The
-lesson for a pipeline is to measure how much the model's answers vary from run to run under the serving setup the
-selection will run on, before trusting a ground truth or a stopping rule. The no-op change measures exactly that.
+gpt-oss-120b, OpenAI's open-weights model, was recorded on the branch with re-planning (`docs/AEM_ALIGNMENT.md`
+§4.1: 182 tests, 48 changes, three repetitions). Its answers vary even more: the no-op change appears to break four
+tests, and every benign change two to seven. More repetitions would show whether a majority vote settles them
+(roadmap, phase 6).
+
+Qwen and gpt-oss are used as they are served, like Gemma. Their recordings stand as this finding, and the results
+are Gemma's. The lesson for a pipeline is to measure how much the model's answers vary from run to run under the
+serving setup the selection will run on, before trusting a ground truth or a stopping rule. The no-op change
+measures exactly that.
 
 ---
 
 ## 6. Models, the prototype, and a second system under test
 
-- **ContentOps on real models** (`docs/EXPERIMENT.md`). Gemma 4 E4B (`--backend vllm`, or `hf` on a local GPU)
-  and Qwen3.8-27B (`--backend llm`, or any other OpenAI-compatible endpoint) run on the GPU server, which offers
-  two GPUs directly and two more through SLURM on the same machine (`TRACEEVAL_SITE=hpc`). One run can spread
-  its requests over several servers. A 43-variant × 3-rep recording of the 176 tests is about 23k runs (timings
-  in `docs/EXPERIMENT.md` §7). Every answer can be recorded (`traceeval/llm/cache.py`), so a rerun costs nothing
-  and the test suite replays Gemma's answers without a GPU. A run with an OpenAI model, through the `llm`
-  backend, waits for API tokens.
+- **ContentOps on real models** (`docs/EXPERIMENT.md`). Gemma 4 E4B (`--backend vllm`, or `hf` on a local GPU) and
+  Qwen3.8-27B (`--backend llm`, or any other OpenAI-compatible endpoint) run on the GPU server, which offers two
+  GPUs directly and two more through SLURM on the same machine (`TRACEEVAL_SITE=hpc`). One run can spread its
+  requests over several servers. A 43-variant × 3-rep recording of the 176 tests is about 23k runs (timings in
+  `docs/EXPERIMENT.md` §7). Every answer can be recorded (`traceeval/llm/cache.py`), so a rerun costs nothing and
+  the test suite replays Gemma's answers without a GPU. gpt-oss-120b, OpenAI's open-weights model, runs the same
+  way over both of the server's GPUs (§5.4). A run with a model behind OpenAI's API waits for API tokens.
 - **The prototype** (`traceeval check`, `docs/EXPERIMENT.md` §5) runs the adaptive method on one change, live.
   Each test it picks runs on the changed app with the real model, and the outcome decides what runs next. It
   stops with a verdict and its probability that the change broke something. A recording made with the same model
@@ -479,9 +485,9 @@ selection will run on, before trusting a ground truth or a stopping rule. The no
 | 1. Testbed | SUT, catalog, tracing, mutations, change sets, record/replay, metrics, report, CLI, tests | done (v0.1) |
 | 2. Methods | baselines + cost-aware + predictive + adaptive Bayesian selector with stopping | done (v0.1), with the mandatory-coverage rule (§5.3); open: tuning ε, the priors and the discount |
 | 3. Method improvements | (a) test-level learned sensitivities (per test × component-kind reveal history) instead of kind-level; (b) IR relevance inside the Bayesian likelihood; (c) CASPER-style slices and the Risk-Aware Adaptive Evaluation bandit as reproduced baselines | (a) done; (b) done as an option (§5.2); (c) open |
-| 4. Real LLM | ContentOps on real models (local vLLM): all variants × 3 reps under two models | done: Gemma (`runs/gemma5`); Qwen's recording of the same app (`runs/qwen5`) is spoiled by run-to-run variation and is not used for the results (§5.4) |
+| 4. Real LLM | ContentOps on real models (local vLLM): all variants × 3 reps under two models | done: Gemma (`runs/gemma5`); Qwen's recording of the same app (`runs/qwen5`) is spoiled by run-to-run variation and is not used for the results (§5.4); gpt-oss-120b, recorded on the re-planning branch, varies even more |
 | 5. External SUT | tau2-bench airline adapter; 12 mutations (6 policy, 4 tool-code, 2 benign); same evaluation | after the demo for the AEM team |
-| 6. Scale/robustness | more mutations (mutation operators generated systematically: step deletion/swap/condition negation in procedures, argument swaps in adapters, config boundary values), equivalent-mutant analysis, sensitivity to K and to budget definitions (time vs. tokens), ablations of each model ingredient | with the paper |
+| 6. Scale/robustness | more mutations (mutation operators generated systematically: step deletion/swap/condition negation in procedures, argument swaps in adapters, config boundary values), equivalent-mutant analysis, sensitivity to K and to budget definitions (time vs. tokens), ablations of each model ingredient, more repetitions for the models whose answers vary (§5.4) | with the paper |
 | 7. Paper | see §8 | drafting can start from this document and the report |
 
 A model's own mistakes and blind spots shape the ground truth: which changes a test reveals depends on the model
@@ -505,7 +511,9 @@ plan for the demo of 12 November 2026):
 - environment failures kept apart (`INFRA_INVALID`);
 - recordings of the app with both models.
 
-After the demo come a run with an OpenAI model, once API tokens are available, and tau2-bench.
+After the demo come re-planning after a failed step, built on a branch and waiting for one product decision
+(`docs/AEM_ALIGNMENT.md` §4.1), then tau2-bench, and a run with a model behind OpenAI's API once tokens are
+available.
 
 ---
 
@@ -537,9 +545,10 @@ regressions.
 4. Method (§3.1).
 5. Testbed (§4).
 6. Evaluation: RQ1–RQ4, ablations, and external validity with LLMs and tau2-bench.
-7. Threats to validity: synthetic mutants vs. real regressions; two models, greedy decoding, and a ground truth
-   that depends on the model; a single primary domain; calibration leakage, controlled by leave-one-change-out; a
-   textual testbed that favours IR.
+7. Threats to validity: synthetic mutants vs. real regressions; three models, of which only the smallest gives a
+   stable ground truth with three repetitions; greedy decoding, and a ground truth that depends on the model; a
+   single primary domain; calibration leakage, controlled by leave-one-change-out; a textual testbed that favours
+   IR.
 8. Conclusion.
 
 **Venues.** ASE, ISSTA or ICST, with a software-engineering framing: RTS/TCP for LLM-based systems, a
@@ -565,6 +574,8 @@ wanted, and budgets with early stopping.
 4. Oracles. Which properties are deterministic and which are judged? Which are release blockers (the safety set)?
 5. Budgets. Tokens, time or both; per PR or nightly? Is a partial run with an explicit "clean with probability p"
    statement acceptable to the team? This is what the stopping rule outputs.
+6. Re-planning. Should a single publish request for a page with a broken link be repaired or refused? The
+   re-planning branch waits for this answer (`docs/AEM_ALIGNMENT.md` §4.1).
 
 ---
 

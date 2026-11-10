@@ -120,6 +120,9 @@ coverage: 100% of the changed components exercised, 27% of the 15 affected prope
 invoked: 3 of 11 agents, 5 of 13 skills, 5 of 32 tools, 5 of 19 features
 ```
 
+Live, the token counts can differ slightly from these, because decoding on the GPU server is nearly but not exactly
+repeatable ([EXPERIMENT.md](EXPERIMENT.md) section 3). The tests and the verdict stay the same.
+
 WF3-03 is the legal takedown in which the person refuses the approval. Without the rule, the orchestrator skips
 the approval and sends the takedown to publishing. The dispatcher refuses the call because it carries no approval
 token, so the pages stay up, and the test fails because no one was asked. The method needed three tests and one
@@ -207,15 +210,30 @@ cases:
   change, which is why the method discounts it. Qwen gets WF1-01 and WF6-02 right. In WF5-02 and WF1-02 it
   re-plans, as Adobe's Agent Orchestrator does: it has the broken link fixed, or rewrites the page that failed
   the brand check, and goes on.
-- *Why only Gemma's numbers?* Qwen's recording of the same app is not a clean ground truth. Six of its tests
-  answer differently when run 64 at a time than when run one at a time, so even a change that alters nothing
-  appears to break them. A larger model does not automatically give a cleaner ground truth: some of Qwen's
-  answers vary from run to run, and vLLM, the model server, has a switch for repeatable decoding that does not
-  support Qwen3.8. Both models are used as they are served. The lesson for Adobe is to measure first how much the
-  answers vary under the real serving setup (RESEARCH_PLAN §5.4).
+- *Why only Gemma's numbers?* Qwen's recording of the same app is not a clean ground truth. Six of its tests answer
+  differently when run 64 at a time than when run one at a time, so even a change that alters nothing appears to
+  break them. A larger model does not automatically give a cleaner ground truth: some of Qwen's answers vary from
+  run to run, and vLLM, the model server, has a switch for repeatable decoding that does not support Qwen3.8.
+  gpt-oss-120b, a third model recorded on the re-planning branch, varies even more. The models are used as they are
+  served. The lesson for Adobe is to measure first how much the answers vary under the real serving setup
+  (RESEARCH_PLAN §5.4).
 - *How would this run at Adobe?* Nightly full-suite runs provide the recordings the method learns from. For each
   change, `traceeval check` selects the tests, orders them and decides when to stop. The traces are
   OpenTelemetry, and the catalog of properties maps onto DeepEval's metrics.
 - *What is next?* Re-planning after a failed step is built on a branch and recorded with three models. It waits for
   one decision: whether a single publication with a broken link is repaired or refused
   ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4.1). Then tau2-bench, a public agent benchmark, as a second application.
+
+## Questions for the AEM team
+
+Their answers decide what comes next ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §9 keeps the list):
+
+- Should a single publish request for a page with a broken link be repaired or refused? Re-planning waits for this
+  answer ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4.1).
+- Is the diff available per pull request or per nightly batch, and are skills, prompts and settings versioned
+  together with the harness code? The change sets assume one tree.
+- Are the traces of the nightly runs kept: tool calls, skills loaded, settings read? The observed dependencies need
+  one traced run per test.
+- Which properties block a release, and which are judged by a model?
+- Is a budget counted in tokens, in time or both, per change or per night? Is a partial run that ends with "nothing
+  broke, with probability p" acceptable?

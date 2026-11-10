@@ -20,7 +20,7 @@ traceeval sdd --workdir runs/sdd                                 # spec-driven d
 traceeval properties draft [--fresh] | apply                     # a model drafts the catalog of properties; you edit
 TRACEEVAL_BACKEND=vllm pytest -q    # record the answers the cassette lacks (Gemma up on the GPU server)
 traceeval sdd draft --request r.md --id FS-0106 [--replay a.json]  # draft a spec with a model
-scripts/gpu_remote.sh up [gemma|qwen] | status | down   # models on the GPU server; see docs/EXPERIMENT.md
+scripts/gpu_remote.sh up [gemma|qwen|gptoss] | status | down   # models on the GPU server; see docs/EXPERIMENT.md
 TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM cluster (2 GPUs, port + 10)
 # several servers in one run: TRACEEVAL_VLLM_URL / TRACEEVAL_LLM_BASE_URL take comma-separated URLs
 ```

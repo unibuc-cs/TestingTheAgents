@@ -124,18 +124,19 @@ parse it by hand.
 
 ## 3. Where the models run
 
-Two models play the agents. Gemma 4 E4B, a small model from Google, is the default. Qwen3.8-27B, released by
-Alibaba in August 2026 and about six times bigger, is the second model, so we can check that results hold for
-more than one model. The `--backend` option picks who plays the agents:
+Gemma 4 E4B, a small model from Google, plays the agents by default. Qwen3.8-27B, released by Alibaba in August
+2026 and about six times bigger, is the second model, so we can check that results hold for more than one model.
+gpt-oss-120b, OpenAI's open-weights model, is a third, served over both of the server's GPUs when they are free.
+The `--backend` option picks who plays the agents:
 
 | backend | what it is | when to use it |
 |---|---|---|
 | `hf` (default) | Gemma in this Python process, on your local GPU (RTX 4090), one call at a time | a quick look at one case, no server needed |
 | `vllm` | Gemma served by vLLM on the GPU server (GPU0), reached through an SSH tunnel; many calls at once | recording experiments with Gemma |
-| `llm` | an OpenAI-compatible endpoint: by default Qwen on the GPU server (GPU1), or the one named by `TRACEEVAL_LLM_BASE_URL` and `TRACEEVAL_LLM_MODEL` | recording experiments with Qwen; an OpenAI model would use it too |
+| `llm` | an OpenAI-compatible endpoint: by default Qwen on the GPU server (GPU1), or the one named by `TRACEEVAL_LLM_BASE_URL` and `TRACEEVAL_LLM_MODEL` | recording experiments with Qwen or gpt-oss-120b; a model behind OpenAI's API would use it too |
 | `replay` | Gemma's recorded answers, no model (`tests/cassettes/gemma.jsonl`, or the file named by `TRACEEVAL_CACHE`) | the test suite and the spec-driven development (SDD) demo; running a recorded experiment again |
 
-The two models are wired in slightly differently:
+The models are wired in slightly differently:
 
 - **Gemma (`hf`, `vllm`).** We build the prompt on your machine with Gemma's chat template and send it as
   token ids. The answer comes back as raw text, and we parse it on your machine
@@ -144,6 +145,9 @@ The two models are wired in slightly differently:
 - **Qwen (`llm`).** We use the ordinary chat API. vLLM applies Qwen's chat template and turns Qwen's tool-call
   syntax into structured calls on the server, so there is no Qwen-specific code in the repository. Qwen's
   thinking mode is turned off on the server, so it answers directly, as Gemma does.
+- **gpt-oss-120b (`llm`).** It is reached the same way as Qwen. It reasons before it answers, so it needs more room
+  per answer (`TRACEEVAL_LLM_MAX_TOKENS=4096`). It writes typographic hyphens, spaces and quotes, which the answer
+  checks read as the plain ones.
 
 Two cases, SEO-07 and PUB-20, have a rubric. Once their fixed checks pass, a model also judges the answer
 against the rubric. By default the judge is the model playing the agents; `TRACEEVAL_JUDGE=gemma` or `qwen`
@@ -227,7 +231,13 @@ traceeval run --test PUB-01 --backend llm
 traceeval experiment --backend llm --workdir runs/qwen5 --reps 3
 traceeval check skill_routing_drop_approval --history runs/qwen5 --backend llm
 
-scripts/gpu_remote.sh down      # stop both servers and close the tunnels: frees the GPUs
+# gpt-oss-120b (it takes both fmi0 GPUs: Gemma and Qwen then run on the cluster)
+scripts/gpu_remote.sh up gptoss
+export TRACEEVAL_LLM_BASE_URL=http://127.0.0.1:18102/v1 TRACEEVAL_LLM_MODEL=openai/gpt-oss-120b
+export TRACEEVAL_LLM_MAX_TOKENS=4096
+traceeval experiment --backend llm --workdir runs/gptoss --reps 3
+
+scripts/gpu_remote.sh down      # stop every server and close the tunnels: frees the GPUs
 scripts/gpu_remote.sh down qwen # or just one of them
 ```
 
@@ -299,10 +309,11 @@ All settings are optional and are read from environment variables:
 | `TRACEEVAL_HF_MODEL` | `google/gemma-4-E4B-it` | the `gemma` preset's model; `--backend hf` and `vllm` read it too |
 | `TRACEEVAL_VLLM_URL` | `http://127.0.0.1:18100/v1` | where `--backend vllm` sends Gemma's calls; several servers separated by commas |
 | `TRACEEVAL_LLM_BASE_URL`, `TRACEEVAL_LLM_MODEL` | `http://127.0.0.1:18101/v1`, `Qwen/Qwen3.8-27B-FP8` | where `--backend llm` sends its calls (several servers separated by commas), and the model name the servers know |
+| `TRACEEVAL_LLM_MAX_TOKENS` | `700` | the most tokens `--backend llm` lets the model write per answer; gpt-oss-120b needs 4096 |
 | `TRACEEVAL_JUDGE` | the agents' model | `gemma` or `qwen`: the model that judges the cases with a rubric |
 | `TRACEEVAL_VLLM_ENV` | none | extra settings for the vLLM server, for example `VLLM_BATCH_INVARIANT=1`, which makes answers independent of batching (not supported for Qwen3.8) |
 
-To add a third model, add a preset to the `case` statement in `preset()` at the top of the script, with the
+To add another model, add a preset to the `case` statement in `preset()` at the top of the script, with the
 model, GPU, port and any vLLM flags it needs, and add its name to `PRESETS`.
 
 ### When something goes wrong
@@ -518,6 +529,11 @@ the reference, recorded exactly like the others, seven of the eight other benign
 five tests that fail where the reference passes. Some of Qwen's answers therefore vary from run to run even
 under identical conditions. Like Gemma, Qwen is used as it is served. Its recording stands as this finding,
 and the results are Gemma's.
+
+gpt-oss-120b, OpenAI's open-weights model, was recorded on the branch with re-planning
+([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4.1): 182 tests, 48 changes and three repetitions, served as one copy over
+both of fmi0's GPUs. Its answers vary even more than Qwen's. The no-op change appears to break four tests, and
+every benign change two to seven, so its recording is not used for results either.
 
 The table below compares the strategies at a budget of 20% of the full suite's tokens, on the 29 regressions
 Gemma reveals. The full tables are in [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.1 and in the report.
