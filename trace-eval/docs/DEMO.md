@@ -159,8 +159,8 @@ current app ([USER_GUIDE.md](USER_GUIDE.md) §4 says how to read it):
   hand-written dependencies find 62% of the regressions, traces 86%, TF-IDF 93%, and the adaptive method 78% for 3%
   of the tokens, which puts it at the left of the figure; it catches 84% of the changes that break a safety
   property.
-- Section 3: the tokens spent on benign changes, and why the adaptive method stopped; it never calls a benign
-  change a regression.
+- Section 3: the tokens spent on the changes no test reveals, and why the adaptive method stopped; it never calls
+  one of them a regression.
 - Section 5: the catalog of properties, with each property's pass rate against its threshold.
 - Section 6: the coverage of [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5. Point at the `not covered` column (the
   tests reach 15 of the 31 places where a tool refuses) and at one declared-against-invoked gap. `traceeval

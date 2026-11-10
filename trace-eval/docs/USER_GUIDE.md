@@ -68,8 +68,9 @@ Everything else is plumbing (loaders, tracing, report).
   budget. The third table gives the time spent, from each executed test's mean run time on the original app,
   which runs one test at a time. The fourth gives the detection rate over the critical regressions only: the
   changes that break a safety property, meaning that one of their revealing tests checks a safety property.
-- Section 3 gives the tokens spent on changes that break nothing. Its stop-reason table shows whether the
-  adaptive strategy said `clean` on benign changes and `regression` on regressions.
+- Section 3 gives the tokens spent on the changes no test reveals (the benign ones and the regressions the model
+  cannot see). Its stop-reason table shows whether the adaptive strategy said `clean` on benign changes and
+  `regression` on regressions.
 - Section 4 gives selection recall (the share of the revealing tests inside the selected subset) and how well the
   complete order is prioritized, by APFD and APFD_c (`experiment/metrics.py`; the papers are in
   [REFERENCES.md](REFERENCES.md)). Both score an order of the whole suite with every test run and no stopping, so

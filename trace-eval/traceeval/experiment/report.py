@@ -1,5 +1,5 @@
-"""Markdown report (+ three figures) from the replay results: ground truth, detection vs. cost,
-waste on benign changes, stopping accuracy, APFD, properties, and coverage (of the suite and of each change)."""
+"""Markdown report (+ three figures) from the replay results: ground truth, detection vs. cost, waste on the
+changes no test reveals, stopping accuracy, APFD, properties, and coverage (of the suite and of each change)."""
 
 from pathlib import Path
 
@@ -106,7 +106,7 @@ def fig_benign_waste(df, out):
         )
     ax.set_xticks([i + width * (len(budgets) - 1) / 2 for i in range(len(names))])
     ax.set_xticklabels(names, rotation=25, ha="right", fontsize=8)
-    _axes(ax, "Tokens spent on benign changes (lower is better)", "", "tokens spent (% of full suite)")
+    _axes(ax, "Tokens spent on changes no test reveals (lower is better)", "", "tokens spent (% of full suite)")
     ax.legend(fontsize=8, frameon=False)
     fig.tight_layout()
     fig.savefig(out, dpi=150)
@@ -344,11 +344,11 @@ def write_report(workdir: Path) -> Path:
         "",
         _table(c2d.to_frame("cost_to_first_detection"), "{:.3f}"),
         "",
-        "## 3. Benign changes — wasted budget and stopping",
+        "## 3. Changes no test reveals — wasted budget and stopping",
         "",
         _by_budget(ben, "cost_fraction", "{:.3f}"),
         "",
-        "![benign waste](figures/benign_waste.png)",
+        "![tokens spent on changes no test reveals](figures/benign_waste.png)",
         "",
         "Stop reasons of `adaptive_bayes` (rows: is the change a regression?):",
         "",

@@ -49,7 +49,7 @@ flowchart LR
   (CASPER and Risk-Aware Adaptive Evaluation, neither of which reads the diff;
   [docs/REFERENCES.md](docs/REFERENCES.md)), and `adaptive_bayes` is ours.
 - **The report** compares the strategies: the regressions caught for the tokens and the time spent, the changes
-  that break a safety property, what is spent on changes that break nothing, whether the adaptive method stops at
+  that break a safety property, what is spent on the changes no test reveals, whether the adaptive method stops at
   the right moment, and the coverage of the suite and of each change.
 
 ## Run it

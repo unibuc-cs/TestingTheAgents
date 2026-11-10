@@ -126,12 +126,12 @@ Cost until the first true detection (fraction of the full suite, detected cases 
 | risk_aware_ts | 0.106 |
 | adaptive_bayes | 0.016 |
 
-## 3. Benign changes — wasted budget and stopping
+## 3. Changes no test reveals — wasted budget and stopping
 
 | strategy |
 |---|
 
-![benign waste](figures/benign_waste.png)
+![tokens spent on changes no test reveals](figures/benign_waste.png)
 
 Stop reasons of `adaptive_bayes` (rows: is the change a regression?):
 

@@ -67,7 +67,8 @@ sums it up) separate throughout: selection (which tests), prioritization (in whi
 - **RQ3 (prioritization)** Can we order tests to detect regressions earlier? *Metric: APFD, cost-cognizant
   APFD_c, cost to first detection.*
 - **RQ4 (budget)** Can we reduce time and tokens while retaining acceptable detection and coverage? *Metric:
-  detection rate vs. budget curves, tokens actually spent, waste on benign changes, stopping accuracy.*
+  detection rate vs. budget curves, tokens actually spent, waste on the changes no test reveals, stopping
+  accuracy.*
 
 **Claimed contribution.** A change-aware, trace-informed, cost-bounded method for selecting agent tests, with a
 stopping rule based on the posterior probability of a regression, and a reproducible testbed (SUT, mutation
@@ -376,9 +377,10 @@ and gpt-oss's recordings of the same app. The ground truth belongs to the model:
 - None of the nine benign changes fails a test. Across all 43 changes, the five runs disagreed on only four
   (change, test) pairs, and the majority vote absorbs them.
 
-Detection of the 29 regressions Gemma reveals, by nominal budget, and tokens actually spent:
+Detection of the 29 regressions Gemma reveals, by nominal budget, and tokens actually spent (the last column on the
+14 changes no test reveals):
 
-| strategy | 5% | 10% | 20% | 50% | 100% | spent @20% | spent @100% | spent on benign @100% |
+| strategy | 5% | 10% | 20% | 50% | 100% | spent @20% | spent @100% | spent on unrevealed @100% |
 |---|---|---|---|---|---|---|---|---|
 | full (catalog order) | 0.14 | 0.24 | 0.34 | 0.90 | 1.00 | 0.20 | 0.98 | 1.00 |
 | random | 0.22 | 0.37 | 0.56 | 0.86 | 1.00 | 0.20 | 0.98 | 1.00 |
@@ -535,11 +537,12 @@ of the suite's tokens unless said otherwise.
 2. **Read the diff.** The strategies that read the diff and the traces find most regressions early; the two that do
    not, CASPER's slices and the risk-aware bandit, sit near a random order and find their first revealing test late
    (§5.1).
-3. **Stop when confident, with a safety net.** The adaptive method finds nearly as much as the best full-budget
-   strategy for a small fraction of the tokens and returns the rest; its price is a ceiling on narrow regressions
-   (§5.1). The mandatory rule covers the safety properties for under one extra test per change and catches a change
-   the stopping rule alone misses (§5.3). The catalog of properties is where that policy lives: whoever sets the
-   mandatory flag decides what the pipeline never skips.
+3. **Stop when confident, with a safety net.** The adaptive method finds more than any other strategy at equal
+   tokens spent, and most of what the best full-budget strategy finds, for a small fraction of its tokens; it
+   returns the rest. Its price is a ceiling on narrow regressions (§5.1). The mandatory rule covers the safety
+   properties for under one extra test per change and catches a change the stopping rule alone misses (§5.3). The
+   catalog of properties is where that decision lives: whoever sets the mandatory flag decides what the pipeline
+   never skips.
 4. **Discount the tests the model already fails.** The tests Gemma fails on the current app fail on nearly every
    changed copy too, and every other strategy reports some of those failures as the change's; the adaptive method
    keeps each test's pass rate and acts only on a flip (§5.1). A pipeline should do the same rather than treat
