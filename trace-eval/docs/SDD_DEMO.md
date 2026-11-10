@@ -73,7 +73,7 @@ replays them without a GPU. Playing the agents with a real model has three conse
   nothing about it.
 - Two correct PRs are rejected, and the evidence says why.
   - FS-0103 `pr_correct` makes the service refuse to publish or schedule without a fresh link check. In
-    DS-INTENTS/i02 and i05 Gemma publishes or schedules without one, so those regression cases fail.
+    DS-INTENTS/i02, i05 and PUB-19 Gemma publishes or schedules without one, so those regression cases fail.
   - Under FS-0104 `pr_config_70`, Gemma applies an over-long title whatever the limit (as in SEO-02). The
     property over title lengths, the boundary scenario and the monitor over the SEO runs all find such a title.
 - Several wrong PRs are caught in additional ways. FS-0101 `pr_in_adapter` and `pr_unwired` let through Gemma's

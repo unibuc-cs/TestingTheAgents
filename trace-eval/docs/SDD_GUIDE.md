@@ -95,7 +95,7 @@ case id or an inline case with `agent`, `request`, `context`), `dirs`, `module`,
 (`write_tools`, `catalog_cases`, `{skill_write_tools: <skill>}` or a literal list), `int`, `str`, `any`.
 
 Expressions (`where`, `ensures`) are Python expressions over a small vocabulary of helpers: `config('key')`,
-`approval_age(run, page_id)`, `expected_broken(run, page_id)`, `audit_count(run, action, ...)`,
+`approval_age(run, page_id)`, `expected_broken(run, page_id, seq)`, `audit_count(run, action, ...)`,
 `applied(run, tool)`, `token_owner(run, token)`, `call_token(run, event)` (the token a call was made with,
 also when a step of a plan received it), `title_of_length(n)`, `first_case_calling(tool)` and
 `baseline_run(test_id)`. In an expression, `event.<field>` reads the call or audit entry being checked and

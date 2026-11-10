@@ -598,7 +598,7 @@ PRS: list[PR] = [
         REJECTED,
         _m("FS-0103_pr_correct", "link gate in the service layer", FS0103_CORRECT),
         "2 files: the rule moves from the skill procedure (a prompt) into the service, and is proven; with Gemma it "
-        "exposes a slip: in DS-INTENTS/i02 and i05 the agent publishes or schedules without validating links, "
+        "exposes a slip: in DS-INTENTS/i02, i05 and PUB-19 the agent publishes or schedules without validating links, "
         "which the service now refuses, so those regression tests fail",
     ),
     PR(

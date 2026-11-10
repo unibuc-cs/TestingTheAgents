@@ -47,11 +47,24 @@ def test_skill_parsing_exposes_procedure():
 
 
 # Gemma's own mistakes on the original app (docs/EXPERIMENT.md, section 6): it ignores guards it has to work
-# out for itself; in WF1-01, as in PUB-10, it schedules a page whose review is not approved; in WF2-03 it says it
-# republished two pages it never published; in WF5-02 it goes on to the publishing step after the rollback's link
-# check failed (publishing's own link check then refuses); in WF6-02 it stops the whole plan after the refused
-# export, although the byline edits do not depend on it. Every other case must pass.
-KNOWN_MODEL_MISTAKES = ["AUT-04", "CFG-01", "PUB-10", "SEO-02", "WF1-01", "WF2-03", "WF5-02", "WF6-02"]
+# out for itself; in WF1-01, as in PUB-10, it schedules a page whose review is not approved; in WF6-02 it stops the
+# whole plan after the refused export, although the byline edits do not depend on it. With the re-planning rule
+# (docs/AEM_ALIGNMENT.md, section 4.1) it does not re-plan when one page of a multi-page publication is refused
+# (WF2-02, WF2-03), republishes a page it was only asked to repair (OPT-04), and in AUT-02/03, which pass in two
+# runs of three, applies the rule outside a plan. Every other case must pass.
+KNOWN_MODEL_MISTAKES = [
+    "AUT-02",
+    "AUT-03",
+    "AUT-04",
+    "CFG-01",
+    "OPT-04",
+    "PUB-10",
+    "SEO-02",
+    "WF1-01",
+    "WF2-02",
+    "WF2-03",
+    "WF6-02",
+]
 
 
 class ScriptedClient:

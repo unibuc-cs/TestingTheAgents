@@ -97,6 +97,12 @@ class CheckContext:
         return {tid: self.run(self.catalog[tid]) for tid in ids}  # cache hits, or one at a time when not parallel
 
     # ---------------------------------------------------------------- expression environment
+    def first_case_calling(self, tool: str) -> str | None:
+        """The first catalog case whose recorded baseline run called ``tool`` successfully and passed: a case the
+        model already fails cannot show that a change keeps the tool working."""
+        runs = self.model.baseline_runs
+        return next((t for t in self.model.cases_calling([tool], ok_only=True) if runs[t].get("passed")), None)
+
     def env(self, run: dict | None = None, **extra) -> dict:
         """The names a clause expression may use: the helpers below, ``run`` (the record, if any) and ``extra``."""
         env = {
@@ -108,7 +114,7 @@ class CheckContext:
             "token_owner": token_owner,
             "call_token": call_token,
             "title_of_length": title_of_length,
-            "first_case_calling": lambda tool: next(iter(self.model.cases_calling([tool], ok_only=True)), None),
+            "first_case_calling": self.first_case_calling,
             "baseline_run": lambda test_id: wrap(with_context(self.model.baseline_runs[test_id])),
         }
         if run is not None:
@@ -145,14 +151,21 @@ def approval_age(run, page_id: str) -> int:
     return (date.fromisoformat(state["today"]) - date.fromisoformat(approved_on)).days
 
 
-def expected_broken(run, page_id: str) -> int:
+def expected_broken(run, page_id: str, seq: int | None = None) -> int:
     """Independent oracle: how many of the page's links/assets are broken according to the state's own tables
-    (state at the end of the run: pages may be created or edited before they are validated)."""
+    (state at the end of the run: pages may be created or edited before they are validated). With ``seq``, the
+    audit entry the count is for, links that a later link repair removed count again: they were on the page
+    then."""
     state = run["final_state"]
     page = state["pages"][page_id]
     paths = {p["path"] for p in state["pages"].values()}
+    links = list(page.get("links", []))
+    if seq is not None:
+        for e in state.get("audit", []):
+            if e.get("action") == "fix_broken_links" and e.get("page_id") == page_id and e["seq"] > seq:
+                links += e.get("unlinked", [])
     broken = 0
-    for link in page.get("links", []):
+    for link in links:
         if link.startswith(("http://", "https://")):
             broken += state.get("external_links", {}).get(link, "unknown") != "ok"
         elif link.startswith("asset:"):

@@ -71,5 +71,6 @@ def fix_broken_links(state, page_id: str, actor: str) -> dict:
     for link in dict.fromkeys(dead):
         page["body"] = page["body"].replace(f"[[{link}]]", link)
     page["links"] = _extract_links(page["body"])
-    state.audit("fix_broken_links", actor, page_id=page_id, unlinked=len(dead))
-    return {"page_id": page_id, "unlinked": list(dict.fromkeys(dead)), "links": page["links"]}
+    unlinked = list(dict.fromkeys(dead))
+    state.audit("fix_broken_links", actor, page_id=page_id, unlinked=unlinked)
+    return {"page_id": page_id, "unlinked": unlinked, "links": page["links"]}

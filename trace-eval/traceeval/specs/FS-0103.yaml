@@ -21,7 +21,7 @@ clauses:
   - use: always_in_audit
     with:
       actions: [validate_links]
-      where: event.broken == expected_broken(run, event.page_id)
+      where: event.broken == expected_broken(run, event.page_id, event.seq)
 
   - use: function_contract
     with:

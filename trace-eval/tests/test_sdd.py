@@ -80,7 +80,7 @@ def test_fs0102_and_fs0103_verdicts(world):
     # the code is right, but the service now refuses Gemma's publish and schedule without a link check
     correct = {c["clause_id"]: c for c in ev["FS-0103/pr_correct"]["clauses"]}
     assert [k for k, c in correct.items() if c["status"] == "fail"] == ["regression-tests"]
-    assert correct["regression-tests"]["details"] == ["DS-INTENTS/i02", "DS-INTENTS/i05"]
+    assert correct["regression-tests"]["details"] == ["DS-INTENTS/i02", "DS-INTENTS/i05", "PUB-19"]
     stale = {c["clause_id"]: c for c in ev["FS-0103/pr_gate_ignores_version"]["clauses"]}
     # the same unchecked schedule goes through a gate that ignores the version, and the audit order shows it
     assert [k for k, c in stale.items() if c["status"] == "fail"] == [
