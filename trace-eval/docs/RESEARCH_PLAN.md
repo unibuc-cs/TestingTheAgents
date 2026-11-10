@@ -457,12 +457,14 @@ tests on the original app. It gets five of Gemma's six mistakes right and makes 
 routing skill says to stop after a failed step, it re-plans, as Adobe's Agent Orchestrator does: it repairs the
 page that failed the brand check, or has the broken link fixed, and goes on (`docs/EXPERIMENT.md` §6).
 
-Its recording is not a clean ground truth. Every regression is revealed, but so is every benign change, by two
-to five tests, including the no-op change whose change set is empty. Six tests (the two that Qwen judges itself,
-the 60-character boundary and three long workflows) answer differently when they run 64 at a time over three
-servers, as the changed copies do, than when they run one at a time, as the baseline does. Qwen's three runs also
-disagreed on 260 (change, test) pairs, against Gemma's five. The strategies' numbers on this recording are
-therefore not results; its report stays in `docs/results/qwen5/` as a record of the effect.
+Its recording is not a clean ground truth. Every regression is revealed, but so is every benign change, by two to
+five tests, including the no-op change whose change set is empty. Six tests (the two that Qwen judges itself, the
+60-character boundary and three long workflows) answer differently when they run 64 at a time over three servers,
+as the changed copies do, than when they run one at a time, as the baseline does. Qwen's three runs also disagreed
+on 260 (change, test) pairs, against Gemma's five. The strategies' numbers on this recording are therefore not
+results; its report stays in `docs/results/qwen5/` as a record of the effect. The two reproduced methods show the
+effect once more: CASPER's slices appear to detect 87% of the changes at a 20% budget there, because two of their
+twenty representatives, SEO-05 and WF4-02, are among the unstable tests and "reveal" 25 and 31 of the 43 changes.
 
 Two remedies fall short. vLLM 0.31's batch-invariant mode, which makes greedy decoding exactly repeatable, does
 not support Qwen3.8: the server refuses it for the model's linear-attention layers ("not supported for
