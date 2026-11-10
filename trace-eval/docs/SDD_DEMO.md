@@ -63,14 +63,14 @@ the repository (12% on average), and all 25 verdicts are as expected. Every wron
 names the clause, the counterexample or the misplaced code. Two rules are proven for all inputs (FS-0101,
 FS-0103). Two specs find defects in the current code before any PR is written (FS-0102, FS-0105).
 
-## With a real model playing the agents
+## With Gemma playing the agents
 
 The agents are played by Gemma 4 E4B. Its answers are recorded (`tests/cassettes/`), so `traceeval sdd`
-replays them without a GPU. Playing the agents with a real model has three consequences.
+replays them without a GPU. Playing the agents with a model has three consequences.
 
-- The regression line counts only cases that pass on the original app. Gemma gets seven catalog cases wrong on the
-  original app (AUT-04, PUB-10, SEO-02, WF1-01, WF2-03, WF5-02, WF6-02). They would fail under every PR and say
-  nothing about it.
+- The regression line counts only cases that pass on the original app. Gemma gets eight catalog cases wrong on the
+  original app (AUT-04, CFG-01, PUB-10, SEO-02, WF1-01, WF2-03, WF5-02, WF6-02). They would fail under every PR and
+  say nothing about it.
 - Two correct PRs are rejected, and the evidence says why.
   - FS-0103 `pr_correct` makes the service refuse to publish or schedule without a fresh link check. In
     DS-INTENTS/i02 and i05 Gemma publishes or schedules without one, so those regression cases fail.

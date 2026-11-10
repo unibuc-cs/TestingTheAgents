@@ -27,6 +27,8 @@ runs the test with the model, and a recording supplies only the baseline traces,
 
 ## 2. Vocabulary
 
+Paths are relative to `traceeval/`.
+
 - **Case / test**: one entry of the catalog. Scenario tests are in `catalog/tests/*.yaml` and dataset items in
   `catalog/datasets/*.yaml` (ids such as `DS-ROUTING/r01`).
 - **Property**: a behavioural requirement a test checks (`task_completion`, `safety_authorization`, ...). Every
@@ -38,15 +40,16 @@ runs the test with the model, and a recording supplies only the baseline traces,
   delegates its steps one at a time, each with its own instruction and the ids of earlier steps
   (`route_to_agent(agent, task, context)`). It asks a person before publishing, scheduling or taking pages down
   (`request_approval`). The workflow tests are in `catalog/tests/workflows.yaml`. Each one names the workflow it
-  runs end to end (`workflow: W1`), one of the six listed in `catalog/workflows.yaml` with the chain of
-  specialists a plan for it delegates to.
+  runs end to end (`workflow: W1`), one of the six listed in `catalog/workflows.yaml` (W1 campaign launch, W2 site
+  optimization, W3 legal takedown, W4 localized price update, W5 broken release rollback, W6 privacy request) with
+  the chain of specialists a plan for it delegates to.
 - **Declared dependencies**: the `declared:` block a test author writes. It is deliberately incomplete.
 - **Observed dependencies**: the components the trace shows the run touched (`agent:x`, `skill:x`, `tool:x`,
   `config:key`, `code:file::function`, `line:file:n`).
 - **Change set**: the diff turned into components with the same identifiers (`traceeval/mutation/changeset.py`).
   Comments, docstrings, blank lines and formatting are left out, so they add no component and no diff line.
 - **Revealing test**: a test that passes on the baseline (the original app) and fails on the changed copy, by
-  majority over K repetitions.
+  majority over K repetitions (`--reps`).
 - **Budget**: tokens, shown as a fraction of the full-suite cost.
 - **Stop reason** (`adaptive_bayes` only): why the adaptive method stopped, one of `clean`, `regression` (a test
   that passed on the original app failed), `budget`, `uninformative` (no remaining test could change the verdict)
@@ -74,9 +77,9 @@ Everything else is plumbing (loaders, tracing, report).
 
 ## 4. How to read the report
 
-- Section 1 lists each change with its number of revealing tests, and a sanity line. Under a real model the
-  sanity line can say VIOLATED: a regression with 0 revealing tests is one that model cannot see (§6). A benign
-  change with revealing tests means the testbed is broken.
+- Section 1 lists each change with its number of revealing tests, and a sanity line. The sanity line can say
+  VIOLATED: a regression with 0 revealing tests is one the model cannot see (§6). A benign change with revealing
+  tests means the testbed is broken.
 - In section 2, `detected` is the fraction of changes where at least one revealing test was run and failed.
   Compare strategies by the second table (tokens actually spent) rather than by the nominal budget: strategies
   that select a subset run out of tests, the adaptive one stops early, and the rest always spend the whole
@@ -85,10 +88,10 @@ Everything else is plumbing (loaders, tracing, report).
   changes that break a safety property, meaning that one of their revealing tests checks a safety property.
 - Section 3 gives the tokens spent on changes that break nothing. Its stop-reason table shows whether the
   adaptive strategy said `clean` on benign changes and `regression` on regressions.
-- Section 4 gives selection recall and the prioritization quality of the complete order, by APFD and APFD_c
-  (`experiment/metrics.py`; the papers are in [REFERENCES.md](REFERENCES.md)). Both score an order of the whole
-  suite with every test run and no stopping, so they measure prioritization alone. Each revealing test counts as
-  one fault, found when that test runs.
+- Section 4 gives selection recall (the share of the revealing tests inside the selected subset) and the
+  prioritization quality of the complete order, by APFD and APFD_c (`experiment/metrics.py`; the papers are in
+  [REFERENCES.md](REFERENCES.md)). Both score an order of the whole suite with every test run and no stopping, so
+  they measure prioritization alone. Each revealing test counts as one fault, found when that test runs.
   - APFD (Rothermel et al. 2001) is the area under the curve of faults found against tests run. With n tests, m
     faults and TF_i the position of the test that finds fault i: `APFD = 1 - (TF_1 + ... + TF_m) / (n * m) + 1 / (2
     * n)`. It is near 1 when the first tests find every fault and near 0 when the last ones do; a random order
@@ -100,9 +103,9 @@ Everything else is plumbing (loaders, tracing, report).
     little and scores high; finding it after the long workflows scores low, however few tests came before. Tokens
     per test vary by a factor of ten or more on this suite, so APFD_c is the one to read: an order can score well
     on APFD and poorly on APFD_c by putting the expensive tests first.
-  - What to expect: `full` (catalog order) and `random` sit near 0.55 on both; an order that uses the change scores
-    0.75 or more. The adaptive method's order is the one its model would pick if every test passed, followed by the
-    rest in cost-aware order.
+  - What to expect: `random` sits near 0.54 on both and `full` (catalog order) near 0.6; an order that uses the
+    change scores about 0.75 or more. The adaptive method's order is the one its model would pick if every test
+    passed, followed by the rest in cost-aware order.
 - Section 5 covers the catalog of properties: each property's pass rate on the original app against its
   threshold and, per strategy, the share of the properties a change breaks that the strategy's tests exercised.
 - Section 6 measures coverage ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5).
@@ -153,7 +156,7 @@ flowchart LR
 
 | factor | what it is | example |
 |---|---|---|
-| kind ratio | for the other recorded changes of this kind, the fraction of the tests each one touched that caught it, averaged over those changes | for a code change, tests that ran a changed line caught it 19% of the time on average: 6 of the 12 tests that ran the changed line of the link check caught `code_links_external_lenient`, but only 5 of the 180 that ran the changed line of the agent loop caught `code_termination_off_by_six`. Tests that only called a changed function, without running the changed line, caught nothing (the 1% floor). A ratio learned from one or two changes is padded with 2 changes' worth of a default for its kind, so it stays near that default |
+| kind ratio | for the other recorded changes of this kind (code, skill, prompt or config; §6), the fraction of the tests each one touched that caught it, averaged over those changes | for a code change, tests that ran a changed line caught it 19% of the time on average: 6 of the 12 tests that ran the changed line of the link check caught `code_links_external_lenient`, but only 5 of the 180 that ran the changed line of the agent loop caught `code_termination_off_by_six`. Tests that only called a changed function, without running the changed line, caught nothing (the 1% floor). A ratio learned from one or two changes is padded with 2 changes' worth of a default for its kind, so it stays near that default |
 | test record | the number of other recorded changes of this kind that touched the test and that it caught, over the number an average touched test would have caught; both are padded with 2 (`prior_strength`) | AUT-02 caught 3 where an average test would have caught 1.03: (3 + 2) / (1.03 + 2) = 1.65. AUT-13 caught none of an expected 1.03: (0 + 2) / (1.03 + 2) = 0.66 |
 | coverage | how often the test ran the changed code in its runs on the original app, from 0 to 1. When an agent loses a tool or a skill, it is how often the test used that tool or skill, because the agent's other tests cannot notice the loss | PUB-12 runs the changed line of `harness/retry.py` in every run: 1.0 |
 | tilt | the text similarity between the test and the diff (0.5 to 1.5), plus 0.5 if the test's author declared the dependency. The similarity is word overlap by default. `adaptive_bayes_tfidf` uses TF-IDF instead (word overlap that gives rare words more weight), and `adaptive_bayes_notext` uses no text at all. `--strategies adaptive_bayes adaptive_bayes_tfidf adaptive_bayes_notext` compares the three (RESEARCH_PLAN §5.2) | a test whose request mentions publishing gets more weight for a change to the publishing skill |
@@ -233,7 +236,7 @@ tests, those that pass on the original app and fail on the changed copy, in Gemm
 | **Benign: no test should fail** | | | |
 | `benign_skill_prose_reflow` | the publishing skill's prose is reworded, its procedure untouched | a wording change: a strategy should spend little on it | 0 |
 | `benign_code_comment_docstring` | comments and docstrings change in the links service | leaves an empty change set (code only), so there is nothing to test | 0 |
-| `benign_code_rename_locals` | local variables are renamed in the workflow service | a real code edit, in a widely used function, that changes nothing | 0 |
+| `benign_code_rename_locals` | local variables are renamed in the workflow service | a code edit, in a widely used function, that changes nothing | 0 |
 | `benign_config_comments_reordered` | config comments are rewritten and sections reordered | an empty change set for configuration | 0 |
 | `benign_new_unused_tool` | a new tool is registered that no agent may use | added code that nothing reaches | 0 |
 | `benign_orchestrator_prompt_wording` | the orchestrator's prompt is reworded | a prompt edit on the agent every request passes through | 0 |
@@ -251,8 +254,8 @@ tests, those that pass on the original app and fail on the changed copy, in Gemm
 | `benign_routing_guidance_reordered` | three bullets of the routing skill's guidance move to the top | a prompt edit on the skill every request reads | 0 |
 
 A 0 above means that no test reveals the change under that model. It is a fact about the model and does not
-indicate a bug in the testbed; the report's section 1 shows such a change with 0. RESEARCH_PLAN §4.3 explains why
-some candidate changes were left out of the set.
+indicate a bug in the testbed; the report's section 1 shows such a change with 0. RESEARCH_PLAN §4.3 gives the
+criteria a change must meet to be in the set.
 
 ## 7. How to extend
 
@@ -306,8 +309,8 @@ some candidate changes were left out of the set.
   for example `tool_errors: {unpublish_page: approval_required}`. Any other error fails the test as
   `tool_error:<tool>`, unless a later call of the same tool succeeded. A crash in tool or service code (any
   exception other than a `ToolError`) always fails it as `crash:<tool>`. Both are classified `TOOL_ERROR`.
-  `tool_errors: "*"` allows any error, and a spec scenario (`traceeval/specs/`) that writes its own `expect` gets
-  it by default.
+  `tool_errors: "*"` allows any error, and a scenario added by a spec in `traceeval/specs/`
+  ([SDD_GUIDE.md](SDD_GUIDE.md)) that writes its own `expect` gets it by default.
 - **Change**: add a `Mutation(...)` to the table in `mutation/catalog.py` with `replace`, `delete_line`,
   `delete_block` or `append` edits. Anchors are literal text, so reformatting `sut/` breaks them, and the
   operators then raise an error. A regression must be revealed by ≥1 test, and a benign change by none.
@@ -330,7 +333,9 @@ some candidate changes were left out of the set.
   file of recorded answers (EXPERIMENT.md §5).
 - Test texts share vocabulary with skills and config keys, which is why the text-retrieval baseline `ir_tfidf`
   is strong here.
-- `history_ml` (needs scikit-learn) and `observed_diverse` are optional. `--strategies all` includes them.
+- `observed_diverse` (the observed selection, one behaviour group at a time) and `history_ml` (a logistic
+  regression trained on the other changes' outcomes; needs scikit-learn) are optional baselines in
+  `selection/extras.py`; `--strategies all` includes them.
 - `casper_slices` and `risk_aware_ts` reproduce two published methods and ignore the diff by design. They are in
   the default comparison so that the report shows what change-awareness adds.
 - `runs/` is git-ignored and large (it holds line-level coverage). To keep a run, copy its `results/` into

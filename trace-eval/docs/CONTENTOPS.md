@@ -1,9 +1,9 @@
 # ContentOps: the application under test
 
-ContentOps is a small, made-up content platform run by AI agents. Picture a CMS such as AEM with an
-assistant in front of it: instead of clicking through screens, people type what they want and a team of
-agents does the work. Every test, every controlled change and every spec in this repository is about this
-one application, and all of its code lives in [`traceeval/sut/`](../traceeval/sut/).
+ContentOps is a small, made-up content platform run by AI agents. Picture a content management system (CMS) such as
+Adobe Experience Manager (AEM) with an assistant in front of it: instead of clicking through screens, people type
+what they want and a team of agents does the work. Every test, every controlled change and every spec in this
+repository is about this one application, and all of its code lives in [`traceeval/sut/`](../traceeval/sut/).
 
 ## What people ask it to do
 
@@ -132,10 +132,10 @@ agent that includes it. Test selection has to follow that ripple.
 
 ![One run of a case, end to end](figures/guide_2_run.png)
 
-*Bob asks: "Please publish the welcome page". The executor starts the orchestrator, which routes the
-request to publishing. The publishing agent follows its procedure: fetch the page, check the permission,
-check the links, publish. Each step goes through the dispatcher and is recorded. At the end, the final
-data and the answer are scored against what the test case expects.*
+*Bob asks: "Please publish the welcome page". The executor (`traceeval/experiment/executor.py`, the code that runs
+one test) starts the orchestrator, which routes the request to publishing. The publishing agent follows its
+procedure: fetch the page, check the permission, check the links, publish. Each step goes through the dispatcher
+and is recorded. At the end, the final data and the answer are scored against what the test case expects.*
 
 ## Who enforces which rule
 
@@ -175,11 +175,11 @@ tool it hits ([`faults.py`](../traceeval/sut/harness/faults.py)):
 
 ## Why it is shaped like this
 
-The application is small but realistic. It has enough layers (instructions, skills, tools, services,
-settings, harness) that a change can land in the wrong one. It has enough rules (gates, retries, budgets)
-that a change can break one without touching the feature it was aimed at. Finally, the model decodes greedily
-(it always takes its most likely next token), and the app has no clock and no randomness. A run therefore
-replays exactly from recorded answers, so the whole catalog can be run again and again for free.
+The application is small but realistic. It has enough layers (instructions, skills, tools, services, settings,
+harness) that a change can land in the wrong one. It has enough rules (gates, retries, budgets) that a change can
+break one without touching the feature it was aimed at. Finally, the model decodes greedily (it always takes its
+most likely next token), and the app has no wall clock (timestamps come from a counter) and no randomness. A run
+therefore replays exactly from recorded answers, so the whole catalog can be run again and again for free.
 
 To follow a single request through the code, see [STUDY_GUIDE.md §1.1](STUDY_GUIDE.md#11-one-run-end-to-end).
 The test scenarios that exercise the platform are in [`traceeval/catalog/tests/`](../traceeval/catalog/tests/).

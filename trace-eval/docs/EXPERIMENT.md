@@ -1,8 +1,8 @@
-# Running the experiment with a real model
+# Running the experiment
 
-This page explains how the experiment runs the agents on real models: Gemma 4 E4B, and Qwen3.8-27B as a
-second model. It covers where the models run, how the GPU server is wired in, and what to type. Start with
-sections 1 and 4, and look up the rest when you need it.
+This page explains how the experiment runs the agents on the models: Gemma 4 E4B, Qwen3.8-27B and gpt-oss-120b. It
+covers where the models run, how the GPU server is wired in, and what to type. Start with sections 1 and 4, and
+look up the rest when you need it.
 
 The diagrams are written in Mermaid, which GitHub draws, and PyCharm too with the Mermaid plugin.
 
@@ -47,9 +47,9 @@ flowchart LR
     S --> P["Report<br/>runs/NAME/results/report.md"]
 ```
 
-Each agent's decisions come from a real model: Gemma 4 E4B, a small open model from Google, or Qwen3.8-27B.
-Recording costs GPU time, which is why we use the GPU server (section 4). Replaying recorded answers is free
-(section 5).
+Each agent's decisions come from a model: Gemma 4 E4B, a small open model from Google, Qwen3.8-27B, or
+gpt-oss-120b. Recording costs GPU time, which is why we use the GPU server (section 4). Replaying recorded answers
+is free (section 5).
 
 ## 2. What happens when one test runs
 
@@ -115,7 +115,7 @@ to do.
 
 ### What Gemma writes
 
-Gemma has its own syntax for tool calls. This is a real answer from the model log:
+Gemma has its own syntax for tool calls. This is an answer from the model log:
 
 ```text
 <|tool_call>call:check_permission{action:<|"|>attach<|"|>,user_id:<|"|>alice<|"|>}<tool_call|>
@@ -127,13 +127,13 @@ parse it by hand.
 ## 3. Where the models run
 
 Gemma 4 E4B, a small model from Google, plays the agents by default. Qwen3.8-27B, Alibaba's open model, about six
-times bigger, is the second, so we can check that results hold for more than one model.
-gpt-oss-120b, OpenAI's open-weights model, is a third, served over both of the server's GPUs when they are free.
-The `--backend` option picks who plays the agents:
+times bigger, is the second, so we can check that results hold for more than one model. gpt-oss-120b, OpenAI's
+open-weights model, is a third, served over both GPUs of the GPU server, fmi0, when they are free. The `--backend`
+option picks who plays the agents:
 
 | backend | what it is | when to use it |
 |---|---|---|
-| `hf` (default) | Gemma in this Python process, on your local GPU (RTX 4090), one call at a time | a quick look at one case, no server needed |
+| `hf` (default) | Gemma in this Python process, on a local GPU, one call at a time | a quick look at one case, no server needed |
 | `vllm` | Gemma served by vLLM on the GPU server (GPU0), reached through an SSH tunnel; many calls at once | recording experiments with Gemma |
 | `llm` | an OpenAI-compatible endpoint: by default Qwen on the GPU server (GPU1), or the one named by `TRACEEVAL_LLM_BASE_URL` and `TRACEEVAL_LLM_MODEL` | recording experiments with Qwen or gpt-oss-120b; a model behind OpenAI's API would use it too |
 | `replay` | Gemma's recorded answers, no model (`tests/cassettes/gemma.jsonl`, or the file named by `TRACEEVAL_CACHE`) | the test suite and the spec-driven development (SDD) demo; running a recorded experiment again |
@@ -145,18 +145,20 @@ The models are wired in slightly differently:
   ([`traceeval/llm/chat.py`](../traceeval/llm/chat.py)). The only difference between `hf` and `vllm` is which
   machine does the arithmetic, so a test gets the same prompt and the same parsing on either engine.
 - **Qwen (`llm`).** We use the ordinary chat API. vLLM applies Qwen's chat template and turns Qwen's tool-call
-  syntax into structured calls on the server, so there is no Qwen-specific code in the repository. Qwen's
-  thinking mode is turned off on the server, so it answers directly, as Gemma does.
+  syntax into structured calls on the server, so there is no Qwen-specific prompt or parsing code in the
+  repository, only its default URL and model name. Qwen's thinking mode is turned off on the server, so it answers
+  directly, as Gemma does.
 - **gpt-oss-120b (`llm`).** It is reached the same way as Qwen. It reasons before it answers, so it needs more room
   per answer (`TRACEEVAL_LLM_MAX_TOKENS=4096`). It writes typographic hyphens, spaces and quotes, which the answer
   checks read as the plain ones.
 
-Two cases, SEO-07 and PUB-20, have a rubric. Once their fixed checks pass, a model also judges the answer
-against the rubric. By default the judge is the model playing the agents; `TRACEEVAL_JUDGE=gemma` or `qwen`
-picks one explicitly. Gemma's verdicts are recorded and replayed with its other answers, while Qwen is always
-asked on its server.
+Two cases, SEO-07 and PUB-20, have a rubric. Once their fixed checks pass, a model also judges the answer against
+the rubric. By default the judge is the model playing the agents; `TRACEEVAL_JUDGE=gemma` or `qwen` picks one
+explicitly, where `qwen` means the model the `llm` backend serves (Qwen, or gpt-oss when that is the one running).
+Gemma's verdicts are recorded and replayed with its other answers, while the `llm` backend's model is always asked
+on its server.
 
-This is the path of one model call when both models are running:
+This is the path of one model call when Gemma and Qwen are both running:
 
 ```mermaid
 flowchart LR
@@ -311,6 +313,7 @@ All settings are optional and are read from environment variables:
 | `TRACEEVAL_HF_MODEL` | `google/gemma-4-E4B-it` | the `gemma` preset's model; `--backend hf` and `vllm` read it too |
 | `TRACEEVAL_VLLM_URL` | `http://127.0.0.1:18100/v1` | where `--backend vllm` sends Gemma's calls; several servers separated by commas |
 | `TRACEEVAL_LLM_BASE_URL`, `TRACEEVAL_LLM_MODEL` | `http://127.0.0.1:18101/v1`, `Qwen/Qwen3.8-27B-FP8` | where `--backend llm` sends its calls (several servers separated by commas), and the model name the servers know |
+| `TRACEEVAL_LLM_API_KEY` | `EMPTY` | the key `--backend llm` sends; a local vLLM server needs none |
 | `TRACEEVAL_LLM_MAX_TOKENS` | `700` | the most tokens `--backend llm` lets the model write per answer; gpt-oss-120b needs 4096 |
 | `TRACEEVAL_JUDGE` | the agents' model | `gemma` or `qwen`: the model that judges the cases with a rubric |
 | `TRACEEVAL_VLLM_ENV` | none | extra settings for the vLLM server, for example `VLLM_BATCH_INVARIANT=1`, which makes answers independent of batching (not supported for Qwen3.8) |
@@ -361,17 +364,18 @@ The work folder is git-ignored; to keep a run, copy its `results/` into `docs/re
 | `variants/` | the changed copies of the app |
 | `results/report.md`, `results/*.csv` | the report and the raw replay tables |
 
-To see what the model did, set `TRACEEVAL_MODEL_LOG` to a file. Every model call is then appended to it as
-one JSON line with the agent, the last message it got, Gemma's raw answer, the tokens and the seconds.
+To see what Gemma did (`--backend hf` or `vllm`), set `TRACEEVAL_MODEL_LOG` to a file. Every call to Gemma is then
+appended to it as one JSON line with the agent, the last message it got, the raw answer, the tokens and the
+seconds.
 
 ```bash
 TRACEEVAL_MODEL_LOG=runs/gemma7/model_calls.jsonl traceeval run --test PUB-02 --backend vllm
 ```
 
-To export a run's trace, add `--otel trace.json` to `traceeval run`. It writes the trace as OpenTelemetry
-spans in OTLP JSON ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.6). There is a span for the run, one for each
-agent turn, nested by delegation, and one for each tool call, model call and skill load. The plan, the
-delegations and the approvals are span events.
+To export a run's trace, add `--otel trace.json` to `traceeval run`. It writes the trace as OpenTelemetry spans in
+OTLP JSON, the JSON form of the OpenTelemetry protocol ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.6). There is a span
+for the run, one for each agent turn, nested by delegation, and one for each tool call, model call and skill load.
+The plan, the delegations and the approvals are span events.
 
 ```bash
 traceeval run --test WF3-01 --backend replay --otel runs/otel/wf3-01.json
@@ -435,7 +439,7 @@ TRACEEVAL_CACHE=tests/cassettes/gemma.jsonl traceeval sdd --backend vllm --worke
 scripts/gpu_remote.sh down
 ```
 
-## 6. What a real model gets wrong, and how the prompts and checks allow for it
+## 6. What the models get wrong, and how the prompts and checks allow for it
 
 A model does not follow a skill the way a script would, and the prompts and checks are written with that in
 mind:
@@ -461,7 +465,7 @@ mind:
 
 What remains are the models' own mistakes, which clearer wording does not fix. On the original app, Gemma passes
 172 of the 180 tests. Qwen passes 173: it gets five of Gemma's mistakes right (PUB-10, AUT-04, SEO-02, WF1-01,
-WF6-02), shares CFG-01 and WF2-03, and makes mistakes of its own:
+WF6-02), shares CFG-01 and WF2-03, splits on WF5-02 (half of its runs), and makes mistakes of its own:
 
 | case | model | what goes wrong |
 |---|---|---|
@@ -491,10 +495,10 @@ no revealing test (section 7).
 
 The results in `docs/results/gemma7/` come from `runs/gemma7`: Gemma on the current app, with 180 tests, 43
 changes, five repetitions and the model judge. The recording took about two hours on fmi0's GPU0: 31 minutes for
-the baseline, one test at a time, and under two minutes per change with 64 tests at a time. Qwen's recording of the
-same app (`docs/results/qwen7/`, five repetitions) took about six hours on two SLURM GPUs, and gpt-oss's
-(`docs/results/gptoss7/`) three and a half hours on both of fmi0's GPUs; neither is a clean ground truth, for the
-reasons given below.
+the baseline, one test at a time, and under two minutes per change with the changed copies run many tests at a time
+(`--workers`). Qwen's recording of the same app (`docs/results/qwen7/`, five repetitions) took about six hours on
+two SLURM GPUs, and gpt-oss's (`docs/results/gptoss7/`) three and a half hours on both of fmi0's GPUs; neither is a
+clean ground truth, for the reasons given below.
 
 | | Gemma 4 E4B |
 |---|---|
@@ -513,10 +517,11 @@ set:
 | `skill_linkval_ignore_assets` | it stops at a broken asset reference even when the skill says it does not block |
 
 Gemma's five runs of each test agree on the original app, and disagree on only four (change, test) pairs over all
-43 changes. The majority vote absorbs them. A second recording with three repetitions reproduces it: runs that
-agree on every test of the original app, five disagreeing pairs, no benign change revealed, the same revealing sets
-for 41 of the 43 changes, the other two differing by one test each at the majority line, and the strategies'
-numbers within a few points of the table below. Three repetitions suffice for Gemma.
+43 changes. The majority vote absorbs them. A second recording with three repetitions, whose report is not kept,
+reproduces it: runs that agree on every test of the original app, five disagreeing pairs, no benign change
+revealed, the same revealing sets for 41 of the 43 changes, the other two differing by one test each at the
+majority line, and the strategies' numbers within a few points of the table below. Three repetitions suffice for
+Gemma.
 
 Qwen's recording is spoiled as a ground truth by how the model is served, and five repetitions do not mend it.
 Its runs disagree on 357 (change, test) pairs. Every benign change is revealed by three to six tests under the

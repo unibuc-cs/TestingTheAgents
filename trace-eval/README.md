@@ -3,10 +3,10 @@
 After a change to an LLM agent system (a skill, a prompt, harness code, a config key), which tests should run, in
 what order, and when can we stop? The aim is to spend fewer tokens and less time and still catch regressions.
 
-This repository is a testbed for that question: a small, working multi-agent application whose agents are played
-by a real model, a catalog of tests, a set of controlled changes with known effects, and nine selection strategies,
-one of which, `adaptive_bayes`, is the method this project proposes. The strategies are compared by replaying
-recorded runs, and `traceeval check` runs the proposed method live on one change.
+This repository is a testbed for that question: a small, working multi-agent application whose agents are played by
+a model, a catalog of tests, a set of controlled changes with known effects, and nine selection strategies, one of
+which, `adaptive_bayes`, is the method this project proposes. The strategies are compared by replaying recorded
+runs, and `traceeval check` runs the proposed method live on one change.
 
 ## The pieces, and how they fit
 
@@ -29,8 +29,8 @@ flowchart LR
 
 - **The application**, ContentOps, lives in [`traceeval/sut/`](traceeval/sut/): an orchestrator and ten specialist
   agents defined in YAML, skills that each carry a machine-readable procedure, tools over deterministic services,
-  and one config file. A real model plays the agents: Gemma 4 E4B by default, Qwen3.8-27B or gpt-oss-120b through
-  an OpenAI-compatible endpoint. [docs/CONTENTOPS.md](docs/CONTENTOPS.md) describes it.
+  and one config file. The agents are played by a model: Gemma 4 E4B by default, Qwen3.8-27B or gpt-oss-120b
+  through an OpenAI-compatible endpoint. [docs/CONTENTOPS.md](docs/CONTENTOPS.md) describes it.
 - **The tests** live in [`traceeval/catalog/`](traceeval/catalog/) as YAML. Each has a request, a context and
   deterministic checks on the final state, the tool calls and the answer; two also have their answer judged by a
   model against a rubric. Each test names the properties it checks, ids from the catalog of properties
@@ -45,12 +45,12 @@ flowchart LR
   *reveals* a change when it passes on the current app and fails on the changed copy, by majority over the
   repetitions. A change is a regression when at least one test reveals it.
 - **The strategies** in [`traceeval/selection/`](traceeval/selection/) pick tests under a token budget from the
-  change set, the traces, the costs and the pass rates, and from the outcomes of the other recorded changes.
-  They never see the outcome of the change under evaluation. [`strategies.py`](traceeval/selection/strategies.py)
-  holds the baselines, [`reproduced.py`](traceeval/selection/reproduced.py) two published methods reproduced
-  (CASPER's slices and Risk-Aware Adaptive Evaluation's bandit, neither of which reads the diff), and
-  [`adaptive_bayes.py`](traceeval/selection/adaptive_bayes.py) the proposed method, with two variants that compare
-  text measures and one without its mandatory-coverage rule.
+  change set, the traces, the costs and the pass rates, and from the outcomes of the other recorded changes. They
+  never see the outcome of the change under evaluation. [`strategies.py`](traceeval/selection/strategies.py) holds
+  the baselines, [`reproduced.py`](traceeval/selection/reproduced.py) two published methods reproduced (CASPER's
+  slices and Risk-Aware Adaptive Evaluation's bandit, neither of which reads the diff;
+  [docs/REFERENCES.md](docs/REFERENCES.md)), and [`adaptive_bayes.py`](traceeval/selection/adaptive_bayes.py) the
+  proposed method, with two variants that compare text measures and one without its mandatory-coverage rule.
 - **The report** shows, per strategy, how many regressions it catches for how many tokens and how much time, how
   many of the changes that break a safety property it catches, what it spends on changes that break nothing, and
   whether the adaptive method stops at the right moment. It also gives the coverage of the suite and of each
@@ -78,8 +78,8 @@ traceeval experiment --backend vllm --workdir runs/gemma7 --reps 5    # about tw
 scripts/gpu_remote.sh down
 ```
 
-The prototype, `traceeval check`, checks one change live. The proposed method picks a test, the test runs on the
-changed app with the real model, the outcome decides what runs next, and the check ends with a verdict.
+The prototype, `traceeval check`, checks one change live. The proposed method picks a test, the test runs live on
+the changed app, the outcome decides what runs next, and the check ends with a verdict.
 
 ```bash
 traceeval check skill_routing_drop_approval --history runs/gemma7 --budget 0.2      # a change from the catalog
@@ -94,9 +94,9 @@ method what each test costs and which code it runs.
 The results come from Gemma's recording of the current app (`runs/gemma7`: 180 tests, 43 changes, five repetitions
 per test). Of the 34 regressions, 29 are revealed by at least one test. Gemma ignores the other five either way: it
 behaves the same with or without the change. No benign change, one meant to break nothing, fails a test. A second
-recording with three repetitions reproduces this ground truth on all but two (change, test) labels. The table gives
-the share of those 29 that each strategy detects with a nominal budget of 20% of the full-suite tokens, and what it
-actually spends:
+recording with three repetitions reproduces this ground truth on all but two (change, test) labels
+([docs/EXPERIMENT.md](docs/EXPERIMENT.md) §7). The table gives the share of those 29 that each strategy detects
+with a nominal budget of 20% of the full-suite tokens, and what it actually spends:
 
 | strategy | detected | tokens spent | time spent |
 |---|---|---|---|
@@ -107,25 +107,26 @@ actually spends:
 | `risk_aware_ts`: Risk-Aware Adaptive Evaluation, reproduced | 57% | 20% | 22% |
 | `adaptive_bayes`: the proposed method | 78% | 2.9% | 3.2% |
 
-The adaptive method is the only one that leaves budget unspent. It stops as soon as it is confident, and it never
-calls a change that breaks nothing a regression. Its misses are mostly narrow regressions, revealed by one to
-five tests, where it concludes too early that nothing broke. Of the 21 changes that break a safety property, it
-catches 84%. The two reproduced methods look at the traces and the outcomes but not at the diff, and sit between
-random (56%) and the change-aware strategies. The full numbers are in the
-[Gemma report](docs/results/gemma7/report.md), and the take-aways of the experiments in
-[RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.5.
+The adaptive method is the only one that stops on its own: it ends as soon as it is confident, and it never calls a
+change that breaks nothing a regression. `declared` and `observed` also spend less than the budget, but only
+because they run out of tests to select. Its misses are mostly narrow regressions, revealed by one to five tests,
+where it concludes too early that nothing broke. Of the 21 changes that break a safety property, it catches 84%.
+The two reproduced methods look at the traces and the outcomes but not at the diff, and sit between random (56%)
+and the change-aware strategies. The full numbers are in the [Gemma report](docs/results/gemma7/report.md), and the
+take-aways of the experiments in [RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.5.
 
 Qwen3.8-27B's recording of the same app is not a clean ground truth, and five repetitions do not mend it. It
-records every benign change as revealed by three to six tests, for two reasons. Seven tests answer
-differently when run 64 at a time than when run one at a time: the case it judges itself, the one at the
-60-character boundary, four long workflows and one more. And some of its answers vary from run to run even under
+records every benign change as revealed by three to six tests, for two reasons. Seven tests answer differently when
+run 64 at a time than when run one at a time: one of the two cases it judges against a rubric, the one at the SEO
+title's length limit, four long workflows and one more. And some of its answers vary from run to run even under
 identical conditions. gpt-oss-120b, a third model, varies even more. The models are used as they are served, so
 these recordings are reported as a finding rather than as results ([EXPERIMENT.md](docs/EXPERIMENT.md) §7).
 
 ## Features asked for by Adobe's AEM team
 
-The AEM team listed what they lack today and want in the prototype. Their requirements and follow-up questions
-are summed up in [docs/AEM_ALIGNMENT.md](docs/AEM_ALIGNMENT.md), together with the plan and its status.
+The AEM team (Adobe Experience Manager, Adobe's content management system) listed what they lack today and want in
+the prototype. Their requirements and follow-up questions are summed up in
+[docs/AEM_ALIGNMENT.md](docs/AEM_ALIGNMENT.md), together with the plan and its status.
 
 | feature | status |
 |---|---|
@@ -156,37 +157,12 @@ Start with [docs/SDD_GUIDE.md](docs/SDD_GUIDE.md) if you are new to spec-driven 
 
 ## How to read the documentation
 
-Each document uses only what the ones before it define.
+[docs/README.md](docs/README.md) lists the documents by what you want to do, with the reading order. In short: this
+README, then [docs/CONTENTOPS.md](docs/CONTENTOPS.md) for the application, [docs/USER_GUIDE.md](docs/USER_GUIDE.md)
+to work in the repository, [docs/EXPERIMENT.md](docs/EXPERIMENT.md) to record with a model,
+[docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) for the research, [docs/AEM_ALIGNMENT.md](docs/AEM_ALIGNMENT.md) for
+Adobe's requirements and [docs/DEMO.md](docs/DEMO.md) for the walkthrough. Each document uses only what the ones
+before it define. [CLAUDE.md](CLAUDE.md) holds the conventions for coding agents working in the repository.
 
-```mermaid
-flowchart TD
-    R["README<br/>the question, the pieces, the results"] --> A["CONTENTOPS.md<br/>the application under test"]
-    A --> U["USER_GUIDE.md<br/>vocabulary, the report, the method's weights,<br/>the changes, how to extend"]
-    U --> X["EXPERIMENT.md<br/>real models, the GPU server, recording and replay"]
-    X --> P["RESEARCH_PLAN.md<br/>problem, abstractions, methods, results,<br/>take-aways, roadmap"]
-    P --> M["AEM_ALIGNMENT.md<br/>what the AEM team asked for,<br/>and the features built for it"]
-    M --> D["DEMO.md<br/>the walkthrough for the AEM team"]
-    U --> S["SDD_GUIDE.md, SDD_DEMO.md, STUDY_GUIDE.md<br/>spec-driven development, the add-on"]
-    P --> W["related_work.md, REFERENCES.md, paper/<br/>the literature and the paper draft"]
-```
-
-- [docs/CONTENTOPS.md](docs/CONTENTOPS.md): the application, its agents, skills, tools and rules.
-- [docs/USER_GUIDE.md](docs/USER_GUIDE.md): how the pieces fit, how to read the report, how the method weighs a
-  test, the controlled changes, how to add a test, a change or a strategy.
-- [docs/EXPERIMENT.md](docs/EXPERIMENT.md): the experiment with real models. Where the models run, the GPU server
-  script, the recorded answers, the commands to type, and what the recordings show.
-- [docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md): the research framing: the problem, the abstractions, the methods,
-  the results, the take-aways and the roadmap.
-- [docs/AEM_ALIGNMENT.md](docs/AEM_ALIGNMENT.md): Adobe's platform, the AEM team's requirements, and the features
-  built for them.
-- [docs/DEMO.md](docs/DEMO.md): the 20-minute walkthrough for the AEM team, with the commands and what each shows.
-- [docs/SDD_GUIDE.md](docs/SDD_GUIDE.md), [docs/SDD_DEMO.md](docs/SDD_DEMO.md),
-  [docs/STUDY_GUIDE.md](docs/STUDY_GUIDE.md): the spec-driven development layer, its results, and a reading plan
-  for the whole repository in diagrams.
-- [docs/related_work.md](docs/related_work.md), [docs/REFERENCES.md](docs/REFERENCES.md), `docs/paper/`: how this
-  work relates to the literature, the full references, and the paper draft.
-- [CLAUDE.md](CLAUDE.md): conventions for coding agents working in the repository.
-
-The agents and the judge run on real models only, used as they are served. Running a model behind OpenAI's API
-through the `llm` backend waits for API tokens. An adapter that adds tau2-bench, a public agent benchmark, as a
-second system under test is planned ([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §6).
+The models are used as they are served, decoding greedily. The `llm` backend takes any OpenAI-compatible endpoint,
+OpenAI's own API included.

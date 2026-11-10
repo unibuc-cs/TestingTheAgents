@@ -9,7 +9,7 @@ in [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4.
 ## Before the demo
 
 ```bash
-scripts/gpu_remote.sh status            # both fmi0 GPUs free? then:
+scripts/gpu_remote.sh status            # both GPUs of the GPU server (fmi0) free? then:
 scripts/gpu_remote.sh up gemma          # a few minutes; "ready" at the end
 pytest -q                               # green (the known model mistakes are expected failures inside the tests)
 ls runs/gemma7/variants                 # the recording of the current app, for the live check
@@ -71,11 +71,11 @@ traceeval run --test WF3-01 --backend replay --otel runs/otel/wf3-01.json     # 
 ```
 
 Open WF3-01 in `workflows.yaml`. The request is "Legal says the phrase 'guaranteed returns' must not appear on the
-live site: find the pages that use it, take the live ones down, and tell me which". The orchestrator writes a plan
-(`make_plan`) and delegates the search to brand. It then asks a person (`request_approval`), whose answer is
-fixture data, so the run is repeatable. Finally, it delegates to publishing, which takes two pages down with the
-approver's token, since `unpublish_page` is a guarded tool. The expectations check the agent order, the tool
-order, the final state, the audit log and the page ids in the answer.
+live site. Find the pages that use it, take the live ones down, and tell me which pages you took down". The
+orchestrator writes a plan (`make_plan`) and delegates the search to brand. It then asks a person
+(`request_approval`), whose answer is fixture data, so the run is repeatable. Finally, it delegates to publishing,
+which takes two pages down with the approver's token, since `unpublish_page` is a guarded tool. The expectations
+check the agent order, the tool order, the final state, the audit log and the page ids in the answer.
 
 Mention the variants: in WF3-02 a protected page stays up and is reported, and in WF3-03 a refused approval takes
 nothing down. Then mention the other workflows:
@@ -180,9 +180,10 @@ than the change's.
 Open `docs/results/gemma7/report.md`, the replay of every strategy on every change, from the recording of the
 current app:
 
-- Section 1 is the ground truth: each change with the number of tests that reveal it, and the testbed sanity
-  line. Of the 34 regressions, 29 are revealed. Gemma ignores the other five either way: it does not act on a
-  review flag, or on a length limit it has to work out for itself. No benign change fails a test.
+- Section 1 is the ground truth: each change with the number of tests that reveal it, and the testbed sanity line.
+  Of the 34 regressions, 29 are revealed. Gemma ignores the other five either way: it does not act on a review
+  flag, on a length limit it has to work out for itself, or on a skill's rule that a broken asset reference does
+  not block. No benign change fails a test.
 - Section 2 and `figures/detection_vs_cost.png` show detection against the tokens and time actually spent. At a
   20% budget, hand-written dependencies find 62% of the regressions, traces 86%, TF-IDF 93%, and the adaptive
   method 78% for 3% of the tokens, which puts it at the left of the figure. It catches 84% of the changes that
@@ -190,11 +191,11 @@ current app:
 - Section 3 gives the tokens spent on benign changes and the reasons each strategy stopped. The adaptive method
   never calls a benign change a regression.
 - Section 5 lists the catalog of properties, each with its category, mandatory flag, threshold and pass rate.
-- Section 6 gives the coverage of the suite per dimension and the change coverage per strategy. The dimensions
-  are agents, features, skills, tools, tool error paths, configuration, properties, workflows, execution paths
-  and risk, each declared and observed, with what no test covers. Every feature has a test, but the tests reach
-  only 15 of the 31 places where a tool refuses: a gap no other dimension shows. Below it, each agent, skill,
-  tool and feature has the number of tests that declare it and the number that invoke it. The assets agent,
+- Section 6 gives the coverage of the suite per dimension and the change coverage per strategy. The dimensions are
+  agents, features, skills, tools, tool error paths, configuration, setting values, properties, workflows,
+  execution paths and risk, each declared and observed, with what no test covers. Every feature has a test, but the
+  tests reach only 15 of the 31 places where a tool refuses: a gap no other dimension shows. Below it, each agent,
+  skill, tool and feature has the number of tests that declare it and the number that invoke it. The assets agent,
   for instance, is declared by 37 tests and invoked by 17, because the routing datasets stop at the hand-off.
   `traceeval coverage --history runs/gemma7` prints the same in the terminal.
 
@@ -234,24 +235,24 @@ cases:
   with or without the change, is a fact about the model, and the report says which changes these are. The
   ground truth is Gemma's: five repetitions per test and a majority vote. A second recording with three
   repetitions reproduces it on all but two (change, test) labels.
-- *Why are some workflow tests red?* They are Gemma's own mistakes on the original app, not faults of the
-  testbed. In WF1-01 it schedules the launch page after requesting a review, instead of having the approver
-  approve it as in PUB-10. In WF5-02 it goes on to publishing after the rollback's link check failed, and
-  publishing's own link check refuses the page: defence in depth. In WF6-02 it stops the whole plan after a
-  refused export, although the byline edits do not depend on it. A test the model already fails cannot reveal a
-  change, which is why the method discounts it. Qwen gets WF1-01 and WF6-02 right. In WF5-02 and WF1-02 it
-  re-plans, as Adobe's Agent Orchestrator does: it has the broken link fixed, or rewrites the page that failed
-  the brand check, and goes on.
+- *Why are some workflow tests red?* They are Gemma's own mistakes on the original app, not faults of the testbed.
+  In WF1-01 it schedules the launch page right after requesting a review, without waiting for the approval, the
+  same mistake as in PUB-10. In WF5-02 it goes on to publishing after the rollback's link check failed, and
+  publishing's own link check refuses the page: defence in depth. In WF6-02 it stops the whole plan after a refused
+  export, although the byline edits do not depend on it. A test the model already fails cannot reveal a change,
+  which is why the method discounts it. Qwen gets WF1-01 and WF6-02 right. In WF5-02 and WF1-02 it re-plans, as
+  Adobe's Agent Orchestrator does: it has the broken link fixed, or rewrites the page that failed the brand check,
+  and goes on.
 - *Why only Gemma's numbers?* Qwen's recording of the same app is not a clean ground truth. Seven of its tests
   answer differently when run 64 at a time than when run one at a time, so even a change that alters nothing
   appears to break them. A larger model does not automatically give a cleaner ground truth: some of Qwen's answers
   vary from run to run, and vLLM, the model server, has a switch for repeatable decoding that does not support
   Qwen3.8. gpt-oss-120b, a third model, varies even more, and five repetitions settle neither model's vote. The
   models are used as they are served. The lesson for Adobe is to measure first how much the answers vary under the
-  real serving setup (RESEARCH_PLAN §5.4).
+  real serving setup ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4).
 - *How would this run at Adobe?* Nightly full-suite runs provide the recordings the method learns from. For each
-  change, `traceeval check` selects the tests, orders them and decides when to stop. The traces are
-  OpenTelemetry, and the catalog of properties maps onto DeepEval's metrics.
+  change, `traceeval check` selects the tests, orders them and decides when to stop. The traces are OpenTelemetry,
+  and the catalog of properties maps onto the metrics of DeepEval, the evaluation library the AEM team uses.
 - *What is next?* Re-planning after a failed step is built on a branch and recorded with three models. It waits for
   one decision: whether a single publication with a broken link is repaired or refused
   ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4.1). Then tau2-bench, a public agent benchmark, as a second application.
@@ -284,8 +285,8 @@ draft in `docs/paper/`.
   classic regression test selection on what the authors declared, and the metadata is incomplete on purpose, as it
   is in practice.
 - `ir_tfidf` ranks every test by how much its text (name, request, expectations) resembles the diff, with words
-  weighted by TF-IDF so that a word every test uses counts little. It is information-retrieval prioritization, as
-  in REPiR, and uses no traces.
+  weighted by TF-IDF so that a word every test uses counts little. It is information-retrieval prioritization (as
+  in REPiR, listed in [REFERENCES.md](REFERENCES.md)) and uses no traces.
 - `observed` runs only the tests whose recorded traces touched a changed component (an agent, a skill, a tool, a
   setting read, a code line executed), ordered by how often they touched it times their risk, divided by cost. This
   is the trace-informed selection the project argues for.
@@ -336,8 +337,9 @@ tokens, five replay seeds.
   slices in 57% and to the adaptive method in none, because it discounts a test by its failures on the current app
   and stops only on a test that used to pass.
 - *The order is good, not only the stopping.* Read as a plain order with no stopping, the adaptive method has the
-  highest cost-weighted APFD (0.81, against 0.54 for random and 0.76 to 0.79 for the other change-aware strategies)
-  and the earliest first detection (1.7% of the suite's tokens).
+  highest cost-weighted APFD, the share of the revealing tests found as the order proceeds, weighted by the tokens
+  spent ([USER_GUIDE.md](USER_GUIDE.md) §4): 0.81, against 0.54 for random and 0.76 to 0.79 for the other
+  change-aware strategies; and the earliest first detection (1.7% of the suite's tokens).
 - *Where the ground truth comes from.* Gemma's five runs agree on all but four (change, test) pairs over the 43
   changes; Qwen's and gpt-oss's answers vary too much from run to run for the same majority rule, and five
   repetitions settle neither vote, which is why only Gemma's numbers are reported.
@@ -351,9 +353,10 @@ suite's tokens unless said otherwise.
    budget, because shared skills, harness code and settings are reached without being declared. Dependencies read
    from traces find 86%, and everything at 100%. One instrumentation of the agent runtime (the testbed exports
    OpenTelemetry spans) replaces a test-to-component map that nobody keeps current.
-2. **Read the diff.** The strategies that use the change find 78% to 93% of the regressions; the two that do not,
-   CASPER's slices and the risk-aware bandit, find 59% and 57%, near a random order's 56%, and their first
-   revealing test comes after 12% to 14% of the suite's tokens instead of 2% to 6%.
+2. **Read the diff.** The strategies that read the diff and the traces find 78% to 93% of the regressions,
+   hand-written dependencies alone 62%; the two that do not read the change, CASPER's slices and the risk-aware
+   bandit, find 59% and 57%, near a random order's 56%, and their first revealing test comes after 12% to 14% of
+   the suite's tokens instead of 2% to 6%.
 3. **Stop when confident, with a safety net.** The adaptive method finds 78% for 3% of the tokens and returns the
    rest. Its ceiling is 81%: on a regression that one to five tests reveal it can stop too early. The mandatory
    rule covers the safety properties for under one extra test per change, and on this app catches the publishing

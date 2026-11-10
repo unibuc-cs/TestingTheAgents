@@ -1,7 +1,8 @@
 # Working in this repository (for Claude Code and other coding agents)
 
 TRACE-Eval is a research testbed for change-aware, cost-bounded regression test selection of LLM agent
-systems. Read `README.md` (5 minutes), then `docs/USER_GUIDE.md` only when you need to extend something.
+systems. Read `README.md` (5 minutes), then `docs/USER_GUIDE.md` only when you need to extend something;
+`docs/README.md` lists the other documents by what you want to do.
 
 ## Commands
 

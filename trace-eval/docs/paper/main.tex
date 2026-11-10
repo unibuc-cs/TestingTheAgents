@@ -186,7 +186,7 @@ limits, and tag the tests; a person edits the draft and applies it. The model's 
 property to the component that states it; its tags of the tests need the person's review.
 
 \paragraph{The environment.}
-A real model plays the agents: Gemma~4 E4B, served with vLLM on a GPU server and decoding greedily, so that the
+An open model plays the agents: Gemma~4 E4B, served with vLLM on a GPU server and decoding greedily, so that the
 same prompt gives the same answer up to the arithmetic of batching. Qwen3.8-27B and gpt-oss-120b serve as second
 and third models through an OpenAI-compatible endpoint, as they are served, without sampling. Every run is traced:
 the agents started, the skills loaded, the tools called with their status, the configuration keys read, and the
@@ -806,9 +806,10 @@ the suite's tokens unless said otherwise.
         regressions at any budget, because shared skills, harness code and settings are reached without being
         declared. Dependencies read from traces find 86\%, and everything at 100\%. One instrumentation of the
         agent runtime replaces a test-to-component map that nobody keeps current.
-  \item \textbf{Read the diff.} The strategies that use the change find 78\% to 93\% of the regressions; the two
-        that do not, CASPER's slices and the risk-aware bandit, find 59\% and 57\%, near a random order's 56\%, and
-        their first revealing test comes after 12\% to 14\% of the suite's tokens instead of 2\% to 6\%.
+  \item \textbf{Read the diff.} The strategies that read the diff and the traces find 78\% to 93\% of the
+        regressions, hand-written dependencies alone 62\%; the two that do not read the change, CASPER's slices and
+        the risk-aware bandit, find 59\% and 57\%, near a random order's 56\%, and their first revealing test comes
+        after 12\% to 14\% of the suite's tokens instead of 2\% to 6\%.
   \item \textbf{Stop when confident, with a safety net.} The adaptive method finds 78\% for 3\% of the tokens and
         returns the rest. Its ceiling is 81\%: on a regression that one to five tests reveal it can stop too early.
         The mandatory rule covers the safety properties for under one extra test per change, and on this
