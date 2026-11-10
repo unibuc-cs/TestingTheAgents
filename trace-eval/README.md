@@ -63,10 +63,11 @@ pytest -q                                                   # one to two minutes
 traceeval sdd --workdir runs/sdd                            # spec-driven development demo
 ```
 
-Recording an experiment needs the model, served from the GPU server (see
-[docs/EXPERIMENT.md](docs/EXPERIMENT.md)) or from a local GPU with `--backend hf`. `--backend vllm` runs Gemma and
-`--backend llm` runs Qwen or gpt-oss, or any other OpenAI-compatible endpoint; the models are used as they are
-served, decoding greedily.
+Recording an experiment needs a model, used as it is served, decoding greedily:
+
+- `--backend hf`: Gemma on a local GPU, in this process;
+- `--backend vllm`: Gemma served from the GPU server ([docs/EXPERIMENT.md](docs/EXPERIMENT.md));
+- `--backend llm`: Qwen, gpt-oss, or any other OpenAI-compatible endpoint.
 
 ```bash
 scripts/gpu_remote.sh up gemma
@@ -103,13 +104,16 @@ full-suite tokens, and what it actually spends:
 | `risk_aware_ts`: Risk-Aware Adaptive Evaluation, reproduced | 57% | 20% | 22% |
 | `adaptive_bayes`: our method | 78% | 2.9% | 3.2% |
 
-The adaptive method is the only one that stops on its own: it ends as soon as it is confident, and it never flags a
-benign change as a regression. Its misses are mostly narrow regressions, revealed by one to five tests, where it
-concludes too early that nothing broke. Of the 21 changes that break a safety property, it catches 84%. `declared`
-and `observed` also spend less than the budget, but only because they run out of tests to select. The two
-reproduced methods look at the traces and the outcomes but not at the diff, and sit between random (56%) and the
-change-aware strategies. The full numbers are in the [Gemma report](docs/results/gemma7/report.md), and the
-take-aways of the experiments in [RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.5.
+- The adaptive method is the only one that stops on its own: it ends as soon as it is confident, and it never flags
+  a benign change as a regression. Of the 21 changes that break a safety property, it catches 84%.
+- Its misses are mostly narrow regressions, revealed by one to five tests, where it concludes too early that
+  nothing broke.
+- `declared` and `observed` also spend less than the budget, but only because they run out of tests to select.
+- The two reproduced methods look at the traces and the outcomes but not at the diff, and sit between random (56%)
+  and the change-aware strategies.
+
+The full numbers are in the [Gemma report](docs/results/gemma7/report.md), and the take-aways of the experiments in
+[RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.5.
 
 Qwen3.8-27B's and gpt-oss-120b's recordings of the same app are not clean ground truths: some of their answers vary
 from run to run and with batching, so every benign change appears revealed by a few tests. The models are used as

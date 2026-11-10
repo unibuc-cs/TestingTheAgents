@@ -6,7 +6,7 @@ Ciprian Păduraru · University of Bucharest · the results are in `docs/results
 
 ---
 
-## TL;DR
+## In short
 
 - **Problem.** After a change to an agent system, decide which tests and eval items to run, in what order, and
   when to stop, under a token budget and without missing regressions.
@@ -299,11 +299,14 @@ rather than by a model of the signals; the budget is in tokens; and each test ru
 `docs/CONTENTOPS.md` describes the application: an orchestrator and ten specialists, thirteen skills, 32 tools over
 deterministic services, a harness with a dispatcher, retries, fault injection and step budgets, and one
 configuration file. The structure is deliberate: selection has to be hard, and there has to be something to say
-about defence in depth. Some components are shared and have a wide blast radius: `governance-checks` and
-`link-validation` are included by several skills, `check_permission` is available to eight of the ten specialists
-and `get_page` to six, and the retry helper wraps every tool call. Others are narrow: the approval gate matters to
-one test. Some policies are enforced only in skills (publish permission), others also in tools (approval tokens).
-Mutations of a skill's prose and of its procedure are separate components (`#prose`, `#procedure`, §2.2).
+about defence in depth.
+
+- Some components are shared and have a wide blast radius: `governance-checks` and `link-validation` are included
+  by several skills, `check_permission` is available to eight of the ten specialists and `get_page` to six, and the
+  retry helper wraps every tool call.
+- Others are narrow: the approval gate matters to one test.
+- Some policies are enforced only in skills (publish permission), others also in tools (approval tokens).
+- Mutations of a skill's prose and of its procedure are separate components (`#prose`, `#procedure`, §2.2).
 
 ### 4.2 Eval catalog
 
@@ -332,13 +335,17 @@ fails under which change the fault matrix.
 | combined | 1 | a keyword-count rule in code plus a very low limit in config |
 | benign | 9 | the publishing skill's prose reflowed |
 
-The set is written for the models: a change has to touch an input a model acts on (keyword weights, trigger
-lists and the order of an agent's intents are not such inputs), and a removed step has to go from both the
-procedure and the prose, or the model does the step anyway. Candidates that told nothing about selection were
-left out: exact twins of other changes, crashes that only exercised the crash classification, and a change that
-broke most of the suite. Ten of the changes are aimed at the multi-agent workflows: the orchestrator's approval
-and brand rules, the hand-off of ids between steps, the services behind the AEM-style agents, and two benign
-ones. `docs/USER_GUIDE.md` §6 explains each of the 43 and why it is in the set.
+The set is written for the models:
+
+- a change has to touch an input a model acts on (keyword weights, trigger lists and the order of an agent's
+  intents are not such inputs);
+- a removed step has to go from both the procedure and the prose, or the model does the step anyway;
+- candidates that told nothing about selection were left out: exact twins of other changes, crashes that only
+  exercised the crash classification, and a change that broke most of the suite;
+- ten of the changes are aimed at the multi-agent workflows: the orchestrator's approval and brand rules, the
+  hand-off of ids between steps, the services behind the AEM-style agents, and two benign ones.
+
+`docs/USER_GUIDE.md` §6 explains each of the 43 and why it is in the set.
 
 The report checks a sanity property of the testbed: every regression-inducing change is revealed by ≥ 1 test, and
 no benign change is revealed by any test. Under Gemma five regressions are revealed by no test (§5.1); the
@@ -425,18 +432,19 @@ methods' after 12–14%. The report's sections 2 and 4 hold the full tables; tim
   impact score is the test's risk, so it does better on the changes that break a safety property (71% at 20%, 98%
   at 50%). It rewards any failure, so it also runs Gemma's red tests early (the *Red tests* bullet). Neither stops:
   both spend the whole budget on every change.
-- *Where CASPER fits.* The numbers above measure what the diff is worth, not CASPER in its own setting. CASPER was
-  built for changes that have no diff a test can be mapped to: a model upgrade, a provider's silent update, a
-  prompt-level change whose effect spreads through the model's behaviour. It needs only the logs of the last full
-  run, so it applies to a system whose code the testing team does not own, and its cost does not grow with the
-  suite: a fixed number of representatives per slice samples a suite of a thousand tests as cheaply as one of a
-  hundred, and the slices themselves are a map of the suite's behaviours that the team can read. A platform like
-  AEM's sees both kinds of change. The change-aware strategies cover the edits to skills, code and settings;
-  CASPER's representatives are the natural first pass after a model update, when every test is affected and the
-  question is which behaviours drifted. The two could also be combined: the slices can serve as the near-duplicate
-  groups of the adaptive method, and a slice whose representatives drifted can enter the model as a changed
-  component. On this testbed every change is an edit with a diff and the suite is small (180 tests, which the
-  reproduction cuts into twelve slices), which is the case slicing has least to offer.
+- *Where CASPER fits.* The numbers above measure what the diff is worth, not CASPER in its own setting.
+  - CASPER was built for changes that have no diff a test can be mapped to: a model upgrade, a provider's silent
+    update, a prompt-level change whose effect spreads through the model's behaviour. It needs only the logs of the
+    last full run, so it applies to a system whose code the testing team does not own, and its cost does not grow
+    with the suite: a fixed number of representatives per slice samples a suite of a thousand tests as cheaply as
+    one of a hundred, and the slices themselves are a map of the suite's behaviours that the team can read.
+  - A platform like AEM's sees both kinds of change. The change-aware strategies cover the edits to skills, code
+    and settings; CASPER's representatives are the natural first pass after a model update, when every test is
+    affected and the question is which behaviours drifted.
+  - The two could also be combined: the slices can serve as the near-duplicate groups of the adaptive method, and a
+    slice whose representatives drifted can enter the model as a changed component.
+  - On this testbed every change is an edit with a diff and the suite is small (180 tests, which the reproduction
+    cuts into twelve slices), which is the case slicing has least to offer.
 
 ### 5.2 Text in the method: an option (roadmap 3(b))
 
@@ -462,9 +470,11 @@ tests and changes are worded differently (tau2-bench, §6), shows whether the ga
 ### 5.3 Coverage, and mandatory properties in the method
 
 Coverage is a metric the AEM team asked for (`docs/AEM_ALIGNMENT.md` §3.5); the report's section 6 gives it for the
-suite and for each change. On this app every agent, skill, configuration key, property and workflow has a test; one
-tool (`get_asset`) and two setting values have none. The declared metadata misses one skill and three settings that
-the traces show in use.
+suite and for each change. On this app:
+
+- every agent, skill, configuration key, property and workflow has a test;
+- one tool (`get_asset`) and two setting values have none;
+- the declared metadata misses one skill and three settings that the traces show in use.
 
 Change coverage needs no ground truth. Observed, cost-aware and TF-IDF selection and the adaptive method all
 exercise 97% of the changed components at a 20% budget (one change touches code no test runs). The adaptive
@@ -495,31 +505,30 @@ Gemma gives the opposite picture (§5.1): its vote is stable, and the votes over
 runs differ on two labels only, the two pairs at the majority line (DS-INTENTS/i20 under
 `skill_governance_drop_consent`, WF4-01 under `skill_translation_wrong_default`).
 
-Qwen passes 173 of the 180 tests on the original app (`docs/EXPERIMENT.md` §6). Its recording is not a clean ground
-truth. Every regression is revealed, but so is every benign change: by three to six tests under the majority over
-five runs, by two to four under the first three, the empty change (`benign_code_comment_docstring`, whose change
-set is empty) included. The two votes differ on 75 (change, test) pairs and on the revealing sets of 40 of the 43
-changes; a change's own runs disagree on 357 pairs. Seven tests carry the variation: one of the two cases a model
-judges against a rubric (PUB-20), the 60-character boundary (SEO-05), four long workflows (WF2-01, WF2-02, WF4-02,
-WF5-02) and AUT-05. Twenty-nine of the 34 regressions have a revealing test outside the seven. CASPER's twenty
-representatives include SEO-05, WF5-02 and WF2-02, which "reveal" 40, 34 and 15 of the 43 changes, so its slices
-appear to detect 90% of the changes at a 20% budget there.
+Neither recording is a clean ground truth (`docs/EXPERIMENT.md` §6 has the tests each model gets wrong):
 
-gpt-oss passes 153 of the 180 tests and varies more. The benign changes are "revealed" by two to five tests under
-the majority over five runs and by one to four under the first three; the two votes differ on 95 pairs, and a
-change's own runs disagree on 577. Thirteen tests carry the variation, mostly the long workflows: WF1-01 and
-WF1-03 pass on the original app and fail on nearly every changed copy, whichever the change, the empty one
-included; MNT-05 flips on twenty changes. Twenty-five of the 34 regressions have a revealing test outside those
-thirteen. CASPER's representatives include the three, so its slices appear to detect 98% of the changes at a 20%
-budget there.
+| | Qwen | gpt-oss |
+|---|---|---|
+| tests passing on the original app | 173 of 180 | 153 of 180 |
+| regressions revealed | all 34 | all 34 |
+| benign changes "revealed", majority over five runs | every one, by three to six tests, the empty change (`benign_code_comment_docstring`, whose change set is empty) included | every one, by two to five tests |
+| the same under the first three runs | by two to four tests | by one to four tests |
+| (change, test) pairs on which the two votes differ | 75, and the revealing sets of 40 of the 43 changes | 95 |
+| pairs on which a change's own runs disagree | 357 | 577 |
+| tests that carry the variation | seven: one of the two cases a model judges against a rubric (PUB-20), the 60-character boundary (SEO-05), four long workflows (WF2-01, WF2-02, WF4-02, WF5-02) and AUT-05 | thirteen, mostly the long workflows: WF1-01 and WF1-03 pass on the original app and fail on nearly every changed copy, whichever the change, the empty one included; MNT-05 flips on twenty changes |
+| regressions with a revealing test outside those | 29 of 34 | 25 of 34 |
+| CASPER's representatives | include SEO-05, WF5-02 and WF2-02, which "reveal" 40, 34 and 15 of the 43 changes, so its slices appear to detect 90% of the changes at a 20% budget | include the three unstable tests, so its slices appear to detect 98% at a 20% budget |
 
-Two remedies fall short. vLLM's batch-invariant mode, which makes greedy decoding exactly repeatable, does not
-support Qwen3.8: the server refuses it for the model's linear-attention layers ("not supported for GDN_ATTN").
-Recording the baseline the way the changes are recorded is not enough either. With the empty change, recorded
-exactly like the others, as the reference, every one of the eight other benign changes still flips tests: two to
-five under Qwen (WF4-01 and WF5-02 in nearly all of them) and one to four under gpt-oss. Part of the variation is
-batching, the tests that pass one at a time and fail in a batch; the rest is run-to-run variation under identical
-conditions.
+Two remedies fall short:
+
+- vLLM's batch-invariant mode, which makes greedy decoding exactly repeatable, does not support Qwen3.8: the server
+  refuses it for the model's linear-attention layers ("not supported for GDN_ATTN");
+- recording the baseline the way the changes are recorded is not enough either: with the empty change, recorded
+  exactly like the others, as the reference, every one of the eight other benign changes still flips tests, two to
+  five under Qwen (WF4-01 and WF5-02 in nearly all of them) and one to four under gpt-oss.
+
+Part of the variation is batching, the tests that pass one at a time and fail in a batch; the rest is run-to-run
+variation under identical conditions.
 
 Qwen and gpt-oss are used as they are served, like Gemma. Their recordings are kept for this finding; the results
 are Gemma's. The lesson for a pipeline is to measure how much the model's answers vary from run to run under the

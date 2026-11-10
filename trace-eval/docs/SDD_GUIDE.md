@@ -4,16 +4,20 @@ The reference for the spec-driven development (SDD) layer. [SDD_DEMO.md](SDD_DEM
 [STUDY_GUIDE.md](STUDY_GUIDE.md) a reading plan of the layer's code, and [CONTENTOPS.md](CONTENTOPS.md) the
 application the specs describe.
 
-## 1. The idea in one paragraph
+## 1. The idea
 
 A change request is usually prose, such as "approvals should expire after 30 days", and a machine cannot
 check prose. A *spec* keeps the prose as the *intent*, which a person reviews, and adds *clauses*: small,
-typed statements that a machine can check against a pull request. A clause can say that a configuration
-key must be in a range, that a function must satisfy a pre/post-condition, that something must always or
-never happen in recorded runs, that a concrete scenario must end a given way, or that a piece of code must
-live in a given layer. Each clause is checked by exactly one checker. Each check produces evidence with a
-*rung*, a level that says how strong the evidence is. A PR is accepted when every clause holds and reaches
-its required rung.
+typed statements that a machine can check against a pull request. A clause can say that:
+
+- a configuration key must be in a range;
+- a function must satisfy a pre/post-condition;
+- something must always or never happen in recorded runs;
+- a concrete scenario must end a given way;
+- a piece of code must live in a given layer.
+
+Each clause is checked by exactly one checker. Each check produces evidence with a *rung*, a level that says how
+strong the evidence is. A PR is accepted when every clause holds and reaches its required rung.
 
 ![From request to verdict](figures/sdd_1_loop.svg)
 
@@ -110,9 +114,15 @@ traceeval sdd draft --request request.md --id FS-0106 --replay answer.json      
 ```
 
 The `llm` backend's model does the drafting ([EXPERIMENT.md](EXPERIMENT.md) §3). It receives the catalog, the
-request and a *slice of the product model*: every tool with its kind and the service functions behind it, every
-configuration key with its value, every skill with the tools it calls, the code paths that change a page status,
-and every recorded case. It must answer in JSON, with template names and slot values only.
+request and a *slice of the product model*:
+
+- every tool with its kind and the service functions behind it;
+- every configuration key with its value;
+- every skill with the tools it calls;
+- the code paths that change a page status;
+- every recorded case.
+
+It must answer in JSON, with template names and slot values only.
 
 The answer is expanded through the catalog, and clauses that do not fit a template are dropped and reported.
 The result is validated against the product model: an unknown tool, case, skill or directory is an *error*,

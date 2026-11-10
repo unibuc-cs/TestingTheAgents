@@ -7,10 +7,12 @@ rendered from the Mermaid sources in `docs/diagrams/`.
 
 ## 1. What is in the repository
 
-The repository has three layers. The bottom one is ContentOps, a small, working multi-agent application. The
-middle one is the testbed: it runs the application, records what each run touched, and applies controlled
-changes to it. The top one holds the two research questions that use the testbed: test selection and
-spec-driven development.
+The repository has three layers:
+
+- the bottom one is ContentOps, a small, working multi-agent application;
+- the middle one is the testbed: it runs the application, records what each run touched, and applies controlled
+  changes to it;
+- the top one holds the two research questions that use the testbed: test selection and spec-driven development.
 
 ![The layers of the repository](figures/guide_1_layers.png)
 
@@ -106,13 +108,16 @@ that put the rule in the service refuse that, and the other two let it through.
 
 `pr_branchy`, the sixth PR, is the gap example of [SDD_GUIDE.md](SDD_GUIDE.md) §5.
 
-The proof works as follows. The source of `review_age_ok` is parsed, and its single `return` expression is
-rewritten into Z3 operators: `and`, `or`, `not` and chained comparisons become `z3.And/Or/Not`. The inputs
-become `z3.Int` symbols, and the solver is asked for an input that satisfies `assume ∧ ¬ensures`, that is,
-one that meets the precondition and breaks the postcondition. If the answer is `unsat`, no such input exists,
-and that is the proof. If the solver finds a model, a concrete assignment of the inputs, that model is the
-counterexample. Loops, branches and calls are not translated; for those the clause stays at L2 and the
-evidence record says so.
+The proof works as follows:
+
+1. the source of `review_age_ok` is parsed, and its single `return` expression is rewritten into Z3 operators:
+   `and`, `or`, `not` and chained comparisons become `z3.And/Or/Not`;
+2. the inputs become `z3.Int` symbols, and the solver is asked for an input that satisfies `assume ∧ ¬ensures`,
+   that is, one that meets the precondition and breaks the postcondition;
+3. if the answer is `unsat`, no such input exists, and that is the proof; if the solver finds a model, a concrete
+   assignment of the inputs, that model is the counterexample.
+
+Loops, branches and calls are not translated; for those the clause stays at L2 and the evidence record says so.
 
 ## 4. The code, in reading order
 

@@ -1,9 +1,11 @@
 # Spec-driven development on the testbed: a starting prototype
 
-This prototype asks two questions. Can a change request be written as a spec formal enough for a machine to
-check, and where possible prove, that a PR implements it in the right place and with the smallest necessary
-change? And can a coding agent then read less and run fewer checks than it would by reading the whole
-repository and running everything?
+This prototype asks two questions:
+
+- can a change request be written as a spec formal enough for a machine to check, and where possible prove, that a
+  PR implements it in the right place and with the smallest necessary change?
+- can a coding agent then read less and run fewer checks than it would by reading the whole repository and running
+  everything?
 
 It adds a spec layer (`traceeval/spec/`) on top of the ContentOps testbed:
 
@@ -63,14 +65,21 @@ A spec is prose intent plus clauses of five kinds (settings, contracts, trace ru
 
 ## What the report shows per PR
 
-For each PR the report gives the verdict (accepted / accepted with gaps / rejected), the failing or gapped
-clauses, the rung each clause reached, and the cost: clause runs, change-selected regression cases (chosen by
-TRACE-Eval's observed-dependency selection), tokens and seconds. For each request it also shows which checks
-will run and the agent brief ([SDD_GUIDE.md](SDD_GUIDE.md) §6).
+For each PR the report gives:
 
-The brief is 9–20% of the repository (12% on average), and all 25 verdicts are as expected. Every wrong PR is
-rejected, and the report names the clause, the counterexample or the misplaced code. Two rules are proven for all
-inputs (FS-0101, FS-0103). Two specs find defects in the current app before any PR is written (FS-0102, FS-0105).
+- the verdict (accepted / accepted with gaps / rejected);
+- the failing or gapped clauses, and the rung each clause reached;
+- the cost: clause runs, change-selected regression cases (chosen by TRACE-Eval's observed-dependency selection),
+  tokens and seconds.
+
+For each request it also shows which checks will run and the agent brief ([SDD_GUIDE.md](SDD_GUIDE.md) §6). What it
+shows:
+
+- the brief is 9–20% of the repository (12% on average);
+- all 25 verdicts are as expected: every wrong PR is rejected, and the report names the clause, the counterexample
+  or the misplaced code;
+- two rules are proven for all inputs (FS-0101, FS-0103);
+- two specs find defects in the current app before any PR is written (FS-0102, FS-0105).
 
 ## With Gemma playing the agents
 
@@ -95,7 +104,11 @@ did not.
 
 ## What is not here yet
 
-The prototype does not include the generation side (an agent that reads the brief and writes the PR, then
-repairs it against the evidence), a real repository (it runs on the testbed), or a second proof backend. The
-next step is to run the loop spec -> brief -> coding agent -> PR -> evidence, and to measure first-pass
+The prototype does not include:
+
+- the generation side: an agent that reads the brief and writes the PR, then repairs it against the evidence;
+- a real repository: it runs on the testbed;
+- a second proof backend.
+
+The next step is to run the loop spec -> brief -> coding agent -> PR -> evidence, and to measure first-pass
 acceptance, placement, minimality and cost against the same requests done without a spec.

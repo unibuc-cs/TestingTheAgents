@@ -181,15 +181,20 @@ limits, for a person to edit and apply ([USER_GUIDE.md](USER_GUIDE.md) §7).
 
 Qwen's draft from the requirements alone (`--fresh`) is in [properties/draft_qwen/](properties/draft_qwen/), with
 its answers, so `traceeval properties draft --fresh --replay docs/properties/draft_qwen/answers.json` reproduces it
-without a model. The catalog is good: fifteen properties, each traced to the skill, configuration key or spec that
-states it, nine of them safety properties and so mandatory, and finer-grained than the hand-written catalog (the
-review gate, the asset licence, the SEO title limit and the default languages are properties of their own). It also
-finds a requirement no test checks: the 30-day approval window, which only spec FS-0101 states, since that feature
-is not built. The tags are weaker: 38 of the 104 cases the draft was made on get only the routing property,
-because every request passes the orchestrator, while 32 of the 36 that the hand-written tags mark as checking a
-mandatory property get one too. Asked to extend the existing catalog instead, Qwen keeps its fifteen properties,
-adds sources to three, and tags 86 of its 104 with `correct_routing`, finding only 19 of those 36. The model is a
-good first author of the catalog; the tags need the person's review the workflow already asks for.
+without a model.
+
+- The catalog is good: fifteen properties, each traced to the skill, configuration key or spec that states it, nine
+  of them safety properties and so mandatory, and finer-grained than the hand-written catalog (the review gate, the
+  asset licence, the SEO title limit and the default languages are properties of their own). It also finds a
+  requirement no test checks: the 30-day approval window, which only spec FS-0101 states, since that feature is not
+  built.
+- The tags are weaker: 38 of the 104 cases the draft was made on get only the routing property, because every
+  request passes the orchestrator, while 32 of the 36 that the hand-written tags mark as checking a mandatory
+  property get one too.
+- Asked to extend the existing catalog instead, Qwen keeps its fifteen properties, adds sources to three, and tags
+  86 of its 104 with `correct_routing`, finding only 19 of those 36.
+
+The model is a good first author of the catalog; the tags need the person's review the workflow already asks for.
 
 ### 3.5 Coverage from several angles
 
@@ -216,10 +221,13 @@ of its components at least one test covers, declared and observed, and the list 
 | execution path | the distinct agent and tool sequences the traces show | counted, not a share |
 | risk | the tests per risk level | an unprotected critical feature |
 
-On Gemma's recording every feature has a test; the thinnest are the site health check (five tests), then
-scheduling, page analytics and rollback (six each). The tests reach 15 of the 31 places where a tool refuses. No
-test asks for the data of a person the platform does not know, has a service refuse a user for a missing role, or
-sends the dispatcher an unknown tool or malformed arguments.
+On Gemma's recording:
+
+- every feature has a test; the thinnest are the site health check (five tests), then scheduling, page analytics
+  and rollback (six each);
+- the tests reach 15 of the 31 places where a tool refuses: no test asks for the data of a person the platform does
+  not know, has a service refuse a user for a missing role, or sends the dispatcher an unknown tool or malformed
+  arguments.
 
 Every test runs with the default settings unless it sets its own. Three cases do (`catalog/tests/settings.yaml`):
 publishing without a required review, scheduling switched off, and the link check switched off. They cover three of
@@ -228,9 +236,12 @@ switched off.
 
 The report, and `traceeval coverage --history runs/gemma7` in the terminal, also give for each agent, skill, tool
 and feature the number of tests that declare it and the number that invoke it. On Gemma's recording the two counts
-disagree in telling ways. The routing datasets name the agent a request should go to, but only the hand-off runs,
-so the assets agent is declared by 37 tests and invoked by 17. The `governance-checks` skill, which every
-specialist loads, is invoked in 120 tests and declared by none. `get_asset` is invoked by none.
+disagree in telling ways:
+
+- the routing datasets name the agent a request should go to, but only the hand-off runs, so the assets agent is
+  declared by 37 tests and invoked by 17;
+- the `governance-checks` skill, which every specialist loads, is invoked in 120 tests and declared by none;
+- `get_asset` is invoked by none.
 
 **2. Change coverage: for one change and one strategy, how much of what the change touches the executed tests
 cover.** Computed without the ground truth, at the moment the strategy stops (the requirements' "coverage achieved
@@ -265,29 +276,34 @@ tests every affected mandatory property before it calls a change clean, for unde
 
 ### 3.6 OpenTelemetry export
 
-`traceeval run --test <id> --otel trace.json` writes the run's trace as OpenTelemetry spans in OTLP JSON, the
-form an OpenTelemetry collector accepts on `/v1/traces` (`traceeval/tracing/otel.py`, without a dependency). The
-root span covers the run (test, run id, variant, backend, termination, steps, token totals). Under it, each
-agent turn is an `invoke_agent` span, nested by delegation, and each tool call (`execute_tool`), model call
-(`chat`, with its tokens) and skill load (`load_skill`, with name, version and digest) is a child of the agent
-turn that made it. Names and attributes follow the OpenTelemetry GenAI semantic conventions where they apply
-(`gen_ai.operation.name`, `gen_ai.agent.name`, `gen_ai.tool.name`, `gen_ai.usage.*`, `error.type`); the rest
-are under `traceeval.*`. The "cognition events" Adobe mentioned are span events on the agent span: `plan` (the
-goal and steps of a `make_plan` call), `route` (each delegation with its target, task, status and reason),
-`approval` (whether the step was approved, and by whom) and `consult` (the specialist definitions the
-orchestrator read to choose). A refused tool call carries `error.type`; a crashed one also has status ERROR.
-Span and trace ids are derived from the run id and the event index, so the same run always exports the same
-ids.
+`traceeval run --test <id> --otel trace.json` writes the run's trace as OpenTelemetry spans in OTLP JSON, the form
+an OpenTelemetry collector accepts on `/v1/traces` (`traceeval/tracing/otel.py`, without a dependency):
+
+- the root span covers the run (test, run id, variant, backend, termination, steps, token totals);
+- under it, each agent turn is an `invoke_agent` span, nested by delegation;
+- each tool call (`execute_tool`), model call (`chat`, with its tokens) and skill load (`load_skill`, with name,
+  version and digest) is a child of the agent turn that made it;
+- names and attributes follow the OpenTelemetry GenAI semantic conventions where they apply
+  (`gen_ai.operation.name`, `gen_ai.agent.name`, `gen_ai.tool.name`, `gen_ai.usage.*`, `error.type`); the rest are
+  under `traceeval.*`;
+- the "cognition events" Adobe mentioned are span events on the agent span: `plan` (the goal and steps of a
+  `make_plan` call), `route` (each delegation with its target, task, status and reason), `approval` (whether the
+  step was approved, and by whom) and `consult` (the specialist definitions the orchestrator read to choose);
+- a refused tool call carries `error.type`; a crashed one also has status ERROR;
+- span and trace ids are derived from the run id and the event index, so the same run always exports the same ids.
 
 ### 3.7 Controlled changes aimed at the workflows
 
 Ten changes, so that the workflows matter for selection: eight regressions and two benign ones, each checked under
-Gemma ([USER_GUIDE.md](USER_GUIDE.md) §6 lists them with the tests that reveal each). The orchestrator's approval
-rule, removed from the routing skill, is revealed by eleven tests, in four of the six workflows (W1 to W4); the
-brand gate and the hand-off of ids between steps by the W1 and W2 tests; the insights ranking and the page search
-by their single-agent tests and by W2 and W3. Three regressions are revealed by no workflow test although a
-workflow runs the changed code (the audit's alt-text rule, the brand check's letter case, the approval gate on
-taking pages down): covering a change is not revealing it, the case the method is built for.
+Gemma ([USER_GUIDE.md](USER_GUIDE.md) §6 lists them with the tests that reveal each).
+
+- The orchestrator's approval rule, removed from the routing skill, is revealed by eleven tests, in four of the six
+  workflows (W1 to W4).
+- The brand gate and the hand-off of ids between steps are revealed by the W1 and W2 tests.
+- The insights ranking and the page search are revealed by their single-agent tests and by W2 and W3.
+- Three regressions are revealed by no workflow test although a workflow runs the changed code (the audit's
+  alt-text rule, the brand check's letter case, the approval gate on taking pages down): covering a change is not
+  revealing it, the case the method is built for.
 
 ## 4. Next steps
 
@@ -355,12 +371,14 @@ so its column is the least firm.
 
 ### 4.3 Limits
 
-Three limits go with the results. Some tests fail under Gemma on the original app, the model's own mistakes
-([EXPERIMENT.md](EXPERIMENT.md) §6), so they cannot reveal a change; WF2-03 among them, which replays in the demo
-([DEMO.md](DEMO.md) §3). A one-off difference between runs can make a benign change look revealed or a regression
-look invisible, which the report's sanity line shows as VIOLATED; several repetitions and the majority vote absorb
-most of it ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4). And the ground truth belongs to the model: Qwen gets some
-of Gemma's cases right and makes mistakes of its own.
+Three limits go with the results:
+
+- some tests fail under Gemma on the original app, the model's own mistakes ([EXPERIMENT.md](EXPERIMENT.md) §6), so
+  they cannot reveal a change; WF2-03 among them, which replays in the demo ([DEMO.md](DEMO.md) §3);
+- a one-off difference between runs can make a benign change look revealed or a regression look invisible, which
+  the report's sanity line shows as VIOLATED; several repetitions and the majority vote absorb most of it
+  ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4);
+- the ground truth belongs to the model: Qwen gets some of Gemma's cases right and makes mistakes of its own.
 
 Sources: [Overview of agents in AEM](https://experienceleague.adobe.com/en/docs/experience-manager-cloud-service/content/ai-in-aem/agents/overview),
 [Agentic AI in Experience Cloud](https://experienceleague.adobe.com/en/docs/core-services/interface/features/agentic-ai?lang=en),

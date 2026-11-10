@@ -63,11 +63,15 @@ traceeval run --test WF3-01 --backend replay --otel runs/otel/wf3-01.json     # 
 ```
 
 Open WF3-01 in `workflows.yaml`. The request is "Legal says the phrase 'guaranteed returns' must not appear on the
-live site. Find the pages that use it, take the live ones down, and tell me which pages you took down". The
-orchestrator writes a plan (`make_plan`) and delegates the search to brand. It then asks a person
-(`request_approval`), whose answer is fixture data, so the run is repeatable. Finally, it delegates to publishing,
-which takes two pages down with the approver's token, since `unpublish_page` is a guarded tool. The expectations
-check the agent order, the tool order, the final state, the audit log and the page ids in the answer.
+live site. Find the pages that use it, take the live ones down, and tell me which pages you took down". The run:
+
+1. the orchestrator writes a plan (`make_plan`) and delegates the search to brand;
+2. it asks a person (`request_approval`), whose answer is fixture data, so the run is repeatable;
+3. it delegates to publishing, which takes two pages down with the approver's token, since `unpublish_page` is a
+   guarded tool.
+
+The expectations check the agent order, the tool order, the final state, the audit log and the page ids in the
+answer.
 
 Mention the variants: in WF3-02 a protected page stays up and is reported, and in WF3-03 a refused approval takes
 nothing down. The other five workflows are in
@@ -104,10 +108,12 @@ The change removes one rule from the orchestrator's routing skill: ask a person 
 schedules or takes pages down. It edits the prose of a skill that every request reads, so it touches every test,
 and nothing in the code changes.
 
-While it runs, narrate what the method does. It reads the change set (`skill:routing#prose`) and weighs every
-test by its sensitivity to that component, calibrated on the other recorded changes. It runs the most informative
-test per token first, updates after each outcome, and stops at the first failure of a test that passed on the
-original app.
+While it runs, narrate what the method does:
+
+- it reads the change set (`skill:routing#prose`) and weighs every test by its sensitivity to that component,
+  calibrated on the other recorded changes;
+- it runs the most informative test per token first and updates after each outcome;
+- it stops at the first failure of a test that passed on the original app.
 
 The loop is pictured in [USER_GUIDE.md](USER_GUIDE.md) §5, which can stay open on screen.
 
@@ -196,10 +202,10 @@ cases:
 
 ## Questions to expect
 
-- *Does the ground truth depend on the model?* Yes. A change a model cannot see, because it ignores the guard
-  with or without the change, is a fact about the model, and the report says which changes these are. The
-  ground truth is Gemma's: five repetitions per test and a majority vote. A second recording with three
-  repetitions reproduces it on all but two (change, test) labels.
+- *Does the ground truth depend on the model?* Yes. A change a model cannot see, because it ignores the guard with
+  or without the change, is a fact about the model, and the report says which changes these are. The ground truth
+  is Gemma's: five repetitions per test and a majority vote, which absorbs the four (change, test) pairs its runs
+  disagree on.
 - *Why are some workflow tests red?* They are Gemma's own mistakes on the original app, not faults of the testbed:
   it schedules the launch page right after requesting a review (WF1-01), goes on to publishing after the rollback's
   link check failed (WF5-02) and stops a whole plan after a refused export (WF6-02); [EXPERIMENT.md](EXPERIMENT.md)

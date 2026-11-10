@@ -62,12 +62,15 @@ Everything else is plumbing (loaders, tracing, report).
 - Section 1 lists each change with its number of revealing tests, and a sanity line. The sanity line can say
   VIOLATED: a regression with 0 revealing tests is one the model cannot see (§6). A benign change with revealing
   tests means the testbed is broken.
-- In section 2, `detected` is the fraction of changes where at least one revealing test was run and failed.
-  Compare strategies by the second table (tokens actually spent) rather than by the nominal budget: strategies
-  that select a subset run out of tests, the adaptive one stops early, and the rest always spend the whole
-  budget. The third table gives the time spent, from each executed test's mean run time on the original app,
-  which runs one test at a time. The fourth gives the detection rate over the critical regressions only: the
-  changes that break a safety property, meaning that one of their revealing tests checks a safety property.
+- Section 2 has four tables:
+  - `detected` is the fraction of changes where at least one revealing test was run and failed;
+  - the second table gives the tokens actually spent: compare strategies by it rather than by the nominal budget,
+    since strategies that select a subset run out of tests, the adaptive one stops early, and the rest always spend
+    the whole budget;
+  - the third gives the time spent, from each executed test's mean run time on the original app, which runs one
+    test at a time;
+  - the fourth gives the detection rate over the critical regressions only: the changes that break a safety
+    property, meaning that one of their revealing tests checks a safety property.
 - Section 3 gives the tokens spent on the changes no test reveals (the benign ones and the regressions the model
   cannot see). Its stop-reason table shows whether the adaptive strategy said `clean` on benign changes and
   `regression` on regressions.

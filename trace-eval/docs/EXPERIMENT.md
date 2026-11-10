@@ -5,12 +5,15 @@ wired in, and what to type. Start with sections 1 and 4 and look the rest up whe
 
 ## 1. Recording, in two minutes
 
-The README says what the testbed is. Every test runs several times on the original app and on every changed copy
-(`--reps`; five in the recording the results come from), and what happened is recorded. The majority of the runs
-decides the outcome. A run the environment broke, because the model server or the network did not answer, is marked
-`INFRA_INVALID` and left out, as if it had not been made. That gives the ground truth: which tests fail under which
-change. After that, comparing the strategies costs nothing, because we replay the recordings: strategy X would have
-run these tests, so it would or would not have caught this change, for this many tokens.
+The README says what the testbed is. A recording goes like this:
+
+1. Every test runs several times on the original app and on every changed copy (`--reps`; five in the recording the
+   results come from), and what happened is recorded.
+2. The majority of the runs decides the outcome. A run the environment broke, because the model server or the
+   network did not answer, is marked `INFRA_INVALID` and left out, as if it had not been made.
+3. That gives the ground truth: which tests fail under which change.
+4. After that, comparing the strategies costs nothing, because we replay the recordings: strategy X would have run
+   these tests, so it would or would not have caught this change, for this many tokens.
 
 Recording costs GPU time, which is why we use the GPU server (section 4). Replaying recorded answers is free
 (section 5).
@@ -81,10 +84,14 @@ parse it by hand.
 
 ## 3. Where the models run
 
-Gemma 4 E4B, a small model from Google, plays the agents by default. Qwen3.8-27B, Alibaba's open model, about six
-times bigger, is the second, so we can check that results hold for more than one model. gpt-oss-120b, OpenAI's
-open-weights model, is a third, served over both GPUs of the GPU server, fmi0, when they are free. The `--backend`
-option picks who plays the agents:
+Three models can play the agents:
+
+- Gemma 4 E4B, a small model from Google, by default;
+- Qwen3.8-27B, Alibaba's open model, about six times bigger, so we can check that results hold for more than one
+  model;
+- gpt-oss-120b, OpenAI's open-weights model, served over both GPUs of the GPU server, fmi0, when they are free.
+
+The `--backend` option picks who plays the agents:
 
 | backend | what it is | when to use it |
 |---|---|---|
@@ -422,22 +429,26 @@ WF6-02), shares CFG-01 and WF2-03, splits on WF5-02 (half of its runs), and make
 | DS-ROUTING/r40 | Qwen | it answers a vague request itself instead of handing it to the default agent |
 | SEO-07 | Qwen | the case it judges itself against a rubric: its own judge rejects its answer |
 
-There is a pattern. Gemma acts on guards, the conditions that should stop a step, when they come from a
-tool's answer (a denied permission, a broken link). It does not act on guards it has to work out for itself
-(a review flag, a length). In a plan, it does not judge well which steps depend on a failed one. Qwen follows
-the guards, but in a plan it tends to repair a failed step and go on. Gemma's cases are listed in
-`KNOWN_MODEL_MISTAKES` (`tests/test_sut.py`); the test suite expects them to fail and every other case to
-pass. A test the model fails on the original app cannot reveal a change, which is also why some changes have
-no revealing test (section 7).
+There is a pattern:
+
+- Gemma acts on guards, the conditions that should stop a step, when they come from a tool's answer (a denied
+  permission, a broken link). It does not act on guards it has to work out for itself (a review flag, a length).
+- In a plan, Gemma does not judge well which steps depend on a failed one.
+- Qwen follows the guards, but in a plan it tends to repair a failed step and go on.
+
+Gemma's cases are listed in `KNOWN_MODEL_MISTAKES` (`tests/test_sut.py`); the test suite expects them to fail and
+every other case to pass. A test the model fails on the original app cannot reveal a change, which is also why some
+changes have no revealing test (section 7).
 
 ## 7. The recordings
 
-The results in `docs/results/gemma7/` come from `runs/gemma7`: Gemma on the current app, with 180 tests, 43
-changes, five repetitions and the model judge. The recording took about two hours on fmi0's GPU0: 31 minutes for
-the baseline, one test at a time, and under two minutes per change, because the changed copies run many tests at
-once (`--workers`). Qwen's recording of the same app (`docs/results/qwen7/`, five repetitions) took about six hours
-on two SLURM GPUs, and gpt-oss's (`docs/results/gptoss7/`) three and a half hours on both of fmi0's GPUs; neither
-is a clean ground truth, for the reasons given below.
+Three recordings of the current app, each with 180 tests, 43 changes, five repetitions and the model judge:
+
+| recording | model | where | time | clean ground truth? |
+|---|---|---|---|---|
+| `runs/gemma7`, report in `docs/results/gemma7/` | Gemma | fmi0's GPU0 | about two hours: 31 minutes for the baseline, one test at a time, and under two minutes per change, because the changed copies run many tests at once (`--workers`) | yes; the results come from it |
+| `runs/qwen7`, `docs/results/qwen7/` | Qwen | two SLURM GPUs | about six hours | no (below) |
+| `runs/gptoss7`, `docs/results/gptoss7/` | gpt-oss | both of fmi0's GPUs | three and a half hours | no (below) |
 
 On the original app 172 of 180 tests pass, 29 of the 34 regressions are revealed and no benign change is, so the
 report's sanity line says VIOLATED for the five changes below. They are misses of the model, not of the testbed,
