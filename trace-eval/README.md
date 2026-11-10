@@ -93,7 +93,8 @@ calls a change that breaks nothing a regression. Its misses are mostly narrow re
 five tests, where it concludes too early that nothing broke. Of the 21 changes that break a safety property, it
 catches 86%. The two reproduced methods look at the traces and the outcomes but not at the diff, and sit between
 random (52%) and the change-aware strategies. The full numbers are in the
-[Gemma report](docs/results/gemma5/report.md).
+[Gemma report](docs/results/gemma5/report.md), and the take-aways of the experiments in
+[RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.5.
 
 Qwen3.8-27B's recording of the same app is not a clean ground truth. It records every benign change as revealed by
 two to five tests, for two reasons. Six tests answer differently when run 64 at a time over three servers than when

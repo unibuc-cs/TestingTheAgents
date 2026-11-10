@@ -136,9 +136,22 @@ threshold where it is a rate:
 ```
 
 Categories: correctness, safety, resilience, orchestration (planning, data handoff, approvals, stopping on
-failure), efficiency, quality (of the answer). The report then gives, per strategy, the share of the affected
-properties it covered, and per property, the pass rate against its threshold. The categories map onto DeepEval's
-metrics (task completion, tool correctness, G-Eval for the judged ones), so the catalog could later drive DeepEval.
+failure), efficiency, quality (of the answer). The categories map onto DeepEval's metrics (task completion, tool
+correctness, G-Eval for the judged ones), so the catalog could later drive DeepEval. What each field means and
+where the testbed uses it:
+
+| field | meaning | used by |
+|---|---|---|
+| `category` | the kind of requirement, one of the six above | the report, which groups by it; `properties draft`, which takes a new property's mandatory flag and threshold from it (safety: mandatory, 1.0) |
+| `description` | the requirement in one sentence | people, and the model that tags the tests |
+| `checked_by` | how its tests verify it: `state` (the final application state), `trace` (tool calls, agents, audit, steps), `judge` (a model reads the answer against a rubric), `dataset` (prompt → expected item) | documentation of the oracle; `properties draft` accepts only these values |
+| `mandatory` | a release blocker | the adaptive method's last step: before calling a change clean it runs a test of every mandatory property the change may affect (§3.5); `traceeval check`, which names the affected properties left unchecked; the report, which counts the runs that covered them |
+| `threshold` | the share of its tests that must pass on the current app for the property to count as met | the report's section 5: the mean pass rate of its tests over the recorded runs, against the threshold; the safety properties require 1.0 |
+| `sources` | the components that state the requirement, as component ids (`skill:<name>#procedure`, `agent:<name>.<field>`, `config:<key>`, `spec:<id>`) | the map from a change to the properties it may affect: a property one of whose sources the change set touches, plus the properties of the tests whose traces reached a changed component |
+
+A test lists the ids of the properties it checks (`properties:`); the loader rejects an unknown id, and `pytest`
+fails on a property that no test checks. The report then gives, per property, the pass rate against its threshold,
+and per strategy, the share of the affected properties it covered.
 
 **Drafting the catalog with a model.**
 `traceeval properties draft` asks Qwen for the catalog from the requirements only (the skills' rules, the agents'

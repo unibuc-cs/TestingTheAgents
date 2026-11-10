@@ -501,6 +501,45 @@ are Gemma's. The lesson for a pipeline is to measure how much the model's answer
 serving setup the selection will run on, before trusting a ground truth or a stopping rule. The no-op change
 measures exactly that.
 
+### 5.5 Take-aways
+
+What the experiments say, in the order a team would act on them; the same list closes `docs/DEMO.md`. The numbers are
+Gemma's (§5.1), at a budget of 20% of the suite's tokens unless said otherwise.
+
+1. **Record traces; do not maintain a map.** Hand-written dependency metadata finds 61% of the regressions at any
+   budget, because shared skills, harness code and settings are reached without being declared. Dependencies read
+   from traces find 86%, and everything at 100%. One instrumentation of the agent runtime (the testbed exports
+   OpenTelemetry spans) replaces a test-to-component map that nobody keeps current.
+2. **Read the diff.** The strategies that use the change find 79% to 92% of the regressions; the two that do not,
+   CASPER's slices and the risk-aware bandit, find 50% and 59%, near a random order's 52%, and their first
+   revealing test comes after 12% to 13% of the suite's tokens instead of 2% to 6%.
+3. **Stop when confident, with a safety net.** The adaptive method finds 79% for 3% of the tokens and returns the
+   rest. Its ceiling is 83%: on a regression that one to five tests reveal it can stop too early. The mandatory
+   rule covers the safety properties for under one extra test per change, and on this app catches the publishing
+   skill without its link check, which the stopping rule alone misses. The catalog of properties is where that
+   policy lives: whoever sets the mandatory flag decides what the pipeline never skips.
+4. **Discount the tests the model already fails.** Six tests fail on the current app, and on every changed copy.
+   On the 14 changes no test reveals, every other strategy reports a failure the change did not cause in 51% to
+   91% of its replays; the adaptive method in none, because it keeps each test's pass rate on the current app and
+   acts only on a flip. A pipeline should do the same rather than treat every red test as a regression.
+5. **Measure the model's noise before trusting a verdict.** Gemma's three runs agree on every test of the current
+   app and disagree on five (change, test) pairs over the 43 changes; Qwen's disagree on 260 and gpt-oss's on 577,
+   both "reveal" every benign change, and five repetitions do not settle gpt-oss's vote. The baseline runs one
+   test at a time and the changed copies in batches, and that alone flips some tests. An empty change, recorded
+   like the others, measures the noise floor; record it per model and per serving setup.
+6. **CASPER and the bandit have their place.** CASPER needs no diff: a model or provider update, or a prompt-level
+   change in a system the team does not own. For AEM its representatives are the natural first pass after a model
+   update, when every test is affected and the question is which behaviours drifted; its slices could also serve
+   as the adaptive method's groups of near-duplicate tests. The bandit learns from the outcomes of earlier changes
+   and from the tests it has run; with no history it has only the tests' risk to go on. The change-aware
+   strategies cover edits to skills, code and settings; the two kinds combine.
+7. **Text is a strong, cheap baseline.** TF-IDF similarity between the diff and the tests' text has the best
+   detection when the whole budget is spent (92%, and 98% on the changes that break a safety property). It never
+   stops, so it spends everything on benign changes too; it is the fallback order to keep in any pipeline.
+8. **Not yet covered.** Real version history instead of mutants; a second system under test (tau2-bench); suites
+   large enough for slicing to pay; re-planning after a failed step (recorded on a branch, awaiting the AEM team's
+   decision); tuning the stopping threshold, the priors and the discount; time rather than tokens as the budget.
+
 ---
 
 ## 6. Models, the prototype, and a second system under test

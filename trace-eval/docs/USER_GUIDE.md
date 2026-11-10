@@ -234,7 +234,8 @@ some candidate changes were left out of the set.
 
 - **Property**: add an entry to `catalog/properties.yaml` (id, category, description, `checked_by`, `mandatory`,
   `threshold`, `sources`) before a test uses it. The loader rejects a test that names an unknown property, and
-  `pytest` fails if a property has no test. Two fields take values from fixed lists. The category is one of
+  `pytest` fails if a property has no test. What each field means and where the testbed uses it is in
+  [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.4. Two fields take values from fixed lists. The category is one of
   correctness, safety, resilience, orchestration, efficiency, quality. `checked_by` is a subset of state (the
   final application state), trace (tool calls, agents, audit, steps), judge (a model reads the answer) and
   dataset (prompt -> expected item).
