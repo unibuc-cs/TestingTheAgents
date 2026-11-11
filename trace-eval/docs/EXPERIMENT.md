@@ -142,12 +142,13 @@ flowchart LR
 Each vLLM server listens only on the GPU server's own localhost, so nobody on the network can reach it. Your
 PC gets in through one SSH tunnel per model, which uses the same key you log in with.
 
-Runs are repeatable, with one caveat. Decoding is greedy (temperature 0), so the same prompt gives the same
-answer. On vLLM this is nearly exact rather than bit-exact: the batch a request lands in can change the
-floating-point arithmetic slightly. Once in a while that flips a token, and with it the rest of the run. With
-Qwen running many cases at once, tests failed under changes that could not have affected them
-([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4). That is why a ground truth should come from several repetitions
-(`--reps 3`, majority vote) rather than one.
+Runs are repeatable, with one caveat. Decoding is greedy (temperature 0), so the same prompt gives the same answer.
+On vLLM this is nearly exact rather than bit-exact: the batch a request lands in can change the floating-point
+arithmetic slightly. Once in a while that flips a token, and with it the rest of the run. With Qwen running 64
+cases at once, tests failed under changes that could not have affected them; run one case at a time (`--workers
+1`), Qwen's runs agree with each other as Gemma's do ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4). That is why a
+ground truth should come from several repetitions (`--reps 3`, majority vote) rather than one, and, for a model
+served like Qwen, from the changed copies recorded one test at a time.
 
 ## 4. The GPU server, step by step
 
@@ -364,6 +365,14 @@ The check prints each test as it runs, and then:
 
 `--history` is a recording made with the same model (the README); `traceeval experiment --reps 1` is enough for it.
 A changed copy of the app is compared with `traceeval/sut`, so copy that folder before editing it.
+
+Run live on every one of the 43 changes, one check at a time with Gemma on the GPU server, the check gives the
+verdict the replay's five seeds agree on for 42 of them, with the same tests and the same tokens to within a few
+hundred ([results/gemma7/live_vs_replay.md](results/gemma7/live_vs_replay.md) has the table). The one difference is
+a live false alarm: under the benign rewording of the orchestrator's prompt, WF3-03 failed live, with the
+orchestrator skipping the approval, where its five recorded runs pass. That is the one-off difference of section 3,
+on a test whose outcome hangs on one decision of the model. The 43 checks took 21 minutes of model time, six tests
+and 1.9% of the suite's tokens per check at the median.
 
 ### Recorded answers: running without a model
 

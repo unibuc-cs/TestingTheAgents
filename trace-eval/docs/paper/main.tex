@@ -897,6 +897,16 @@ its replays, to \strat{cost\_aware} in 94\%, to the bandit in 76\% and to CASPER
 (Equation~\ref{eq:likelihood}) and stops only on a test that used to pass, so in 490 replays on these changes it
 neither ran a test that failed (Table~\ref{tab:order}) nor gave a \regression{} verdict.
 
+\paragraph{Live against replay.} The prototype, which runs the adaptive method with the model live instead of
+looking outcomes up, was run on all 43 changes at a 20\% budget, one check at a time. On 42 it gave the verdict of
+the replay's five seeds, with the same tests and the same tokens to within a few hundred. The exception is a live
+false alarm on the benign rewording of the orchestrator's prompt: a workflow test failed live, with the
+orchestrator skipping an approval, where its five recorded runs pass. That is the one-off difference that greedy
+decoding under batching leaves, on a test whose outcome hangs on one decision of the model. The 43 checks took 21
+minutes of model time: six tests and 1.9\% of the suite's tokens per check at the median. The replay is a faithful
+stand-in for the live prototype, and the one false alarm is the noise floor the stopping rule would have to
+tolerate with repetitions.
+
 \paragraph{The text factor.} The tilt $\tau_t$ can use word overlap (the default), the TF-IDF similarity of
 \strat{ir\_tfidf}, or no text at all (Table~\ref{tab:text}). TF-IDF brings forward the one test that reveals a
 narrow change and gains up to five points while spending less; without any text the method loses ten to seventeen
@@ -957,12 +967,15 @@ ground truth, and the five repetitions do not settle either vote: every benign c
 tests, the change whose change set is empty included. Seven tests carry Qwen's variation: one of the two cases a
 model judges against a rubric, the title at the length limit, four long workflows and one authoring case. Thirteen
 tests carry gpt-oss's; two of them pass on the current version and fail on nearly every changed copy, whichever the
-change. Part of the variation is batching: the baseline runs one test at a time and the changed copies many at
-once, and some tests pass alone and fail in a batch. Two remedies fall short. vLLM's batch-invariant mode, which
-would make greedy decoding exactly repeatable, does not support Qwen's attention layers; and with the empty change,
-recorded like the others, as the reference, every other benign change still flips tests (two to five under Qwen,
-one to four under gpt-oss). The rest is run-to-run variation under identical conditions, and the empty change
-measures that noise floor. Gemma's vote is stable (four disagreeing pairs, above).
+change. The baseline runs one test at a time and the changed copies many at once. Recording the empty change one
+test at a time, five repetitions, separates batching from the model: under Qwen the runs disagree on one test,
+which sits at the majority line in the baseline too, and flip no other test against the baseline, where the same
+change recorded 64 tests at a time has nine tests whose runs disagree and six that flip. Qwen's variation is
+batching; one test at a time it is as repeatable as Gemma, whose vote is stable either way (four disagreeing pairs,
+above). vLLM's batch-invariant mode, which would make batched decoding exactly repeatable, does not support Qwen's
+attention layers, and the empty change recorded in batches, taken as the reference, still leaves every other benign
+change flipping tests (two to five under Qwen, one to four under gpt-oss). gpt-oss was not recorded one test at a
+time.
 
 \begin{table}[H]
 \centering\small
@@ -1017,9 +1030,10 @@ What the experiments say, in the order a team would act on them.
         what the pipeline never skips.
   \item \textbf{Discount the tests the model already fails.} Every other strategy reports some of the model's own
         failures as the change's (RQ3). A pipeline should keep each test's fail rate and act only on a flip.
-  \item \textbf{Measure the model's noise before trusting a verdict.} An empty change, recorded like the others,
-        measures the noise floor of a model under a serving setup (Table~\ref{tab:models}); record it before
-        trusting a majority vote or a stopping rule.
+  \item \textbf{Measure the model's noise before trusting a verdict.} An empty change, recorded like the others and
+        once more one test at a time, measures the noise floor of a model under a serving setup and says whether it
+        is the batch or the model (Table~\ref{tab:models}); record it before trusting a majority vote or a stopping
+        rule.
   \item \textbf{Text is a strong, cheap baseline.} TF-IDF similarity between the diff and the tests' text has the
         best detection when the whole budget is spent, and it never stops; it is the fallback order to keep in any
         pipeline.
@@ -1043,8 +1057,9 @@ Three things come next:
         hold where tests and changes are worded differently;
   \item real version histories beside the mutants, with the changes a team shipped and the tests that caught them,
         so that the reveal ratios are learned from practice;
-  \item the repetitions that a model with varying answers needs, with the empty change as the instrument: how many
-        runs, under which serving setup, before a majority vote is a ground truth and a single failure is a
+  \item \item a ground truth for Qwen with the changed copies recorded one test at a time, and the repetitions that
+        a model whose answers vary under identical conditions needs, with the empty change as the instrument: how
+        many runs, under which serving setup, before a majority vote is a ground truth and a single failure is a
         verdict.
 \end{enumerate}
 

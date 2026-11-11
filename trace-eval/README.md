@@ -85,7 +85,8 @@ traceeval check path/to/my-copy-of-sut --history runs/qwen7 --backend llm       
 ```
 
 `--history` points to an experiment recorded with the same model and the same version of the app. It tells the
-method what each test costs and which code it runs.
+method what each test costs and which code it runs. Run live on all 43 changes, the check gives the replay's
+verdict on 42 ([docs/EXPERIMENT.md](docs/EXPERIMENT.md) §5).
 
 ## Main results
 
@@ -115,10 +116,10 @@ full-suite tokens, and what it actually spends:
 The full numbers are in the [Gemma report](docs/results/gemma7/report.md), and the take-aways of the experiments in
 [RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.5.
 
-Qwen3.8-27B's and gpt-oss-120b's recordings of the same app are not clean ground truths: some of their answers vary
-from run to run and with batching, so every benign change appears revealed by a few tests. The models are used as
-they are served, so these two recordings are a finding, not a result
-([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.4).
+Qwen3.8-27B's and gpt-oss-120b's recordings of the same app are not clean ground truths: recorded many tests at
+once, their answers vary with the batch, so every benign change appears revealed by a few tests. Qwen recorded one
+test at a time is as repeatable as Gemma. The models are used as they are served, so these two recordings are a
+finding, not a result ([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.4).
 
 ## Built for Adobe's AEM team
 

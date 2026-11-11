@@ -445,6 +445,9 @@ methods' after 12–14%. The report's sections 2 and 4 hold the full tables; tim
     slice whose representatives drifted can enter the model as a changed component.
   - On this testbed every change is an edit with a diff and the suite is small (180 tests, which the reproduction
     cuts into twelve slices), which is the case slicing has least to offer.
+- *Live against replay.* `traceeval check`, run live on all 43 changes, gives the replayed verdict on 42, with the
+  same tests and tokens; the exception is one live false alarm on a benign change, from a one-off difference in the
+  model's answer (`docs/EXPERIMENT.md` §5). The replay is a faithful stand-in for the live prototype.
 
 ### 5.2 Text in the method: an option (roadmap 3(b))
 
@@ -527,13 +530,18 @@ Two remedies fall short:
   exactly like the others, as the reference, every one of the eight other benign changes still flips tests, two to
   five under Qwen (WF4-01 and WF5-02 in nearly all of them) and one to four under gpt-oss.
 
-Part of the variation is batching, the tests that pass one at a time and fail in a batch; the rest is run-to-run
-variation under identical conditions.
+Recording the empty change one test at a time, as the baseline is recorded, separates the two causes
+(`docs/results/qwen7/one_at_a_time.md`). Under Qwen, five repetitions one at a time disagree with themselves on one
+test, WF5-02, which sits at the majority line and splits in the baseline too, and flip no other test against the
+baseline; the same change recorded 64 tests at a time has nine tests whose runs disagree and six that flip. Qwen's
+variation is batching, not the model; its runs one at a time are as repeatable as Gemma's. gpt-oss was not recorded
+one at a time. A ground truth for Qwen therefore needs the changed copies recorded one test at a time, at about 1.2
+hours per repetition per server, or vLLM's batch-invariant mode, which Qwen3.8 does not support.
 
 Qwen and gpt-oss are used as they are served, like Gemma. Their recordings are kept for this finding; the results
 are Gemma's. The lesson for a pipeline is to measure how much the model's answers vary from run to run under the
-serving setup the selection will run on, before trusting a ground truth or a stopping rule. The empty change
-measures exactly that.
+serving setup the selection will run on, before trusting a ground truth or a stopping rule, and to measure it one
+test at a time and in batches. The empty change measures exactly that.
 
 ### 5.5 Take-aways
 
@@ -556,10 +564,10 @@ of the suite's tokens unless said otherwise.
    changed copy too, and every other strategy reports some of those failures as the change's; the adaptive method
    keeps each test's pass rate and acts only on a flip (§5.1). A pipeline should do the same rather than treat
    every red test as a regression.
-5. **Measure the model's noise before trusting a verdict.** Gemma's vote is stable; Qwen's and gpt-oss's are not,
-   partly because the baseline runs one test at a time and the changed copies in batches, partly because some
-   answers vary under identical conditions (§5.4). An empty change, recorded like the others, measures the noise
-   floor; record it per model and per serving setup.
+5. **Measure the model's noise before trusting a verdict.** Gemma's vote is stable; Qwen's and gpt-oss's are not.
+   Qwen's noise is batching: recorded one test at a time its runs agree, and the changed copies, recorded many
+   tests at once, do not (§5.4). An empty change, recorded like the others, measures the noise floor; record it per
+   model and per serving setup.
 6. **CASPER and the bandit have their place.** CASPER needs no diff and is the natural first pass after a model
    update; the bandit learns from outcomes and, without history, has only the tests' risk to go on (*Where CASPER
    fits*, §5.1). The change-aware strategies cover edits to skills, code and settings; the two kinds combine.

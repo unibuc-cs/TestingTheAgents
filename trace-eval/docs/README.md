@@ -1,19 +1,18 @@
 # By what you want to do
 
-| you want to                                                                                                                                                   | read |
-|---------------------------------------------------------------------------------------------------------------------------------------------------------------|---|
-| understand the goals, the pieces and the main results                                                                                                         | [README](../README.md) |
-| see the application the tests exercise: its users, agents, skills, tools and rules                                                                            | [CONTENTOPS.md](CONTENTOPS.md) |
+| you want to                                                                                                                                              | read |
+|----------------------------------------------------------------------------------------------------------------------------------------------------------|---|
+| understand the goals, the pieces and the main results                                                                                                    | [README](../README.md) |
+| see the application the tests exercise: its users, agents, skills, tools and rules                                                                       | [CONTENTOPS.md](CONTENTOPS.md) |
+| Adobe's platform, what Georgiana asked for, the features built for it, the next steps                                                                    | [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) |
+| the research: the problem, the abstractions, the methods, the results, the take-aways, the roadmap                                                       | [RESEARCH_PLAN.md](RESEARCH_PLAN.md) |
 | work in the repository: the vocabulary, how to read a report, how the method weighs a test, the controlled changes, how to add a test, a change or a strategy | [USER_GUIDE.md](USER_GUIDE.md) |
-| record with a model: the GPU server, the commands, recording and replay, what the recordings show, what the models get wrong                                  | [EXPERIMENT.md](EXPERIMENT.md) |
-| the research: the problem, the abstractions, the methods, the results, the take-aways, the roadmap                                                            | [RESEARCH_PLAN.md](RESEARCH_PLAN.md) |
-| Adobe's platform, what the AEM team asked for, the features built for it, the next steps                                                                      | [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) |
-| give or follow the demo for the AEM team, command by command                                                                                                  | [DEMO.md](DEMO.md) |
-| the full results of a recording: tables and figures                                                                                                           | [results/gemma7/report.md](results/gemma7/report.md), the results the README quotes; [results/qwen7/](results/qwen7/report.md) and [results/gptoss7/](results/gptoss7/report.md), the other two models |
-| spec-driven development: what a spec is, how a pull request is judged against it, the assurance rungs                                                         | [SDD_GUIDE.md](SDD_GUIDE.md), then [SDD_DEMO.md](SDD_DEMO.md) for the results and [sdd/report.md](sdd/report.md) for the full report |
-| read the code of the spec-driven development layer, with diagrams, in two to three hours                                                                      | [STUDY_GUIDE.md](STUDY_GUIDE.md) |
-| the literature, the references and the paper                                                                                                                  | [related_work.md](related_work.md), [REFERENCES.md](REFERENCES.md), `paper/main.tex` (build with `latexmk -pdf main`) |
-| work on the code with a coding agent: commands, layout, conventions, gotchas                                                                                  | [../CLAUDE.md](../CLAUDE.md) |
+| record with a model: a local GPU server, the commands, recording and replay, what the recordings show, what the models get wrong                         | [EXPERIMENT.md](EXPERIMENT.md) |
+| give or follow the demo for the AEM team, command by command                                                                                             | [DEMO.md](DEMO.md) |
+| the full results of a recording: tables and figures                                                                                                      | [results/gemma7/report.md](results/gemma7/report.md), the results the README quotes; [results/qwen7/](results/qwen7/report.md) and [results/gptoss7/](results/gptoss7/report.md), the other two models |
+| spec-driven development: what a spec is, how a pull request is judged against it, the assurance rungs                                                    | [SDD_GUIDE.md](SDD_GUIDE.md), then [SDD_DEMO.md](SDD_DEMO.md) for the results and [sdd/report.md](sdd/report.md) for the full report |
+| read the code of the spec-driven development layer, with diagrams, in two to three hours                                                                 | [STUDY_GUIDE.md](STUDY_GUIDE.md) |
+| the literature, the references and the paper                                                                                                             | [related_work.md](related_work.md), [REFERENCES.md](REFERENCES.md), `paper/main.tex` (build with `latexmk -pdf main`) |
 
 ## Reading order
 
@@ -24,7 +23,7 @@ development documents and the literature branch off the main line.
 flowchart TD
     R["README<br/>the question, the pieces, the results"] --> A["CONTENTOPS.md<br/>the application under test"]
     A --> U["USER_GUIDE.md<br/>vocabulary, the report, the method's weights,<br/>the changes, how to extend"]
-    U --> X["EXPERIMENT.md<br/>the models, the GPU server, recording and replay"]
+    U --> X["EXPERIMENT.md<br/>the models, a local GPU server, recording and replay"]
     X --> P["RESEARCH_PLAN.md<br/>problem, abstractions, methods, results,<br/>take-aways, roadmap"]
     P --> M["AEM_ALIGNMENT.md<br/>what the AEM team asked for,<br/>and the features built for it"]
     M --> D["DEMO.md<br/>the walkthrough for the AEM team"]
@@ -34,7 +33,9 @@ flowchart TD
 
 ## What else is in this folder
 
-- `results/`: one folder per recording (`gemma7`, `qwen7`, `gptoss7`), each with the report and its three figures.
+- - - `results/`: one folder per recording (`gemma7`, `qwen7`, `gptoss7`), each with the report and its three
+  figures. `gemma7/live_vs_replay.md` is the live check against the replay, change by change.
+  `qwen7/one_at_a_time.md` is Qwen's empty change recorded one test at a time, against its batched recording.
 - `sdd/`: the spec-driven development report, its figures, and a spec drafted by Qwen from a change request, with
   its answer.
 - `properties/draft_qwen/`: the catalog of properties as Qwen drafted it from the requirements, with the model's

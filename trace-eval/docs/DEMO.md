@@ -211,12 +211,16 @@ cases:
   link check failed (WF5-02) and stops a whole plan after a refused export (WF6-02); [EXPERIMENT.md](EXPERIMENT.md)
   §6 lists them. A test the model already fails cannot reveal a change, which is why the method discounts it.
 - *Why only Gemma's numbers?* Qwen's and gpt-oss's recordings of the same app are not clean ground truths
-  ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4): a change that alters nothing appears to break a few tests. A larger
-  model does not automatically give a cleaner ground truth, and the lesson for Adobe is to measure first how much
-  the answers vary under the real serving setup.
+  ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4): recorded many tests at once, a change that alters nothing appears to
+  break a few tests. Recorded one test at a time, Qwen is as repeatable as Gemma. A larger model does not
+  automatically give a cleaner ground truth, and the lesson for Adobe is to measure first how much the answers vary
+  under the real serving setup.
 - *How would this run at Adobe?* Nightly full-suite runs provide the recordings the method learns from. For each
   change, `traceeval check` selects the tests, orders them and decides when to stop. The traces are OpenTelemetry,
   and the catalog of properties maps onto the metrics of DeepEval, the evaluation library the AEM team uses.
+- *Does the replay predict the live run?* Yes: run live on all 43 changes, the check gives the replayed verdict on
+  42, with the same tests and tokens. The exception is a live false alarm on a benign change, the one-off
+  difference in the model's answer that [EXPERIMENT.md](EXPERIMENT.md) §3 describes.
 - *What is next?* Re-planning after a failed step is built on a branch and recorded with three models. It waits for
   one decision: whether a single publication with a broken link is repaired or refused
   ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4.1). Then tau2-bench, a public agent benchmark, as a second application.
