@@ -144,11 +144,20 @@ PC gets in through one SSH tunnel per model, which uses the same key you log in 
 
 Runs are repeatable, with one caveat. Decoding is greedy (temperature 0), so the same prompt gives the same answer.
 On vLLM this is nearly exact rather than bit-exact: the batch a request lands in can change the floating-point
-arithmetic slightly. Once in a while that flips a token, and with it the rest of the run. With Qwen running 64
-cases at once, tests failed under changes that could not have affected them; run one case at a time (`--workers
-1`), Qwen's runs agree with each other as Gemma's do ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4). That is why a
-ground truth should come from several repetitions (`--reps 3`, majority vote) rather than one, and, for a model
-served like Qwen, from the changed copies recorded one test at a time.
+arithmetic slightly. Once in a while that flips a token, and with it the rest of the run. How much that matters
+depends on the model, and a change that alters nothing, recorded again and again against the baseline, measures it:
+
+| model | one test at a time | many tests at once |
+|---|---|---|
+| Gemma | the runs agree: five more runs of a benign change flip no test and disagree on none ([results/gemma7/false_alarm_one_at_a_time.md](results/gemma7/false_alarm_one_at_a_time.md)) | the same: fifteen runs of the empty change flip no test, at any number of runs from three to fifteen ([results/gemma7/noise_floor.md](results/gemma7/noise_floor.md)) |
+| Qwen | the runs agree, as Gemma's do, but for one test at the majority line ([results/qwen7/one_at_a_time.md](results/qwen7/one_at_a_time.md)) | five or six tests flip, three of them from pass to fail, however many runs are taken ([results/qwen7/noise_floor.md](results/qwen7/noise_floor.md)) |
+| gpt-oss | five or six tests disagree with themselves, and ten flip between two starts of the server ([results/gptoss7/one_at_a_time.md](results/gptoss7/one_at_a_time.md)) | eleven tests disagree, and batching flips tests of its own: two fail in every run one at a time and pass in batches |
+
+That is why a ground truth should come from several repetitions (`--reps 3`, majority vote) rather than one, and,
+for a model served like Qwen, from the changed copies recorded one test at a time; for a model like gpt-oss, the
+baseline and the changes would also have to come from one start of the server. vLLM's batch-invariant mode would
+take the batch out of the arithmetic, but neither Qwen3.8 nor Gemma 4 can be served in it
+([results/gemma7/batch_invariant.md](results/gemma7/batch_invariant.md)).
 
 ## 4. The GPU server, step by step
 
@@ -275,7 +284,7 @@ All settings are optional and are read from environment variables:
 | `TRACEEVAL_LLM_API_KEY` | `EMPTY` | the key `--backend llm` sends; a local vLLM server needs none |
 | `TRACEEVAL_LLM_MAX_TOKENS` | `700` | the most tokens `--backend llm` lets the model write per answer; gpt-oss-120b needs 4096 |
 | `TRACEEVAL_JUDGE` | the agents' model | `gemma` or `qwen`: the model that judges the cases with a rubric |
-| `TRACEEVAL_VLLM_ENV` | none | extra settings for the vLLM server, for example `VLLM_BATCH_INVARIANT=1`, which makes answers independent of batching (not supported for Qwen3.8) |
+| `TRACEEVAL_VLLM_ENV` | none | extra settings for the vLLM server, for example `VLLM_BATCH_INVARIANT=1`, which makes answers independent of batching; neither Qwen3.8 nor Gemma 4 can be served in it ([results/gemma7/batch_invariant.md](results/gemma7/batch_invariant.md)) |
 
 To add another model, add a preset to the `case` statement in `preset()` at the top of the script, with the
 model, GPU, port and any vLLM flags it needs, and add its name to `PRESETS`.
@@ -373,9 +382,17 @@ Run live on every one of the 43 changes, one check at a time with Gemma on the G
 verdict the replay's five seeds agree on for 42 of them, with the same tests and the same tokens to within a few
 hundred ([results/gemma7/live_vs_replay.md](results/gemma7/live_vs_replay.md) has the table). The one difference is
 a live false alarm: under the benign rewording of the orchestrator's prompt, WF3-03 failed live, with the
-orchestrator skipping the approval, where its five recorded runs pass. That is the one-off difference of section 3,
-on a test whose outcome hangs on one decision of the model. The 43 checks took 21 minutes of model time, six tests
-and 1.9% of the suite's tokens per check at the median.
+orchestrator skipping the approval, where its five recorded runs pass. Recorded five more times one test at a time,
+as the check runs, the test passes every time, and no test changes its majority under the change in any of its
+recordings ([results/gemma7/false_alarm_one_at_a_time.md](results/gemma7/false_alarm_one_at_a_time.md)): the
+failure is a one-off of the model, of the kind section 3 describes, on a test whose outcome hangs on one decision,
+and the live check, which reads a single run where the replay reads the majority of five, shows it. The 43 checks
+took 21 minutes of model time, six tests and 1.9% of the suite's tokens per check at the median.
+
+On twenty batches of two to eight changes drawn at random
+([results/gemma7/batch_sweep.md](results/gemma7/batch_sweep.md)), checked live the same way, the live verdict is
+the replay's on 19, and on every batch with a regression member the component the check blames most belongs to a
+member that is a regression on its own.
 
 ### Recorded answers: running without a model
 
@@ -473,12 +490,26 @@ and they stay in the set:
 | `skill_linkval_ignore_assets` | it stops at a broken asset reference even when the skill says it does not block |
 
 Gemma's five runs of each test agree on the original app and disagree on only four (change, test) pairs over all 43
-changes; the majority vote absorbs them, and three repetitions are enough.
+changes; the majority vote absorbs them, and three repetitions are enough: fifteen runs of the empty change say
+what three say ([results/gemma7/noise_floor.md](results/gemma7/noise_floor.md)).
 
 Qwen's and gpt-oss's recordings are not clean ground truths ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4). The 116
 baseline runs of Qwen's recording that a dropped tunnel broke are left out, so about 110 of its tests have four
 valid baseline runs instead of five. We take the models as they are served, with no re-runs or filtering to make
 them agree with themselves, so the results are Gemma's.
+
+The follow-up recordings, of one change or a few each, are git-ignored like the three above; what they say is in
+`docs/results/`:
+
+| recording | what it holds | model, where | result |
+|---|---|---|---|
+| `runs/gemma7_oneatatime` | the benign rewording of the orchestrator's prompt, one test at a time, five repetitions | Gemma, fmi0's GPU0 | `results/gemma7/false_alarm_one_at_a_time.md` |
+| `runs/gemma7_noise` | the empty change fifteen times, 32 tests at a time | Gemma, fmi0's GPU0 | `results/gemma7/noise_floor.md` |
+| `runs/gemma7_batches` | a copy of `runs/gemma7` plus the three batches | Gemma, fmi0's GPU0 | `results/gemma7/batches.md` |
+| `runs/gemma7_sweep` | a copy of `runs/gemma7` plus the twenty batches of `scripts/batch_sweep.py` | Gemma, fmi0's GPU0 | `results/gemma7/batch_sweep.md` |
+| `runs/qwen_w1_a`, `runs/qwen_w1_b` | the empty change one test at a time, three and two repetitions | Qwen, two SLURM GPUs and fmi0's GPU1 | `results/qwen7/one_at_a_time.md` |
+| `runs/qwen7_noise` | the empty change fifteen times, 64 tests at a time | Qwen, two SLURM GPUs | `results/qwen7/noise_floor.md` |
+| `runs/gptoss7_w1` | the empty change one test at a time, three repetitions | gpt-oss, both of fmi0's GPUs | `results/gptoss7/one_at_a_time.md` |
 
 ## 8. Where to look in the code
 

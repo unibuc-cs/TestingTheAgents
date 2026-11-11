@@ -385,6 +385,9 @@ and gpt-oss's recordings of the same app. The ground truth belongs to the model:
   with or without the change (`docs/EXPERIMENT.md` §7).
 - None of the nine benign changes fails a test. Across all 43 changes, the five runs disagreed on only four
   (change, test) pairs, and the majority vote absorbs them.
+- The noise floor is zero: the empty change recorded fifteen times, 32 tests at a time, flips no test against the
+  baseline and has no test whose runs disagree, at any number of runs from three to fifteen
+  (`docs/results/gemma7/noise_floor.md`); three repetitions say what fifteen say.
 
 Detection of the 29 regressions Gemma reveals, by nominal budget, and tokens actually spent (the last column on the
 14 changes no test reveals):
@@ -449,7 +452,11 @@ methods' after 12–14%. The report's sections 2 and 4 hold the full tables; tim
     cuts into twelve slices), which is the case slicing has least to offer.
 - *Live against replay.* `traceeval check`, run live on all 43 changes, gives the replayed verdict on 42, with the
   same tests and tokens; the exception is one live false alarm on a benign change, from a one-off difference in the
-  model's answer (`docs/EXPERIMENT.md` §5). The replay is a faithful stand-in for the live prototype.
+  model's answer (`docs/EXPERIMENT.md` §5). The change recorded five more times one test at a time, as the check
+  runs, does not repeat it, and no test's majority moves under the change in any of its recordings
+  (`docs/results/gemma7/false_alarm_one_at_a_time.md`): the live check reads one run where the replay reads the
+  majority of five. On twenty batches of two to eight changes drawn at random the live verdict is the replay's on
+  19 (§5.6). The replay is a faithful stand-in for the live prototype.
 
 ### 5.2 Text in the method: an option (roadmap 3(b))
 
@@ -527,18 +534,26 @@ Neither recording is a clean ground truth (`docs/EXPERIMENT.md` §6 has the test
 Two remedies fall short:
 
 - vLLM's batch-invariant mode, which makes greedy decoding exactly repeatable, does not support Qwen3.8: the server
-  refuses it for the model's linear-attention layers ("not supported for GDN_ATTN");
+  refuses it for the model's linear-attention layers ("not supported for GDN_ATTN"), nor Gemma 4, whose
+  full-attention heads of 512 dimensions are more than the FlashAttention version the mode falls back to takes
+  (`docs/results/gemma7/batch_invariant.md`);
 - recording the baseline the way the changes are recorded is not enough either: with the empty change, recorded
   exactly like the others, as the reference, every one of the eight other benign changes still flips tests, two to
   five under Qwen (WF4-01 and WF5-02 in nearly all of them) and one to four under gpt-oss.
 
-Recording the empty change one test at a time, as the baseline is recorded, separates the two causes
-(`docs/results/qwen7/one_at_a_time.md`). Under Qwen, five repetitions one at a time disagree with themselves on one
-test, WF5-02, which sits at the majority line and splits in the baseline too, and flip no other test against the
-baseline; the same change recorded 64 tests at a time has nine tests whose runs disagree and six that flip. Qwen's
-variation is batching, not the model; its runs one at a time are as repeatable as Gemma's. gpt-oss was not recorded
-one at a time. A ground truth for Qwen therefore needs the changed copies recorded one test at a time, at about 1.2
-hours per repetition per server, or vLLM's batch-invariant mode, which Qwen3.8 does not support.
+Recording the empty change one test at a time, as the baseline is recorded, separates the two causes, and recording
+it fifteen times in batches says whether more runs settle the vote:
+
+| | Gemma | Qwen | gpt-oss |
+|---|---|---|---|
+| one test at a time, against the baseline | no test flips and no test's runs disagree (five runs of a benign change, `docs/results/gemma7/false_alarm_one_at_a_time.md`) | no test flips; the runs disagree on one test, WF5-02, which sits at the majority line in the baseline too (`docs/results/qwen7/one_at_a_time.md`) | ten tests flip between the baseline and a new start of the server, six of them with every run agreeing on each side; five or six tests disagree with themselves within a recording (`docs/results/gptoss7/one_at_a_time.md`) |
+| in batches, against the baseline | no test flips, at any number of runs from three to fifteen (`docs/results/gemma7/noise_floor.md`) | five or six tests flip at every number of runs from three to fifteen, three of them from pass to fail, and two of the five are a shift, not noise: SEO-05 fails every batched run and passes every run one at a time, DS-ROUTING/r40 the reverse (`docs/results/qwen7/noise_floor.md`) | eight tests flip; two tests that fail in every run one at a time pass in batches |
+| what the variation is | none to speak of: the runs are not bit-exact, but no difference changes an outcome | batching: one test at a time Qwen is as repeatable as Gemma, and more batched runs converge to the batch's labels, not the baseline's | the model and the server: a test's outcome can hold for the life of one server and change with the next start, and batching adds flips of its own |
+
+A ground truth for Qwen therefore needs the changed copies recorded one test at a time, at about 1.2 hours per
+repetition per server: neither more batched runs nor vLLM's batch-invariant mode, which Qwen3.8 cannot use, gives
+the baseline's labels. For gpt-oss one test at a time is not enough: the baseline and the changes would have to
+come from one start of the server, and even then five or six tests disagree with themselves.
 
 Qwen and gpt-oss are used as they are served, like Gemma. Their recordings are kept for this finding; the results
 are Gemma's. The lesson for a pipeline is to measure how much the model's answers vary from run to run under the
@@ -566,10 +581,12 @@ of the suite's tokens unless said otherwise.
    changed copy too, and every other strategy reports some of those failures as the change's; the adaptive method
    keeps each test's pass rate and acts only on a flip (§5.1). A pipeline should do the same rather than treat
    every red test as a regression.
-5. **Measure the model's noise before trusting a verdict.** Gemma's vote is stable; Qwen's and gpt-oss's are not.
-   Qwen's noise is batching: recorded one test at a time its runs agree, and the changed copies, recorded many
-   tests at once, do not (§5.4). An empty change, recorded like the others, measures the noise floor; record it per
-   model and per serving setup.
+5. **Measure the model's noise before trusting a verdict.** Gemma's vote is stable: fifteen runs of the empty
+   change flip nothing. Qwen's noise is batching: recorded one test at a time its runs agree, and the changed
+   copies, recorded many tests at once, do not, however many runs are taken. gpt-oss's is the model and the server:
+   its outcomes change with a restart (§5.4). An empty change, recorded like the others, one test at a time and in
+   batches, measures the noise floor; record it per model and per serving setup. And expect a single live run to
+   show a one-off that the majority of a recording absorbs (§5.1).
 6. **CASPER and the bandit have their place.** CASPER needs no diff and is the natural first pass after a model
    update; the bandit learns from outcomes and, without history, has only the tests' risk to go on (*Where CASPER
    fits*, §5.1). The change-aware strategies cover edits to skills, code and settings; the two kinds combine.
@@ -597,10 +614,39 @@ make of that:
   adaptive method spends the whole 20% budget on 34 tests without reaching PUB-02 and ends without a clean verdict
   (0.32), since one member adds a tool no agent may use, which no test can reach and nothing can clear.
 
-Two lessons. A batch is checked like a change, and the posterior names the member to blame, which is what a nightly
-pipeline needs after a red run. And harmless edits are not harmless together: the ground truth of a batch is not
-the union of its members', so a nightly batch needs its own recording, not the sum of the day's single-change
-checks.
+Twenty more batches drawn at random (`scripts/batch_sweep.py`: three of each size from two to seven and two of
+eight, members editing disjoint files, four batches from the harmless changes only), recorded and checked the same
+way (`docs/results/gemma7/batch_sweep.md`):
+
+| batch size | batches | with a regression member | found by the adaptive method at 5% and at 20% | found live |
+|---|---|---|---|---|
+| 2 | 3 | 2 | 2, in every seed | 2 |
+| 3 | 3 | 2 | 2, in every seed | 2 |
+| 4 | 3 | 3 | 3, in every seed | 3 |
+| 5 | 3 | 3 | 3, in every seed | 3 |
+| 6 | 3 | 1 | 1, in every seed | 1 |
+| 7 | 3 | 3 | 3, in every seed | 3 |
+| 8 | 2 | 2 | 2, in every seed | 2 |
+
+- The size makes no difference: every batch with a regression member is found in all five seeds at 5% and at 20%,
+  after one or two tests and 0.2% to 0.9% of the suite, and live after one to five tests and at most 1.2%. The
+  other strategies find 40% (`declared`) to 76% (`observed`, `ir_tfidf`) of the batches with a revealing test at
+  5%, and at most 94% at 20%, spending the budget.
+- The live verdict is the replay's on 19 of the 20 batches.
+- The blame is right: on all 16 regression verdicts the component the check blames most belongs to a member that is
+  a regression on its own, and on 14 the failed test is one that reveals that very member alone. The two others are
+  a tie between two members' components and a test that reveals two members.
+- Harmless edits harmful together, again: one of the four harmless batches fails PUB-02 in all five runs, with the
+  same pair of prompt edits among its members as `batch_benign`; only the bandit reaches the test, in two seeds of
+  five.
+- Batches also hide what their members reveal: in two of the 20, a test that reveals a member alone passes under
+  the batch (WF4-01 under one batch of eight, WF1-02 under the other, where it is the one test that reveals the
+  routing skill's lost brand gate). Sixteen of the 20 have exactly the union of their members' revealing tests.
+
+Three lessons. A batch is checked like a change, whatever its size, and the posterior names the member to blame,
+which is what a nightly pipeline needs after a red run. Harmless edits are not harmless together, and a batch can
+hide what a member alone reveals: the ground truth of a batch is not the union of its members', so a nightly batch
+needs its own recording, not the sum of the day's single-change checks.
 
 ---
 
@@ -613,7 +659,7 @@ checks.
 | 3. Method improvements | (a) test-level learned sensitivities (per test × component-kind reveal history) instead of kind-level; (b) IR relevance inside the Bayesian likelihood; (c) CASPER-style slices and the Risk-Aware Adaptive Evaluation bandit as reproduced baselines | (a) done; (b) done as an option (§5.2); (c) done: `casper_slices` and `risk_aware_ts` (§5.1) |
 | 4. Models | ContentOps with three models (local vLLM): all changes × K reps | done: Gemma (`runs/gemma7`); Qwen's (`runs/qwen7`) and gpt-oss's (`runs/gptoss7`) recordings of the same app are spoiled by run-to-run variation and are not used for the results (§5.4) |
 | 5. Second system under test | tau2-bench, a public benchmark of tool-using agents with a simulated user (`docs/REFERENCES.md`): the airline domain, 50 tasks with a reward computed from the database state and the agent's communication, no model judge; the local model plays both the agent and the user, the controlled changes mutate the policy and the tool code (12 mutations: 6 policy, 4 tool-code, 2 benign), and the replay evaluator and the strategies run unchanged | after the demo for the AEM team |
-| 6. Scale/robustness | more mutations (mutation operators generated systematically: step deletion/swap/condition negation in procedures, argument swaps in adapters, config boundary values), equivalent-mutant analysis, sensitivity to K and to budget definitions (time vs. tokens), ablations of each model ingredient, more repetitions for the models whose answers vary (five recorded for all three models, §5.4) | with the paper |
+| 6. Scale/robustness | more mutations (mutation operators generated systematically: step deletion/swap/condition negation in procedures, argument swaps in adapters, config boundary values), equivalent-mutant analysis, sensitivity to budget definitions (time vs. tokens), ablations of each model ingredient, more repetitions for the models whose answers vary (five recorded for all three models; the noise floor against the number of runs is measured, §5.4) | with the paper |
 | 7. Paper | see §7 | drafting can start from this document and the report |
 
 Re-planning after a failed step is built on a branch and waits for one product decision (`docs/AEM_ALIGNMENT.md`

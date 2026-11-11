@@ -250,7 +250,8 @@ responsible (`blamed`).
 | `batch_benign` | all nine benign changes at once | 1: two of the prompt edits, harmless alone, change the orchestrator's answer together |
 
 RESEARCH_PLAN §5.6 has what the strategies make of them and [results/gemma7/batches.md](results/gemma7/batches.md)
-the full tables.
+the full tables; `scripts/batch_sweep.py` draws twenty more batches of two to eight changes at random, records them
+and checks them live, with the results in [results/gemma7/batch_sweep.md](results/gemma7/batch_sweep.md).
 
 ## 7. How to extend
 

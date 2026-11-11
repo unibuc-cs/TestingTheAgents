@@ -42,8 +42,9 @@ flowchart LR
   as an edit to a copy of the app. The diff becomes a change set: the components it touches, in the same
   identifiers the traces use. Running the whole suite on each changed copy gives the ground truth: a test *reveals*
   a change when it passes on the current app and fails on the changed copy, by majority over the repetitions. A
-  change is a regression when at least one test reveals it. Three batches bundle several changes, as a nightly run
-  does; the check then also names the components it blames ([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.6).
+  change is a regression when at least one test reveals it. Three batches by hand, and twenty drawn at random,
+  bundle two to nine changes, as a nightly run does; the check then also names the components it blames
+  ([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.6).
 - **The strategies** in [`traceeval/selection/`](traceeval/selection/) pick tests under a token budget from the
   change set, the traces, the costs and the pass rates, and from the outcomes of the other recorded changes. They
   never see the outcome of the change under evaluation. Six are baselines, two are published methods reproduced
@@ -63,6 +64,7 @@ pip install -e ".[dev]"
 pytest -q                                                   # one to two minutes
 traceeval sdd --workdir runs/sdd                            # spec-driven development demo
 ```
+
 
 Recording an experiment needs a model, used as it is served, decoding greedily:
 
@@ -110,6 +112,9 @@ full-suite tokens, and what it actually spends:
   a benign change as a regression. Of the 21 changes that break a safety property, it catches 84%.
 - Its misses are mostly narrow regressions, revealed by one to five tests, where it concludes too early that
   nothing broke.
+- On the 23 batches of changes it finds every batch with a regression member after one or two tests and at most
+  1.2% of the suite, and names the member to blame; its misses are the two batches of harmless edits that break a
+  test together ([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.6).
 - `declared` and `observed` also spend less than the budget, but only because they run out of tests to select.
 - The two reproduced methods look at the traces and the outcomes but not at the diff, and sit between random (56%)
   and the change-aware strategies.
@@ -119,7 +124,8 @@ The full numbers are in the [Gemma report](docs/results/gemma7/report.md), and t
 
 Qwen3.8-27B's and gpt-oss-120b's recordings of the same app are not clean ground truths: recorded many tests at
 once, their answers vary with the batch, so every benign change appears revealed by a few tests. Qwen recorded one
-test at a time is as repeatable as Gemma. The models are used as they are served, so these two recordings are a
+test at a time is as repeatable as Gemma, whose empty change flips nothing in fifteen runs; gpt-oss is not, and its
+outcomes change with a restart of the server. The models are used as they are served, so these two recordings are a
 finding, not a result ([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.4).
 
 ## Built for Adobe's AEM team

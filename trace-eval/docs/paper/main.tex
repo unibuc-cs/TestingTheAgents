@@ -263,9 +263,10 @@ Two rules shaped the set:
   \item a removed step goes from both the procedure and the prose of a skill, or the model does the step anyway.
 \end{itemize}
 We left out what told nothing about selection: twins of other changes, crashes, and a change that broke most of the
-suite. Ten of the changes aim at the workflows. Three batches bundle several of the changes, as a nightly run or a
-pull request would (Section~\ref{sec:evaluation}); their members edit disjoint files, so the edits compose. Which
-test reveals which change was measured afterwards, never designed, and no strategy is told.
+suite. Ten of the changes aim at the workflows. Three batches by hand, and twenty drawn at random, bundle two to
+nine of the changes, as a nightly run or a pull request would (Section~\ref{sec:evaluation}); the members of a
+batch edit disjoint files, so the edits compose. Which test reveals which change was measured afterwards, never
+designed, and no strategy is told.
 
 \begin{table}[t]
 \centering\small
@@ -758,8 +759,10 @@ replays & 1,505 per strategy: 43 changes, 7 budgets, 5 seeds \\
 mistakes, which clearer wording of the requests does not fix (Table~\ref{tab:mistakes}). Of the 34 regressions, 29
 are revealed by at least one test: the five others remove a guard the model does not act on with or without the
 change, so it behaves the same, wrongly, on both versions (Table~\ref{tab:unrevealed}). No benign change fails a
-test. Across the 43 changes the five runs disagreed on four (change, test) pairs, which the majority vote absorbs.
-The 29 revealed regressions and the 14 changes no test reveals are the population below.
+test. Across the 43 changes the five runs disagreed on four (change, test) pairs, which the majority vote absorbs,
+and the noise floor is zero: the change whose change set is empty, recorded fifteen more times, flips no test
+against the baseline and has no test whose runs disagree, at any number of runs from three to fifteen. The 29
+revealed regressions and the 14 changes no test reveals are the population below.
 
 \begin{table}[H]
 \centering\small
@@ -902,11 +905,14 @@ neither ran a test that failed (Table~\ref{tab:order}) nor gave a \regression{} 
 looking outcomes up, was run on all 43 changes at a 20\% budget, one check at a time. On 42 it gave the verdict of
 the replay's five seeds, with the same tests and the same tokens to within a few hundred. The exception is a live
 false alarm on the benign rewording of the orchestrator's prompt: a workflow test failed live, with the
-orchestrator skipping an approval, where its five recorded runs pass. That is the one-off difference that greedy
-decoding under batching leaves, on a test whose outcome hangs on one decision of the model. The 43 checks took 21
-minutes of model time: six tests and 1.9\% of the suite's tokens per check at the median. The replay is a faithful
-stand-in for the live prototype, and the one false alarm is the noise floor the stopping rule would have to
-tolerate with repetitions.
+orchestrator skipping an approval, where its five recorded runs pass. Recorded five more times one test at a time,
+as the check runs, the test passes every time, and no test changes its majority under that change in any of its
+recordings. The live failure is a one-off of the model on a test whose outcome hangs on one decision; the replay,
+which reads the majority of five runs, absorbs it, and the live check, which reads one run, does not. The 43 checks
+took 21 minutes of model time: six tests and 1.9\% of the suite's tokens per check at the median. The replay is a
+faithful stand-in for the live prototype, and the one false alarm is what a stopping rule that acts on a single run
+has to tolerate. On the twenty batches drawn at random (below), checked live the same way, the live verdict is the
+replay's on 19.
 
 \paragraph{The text factor.} The tilt $\tau_t$ can use word overlap (the default), the TF-IDF similarity of
 \strat{ir\_tfidf}, or no text at all (Table~\ref{tab:text}). TF-IDF brings forward the one test that reveals a
@@ -991,21 +997,58 @@ a day of harmless edits & all nine benign changes & 1 & \budget{} after 34 tests
 \end{tabular}
 \end{table}
 
+\paragraph{Batches of any size.} Twenty more batches, drawn at random with two to eight members each (three of each
+size up to seven and two of eight, the members editing disjoint files, four batches from the harmless changes only)
+and recorded the same way, say whether the size matters (Table~\ref{tab:sweep}). It does not: the adaptive method
+finds every batch with a regression member in all five seeds at a 5\% budget, after one or two tests and 0.2--0.9\%
+of the suite, and the live check finds every one after one to five tests; the other strategies find 40--76\% of the
+batches with a revealing test at 5\% and at most 94\% at 20\%, spending the budget. The blame is right: on every
+regression verdict the component blamed most belongs to a member that is a regression on its own, and on 14 of the
+16 the failed test is one that reveals that very member alone; the two others are a tie between two members and a
+test that reveals two members. One of the four harmless batches fails the same test as the batch of nine benign
+changes, in every run, with the same pair of prompt edits among its members, and only the bandit reaches it.
+Batches also hide what their members reveal: in two of the twenty, a test that reveals a member alone passes under
+the batch, once the one test that reveals the routing skill's lost brand gate. Sixteen of the twenty have exactly
+the union of their members' revealing tests.
+
+\begin{table}[H]
+\centering\small
+\caption{Twenty batches drawn at random, by size: how many hold a regression, how many of those the adaptive
+method finds at a 5\% budget (seeds in which it does) and live, and how many batches a test reveals that no member
+has alone ($+$) or that hides a test a member has ($-$).}
+\label{tab:sweep}
+\begin{tabular}{lccccl}
+\toprule
+size & batches & with a regression & found at 5\% & found live & differ from the members' union \\
+\midrule
+2 & 3 & 2 & 2 (5/5) & 2 & 0 \\
+3 & 3 & 2 & 2 (5/5) & 2 & 0 \\
+4 & 3 & 3 & 3 (5/5) & 3 & 1 ($+$) \\
+5 & 3 & 3 & 3 (5/5) & 3 & 0 \\
+6 & 3 & 1 & 1 (5/5) & 1 & 1 ($+$, a harmless batch) \\
+7 & 3 & 3 & 3 (5/5) & 3 & 0 \\
+8 & 2 & 2 & 2 (5/5) & 2 & 2 ($-$) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \paragraph{Other models.} The same application was recorded with Qwen3.8-27B and with gpt-oss-120b, served as they
 are, with greedy decoding and five repetitions, like Gemma (Table~\ref{tab:models}). Neither recording is a clean
 ground truth, and the five repetitions do not settle either vote: every benign change is ``revealed'' by a few
 tests, the change whose change set is empty included. Seven tests carry Qwen's variation: one of the two cases a
 model judges against a rubric, the title at the length limit, four long workflows and one authoring case. Thirteen
 tests carry gpt-oss's; two of them pass on the current version and fail on nearly every changed copy, whichever the
-change. The baseline runs one test at a time and the changed copies many at once. Recording the empty change one
-test at a time, five repetitions, separates batching from the model: under Qwen the runs disagree on one test,
-which sits at the majority line in the baseline too, and flip no other test against the baseline, where the same
-change recorded 64 tests at a time has nine tests whose runs disagree and six that flip. Qwen's variation is
-batching; one test at a time it is as repeatable as Gemma, whose vote is stable either way (four disagreeing pairs,
-above). vLLM's batch-invariant mode, which would make batched decoding exactly repeatable, does not support Qwen's
-attention layers, and the empty change recorded in batches, taken as the reference, still leaves every other benign
-change flipping tests (two to five under Qwen, one to four under gpt-oss). gpt-oss was not recorded one test at a
-time.
+change. The baseline runs one test at a time and the changed copies many at once. The empty change, recorded one
+test at a time and recorded fifteen times in batches, separates the batch from the model and says whether more runs
+settle the vote (Table~\ref{tab:noise}). Qwen's variation is batching: one test at a time its runs agree with the
+baseline on every test, and in batches five or six tests flip at any number of runs from three to fifteen, two of
+them in every run, so more batched runs converge to the batch's labels, not the baseline's. gpt-oss's variation is
+the model and the server: one test at a time, five or six tests disagree with themselves within a recording, and
+ten flip between the baseline and a new start of the server, six of them with every run agreeing on each side;
+batching adds flips of its own. Gemma's floor is zero either way. vLLM's batch-invariant mode, which would make
+batched decoding exactly repeatable, serves neither Qwen's linear-attention layers nor Gemma's 512-dimension
+attention heads, and the empty change recorded in batches, taken as the reference, still leaves every other benign
+change flipping tests (two to five under Qwen, one to four under gpt-oss).
 
 \begin{table}[H]
 \centering\small
@@ -1025,13 +1068,34 @@ gpt-oss-120b & 153 & 2--5 / 1--4   & 95 & 577 & 13 \\
 \end{tabular}
 \end{table}
 
+\begin{table}[H]
+\centering\small
+\caption{A change that alters no behaviour, against each model's baseline: tests whose majority flips and tests
+whose runs disagree, recorded one test at a time (five runs for Gemma and Qwen, three for gpt-oss) and in batches
+(fifteen runs for Gemma and Qwen, five for gpt-oss). The change is the one whose change set is empty, except
+Gemma's one test at a time, which is the benign rewording of the orchestrator's prompt (above).}
+\label{tab:noise}
+\begin{tabular}{lcccc}
+\toprule
+ & \multicolumn{2}{c}{one test at a time} & \multicolumn{2}{c}{in batches} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+model & flips & runs disagree & flips & runs disagree \\
+\midrule
+Gemma~4 E4B  & 0  & 0 & 0 & 0 \\
+Qwen3.8-27B  & 0  & 1 & 5 & 9 \\
+gpt-oss-120b & 10 & 5 & 8 & 11 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \paragraph{Threats to validity.}
 \begin{itemize}
   \item The regressions are mutants, not real changes; they were written to resemble regressions a team would
         ship, and the testbed does not yet pair them with a version history. The tests and the changes were
         written by the same people.
   \item One primary application, built for the purpose, and one model with a stable ground truth; the second and
-        third models show that the ground truth depends on the model and on how it is served.
+        third models show that the ground truth depends on the model and on how it is served. Gemma's noise floor
+        is zero under this serving setup; another server, batch size or version of the model may differ.
   \item The testbed is textual, which favours the text factor and \strat{ir\_tfidf}; a second application with
         differently worded tests and changes (tau-bench \cite{yao2024taubench,barres2025tau2}) is future work
         (Section~\ref{sec:conclusion}).
@@ -1062,16 +1126,20 @@ What the experiments say, in the order a team would act on them.
         failures as the change's (RQ3). A pipeline should keep each test's fail rate and act only on a flip.
   \item \textbf{Measure the model's noise before trusting a verdict.} An empty change, recorded like the others and
         once more one test at a time, measures the noise floor of a model under a serving setup and says whether it
-        is the batch or the model (Table~\ref{tab:models}); record it before trusting a majority vote or a stopping
-        rule.
+        is the batch or the model (Table~\ref{tab:noise}): Gemma's floor is zero at any number of runs, Qwen's is
+        batching and more runs do not lower it, gpt-oss's is the model and the server's start. Record it before
+        trusting a majority vote or a stopping rule, and expect a single live run to show a one-off that the
+        majority absorbs.
   \item \textbf{Text is a strong, cheap baseline.} TF-IDF similarity between the diff and the tests' text has the
         best detection when the whole budget is spent, and it never stops; it is the fallback order to keep in any
         pipeline.
   \item \textbf{Check the day's changes as one batch, then ask who is to blame.} A batch is checked like a change,
-        and the posterior's marginal per component names the member to blame, which is what a nightly pipeline
-        needs after a red run. Harmless edits are not harmless together: two prompt rewordings broke a test that
-        neither broke alone, so a nightly batch needs its own recording, not the sum of the day's single-change
-        checks.
+        whatever its size, and the posterior's marginal per component names the member to blame, which is what a
+        nightly pipeline needs after a red run: on the twenty batches drawn at random it named a member that is a
+        regression on its own every time. Harmless edits are not harmless together, and a batch can hide what a
+        member alone reveals: two prompt rewordings broke a test that neither broke alone, and two batches of eight
+        passed a test a member fails, so a nightly batch needs its own recording, not the sum of the day's
+        single-change checks.
 \end{enumerate}
 
 \section{Conclusion and future work}
@@ -1092,10 +1160,10 @@ Three things come next:
         hold where tests and changes are worded differently;
   \item real version histories beside the mutants, with the changes a team shipped and the tests that caught them,
         so that the reveal ratios are learned from practice;
-  \item \item a ground truth for Qwen with the changed copies recorded one test at a time, and the repetitions that
-        a model whose answers vary under identical conditions needs, with the empty change as the instrument: how
-        many runs, under which serving setup, before a majority vote is a ground truth and a single failure is a
-        verdict.
+  \item a ground truth for Qwen with the changed copies recorded one test at a time, which its noise floor says is
+        enough, and for gpt-oss the repetitions and the single start of the server that a model whose answers vary
+        under identical conditions needs, with the empty change as the instrument: how many runs, under which
+        serving setup, before a majority vote is a ground truth and a single failure is a verdict.
 \end{enumerate}
 
 \bibliographystyle{plainnat}

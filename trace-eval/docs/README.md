@@ -33,10 +33,18 @@ flowchart TD
 
 ## What else is in this folder
 
-- - - - `results/`: one folder per recording (`gemma7`, `qwen7`, `gptoss7`), each with the report and its three
-  figures. `gemma7/live_vs_replay.md` is the live check against the replay, change by change.
-  `qwen7/one_at_a_time.md` is Qwen's empty change recorded one test at a time, against its batched recording.
-  `gemma7/batches.md` is the three batches of changes, replayed and checked live.
+- `results/`: one folder per recording (`gemma7`, `qwen7`, `gptoss7`), each with the report and its three figures,
+  and the follow-up experiments:
+  - `gemma7/live_vs_replay.md`: the live check against the replay, change by change;
+  - `gemma7/false_alarm_one_at_a_time.md`: the change behind the one live false alarm, recorded one test at a time;
+  - `gemma7/noise_floor.md`: the empty change recorded fifteen times, against the number of runs;
+  - `gemma7/batch_invariant.md`: why Gemma 4 cannot be served in vLLM's batch-invariant mode;
+  - `gemma7/batches.md`: the three batches of changes, replayed and checked live;
+  - `gemma7/batch_sweep.md`: twenty batches of two to eight changes drawn at random, replayed and checked live;
+  - `qwen7/one_at_a_time.md`: Qwen's empty change recorded one test at a time, against its batched recording;
+  - `qwen7/noise_floor.md`: the same change recorded fifteen times in batches, against the number of runs;
+  - `gptoss7/one_at_a_time.md`: gpt-oss's empty change recorded one test at a time, against its baseline and its
+    batched recording.
 - `sdd/`: the spec-driven development report, its figures, and a spec drafted by Qwen from a change request, with
   its answer.
 - `properties/draft_qwen/`: the catalog of properties as Qwen drafted it from the requirements, with the model's

@@ -172,7 +172,8 @@ blamed: agent:seo.tools 0.77, code:tools/content_tools.py::set_page_metadata 0.5
 
 The SEO agent's lost tool is the culprit; the other members stay near their prior of one half, untested.
 [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.6 has the three batches, including the nine harmless edits that break a
-test together.
+test together, and the twenty batches of two to eight changes drawn at random, on which the size makes no
+difference and the blame falls on a member that is a regression on its own every time.
 
 ## 5. The evidence over all changes (4 minutes)
 
@@ -232,15 +233,17 @@ cases:
   §6 lists them. A test the model already fails cannot reveal a change, which is why the method discounts it.
 - *Why only Gemma's numbers?* Qwen's and gpt-oss's recordings of the same app are not clean ground truths
   ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4): recorded many tests at once, a change that alters nothing appears to
-  break a few tests. Recorded one test at a time, Qwen is as repeatable as Gemma. A larger model does not
-  automatically give a cleaner ground truth, and the lesson for Adobe is to measure first how much the answers vary
-  under the real serving setup.
+  break a few tests. Recorded one test at a time, Qwen is as repeatable as Gemma; gpt-oss is not, and its outcomes
+  change with a restart of the server. A larger model does not automatically give a cleaner ground truth, and the
+  lesson for Adobe is to measure first how much the answers vary under the real serving setup.
 - *How would this run at Adobe?* Nightly full-suite runs provide the recordings the method learns from. For each
   change, `traceeval check` selects the tests, orders them and decides when to stop. The traces are OpenTelemetry,
   and the catalog of properties maps onto the metrics of DeepEval, the evaluation library the AEM team uses.
 - *Does the replay predict the live run?* Yes: run live on all 43 changes, the check gives the replayed verdict on
   42, with the same tests and tokens. The exception is a live false alarm on a benign change, the one-off
-  difference in the model's answer that [EXPERIMENT.md](EXPERIMENT.md) §3 describes.
+  difference in the model's answer that [EXPERIMENT.md](EXPERIMENT.md) §3 describes; recorded five more times one
+  test at a time, the change does not repeat it, and the live check reads one run where the replay reads five. On
+  twenty batches of changes drawn at random, the live verdict is the replay's on 19.
 - *What is next?* Re-planning after a failed step is built on a branch and recorded with three models. It waits for
   one decision: whether a single publication with a broken link is repaired or refused
   ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4.1). Then tau2-bench, a public agent benchmark, as a second application.
