@@ -41,6 +41,8 @@ flowchart TD
   - `gemma7/batch_invariant.md`: why Gemma 4 cannot be served in vLLM's batch-invariant mode;
   - `gemma7/batches.md`: the three batches of changes, replayed and checked live;
   - `gemma7/batch_sweep.md`: twenty batches of two to eight changes drawn at random, replayed and checked live;
+  - `gemma7/second_recording.md`: the whole experiment recorded a second time, on other GPUs, against
+    `runs/gemma7`;
   - `qwen7/one_at_a_time.md`: Qwen's empty change recorded one test at a time, against its batched recording;
   - `qwen7/noise_floor.md`: the same change recorded fifteen times in batches, against the number of runs;
   - `gptoss7/one_at_a_time.md`: gpt-oss's empty change recorded one test at a time, against its baseline and its

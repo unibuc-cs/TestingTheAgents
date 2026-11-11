@@ -471,13 +471,14 @@ changes have no revealing test (section 7).
 
 ## 7. The recordings
 
-Three recordings of the current app, each with 180 tests, 43 changes, five repetitions and the model judge:
+Four recordings of the current app, each with 180 tests, 43 changes, five repetitions and the model judge:
 
 | recording | model | where | time | clean ground truth? |
 |---|---|---|---|---|
 | `runs/gemma7`, report in `docs/results/gemma7/` | Gemma | fmi0's GPU0 | about two hours: 31 minutes for the baseline, one test at a time, and under two minutes per change, because the changed copies run many tests at once (`--workers`) | yes; the results come from it |
 | `runs/qwen7`, `docs/results/qwen7/` | Qwen | two SLURM GPUs | about six hours | no (below) |
 | `runs/gptoss7`, `docs/results/gptoss7/` | gpt-oss | both of fmi0's GPUs | three and a half hours | no (below) |
+| `runs/gemma7_second`, `docs/results/gemma7/second_recording.md` | Gemma | two SLURM GPUs | about two hours | yes: the same original app run for run as `runs/gemma7`, and 4 of its 7,740 (change, test) labels differ (below) |
 
 On the original app 172 of 180 tests pass, 29 of the 34 regressions are revealed and no benign change is, so the
 report's sanity line says VIOLATED for the five changes below. They are misses of the model, not of the testbed,
@@ -491,7 +492,11 @@ and they stay in the set:
 
 Gemma's five runs of each test agree on the original app and disagree on only four (change, test) pairs over all 43
 changes; the majority vote absorbs them, and three repetitions are enough: fifteen runs of the empty change say
-what three say ([results/gemma7/noise_floor.md](results/gemma7/noise_floor.md)).
+what three say ([results/gemma7/noise_floor.md](results/gemma7/noise_floor.md)). Recorded a second time from
+scratch on other GPUs, the original app gives the same 900 runs, and 4 of the 7,740 (change, test) labels move: a
+regression revealed by one test loses it, a benign change gains one, and detection at a 20% budget moves by at most
+one change for every strategy but CASPER's slices
+([results/gemma7/second_recording.md](results/gemma7/second_recording.md)).
 
 Qwen's and gpt-oss's recordings are not clean ground truths ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4). The 116
 baseline runs of Qwen's recording that a dropped tunnel broke are left out, so about 110 of its tests have four

@@ -124,9 +124,10 @@ The full numbers are in the [Gemma report](docs/results/gemma7/report.md), and t
 
 Qwen3.8-27B's and gpt-oss-120b's recordings of the same app are not clean ground truths: recorded many tests at
 once, their answers vary with the batch, so every benign change appears revealed by a few tests. Qwen recorded one
-test at a time is as repeatable as Gemma, whose empty change flips nothing in fifteen runs; gpt-oss is not, and its
-outcomes change with a restart of the server. The models are used as they are served, so these two recordings are a
-finding, not a result ([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.4).
+test at a time is as repeatable as Gemma, whose empty change flips nothing in fifteen runs and whose whole
+experiment recorded a second time moves 4 of 7,740 labels; gpt-oss is not, and its outcomes change with a restart
+of the server. The models are used as they are served, so these two recordings are a finding, not a result
+([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.4).
 
 ## Built for Adobe's AEM team
 

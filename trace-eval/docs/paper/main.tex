@@ -762,7 +762,8 @@ change, so it behaves the same, wrongly, on both versions (Table~\ref{tab:unreve
 test. Across the 43 changes the five runs disagreed on four (change, test) pairs, which the majority vote absorbs,
 and the noise floor is zero: the change whose change set is empty, recorded fifteen more times, flips no test
 against the baseline and has no test whose runs disagree, at any number of runs from three to fifteen. The 29
-revealed regressions and the 14 changes no test reveals are the population below.
+revealed regressions and the 14 changes no test reveals are the population below; a second recording of the whole
+experiment, on other GPUs, moves 4 of the 7,740 labels (A second recording, below).
 
 \begin{table}[H]
 \centering\small
@@ -1088,6 +1089,46 @@ gpt-oss-120b & 10 & 5 & 8 & 11 \\
 \end{tabular}
 \end{table}
 
+\paragraph{A second recording.} The whole experiment was recorded a second time from scratch, with the same
+command, on a cluster job with a copy of the model on each of its two GPUs instead of the GPU server
+(Table~\ref{tab:second}). The current version comes out the same run for run: 860 of 900 runs pass, the same eight
+tests fail, and no test's five runs disagree, though 103 runs differ in their token count. On the changed copies 4
+of the 7,740 (change, test) labels move and 23 of the 38,700 runs end differently. Each recording counts 29
+regressions, 28 of them shared: the regression revealed by a single test (the routing skill's lost brand gate)
+loses it, and one benign change (the routing guidance reordered) is ``revealed'' by one test in which two of five
+runs pass, the test the nine benign changes break together. Detection at a 20\% budget does not move for the
+adaptive method, \strat{observed}, \strat{cost\_aware}, \strat{full} and \strat{random}; \strat{declared} and
+\strat{ir\_tfidf} lose the one-test regression; CASPER's slices fall from 59\% to 48\%, because they are drawn from
+behavioural signals of the baseline runs, which differ slightly on 37 tests, so that 3 of the 12 slices come out
+the same. What moves between two recordings of a stable model rests on one test: a regression one test reveals, and
+a benign change one test near the majority line ``reveals''.
+
+\begin{table}[H]
+\centering\small
+\caption{The same experiment recorded twice with Gemma, on the GPU server (the results above) and on a cluster job;
+detection at a 20\% budget over five replay seeds.}
+\label{tab:second}
+\begin{tabular}{lcc}
+\toprule
+ & first recording & second recording \\
+\midrule
+runs that pass on the current version & 860 of 900 & 860 of 900 \\
+tests the model fails on the current version & 8 & the same 8 \\
+(change, test) labels that differ & \multicolumn{2}{c}{4 of 7,740} \\
+runs that end differently & \multicolumn{2}{c}{23 of 38,700} \\
+changes counted as regressions & 29 & 29, 28 of them the same \\
+benign changes ``revealed'' & 0 & 1 \\
+pairs whose five runs disagree & 4 & 7 \\
+detection: \strat{adaptive\_bayes} & 0.78 & 0.78 \\
+detection: \strat{observed}, \strat{cost\_aware} & 0.86 & 0.86 \\
+detection: \strat{ir\_tfidf} & 0.93 & 0.90 \\
+detection: \strat{declared} & 0.62 & 0.59 \\
+detection: \strat{casper\_slices} & 0.59 & 0.48 \\
+detection: \strat{risk\_aware\_ts} & 0.57 & 0.59 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \paragraph{Threats to validity.}
 \begin{itemize}
   \item The regressions are mutants, not real changes; they were written to resemble regressions a team would
@@ -1095,7 +1136,8 @@ gpt-oss-120b & 10 & 5 & 8 & 11 \\
         written by the same people.
   \item One primary application, built for the purpose, and one model with a stable ground truth; the second and
         third models show that the ground truth depends on the model and on how it is served. Gemma's noise floor
-        is zero under this serving setup; another server, batch size or version of the model may differ.
+        is zero under this serving setup and a second recording on other GPUs moves 4 of 7,740 labels; another
+        batch size or version of the model may differ.
   \item The testbed is textual, which favours the text factor and \strat{ir\_tfidf}; a second application with
         differently worded tests and changes (tau-bench \cite{yao2024taubench,barres2025tau2}) is future work
         (Section~\ref{sec:conclusion}).
@@ -1128,8 +1170,8 @@ What the experiments say, in the order a team would act on them.
         once more one test at a time, measures the noise floor of a model under a serving setup and says whether it
         is the batch or the model (Table~\ref{tab:noise}): Gemma's floor is zero at any number of runs, Qwen's is
         batching and more runs do not lower it, gpt-oss's is the model and the server's start. Record it before
-        trusting a majority vote or a stopping rule, and expect a single live run to show a one-off that the
-        majority absorbs.
+        trusting a majority vote or a stopping rule; expect a single live run to show a one-off that the majority
+        absorbs, and a second recording to move the labels that rest on one test (Table~\ref{tab:second}).
   \item \textbf{Text is a strong, cheap baseline.} TF-IDF similarity between the diff and the tests' text has the
         best detection when the whole budget is spent, and it never stops; it is the fallback order to keep in any
         pipeline.

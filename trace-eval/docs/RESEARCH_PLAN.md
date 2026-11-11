@@ -388,6 +388,16 @@ and gpt-oss's recordings of the same app. The ground truth belongs to the model:
 - The noise floor is zero: the empty change recorded fifteen times, 32 tests at a time, flips no test against the
   baseline and has no test whose runs disagree, at any number of runs from three to fifteen
   (`docs/results/gemma7/noise_floor.md`); three repetitions say what fifteen say.
+- The whole experiment recorded a second time from scratch, on a cluster job with the model on two GPUs instead of
+  the GPU server (`docs/results/gemma7/second_recording.md`), gives the same original app run for run, and 4 of the
+  7,740 (change, test) labels move: each recording counts 29 regressions, 28 of them the same. The regression
+  revealed by a single test (`skill_routing_drop_brand_gate`, WF1-02) loses it, and one benign change
+  (`benign_routing_guidance_reordered`) is "revealed" by PUB-02, with two of five runs passing, the test the nine
+  benign changes break together (§5.6). Detection at 20% does not move for the adaptive method (0.78), `observed`,
+  `cost_aware`, `full` and `random`; `declared` and `ir_tfidf` lose the one-test regression (0.59, 0.90); CASPER's
+  slices fall from 0.59 to 0.48, because they are drawn from behavioural signals of the baseline runs, which differ
+  slightly on 37 tests, so that 3 of the 12 slices come out the same. What moves between two recordings rests on
+  one test.
 
 Detection of the 29 regressions Gemma reveals, by nominal budget, and tokens actually spent (the last column on the
 14 changes no test reveals):
@@ -582,7 +592,8 @@ of the suite's tokens unless said otherwise.
    keeps each test's pass rate and acts only on a flip (§5.1). A pipeline should do the same rather than treat
    every red test as a regression.
 5. **Measure the model's noise before trusting a verdict.** Gemma's vote is stable: fifteen runs of the empty
-   change flip nothing. Qwen's noise is batching: recorded one test at a time its runs agree, and the changed
+   change flip nothing, and the whole experiment recorded a second time moves 4 of 7,740 labels, the ones that rest
+   on one test (§5.1). Qwen's noise is batching: recorded one test at a time its runs agree, and the changed
    copies, recorded many tests at once, do not, however many runs are taken. gpt-oss's is the model and the server:
    its outcomes change with a restart (§5.4). An empty change, recorded like the others, one test at a time and in
    batches, measures the noise floor; record it per model and per serving setup. And expect a single live run to
