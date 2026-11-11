@@ -31,11 +31,14 @@ CODE, RUNTIME, SKILL, PROMPT, CONFIG, COMBINED, BENIGN = (
 
 @dataclass
 class Mutation:
-    id: str
-    category: str
-    description: str
-    expected_regression: bool
-    edits: list[tuple]
+    """One controlled change: file edits applied to a copy of the application. The edits anchor on literal text,
+    so reformatting the application breaks them (the operators then raise)."""
+
+    id: str  # "skill_publish_drop_link_validation": the kind of part changed, then what the change does
+    category: str  # one of CATEGORIES: code, runtime, skill, prompt, config, combined, benign
+    description: str  # what the change does, for people and for the report
+    expected_regression: bool  # the label: at least one test should reveal it (True) or none should (False)
+    edits: list[tuple]  # (op, file, ...) with op one of replace, delete_line, delete_block, append
 
     def apply(self, sut_dir: Path):
         for edit in self.edits:

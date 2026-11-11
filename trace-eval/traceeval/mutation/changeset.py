@@ -36,10 +36,14 @@ TEXT_SUFFIXES = {".py", ".md", ".yaml", ".yml", ".json"}
 
 @dataclass
 class ChangedComponent:
-    id: str
-    kind: str
-    file: str
-    detail: str = ""
+    """One part of the application a diff touched, named as the traces name it (``code:<file>::<fn>``,
+    ``line:<file>:<n>``, ``tool:<name>``, ``skill:<name>#procedure``, ``agent:<name>.<field>``, ``config:<key>``,
+    ``fixture:<name>``)."""
+
+    id: str  # the component id, the same vocabulary as a test's dependencies
+    kind: str  # code | line | tool | skill | agent | config | fixture | other; sets the method's prior and ratio
+    file: str  # the file the diff touched, relative to the application root
+    detail: str = ""  # the changed code line, the removed items of a list, or the sub-part of a skill or agent
 
     @property
     def base(self) -> str:
@@ -52,8 +56,11 @@ class ChangedComponent:
 
 @dataclass
 class ChangeSet:
-    variant: str
-    files: list[str] = field(default_factory=list)
+    """What a diff of two copies of the application comes to: the files and the components it touched. Comments,
+    docstrings, blank lines and formatting add nothing, so a change set can be empty."""
+
+    variant: str  # the name of the changed copy (a mutation id, or "variant" for a user's own edit)
+    files: list[str] = field(default_factory=list)  # the files that differ, relative to the application root
     components: list[ChangedComponent] = field(default_factory=list)
     diff: str = ""  # unified diff of the code only (no comments, docstrings or blank lines)
 

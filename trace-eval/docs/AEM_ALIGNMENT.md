@@ -94,12 +94,12 @@ sequenceDiagram
 - `route_to_agent(agent, task, context)` gives the specialist its own instruction instead of the user's whole
   request, and in `context` the values it needs (the ids earlier steps reported). The specialist runs
   on a copy of the request context with those values; its answer comes back to the orchestrator for the next step.
-- `request_approval(summary)` stands for the human in the loop. The answer is fixture data (`approvals`: who
-  approves, and whether), so a run is repeatable; a test refuses with `fixture_patch: {approvals.decision:
-  refuse}`. An approval holds for the rest of the request: the runtime adds the approver and their approval token
-  to the orchestrator's context, so the steps after it carry them. Guarded tools such as `unpublish_page` need the
-  token, and the publishing skill has the approver approve a page's review (`approve_review`) instead of only
-  requesting one.
+- `request_approval(summary)` stands for the human in the loop. The answer is in the starting data (the fixture,
+  `approvals`: who approves, and whether), so a run is repeatable; a test refuses with `fixture_patch:
+  {approvals.decision: refuse}`. An approval holds for the rest of the request: the runtime adds the approver and
+  their approval token to the orchestrator's context, so the steps after it carry them. Guarded tools such as
+  `unpublish_page` need the token, and the publishing skill has the approver approve a page's review
+  (`approve_review`) instead of only requesting one.
 - The routing skill states the rules a plan must keep: a campaign page passes the brand check before it is
   scheduled or published; a person approves before anything is published, scheduled or taken down, and a refusal
   stops those steps; a failed step stops the steps that depend on it, while the same action on other pages goes on;

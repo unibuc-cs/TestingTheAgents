@@ -35,7 +35,8 @@ A spec is prose intent plus clauses of five kinds (settings, contracts, trace ru
 
 - **FS-0101 approvals expire after 30 days**: new feature, 4 files (config, workflow service, publish adapters,
   skill prose), 45 diff lines. It shows:
-  - a proof (L5) of the rule for all inputs, which catches a future-dated approval no fixture has
+  - a proof (L5) of the rule for all inputs, which catches a future-dated approval that no starting data (fixture)
+    has
   - an off-by-one error
   - the same logic in the wrong layer (placement fails, and the contract cannot find the function in the service)
   - a proven function that is never wired in

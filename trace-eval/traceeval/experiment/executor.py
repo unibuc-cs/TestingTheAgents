@@ -35,7 +35,8 @@ def observed_components(trace: dict) -> set[str]:
 
 
 def _apply_patch(data: dict, patch: dict):
-    """Set each dotted key of ``patch`` in the fixture data (a case's ``fixture_patch``)."""
+    """Set each dotted key of ``patch`` in the fixture data (a case's ``fixture_patch``), in this run's copy only.
+    A path whose nodes do not exist is created, so a misspelt key adds data instead of failing."""
     for dotted, value in patch.items():
         node = data
         parts = dotted.split(".")

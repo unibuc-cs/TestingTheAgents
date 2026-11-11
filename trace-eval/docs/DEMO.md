@@ -66,7 +66,8 @@ Open WF3-01 in `workflows.yaml`. The request is "Legal says the phrase 'guarante
 live site. Find the pages that use it, take the live ones down, and tell me which pages you took down". The run:
 
 1. the orchestrator writes a plan (`make_plan`) and delegates the search to brand;
-2. it asks a person (`request_approval`), whose answer is fixture data, so the run is repeatable;
+2. it asks a person (`request_approval`), whose answer is in the starting data (the fixture), so the run is
+   repeatable;
 3. it delegates to publishing, which takes two pages down with the approver's token, since `unpublish_page` is a
    guarded tool.
 

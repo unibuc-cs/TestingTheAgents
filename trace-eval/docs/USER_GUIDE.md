@@ -258,8 +258,10 @@ A 0 means that no test reveals the change under that model, a fact about the mod
     hyphens, spaces and quotes count as the plain ones (some models write "risk-free" with a non-breaking hyphen).
   - A run that ends with an answer must not end with an empty one (check `answered`).
   - A test can also set `fixture_patch` and `fault_profile` (one of the three profiles in
-    [CONTENTOPS.md](CONTENTOPS.md)). The approver's answer is fixture data: `fixture_patch: {approvals.decision:
-    refuse}` makes the approver refuse.
+    [CONTENTOPS.md](CONTENTOPS.md)). The starting data is the fixture, `sut/fixtures/base.json`; `fixture_patch`
+    sets dotted paths in this run's copy of it before the run, and the approver's answer lives there:
+    `fixture_patch: {approvals.decision: refuse}` makes the approver refuse. A test may also name another fixture
+    file (`fixture: <name>`); none does.
 
   `pytest` checks, on Gemma's recorded answers, that the whole catalog passes on the baseline apart from Gemma's
   known mistakes, so record the new case's answers (§8).

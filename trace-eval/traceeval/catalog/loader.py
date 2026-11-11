@@ -20,21 +20,25 @@ RISK_WEIGHT = {"critical": 4.0, "high": 3.0, "medium": 2.0, "low": 1.0}  # a cas
 
 @dataclass
 class EvalCase:
-    id: str
-    name: str
-    agent: str
-    request: str
-    context: dict = field(default_factory=dict)
-    fixture: str = "base"
-    fixture_patch: dict = field(default_factory=dict)
+    """One test: a scenario (an entry of ``tests/*.yaml``) or a dataset item (``datasets/*.yaml``). The executor
+    runs it (``experiment/executor.py::run_case``) and the scorers check ``expect`` against the final state, the
+    trace and the answer (``scoring/scorers.py``)."""
+
+    id: str  # "PUB-01", or "DS-ROUTING/r01" for a dataset item
+    name: str  # what the test is about, in one line
+    agent: str  # the entry agent; "orchestrator" for nearly every test, which then routes to a specialist
+    request: str  # what the user types, in plain language; the model reads it
+    context: dict = field(default_factory=dict)  # the ids the request is about, the user, an approval token
+    fixture: str = "base"  # the starting data: fixtures/<name>.json of the app (every test uses base)
+    fixture_patch: dict = field(default_factory=dict)  # dotted paths set in the starting data before the run
     config: dict = field(default_factory=dict)  # settings this case runs with, by dotted key (the rest default)
-    fault_profile: str = "healthy"
-    risk: str = "medium"
-    properties: list[str] = field(default_factory=list)
-    declared: dict = field(default_factory=dict)
-    expect: dict = field(default_factory=dict)
-    judge: dict | None = None
-    dataset: str | None = None
+    fault_profile: str = "healthy"  # or transient_once:<tool>, ack_timeout_once:<tool>, permanent_down:<tool>
+    risk: str = "medium"  # critical | high | medium | low; a weight for the metrics and the strategies
+    properties: list[str] = field(default_factory=list)  # ids from properties.yaml, the requirements it checks
+    declared: dict = field(default_factory=dict)  # what the author says it depends on: agents, skills, tools, config
+    expect: dict = field(default_factory=dict)  # the checks: route_to, state, tools_*, tool_errors, audit, ...
+    judge: dict | None = None  # a rubric, for the two cases a model also judges after the checks pass
+    dataset: str | None = None  # the dataset id of an item, None for a scenario test
     workflow: str | None = None  # the multi-agent workflow this case runs end to end (an id of workflows.yaml)
 
     @property

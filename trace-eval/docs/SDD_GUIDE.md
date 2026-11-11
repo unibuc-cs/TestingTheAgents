@@ -92,9 +92,10 @@ its recorded runs (which cases exercise which tools and functions).
 *What each kind looks at. Two kinds are static and run nothing. The other three execute the PR's copy
 of the application itself. The badge is the rung a passing check reaches.*
 
-Slot types: `config_key`, `function` (`file.py::name`), `file`, `tool`/`tools`, `skill`, `case` (a catalog
-case id or an inline case with `agent`, `request`, `context`), `dirs`, `module`, `expr`, `inputs`, `set`
-(`write_tools`, `catalog_cases`, `{skill_write_tools: <skill>}` or a literal list), `int`, `str`, `any`.
+Slot types: `config_key`, `function` (`file.py::name`), `file`, `tool`/`tools`, `skill`, `case` (a catalog case id
+or an inline case with `agent`, `request`, `context`; `fixture_patch` edits the starting data before the run, as in
+a test), `dirs`, `module`, `expr`, `inputs`, `set` (`write_tools`, `catalog_cases`, `{skill_write_tools: <skill>}`
+or a literal list), `int`, `str`, `any`.
 
 Expressions (`where`, `ensures`) are Python expressions over a small vocabulary of helpers: `config('key')`,
 `approval_age(run, page_id)`, `expected_broken(run, page_id)`, `audit_count(run, action, ...)`,

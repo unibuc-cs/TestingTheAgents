@@ -58,11 +58,14 @@ class TestStats:
 
 
 class History:
+    """A recording (``runs/<name>``) as the strategies and the evaluator read it: the runs of every test on the
+    original app and on each changed copy, the change set of each copy, and the mutation's label."""
+
     def __init__(self):
-        self.baseline: dict[str, TestStats] = {}
-        self.variants: dict[str, dict[str, TestStats]] = {}
-        self.changesets: dict[str, ChangeSet] = {}
-        self.mutation_meta: dict[str, dict] = {}
+        self.baseline: dict[str, TestStats] = {}  # test id -> its runs on the original app
+        self.variants: dict[str, dict[str, TestStats]] = {}  # variant -> test id -> its runs on that changed copy
+        self.changesets: dict[str, ChangeSet] = {}  # variant -> what its diff touched
+        self.mutation_meta: dict[str, dict] = {}  # variant -> mutation.json (category, expected_regression, ...)
 
     # ---------------------------------------------------------------- loading
     @classmethod

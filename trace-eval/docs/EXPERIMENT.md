@@ -45,12 +45,12 @@ sequenceDiagram
 ```
 
 The runner ([`experiment/runner.py`](../traceeval/experiment/runner.py)) starts the case through the executor,
-which builds a fresh app from the fixtures; the path through the orchestrator, the specialist, the dispatcher and
-the scorers is the one [CONTENTOPS.md](CONTENTOPS.md) shows. The part it does not show is the model call. At every
-step the runtime ([`sut/harness/runtime.py`](../traceeval/sut/harness/runtime.py)) asks the agent's backend
-([`backends/llm_openai.py`](../traceeval/sut/harness/backends/llm_openai.py)) "what next?", which is one model
-call. Gemma picks `route_to_agent(publishing)`, and the runtime runs the publishing agent the same way: model call,
-tool call, result, model call again, until Gemma answers in plain text.
+which builds a fresh app from the fixture, the starting data; the path through the orchestrator, the specialist,
+the dispatcher and the scorers is the one [CONTENTOPS.md](CONTENTOPS.md) shows. The part it does not show is the
+model call. At every step the runtime ([`sut/harness/runtime.py`](../traceeval/sut/harness/runtime.py)) asks the
+agent's backend ([`backends/llm_openai.py`](../traceeval/sut/harness/backends/llm_openai.py)) "what next?", which
+is one model call. Gemma picks `route_to_agent(publishing)`, and the runtime runs the publishing agent the same
+way: model call, tool call, result, model call again, until Gemma answers in plain text.
 
 ### What Gemma sees
 
