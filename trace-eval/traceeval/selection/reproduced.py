@@ -31,11 +31,13 @@ def standardised(M: np.ndarray) -> np.ndarray:
 def kmeans(X: np.ndarray, k: int, iters: int = 20) -> tuple[np.ndarray, np.ndarray]:
     """Plain k-means with a deterministic start: the row nearest the mean, then farthest-point seeding. Returns
     the label of every row and the centres."""
+    # seeding: the row nearest the mean, then each time the row farthest from the centres chosen so far
     centres = [X[int(np.argmin(((X - X.mean(0)) ** 2).sum(1)))]]
     while len(centres) < k:
         nearest = np.min([((X - c) ** 2).sum(1) for c in centres], axis=0)
         centres.append(X[int(np.argmax(nearest))])
     C = np.array(centres)
+    # Lloyd's iterations: every row to its nearest centre, every centre to the mean of its rows (an empty one stays)
     for _ in range(iters):
         labels = np.argmin(((X[:, None, :] - C[None, :, :]) ** 2).sum(2), axis=1)
         for j in range(k):
@@ -54,6 +56,7 @@ def fit_logistic(X: np.ndarray, y: np.ndarray, l2: float = 1.0, w=None, iters: i
     converges in a step or two). The penalty keeps the fit finite with few observations or one class."""
     w = np.zeros(X.shape[1]) if w is None else w.copy()
     for _ in range(iters):
+        # one Newton step on the penalised log-likelihood; done once the step is negligible
         p = sigmoid(X @ w)
         gradient = X.T @ (p - y) + l2 * w
         hessian = (X * (p * (1.0 - p))[:, None]).T @ X + l2 * np.eye(X.shape[1])
@@ -70,6 +73,7 @@ def signals(stats) -> list[float]:
     CASPER's ten signals describe software-issue resolution (files edited, test turns, plan compliance); these are
     their counterparts for an agent that calls tools and hands off to other agents."""
     rows = []
+    # one row per baseline run; runs the environment broke are left out as long as a valid run exists
     for r in stats.valid_runs or stats.runs:
         calls = r.get("tools", [])
         counts = Counter(calls)
@@ -116,6 +120,7 @@ class CasperSlices(Strategy):
     name = "casper_slices"
 
     def __init__(self, slice_size=8, min_size=4, outcome_weight=3.0, representatives=2):
+        """The settings of steps 2 and 3 of the class docstring, each explained beside its field."""
         self.slice_size = slice_size  # tests per slice, on average
         self.min_size = min_size  # a smaller slice is merged into its nearest neighbour
         self.outcome_weight = outcome_weight  # weight of the baseline outcome against one standardised signal
@@ -125,7 +130,9 @@ class CasperSlices(Strategy):
         """The slices of the suite: (members nearest the centroid first, representatives). They depend on the
         baseline recording only."""
         tests = ctx.tests()
+        # step 1: the signal matrix, one row per test, standardised
         Z = standardised(np.array([signals(ctx.history.baseline[t]) for t in tests]))
+        # step 2: the baseline pass rate as an extra column, heavier than one signal, then k-means into slices
         outcome = standardised(np.array([[ctx.history.baseline_pass_rate(t)] for t in tests]))
         Z = np.hstack([Z, self.outcome_weight * outcome])
         labels, C = kmeans(Z, max(1, math.ceil(len(tests) / self.slice_size)))
@@ -137,6 +144,7 @@ class CasperSlices(Strategy):
             target = min((j for j in sizes if j != small), key=lambda j: float(((C[j] - C[small]) ** 2).sum()))
             labels[labels == small] = target
             C[target] = Z[labels == target].mean(0)
+        # step 3: each slice as (members nearest the centroid first, its K representatives)
         out = []
         for j in range(len(C)):
             members = sorted(np.flatnonzero(labels == j), key=lambda i: float(((Z[i] - C[j]) ** 2).sum()))
@@ -149,6 +157,8 @@ class CasperSlices(Strategy):
         return out
 
     def run(self, ctx, oracle) -> ExecutionLog:
+        """Steps 3 and 4 on the changed copy: the representatives of every slice, then whole slices in the order of
+        their shift. No stopping rule: the run ends when the budget is spent or no unrun test fits it."""
         log = ExecutionLog(self.name)
         remaining, ran = ctx.budget, {}  # test -> passed, for the tests run so far
 
@@ -170,6 +180,7 @@ class CasperSlices(Strategy):
         shift = []
         for _members, reps in slices:
             seen = [t for t in reps if t in ran]
+            # V1: the representatives' failure rate on the changed copy; V0: their failure rate on the baseline
             v1 = sum(1 for t in seen if not ran[t]) / len(seen) if seen else 0.0
             v0 = sum(1.0 - ctx.history.baseline_pass_rate(t) for t in seen) / len(seen) if seen else 0.0
             shift.append(v1 - v0)
@@ -193,6 +204,7 @@ def context(case, stats) -> list[float]:
     """What is known about a test before it runs on the changed app: its definition and the shape of its baseline
     runs. The paper's context vector describes a scenario's definition the same way (actions, constraints,
     expected horizon)."""
+    # the shape of the test's first valid baseline run
     run0 = (stats.valid_runs or stats.runs)[0]
     return [
         case.severity,  # the risk level
@@ -232,20 +244,28 @@ class RiskAwareTS(Strategy):
     name = "risk_aware_ts"
 
     def __init__(self, context_weight=2.0, l2=1.0):
+        """lambda, from the paper, and the ridge penalty that the few outcomes of one run call for."""
         self.context_weight = context_weight  # lambda: the pooled model's weight against a test's own outcomes
         self.l2 = l2  # ridge penalty of the logistic regression: few observations, several features
 
     def run(self, ctx, oracle) -> ExecutionLog:
+        """The bandit: each round refits the model of which tests fail, draws a failure probability for every unrun
+        test and runs the one whose draw times its impact is highest, until no unrun test fits the budget."""
         log = ExecutionLog(self.name)
         tests = ctx.tests()
+        # the context matrix, one row per test, standardised
         X = standardised(np.array([context(ctx.catalog[t], ctx.history.baseline[t]) for t in tests]))
         X = np.hstack([np.ones((len(tests), 1)), X])  # with an intercept
+        # the impact of each test is its risk weight (critical 4 ... low 1)
         impact = np.array([ctx.catalog[t].severity for t in tests])
         cost = np.array([ctx.cost(t) for t in tests])
+        # per test: times run (at most once here) and times failed, the test's own outcomes
         pulls, fails = np.zeros(len(tests)), np.zeros(len(tests))
         draws = np.random.default_rng(ctx.rng.getrandbits(32))  # the posterior draws, seeded by the replay seed
+        # w: the weights of the pooled logistic model, warm-started from one round to the next
         w, remaining = None, ctx.budget
         while True:
+            # the unrun tests that fit the remaining budget
             candidates = np.flatnonzero((pulls == 0) & (cost <= remaining))
             if len(candidates) == 0:
                 break
@@ -257,6 +277,7 @@ class RiskAwareTS(Strategy):
                 p = sigmoid(X @ w)
                 a = 1.0 + self.context_weight * p + fails  # Beta(1, 1) prior, the model's guess, the test's outcomes
                 b = 1.0 + self.context_weight * (1.0 - p) + pulls - fails
+                # Thompson sampling: one draw per candidate; the highest draw x impact runs
                 theta = draws.beta(a[candidates], b[candidates])
                 i = int(candidates[np.argmax(impact[candidates] * theta)])
             passed, spent = oracle(tests[i])
@@ -268,4 +289,5 @@ class RiskAwareTS(Strategy):
         return log
 
     def order(self, ctx):
+        """The paper's static risk-aware ranking: by impact, the cheaper first among equals."""
         return sorted(ctx.tests(), key=lambda t: (-ctx.catalog[t].severity, ctx.cost(t), t))

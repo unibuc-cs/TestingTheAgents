@@ -20,7 +20,12 @@ Oracle = Callable[[str], tuple[bool, float]]  # test_id -> (passed, cost)
 
 @dataclass
 class SelectionContext:
+    """What a strategy is given for one changed copy: the change set, the catalog, the baseline recording, the
+    budget and a seed. The outcomes on that copy reach it only through the oracle."""
+
+    # the change set of the changed copy under evaluation: its components, files and code diff
     change: ChangeSet
+    # test id -> its case; the suite is the recording's tests that the catalog still has
     catalog: dict[str, EvalCase]
     history: object  # traceeval.experiment.history.History (baseline facts only)
     budget: float  # tokens
@@ -29,26 +34,36 @@ class SelectionContext:
     options: dict = field(default_factory=dict)  # "seed" and the evaluator's "order_cache"; strategies' scratch space
 
     def tests(self) -> list[str]:
+        """The suite: the recorded tests that the catalog still has, in the order of the recording."""
         return [t for t in self.history.test_ids() if t in self.catalog]
 
     def cost(self, t: str) -> float:
+        """Expected cost in tokens, the test's mean over its baseline runs; at least 1, as scores divide by it."""
         return max(1.0, self.history.cost(t))
 
 
 @dataclass
 class ExecutionLog:
+    """What a strategy did on one changed copy: the tests it ran, in order, with outcome and cost, why it stopped,
+    and the adaptive method's final probability that something is broken."""
+
     strategy: str
     steps: list[tuple[str, bool, float]] = field(default_factory=list)  # (test_id, passed, cost)
     # budget | exhausted (no test left that fits) | clean | regression | uninformative | no_components
     stop_reason: str = "budget"
     p_broken: float | None = None  # the adaptive method's final P(the change broke something)
+    # the adaptive method's final P(this component is broken), per changed component, most likely first: for a
+    # batch of changes, which of them the outcomes point at
+    blame: list[tuple[str, float]] = field(default_factory=list)
 
     @property
     def cost(self) -> float:
+        """Tokens spent on the tests run."""
         return sum(c for _, _, c in self.steps)
 
     @property
     def executed(self) -> list[str]:
+        """The tests run, in order."""
         return [t for t, _, _ in self.steps]
 
 
@@ -92,6 +107,7 @@ def weighted_affinity(change: ChangeSet, dep_freq: dict[str, float]) -> float:
     for c in change.components:
         if not matches(c, deps):
             continue
+        # a changed line counts once per file, at the frequency of the most-run of that file's changed lines
         if c.kind == "line":
             line_files[c.file] = max(line_files.get(c.file, 0.0), dep_freq.get(c.id, 1.0))
             continue
@@ -112,6 +128,7 @@ class Strategy:
     stochastic = False  # order depends on ctx.rng (then it is cached per seed, not per variant)
 
     def order(self, ctx: SelectionContext) -> list[str]:
+        """The prioritized test ids for this change; the evaluator runs them greedily within the budget."""
         raise NotImplementedError
 
     def cached_order(self, ctx: SelectionContext) -> list[str]:
@@ -120,6 +137,7 @@ class Strategy:
         cache = ctx.options.get("order_cache")
         if cache is None:
             return self.order(ctx)
+        # a stochastic order (random) depends on the seed as well; any other is the same for every seed
         key = (self.name, ctx.change.variant, ctx.options.get("seed") if self.stochastic else None)
         if key not in cache:
             cache[key] = self.order(ctx)
@@ -131,6 +149,7 @@ class Strategy:
         remaining = ctx.budget
         for t in self.cached_order(ctx):
             est = ctx.cost(t)
+            # a test that does not fit the remaining budget is skipped, not the end of the run
             if est > remaining:
                 continue
             passed, cost = oracle(t)

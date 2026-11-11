@@ -88,6 +88,8 @@ class GemmaChat:
         ``max_tokens`` are used: the model is the one loaded here, and it always chooses freely between calling
         a tool and answering (the backend's ``tool_choice`` is "auto")."""
         t0 = time.perf_counter()
+        # The prompt: the model's chat template over the messages and the tool schemas, as token ids, with no
+        # thinking block. The tokenizer is shared by the threads of a run, so it is used under the lock.
         with self._lock:
             ids = list(
                 self.tokenizer.apply_chat_template(
@@ -119,9 +121,10 @@ class GemmaChat:
             )
             for i, c in enumerate(parsed.get("tool_calls") or [])
         ]
-        usage = SimpleNamespace(prompt_tokens=len(ids), completion_tokens=n_out)
+        usage = SimpleNamespace(prompt_tokens=len(ids), completion_tokens=n_out)  # the call's cost
         if self.log_path:
             self._log(messages, text, usage, time.perf_counter() - t0)
+        # The answer in the chat-completions shape the backend reads: prose and tool calls, None where there is none.
         msg = SimpleNamespace(content=parsed.get("content") or None, tool_calls=tool_calls or None)
         return SimpleNamespace(choices=[SimpleNamespace(message=msg)], usage=usage)
 
@@ -146,11 +149,13 @@ class HFChatClient(GemmaChat):
     """The model run in-process with transformers on the local GPU, one answer at a time."""
 
     def __init__(self, model_id: str):
+        """Load the tokenizer (``GemmaChat``) and the weights onto the GPUs at hand, in the checkpoint's precision."""
         import torch
         from transformers import AutoModelForMultimodalLM
 
         super().__init__(model_id)
         self.torch = torch
+        # Gemma 4 is a multimodal checkpoint, so this is the class that loads it, even though only text goes in.
         self.model = AutoModelForMultimodalLM.from_pretrained(model_id, dtype="auto", device_map="auto")
         self.model.eval()
         self._gpu = threading.Lock()  # one generation at a time, even if a run uses several threads
@@ -175,9 +180,11 @@ class Servers:
     (Qwen: docs/EXPERIMENT.md §7)."""
 
     def __init__(self, urls: str, model_id: str, api_key: str = "EMPTY"):
+        """One OpenAI client per URL in ``urls``; ``api_key`` is whatever the servers expect (vLLM takes any)."""
         from openai import OpenAI
 
         self.model_id = model_id
+        # A long timeout: a batched server may take minutes over a long prompt. A failed request is sent twice more.
         clients = [OpenAI(base_url=u.strip(), api_key=api_key, timeout=600, max_retries=2) for u in urls.split(",")]
         self._turn = itertools.cycle(clients)
         self._lock = threading.Lock()  # the threads of a run take turns from the same cycle
@@ -188,6 +195,7 @@ class Servers:
         )
 
     def _next(self):
+        """The server whose turn it is; the threads of a run take turns one at a time."""
         with self._lock:
             return next(self._turn)
 
@@ -197,6 +205,7 @@ class VLLMChatClient(GemmaChat):
     the tunnel that ``scripts/gpu_remote.sh up`` opens. Many calls may run at once; the servers batch them."""
 
     def __init__(self, model_id: str):
+        """The tokenizer loads locally (``GemmaChat``); the weights are the server's, reached through ``Servers``."""
         super().__init__(model_id)
         self.client = Servers(os.environ.get("TRACEEVAL_VLLM_URL", "http://127.0.0.1:18100/v1"), model_id)
 
@@ -239,14 +248,17 @@ def shared_client(engine: str):
             model_id = os.environ.get("TRACEEVAL_HF_MODEL", DEFAULT_MODEL)
             cache = os.environ.get("TRACEEVAL_CACHE")
             if engine == "llm":
+                # Qwen through vLLM's own chat API: the server builds the prompt and parses the answer itself.
                 client = Servers(
                     os.environ.get("TRACEEVAL_LLM_BASE_URL", QWEN_URL),
                     os.environ.get("TRACEEVAL_LLM_MODEL", QWEN_MODEL),
                     os.environ.get("TRACEEVAL_LLM_API_KEY", "EMPTY"),
                 )
             elif engine == "replay":
+                # The recorded answers alone: no model behind them, a request they lack is a CacheMiss.
                 client = CachedClient(None, cache or CASSETTE, model_id)
             else:
+                # Gemma, in-process or served; the cache in front of it records what the model answers.
                 client = {"hf": HFChatClient, "vllm": VLLMChatClient}[engine](model_id)
                 if cache:
                     client = CachedClient(client, cache, model_id)

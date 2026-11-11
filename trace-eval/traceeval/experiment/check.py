@@ -100,6 +100,10 @@ def check(change: str, history_dir: Path, budget: float, backend: str):
         verdict = "no failure within the budget"
     p = f"; P(something broke) = {log.p_broken:.2f}" if log.p_broken is not None else ""
     print(f"{verdict}\n{spent}{p}")
+    # The components the posterior holds responsible: for a batch of changes, which of them the failure points at.
+    blamed = [f"{c} {pc:.2f}" for c, pc in (getattr(log, "blame", None) or []) if pc >= 0.2]
+    if blamed and log.stop_reason != "no_components":
+        print("blamed: " + ", ".join(blamed[:6]))
     _print_coverage(cs, log.executed, history, catalog)
     return log
 

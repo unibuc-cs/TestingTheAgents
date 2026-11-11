@@ -33,9 +33,10 @@ flowchart TD
 
 ## What else is in this folder
 
-- - - `results/`: one folder per recording (`gemma7`, `qwen7`, `gptoss7`), each with the report and its three
+- - - - `results/`: one folder per recording (`gemma7`, `qwen7`, `gptoss7`), each with the report and its three
   figures. `gemma7/live_vs_replay.md` is the live check against the replay, change by change.
   `qwen7/one_at_a_time.md` is Qwen's empty change recorded one test at a time, against its batched recording.
+  `gemma7/batches.md` is the three batches of changes, replayed and checked live.
 - `sdd/`: the spec-driven development report, its figures, and a spec drafted by Qwen from a change request, with
   its answer.
 - `properties/draft_qwen/`: the catalog of properties as Qwen drafted it from the requirements, with the model's

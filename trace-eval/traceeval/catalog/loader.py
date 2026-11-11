@@ -43,10 +43,12 @@ class EvalCase:
 
     @property
     def severity(self) -> float:
+        """The case's weight in the metrics and the strategies, by its risk; an unknown risk counts as medium."""
         return RISK_WEIGHT.get(self.risk, 2.0)
 
     @property
     def is_safety(self) -> bool:
+        """Whether the case checks a safety property (their ids start with ``safety``)."""
         return any(p.startswith("safety") for p in self.properties)
 
     def declared_components(self) -> set[str]:
@@ -125,6 +127,7 @@ class Feature:
 
 
 def _load_yaml(path: Path):
+    """The parsed YAML document at ``path``."""
     with open(path, encoding="utf-8") as fh:  # the same text on every platform, so the cache keys agree
         return yaml.safe_load(fh)
 
@@ -145,8 +148,11 @@ def load_features(root: Path | str = CATALOG_ROOT) -> dict[str, Feature]:
 
 
 def load_catalog(root: Path | str = CATALOG_ROOT) -> list[EvalCase]:
+    """Every eval case, scenario tests first and then dataset items, in file order. Fails on a repeated id, a
+    property missing from ``properties.yaml`` or a workflow missing from ``workflows.yaml``."""
     root = Path(root)
     cases: list[EvalCase] = []
+    # Scenario tests: one entry per item of each tests/*.yaml, the fields it leaves out at their defaults.
     for path in sorted((root / "tests").glob("*.yaml")):
         for raw in _load_yaml(path) or []:
             cases.append(
@@ -168,6 +174,8 @@ def load_catalog(root: Path | str = CATALOG_ROOT) -> list[EvalCase]:
                     workflow=raw.get("workflow"),
                 )
             )
+    # Dataset items: each inherits the dataset's agent, context, fixture, risk, properties and declared dependencies,
+    # and its own values win where it has them.
     for path in sorted((root / "datasets").glob("*.yaml")):
         ds = _load_yaml(path)
         base_ctx = dict(ds.get("context", {}))
@@ -177,7 +185,7 @@ def load_catalog(root: Path | str = CATALOG_ROOT) -> list[EvalCase]:
             if ds.get("route_only"):  # score the routing decision only: the chosen specialist does not run
                 ctx["_route_only"] = True
             expect = dict(item.get("expect", {}))
-            if "expect_route" in item:
+            if "expect_route" in item:  # the dataset's shorthand for expect.route_to
                 expect["route_to"] = item["expect_route"]
             cases.append(
                 EvalCase(
@@ -197,6 +205,7 @@ def load_catalog(root: Path | str = CATALOG_ROOT) -> list[EvalCase]:
                     dataset=ds["id"],
                 )
             )
+    # The catalog must be consistent before anything runs: unique ids, and only known properties and workflows.
     ids = [c.id for c in cases]
     dupes = {i for i in ids if ids.count(i) > 1}
     if dupes:

@@ -42,6 +42,7 @@ Agent Orchestrator deck and Adobe's public documentation:
 | per-test metadata (agents, skills, tools, workflow, risk, cost, history) | yes (declared + observed + history; a workflow test names its workflow) | — |
 | trace assertions | yes: final state, required and forbidden tools, attempts, audit, step limit, termination, agent order and tool order (`agents_in_order`, `tools_in_order`) | — |
 | budgets and early stopping | yes (`adaptive_bayes`, `traceeval check`) | — |
+| a day's changes checked at once, with the culprit named | yes: batches of changes ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.6); the live check prints the components the method blames | — |
 | OpenTelemetry | yes: `traceeval run --otel` exports a run as OTLP JSON spans, with the plan, the routing decisions and the approvals as span events (§3.6) | pushing to a collector, if wanted |
 | environment failures kept apart | yes: such a run is `INFRA_INVALID` and left out of pass rates, the ground truth and the replays ([USER_GUIDE.md](USER_GUIDE.md) §8) | — |
 | agents like AEM's | yes: authoring, publishing, assets (with asset search), SEO, translation, governance, maintenance, and brand governance, data insights, site optimization | — |

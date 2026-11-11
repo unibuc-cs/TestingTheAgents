@@ -50,6 +50,7 @@ PRIOR = {
     "other": 0.3,
 }
 # fallback reveal ratios when no history is available to calibrate from
+# code:line = tests that ran a changed line, code:fn = tests that only called the changed function or module
 DEFAULT_REVEAL = {
     "code:line": 0.12,
     "code:fn": 0.03,
@@ -81,6 +82,9 @@ def _reach(comp) -> tuple[str, ...]:
 
 @register
 class AdaptiveBayes(Strategy):
+    """The proposed method, in the five steps of the module docstring. The keyword arguments of ``__init__`` are
+    its settings; the variants registered at the end of the module change one of them each."""
+
     name = "adaptive_bayes"
 
     def __init__(
@@ -94,6 +98,7 @@ class AdaptiveBayes(Strategy):
         text="overlap",
         cover_mandatory=True,
     ):
+        """The settings, each explained beside its field with the step of the module docstring it enters."""
         self.eps_clean = eps_clean  # "clean" below this P(something is broken) (step 4)
         self.max_components = max_components  # 2^k hypotheses, so k stays small
         self.indirect = indirect  # sensitivity of a test with no known link to the component
@@ -108,6 +113,7 @@ class AdaptiveBayes(Strategy):
         """The changed components we reason about, with their prior. tool: and line: ids are other views of a
         code change (its adapter, its lines), not separate causes; line hits come back in the sensitivities."""
         comps, seen = [], set()
+        # one hypothesis per distinct component, with the prior of its kind
         for c in ctx.change.components:
             if c.kind in ("tool", "line") or c.id in seen:
                 continue
@@ -121,14 +127,18 @@ class AdaptiveBayes(Strategy):
     def impacted(ctx, change, comp) -> dict[str, set[str]]:
         """Tests that statically look impacted by ``comp``: executed a changed line / the function / match."""
         out = {"line": set(), "fn": set(), "match": set()}
+        # the changed lines of the component's file: running one is the finest observed link to the change
         lines = [c for c in change.components if c.kind == "line" and c.file == comp.file]
         for t in ctx.tests():
+            # observed dependencies: everything the test exercised in at least one baseline run
             deps = ctx.history.deps(t)
+            # a code component has two buckets: ran a changed line, or only called the changed function or module
             if comp.kind == "code":
                 if any(c.id in deps for c in lines):
                     out["line"].add(t)
                 elif matches(comp, deps):
                     out["fn"].add(t)
+            # any other component: the test used it, or one of the items its list lost
             elif any(d in deps for d in _reach(comp)):
                 out["match"].add(t)
         return out
@@ -141,8 +151,12 @@ class AdaptiveBayes(Strategy):
         Per test and bucket: [changes it revealed, changes an impacted test would reveal on average], summed over
         the training changes that impacted it through that bucket. The second number is the change's own reveal
         rate, so revealing a change that breaks almost every test it touches adds little to a test's record."""
+        # sums: bucket -> the reveal ratio of each training change that impacted tests through it
         sums: dict[str, list[float]] = {}
+        # record: (test, bucket) -> [O, E], the two counts of the test's lift (step 2)
         record: dict[tuple[str, str], list[float]] = {}
+        # one pass per other recorded change; its revealing tests (the ground truth of that change: majority
+        # outcome flipped from pass on the baseline to fail on the changed copy) are what everything is measured on
         for v in ctx.train_variants:
             change = ctx.history.changesets.get(v)
             if change is None:
@@ -172,6 +186,7 @@ class AdaptiveBayes(Strategy):
                     seen = record.setdefault((t, bucket), [0.0, 0.0])
                     seen[0] += t in revealing
                     seen[1] += rate
+        # the reveal ratio per bucket (r_kind of the paper); a bucket no training change touched keeps its default
         ratios = dict(DEFAULT_REVEAL)
         for k, vals in sums.items():
             # the mean over changes, padded like the test records: a ratio learned from one or two changes stays
@@ -214,8 +229,10 @@ class AdaptiveBayes(Strategy):
 
     def sensitivity(self, ctx, t, comp, lex, ratios, record) -> float:
         """P(test t fails | component comp is broken)."""
+        # observed dependencies, each with how often the baseline runs exercised it (the coverage factor)
         freq = ctx.history.baseline[t].dep_frequency
         deps = set(freq)
+        # the author declared the component (or its base) as a dependency of the test
         declared = matches(comp, ctx.catalog[t].declared_components())
         tilt = 0.5 + lex + (0.5 if declared else 0.0)  # text relevance [0.5, 1.5] + declared bonus
 
@@ -228,6 +245,8 @@ class AdaptiveBayes(Strategy):
 
         # base = calibrated reveal ratio x how often the baseline runs exercised the component
         base = None
+        # a code component: the changed-line ratio times how often the most-run changed line of the file ran; a
+        # test that only called the function gets the weaker code:fn ratio, with no coverage factor
         if comp.kind == "code":
             hit = [
                 freq[c.id] for c in ctx.change.components if c.kind == "line" and c.file == comp.file and c.id in deps
@@ -236,10 +255,12 @@ class AdaptiveBayes(Strategy):
                 base = own("code:line", ratios["code:line"]) * max(hit)
             elif matches(comp, deps):
                 base = own("code:fn", ratios["code:fn"])
+        # any other component: the ratio of its bucket times how often the test used it, or one of the items it lost
         elif any(d in deps for d in _reach(comp)):
             # an agent field without training data of its own falls back to the ratio of its kind
             ratio = ratios.get(_kind_key(comp), ratios.get(comp.kind, 0.2))
             base = own(_kind_key(comp), ratio) * max(freq[d] for d in _reach(comp) if d in deps)
+        # sensitivity = reveal ratio x lift x coverage x tilt, kept inside [0.02, 0.9] so that no outcome is certain
         if base is not None:
             return min(0.9, max(0.02, base * tilt))
         if declared:  # declared by the test's author but never observed: half the reveal ratio
@@ -259,7 +280,9 @@ class AdaptiveBayes(Strategy):
         # P(test fails with nothing broken): 1 for a test the model already fails on the original app; the floor
         # keeps every outcome possible, so that no single result rules a hypothesis out completely
         fails_anyway = np.array([max(0.01, 1.0 - ctx.history.baseline_pass_rate(t)) for t in tests])
+        # the inputs of the four factors: text relevance (tilt), reveal ratios and the tests' records (lift)
         lex, (ratios, record) = self.text_relevance(ctx), self.calibrate(ctx)
+        # S[t, c] = P(test t fails | component c is broken), the sensitivity of step 2
         S = (
             np.array([[self.sensitivity(ctx, t, c, lex[t], ratios, record) for c, _ in comps] for t in tests])
             if k
@@ -284,8 +307,11 @@ class AdaptiveBayes(Strategy):
             "fails_anyway": fails_anyway,
             "S": S,
             "groups": groups,
+            # test index -> its signature, to find the near-duplicates of a test that just passed
             "group_of": {i: g for g, members in groups.items() for i in members},
+            # expected tokens of each test, the denominator of the policy
             "cost": np.array([ctx.cost(t) for t in tests]),
+            # risk weight of each test: 1 for a low-risk case, 1 + 3 x risk_tilt for a critical one
             "risk": np.array([1.0 + self.risk_tilt * (ctx.catalog[t].severity - 1.0) for t in tests]),
         }
 
@@ -299,12 +325,14 @@ class AdaptiveBayes(Strategy):
 
     @staticmethod
     def _entropy(P):
+        """Entropy of each distribution along the last axis; a zero probability contributes nothing."""
         with np.errstate(divide="ignore", invalid="ignore"):
             return -np.where(P > 1e-12, P * np.log(P), 0.0).sum(axis=-1)
 
     def info_gain(self, post, p_fail):
         """Expected reduction of posterior entropy for every test, over its two possible outcomes."""
         pf = np.clip(p_fail @ post, 1e-12, 1 - 1e-12)  # P(test fails) under the current posterior
+        # the posterior after each of the two outcomes, by Bayes' rule
         post_if_fail = (p_fail * post[None, :]) / pf[:, None]
         post_if_pass = ((1 - p_fail) * post[None, :]) / (1 - pf)[:, None]
         gain = self._entropy(post) - (pf * self._entropy(post_if_fail) + (1 - pf) * self._entropy(post_if_pass))
@@ -321,10 +349,13 @@ class AdaptiveBayes(Strategy):
             log.stop_reason = "no_components"
             return log
         S = m["S"]
+        # the likelihood table P(test fails | hypothesis); a row changes when a near-duplicate of its test passes
         p_fail = self.p_fail_matrix(S, fails_anyway, hyps)
+        # the posterior over the hypotheses, starting from the prior of step 1
         post = m["prior"]
         ran = np.zeros(len(tests), dtype=bool)  # each test runs at most once: a rerun would give the same answer
         remaining = ctx.budget
+        # step 3: pick the test with the best information per token, run it, update; step 4 decides when to stop
         while True:
             if stopping and 1.0 - post[0] < self.eps_clean:  # hypothesis 0 = nothing broken
                 log.stop_reason = "clean"
@@ -337,6 +368,7 @@ class AdaptiveBayes(Strategy):
             if score[i] <= 0:
                 log.stop_reason = "budget" if remaining < cost.min() else "uninformative"
                 break
+            # run it on the changed copy (the oracle: a replay of the recording, or the live app in traceeval check)
             passed, spent = oracle(tests[i])
             ran[i] = True
             remaining -= spent
@@ -356,9 +388,15 @@ class AdaptiveBayes(Strategy):
             if remaining <= 0:
                 log.stop_reason = "budget"
                 break
+        # step 5: after a run that ended clean, on budget or uninformative, the mandatory-coverage rule
         if stopping and self.cover_mandatory and log.stop_reason != "regression":
             post = self._cover_mandatory(ctx, oracle, log, m, ran, remaining, post, p_fail, fails_anyway)
+        # the verdict's probability: P(at least one component is broken | the outcomes)
         log.p_broken = float(1.0 - post[0])
+        # and per component, the marginal P(broken): the posterior mass of the hypotheses in which it is broken
+        marginals = post @ hyps  # hyps[h, c] = 1 when component c is broken under hypothesis h
+        pairs = zip(m["comps"], marginals, strict=True)
+        log.blame = sorted(((c.id, float(p)) for (c, _), p in pairs), key=lambda cp: -cp[1])
         return log
 
     @staticmethod
@@ -371,8 +409,11 @@ class AdaptiveBayes(Strategy):
         from traceeval.experiment.coverage import affected_properties
 
         tests, cost, props = m["tests"], m["cost"], load_properties()
+        # the properties the tests run so far already check
         checked = {p for i in np.flatnonzero(ran) for p in ctx.catalog[tests[i]].properties}
+        # the properties the change may affect, from the components it touched and the tests that exercise them
         affected = affected_properties(ctx.change, ctx.history, ctx.catalog, props)
+        # each mandatory one still unchecked gets the cheapest unrun test that checks it and passes on the original app
         for pid in sorted(p for p in affected if props[p].mandatory):
             options = [
                 i
@@ -390,6 +431,7 @@ class AdaptiveBayes(Strategy):
             remaining -= spent
             log.steps.append((tests[i], passed, spent))
             checked |= set(ctx.catalog[tests[i]].properties)
+            # the same Bayes update and regression stop as in step 4
             post = post * ((1 - p_fail[i]) if passed else p_fail[i])
             post /= post.sum() or 1e-12
             if not passed:

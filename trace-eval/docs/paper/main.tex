@@ -262,9 +262,10 @@ Two rules shaped the set:
         agent's intents is not one;
   \item a removed step goes from both the procedure and the prose of a skill, or the model does the step anyway.
 \end{itemize}
-We left out what told nothing about selection: twins of other changes, crashes, and a change that broke most of
-the suite. Ten of the changes aim at the workflows. Which test reveals which change was measured afterwards, never
-designed, and no strategy is told.
+We left out what told nothing about selection: twins of other changes, crashes, and a change that broke most of the
+suite. Ten of the changes aim at the workflows. Three batches bundle several of the changes, as a nightly run or a
+pull request would (Section~\ref{sec:evaluation}); their members edit disjoint files, so the edits compose. Which
+test reveals which change was measured afterwards, never designed, and no strategy is told.
 
 \begin{table}[t]
 \centering\small
@@ -934,6 +935,18 @@ skill without its link validation, which the method without the rule calls clean
 mandatory property ``no broken publish'' before ending, and that test fails. The rule never caused a false verdict.
 Below a 10\% budget it often cannot afford the extra test.
 
+\paragraph{Batches of changes.} A nightly run sees a day's merges at once. Three batches of catalog changes,
+recorded like the single ones (Table~\ref{tab:batches}), say what the strategies make of that. The nightly batch,
+six regressions and two harmless edits, every change-aware strategy finds within a 5\% budget; the adaptive method
+after one test, and the live check names the SEO agent's lost tool as the component to blame, with the posterior's
+marginal probability per component, while the other members stay near their prior, untested, because the check
+stops at the first failure. The pull request of three related changes on the publishing path it finds after two
+tests, blaming the link check and the publishing skill. The batch of all nine benign changes is revealed by one
+test: the orchestrator's prompt reworded and its routing guidance reordered, harmless alone, make the orchestrator
+drop the broken link from the answer it relays. The ground truth of a batch is not the union of its members', and
+the adaptive method spends its whole budget on that batch without reaching the test, since one member adds a tool
+no agent may use, which no test can reach and nothing can clear.
+
 \begin{table}[H]
 \centering\small
 \caption{The mandatory rule at a 20\% budget.}
@@ -960,6 +973,23 @@ or provider updates without one, where CASPER's representatives are the natural 
 combined: the slices can serve as the near-duplicate groups of the adaptive method, and a slice whose
 representatives drifted can enter the model as a changed component. On this testbed every change has a diff and the
 suite is small (180 tests, twelve slices), which is the case slicing has least to offer.
+
+\begin{table}[H]
+\centering\small
+\caption{Three batches of changes: what they bundle, the tests that reveal them, and the adaptive method on them at
+a 20\% budget, replayed over five seeds and live.}
+\label{tab:batches}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{p{30mm}p{46mm}cp{50mm}}
+\toprule
+batch & bundles & revealing tests & the adaptive method \\
+\midrule
+a day's merges & six regressions across tools, harness, skills, an agent definition and a service; two harmless edits & 28 & \regression{} after one test, 0.3\% of the suite; blames the SEO agent's lost tool (0.77) \\
+a pull request & three related changes on the publishing path & 9 & \regression{} after two tests, 1.2\%; blames the link check (0.68) and the publishing skill (0.59) \\
+a day of harmless edits & all nine benign changes & 1 & \budget{} after 34 tests, 20\%, $P = 0.32$; does not reach the revealing test \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \paragraph{Other models.} The same application was recorded with Qwen3.8-27B and with gpt-oss-120b, served as they
 are, with greedy decoding and five repetitions, like Gemma (Table~\ref{tab:models}). Neither recording is a clean
@@ -1037,6 +1067,11 @@ What the experiments say, in the order a team would act on them.
   \item \textbf{Text is a strong, cheap baseline.} TF-IDF similarity between the diff and the tests' text has the
         best detection when the whole budget is spent, and it never stops; it is the fallback order to keep in any
         pipeline.
+  \item \textbf{Check the day's changes as one batch, then ask who is to blame.} A batch is checked like a change,
+        and the posterior's marginal per component names the member to blame, which is what a nightly pipeline
+        needs after a red run. Harmless edits are not harmless together: two prompt rewordings broke a test that
+        neither broke alone, so a nightly batch needs its own recording, not the sum of the day's single-change
+        checks.
 \end{enumerate}
 
 \section{Conclusion and future work}

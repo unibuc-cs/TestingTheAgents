@@ -303,9 +303,10 @@ with the same options.
 
 - **`baseline`** runs every test on the original app, one test at a time, because it records code coverage
   per test and coverage can follow only one test at a time in a process.
-- **`mutants`** makes a changed copy of the app for each change (in `runs/gemma7/variants/`) and runs every
-  test on it, 32 tests at a time by default (`--workers`), since the vLLM server handles many requests at
-  once. With the local `hf` engine the default is 1.
+- **`mutants`** makes a changed copy of the app for each change (in `runs/gemma7/variants/`) and runs every test on
+  it, 32 tests at a time by default (`--workers`), since the vLLM server handles many requests at once. With the
+  local `hf` engine the default is 1. `--only <ids>` records some changes only, which is how a batch of changes is
+  recorded ([USER_GUIDE.md](USER_GUIDE.md) §6).
 - **`evaluate`** replays the strategies on the recordings; it makes no model calls.
 - **`report`** writes `runs/gemma7/results/report.md`. Its first section is the sanity check: every
   regression must be revealed by at least one test, and no benign change by any.
@@ -362,6 +363,8 @@ The check prints each test as it runs, and then:
 - the change coverage ([USER_GUIDE.md](USER_GUIDE.md) §4) and what the tests left out: the affected properties left
   unchecked (marked when mandatory), the workflows not run, the features not reached and the refusals not reached;
 - what the tests invoked: how many of the application's agents, skills, tools and features.
+- for a batch of changes, `blamed`: the components the method holds responsible, with its probability for each,
+  most likely first.
 
 `--history` is a recording made with the same model (the README); `traceeval experiment --reps 1` is enough for it.
 A changed copy of the app is compared with `traceeval/sut`, so copy that folder before editing it.

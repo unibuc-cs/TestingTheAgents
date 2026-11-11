@@ -45,11 +45,14 @@ def plain(text: str) -> str:
 
 @dataclass
 class Verdict:
+    """The outcome of scoring one run: whether every check held, the classification, and the checks themselves."""
+
     passed: bool
     classification: str  # PASS | TOOL_ERROR | AGENT_FAILURE | HARNESS_ERROR | INFRA_INVALID
-    checks: list[dict] = field(default_factory=list)
+    checks: list[dict] = field(default_factory=list)  # one {name, ok, detail} per expectation checked
 
     def failed_checks(self) -> list[str]:
+        """The names of the checks that did not hold."""
         return [c["name"] for c in self.checks if not c["ok"]]
 
 
@@ -101,6 +104,7 @@ def _state_check(state: dict, assertion) -> tuple[bool, str]:
 def score_case(case, trace: dict, state: dict, run: dict, error: str | None = None, infra: bool = False) -> Verdict:
     """Evaluate every expectation of ``case``. ``trace`` is the recorder's ``to_dict()``. ``error`` is the traceback of
     a run that raised; ``infra`` says that the environment, not the run, caused it."""
+    # A run that raised has nothing to check: the verdict is the error itself, blamed on the environment or the harness.
     if error is not None:
         kind, label = ("infra", "INFRA_INVALID") if infra else ("harness", "HARNESS_ERROR")
         return Verdict(False, label, [{"name": kind, "ok": False, "detail": error}])
@@ -108,13 +112,16 @@ def score_case(case, trace: dict, state: dict, run: dict, error: str | None = No
     checks: list[dict] = []
 
     def add(name, ok, detail=""):
+        """Record one check; ``detail`` says what was found, for the report."""
         checks.append({"name": name, "ok": bool(ok), "detail": detail})
 
+    # What the trace says the run did: the tools that succeeded at least once, the tools tried at all, the answer.
     calls = trace.get("tool_calls", [])
     ok_tools = {c["tool"] for c in calls if c.get("status") == "ok"}
     attempted = {c["tool"] for c in calls}
     message = trace.get("final_message") or run.get("message") or ""
 
+    # The first delegation is the routing decision a dataset item checks.
     if "route_to" in exp:
         routes = trace.get("routes", [])
         first = routes[0][1] if routes else None
@@ -122,6 +129,8 @@ def score_case(case, trace: dict, state: dict, run: dict, error: str | None = No
     for assertion in exp.get("state", []):
         ok, detail = _state_check(state, assertion)
         add(f"state:{assertion[0]}", ok, detail)
+    # Tools by outcome: required ones must have succeeded, forbidden ones must not have, and some must not even
+    # have been tried (a guard that refuses a call still shows the agent asked for it).
     for tool in exp.get("tools_required", []):
         add(f"required:{tool}", tool in ok_tools, f"ok tools: {sorted(ok_tools)}")
     for tool in exp.get("tools_forbidden", []):
@@ -134,6 +143,7 @@ def score_case(case, trace: dict, state: dict, run: dict, error: str | None = No
     if "tools_in_order" in exp:
         ok_calls = [c["tool"] for c in calls if c.get("status") == "ok"]
         add("tools_in_order", _in_order(ok_calls, exp["tools_in_order"]), f"ok calls: {ok_calls}")
+    # A resilience case expects the dispatcher to have retried: some call of the tool took at least ``min`` tries.
     for spec in exp.get("tool_attempts", []):
         mx = max([c.get("attempts", 0) for c in calls if c["tool"] == spec["tool"]] or [0])
         add(f"attempts:{spec['tool']}", mx >= spec.get("min", 1), f"max attempts {mx}")
@@ -142,6 +152,8 @@ def score_case(case, trace: dict, state: dict, run: dict, error: str | None = No
         last = next((c.get("result") for c in reversed(calls) if c["tool"] == tool and c.get("status") == "ok"), None)
         ok, detail = _state_check(last, assertion) if last is not None else (False, f"no successful {tool} call")
         add(f"result:{tool}.{assertion[0]}", ok, detail)
+    # An audit expectation counts the entries of one action in the final state's audit log, matching any other
+    # fields it names (the actor, the page), and wants exactly ``count`` of them.
     for spec in exp.get("audit", []):
         spec = dict(spec)
         action, count = spec.pop("action"), spec.pop("count")
@@ -162,13 +174,16 @@ def score_case(case, trace: dict, state: dict, run: dict, error: str | None = No
         add(f"response~{options[0][:24]}", found, f"message: {message[:120]!r}")
     for needle in exp.get("response_excludes", []):
         add(f"response!~{needle[:24]}", plain(needle) not in plain(message), f"message: {message[:120]!r}")
+    # How the run ended: within its step budget, and the way the case expects (an answer, or cut off by the budget).
     if "max_steps" in exp:
         add("max_steps", (run.get("steps") or 0) <= exp["max_steps"], f"steps {run.get('steps')}")
     if "termination" in exp:
         add("termination", run.get("termination") == exp["termination"], f"got {run.get('termination')}")
+    # The tool boundary: every crash, and every error the case does not allow, is a failed check of its own.
     for name, detail in _tool_failures(calls, exp.get("tool_errors") or {}):
         add(name, False, detail)
 
+    # A failure at the tool boundary is TOOL_ERROR, whatever else failed; any other failed check is the agent's.
     passed = all(c["ok"] for c in checks)
     if passed:
         return Verdict(True, "PASS", checks)
@@ -185,11 +200,13 @@ def _tool_failures(calls: list[dict], allowed) -> list[tuple[str, str]]:
         if status == "crash":
             name = f"crash:{tool}"
         elif status == "error" and allowed != "*" and code not in _codes(allowed.get(tool)):
+            # A later successful call of the same tool means the agent recovered: the error does not count.
             if any(c["tool"] == tool and c.get("status") == "ok" for c in calls[i + 1 :]):
                 continue
             name = f"tool_error:{tool}"
         else:
             continue
+        # The same error from the same tool, repeated over retries or turns, is one failed check.
         if (name, code) not in seen:
             seen.add((name, code))
             out.append((name, f"{code}: {call.get('message') or ''}"))
@@ -203,6 +220,7 @@ def _in_order(seen: list[str], wanted: list[str]) -> bool:
 
 
 def _codes(value) -> set[str]:
+    """The error codes a case allows for one tool: its ``tool_errors`` entry is one code, a list, or absent."""
     if value is None:
         return set()
     return {value} if isinstance(value, str) else set(value)
@@ -231,8 +249,8 @@ def judge_answer(case, message: str, client, model: str) -> dict:
     verdict = (resp.choices[0].message.content or "").strip()
     found = re.search(r"\b(PASS|FAIL)\b", verdict.upper())  # whichever word comes first decides
     return {
-        "ok": bool(found) and found.group(1) == "PASS",
-        "tokens": resp.usage.prompt_tokens + resp.usage.completion_tokens,
+        "ok": bool(found) and found.group(1) == "PASS",  # an answer with neither word fails
+        "tokens": resp.usage.prompt_tokens + resp.usage.completion_tokens,  # added to the test's cost
         "rubric": rubric,
         "verdict": verdict,
     }

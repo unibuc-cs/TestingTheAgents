@@ -133,8 +133,11 @@ def _plain(expr, config, template: bool = False) -> str:
     text = _CONFIG.sub(setting, text)
     if not template:  # a bare "If <request_review>:" reads as an order to request one
         text = re.sub(r"^ctx\.get\('(\w+)'\)$", r"<\1> is given and true", text)
+    # Presence checks on a slot come before the general slot rewrite below, which would take the ctx.get() away.
     text = re.sub(r"ctx\.get\('(\w+)'\) is not None", r"<\1> is given", text)
     text = re.sub(r"ctx\.get\('(\w+)'\) is None", r"<\1> is not given", text)
+    # Any other slot reference, ctx.get('x') or ctx['x']: <x>, or the bare x inside a message template, where the
+    # braces already mark it as a value.
     slot = (lambda m: m.group(1) or m.group(2)) if template else (lambda m: f"<{m.group(1) or m.group(2)}>")
     text = re.sub(r"ctx(?:\.get\('(\w+)'\)|\['(\w+)'\])", slot, text)
     text = re.sub(r"intent == '(\w+)'", r"the intent is `\1`", text)
@@ -157,6 +160,7 @@ def _template(message: str, config) -> str:
     setting becomes the setting's value."""
 
     def placeholder(m):
+        """One ``{...}``: a placeholder that is only a setting becomes its value; any other stays in braces."""
         if _CONFIG.fullmatch(m.group(1).strip()):
             return _plain(m.group(1).strip(), config, template=True)
         return "{" + _plain(m.group(1), config, template=True) + "}"
@@ -191,6 +195,8 @@ def render_procedure(steps: list[dict], config) -> str:
         elif "route" in step:  # the orchestrator's hand-off
             text = "Hand the request to the specialist that owns it, with `route_to_agent`."
         elif "call" in step:
+            # A tool call with its arguments, then what the step attaches to it: a condition on the result, a stop
+            # after the call, and whether an error stops the agent.
             args = ", ".join(f"{k}={_value(v, config)}" for k, v in (step.get("args") or {}).items())
             text = f"Call `{step['call']}`" + (f" with {args}" if args else "") + "."
             # A condition on the result that stops the agent when it fails (unless on_fail says to go on).

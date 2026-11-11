@@ -50,6 +50,8 @@ class Dispatcher:
         token, ...). The answer is either the tool's own result or an ``{"error": ..., "message": ...}``
         dict: the agent always receives a dict, never an exception.
         """
+        # What the trace event at the end reports about the call: when it started, how many tries it took (0 when
+        # a gate refuses it), the write's idempotency key, and whether it ended ok, refused or crashed.
         t0 = time.perf_counter()
         spec = self.tools.get(name)
         attempts, key, status = 0, None, "ok"

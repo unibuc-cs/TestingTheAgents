@@ -154,6 +154,7 @@ class LLMBackend:
             kwargs["tools"] = self.tools
             kwargs["tool_choice"] = "auto"
         resp = self.client.chat.completions.create(**kwargs)
+        # One completion is asked for, so the model's message is the first choice.
         choice = resp.choices[0]
         msg = choice.message
         # Book the tokens that the server reports (0 when it reports none).

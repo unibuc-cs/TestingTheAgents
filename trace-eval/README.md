@@ -40,9 +40,10 @@ flowchart LR
   opposed to the declared ones its author wrote.
 - **The changes** are the entries of [`traceeval/mutation/catalog.py`](traceeval/mutation/catalog.py), each applied
   as an edit to a copy of the app. The diff becomes a change set: the components it touches, in the same
-  identifiers the traces use. Running the whole suite on each changed copy gives the ground truth: a test
-  *reveals* a change when it passes on the current app and fails on the changed copy, by majority over the
-  repetitions. A change is a regression when at least one test reveals it.
+  identifiers the traces use. Running the whole suite on each changed copy gives the ground truth: a test *reveals*
+  a change when it passes on the current app and fails on the changed copy, by majority over the repetitions. A
+  change is a regression when at least one test reveals it. Three batches bundle several changes, as a nightly run
+  does; the check then also names the components it blames ([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.6).
 - **The strategies** in [`traceeval/selection/`](traceeval/selection/) pick tests under a token budget from the
   change set, the traces, the costs and the pass rates, and from the outcomes of the other recorded changes. They
   never see the outcome of the change under evaluation. Six are baselines, two are published methods reproduced

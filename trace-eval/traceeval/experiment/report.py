@@ -13,6 +13,7 @@ from traceeval.catalog import load_catalog, load_properties  # noqa: E402
 
 from .history import History  # noqa: E402
 
+# the strategies, in the order the tables and figures show them; a strategy not listed here is not shown
 ORDER = [
     "full",
     "random",
@@ -29,6 +30,7 @@ ORDER = [
     "adaptive_bayes_notext",
     "adaptive_bayes_nomandatory",
 ]
+# the figures' colours: the method black, its variants grey; a strategy without one gets matplotlib's next default
 COLOR = {
     "full": "#9e9e9e",
     "random": "#bdbdbd",
@@ -43,10 +45,12 @@ COLOR = {
     "adaptive_bayes_notext": "#888888",
     "adaptive_bayes_nomandatory": "#8c564b",
 }
+# the nominal budgets in % of the full suite: the x axis of the detection figure (log scale)
 BUDGET_TICKS = [2, 5, 10, 20, 30, 50, 100]
 
 
 def _axes(ax, title, xlabel, ylabel):
+    """The look the figures share: a left-aligned title, no top or right frame, faint horizontal grid lines."""
     ax.set_title(title, fontsize=11, loc="left")
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
@@ -57,12 +61,14 @@ def _axes(ax, title, xlabel, ylabel):
 
 def fig_detection_vs_cost(df, out):
     """Detection rate against tokens actually spent: strategies that select or stop sit to the left."""
+    # the runs on the changes some test reveals
     reg = df[df.is_regression]
     fig, ax = plt.subplots(figsize=(7.5, 4.5))
     for name in ORDER:
         sub = reg[reg.strategy == name]
         if sub.empty:
             continue
+        # one point per nominal budget: the mean tokens actually spent against the mean detection rate
         g = sub.groupby("budget").agg(cost=("cost_fraction", "mean"), det=("detected", "mean"))
         ax.plot(
             g["cost"] * 100,
@@ -90,10 +96,12 @@ def fig_detection_vs_cost(df, out):
 
 
 def fig_benign_waste(df, out):
+    """Tokens spent on the changes no test reveals: one group of bars per strategy, one bar per nominal budget."""
     ben = df[~df.is_regression]
     budgets = sorted(ben.budget.unique())
     names = [n for n in ORDER if n in set(ben.strategy)]
     fig, ax = plt.subplots(figsize=(7.5, 4))
+    # a strategy's bars share a slot of width 0.8, lighter to darker blue as the budget grows
     width = 0.8 / max(1, len(budgets))
     for k, b in enumerate(budgets):
         vals = [ben[(ben.strategy == n) & (ben.budget == b)]["cost_fraction"].mean() * 100 for n in names]
@@ -104,6 +112,7 @@ def fig_benign_waste(df, out):
             label=f"budget {int(b * 100)}%",
             color=plt.cm.Blues(0.35 + 0.6 * k / max(1, len(budgets) - 1)),
         )
+    # the strategy's name under the middle of its group
     ax.set_xticks([i + width * (len(budgets) - 1) / 2 for i in range(len(names))])
     ax.set_xticklabels(names, rotation=25, ha="right", fontsize=8)
     _axes(ax, "Tokens spent on changes no test reveals (lower is better)", "", "tokens spent (% of full suite)")
@@ -114,8 +123,10 @@ def fig_benign_waste(df, out):
 
 
 def fig_apfdc(pr, out):
+    """APFD_c of each strategy's complete prioritized order over the revealed changes: one box per strategy."""
     names = [n for n in ORDER if n in set(pr.strategy)]
     fig, ax = plt.subplots(figsize=(7.5, 4))
+    # outliers left out; each box in the colour of the strategy's line in the other figures
     boxes = ax.boxplot(
         [pr[pr.strategy == n]["apfdc"].dropna().values for n in names], patch_artist=True, widths=0.6, showfliers=False
     )["boxes"]
@@ -132,6 +143,7 @@ def fig_apfdc(pr, out):
 
 
 def _table(df, fmt="{:.2f}"):
+    """A DataFrame as a Markdown table: the index as the first column, floats in ``fmt``, the rest as text."""
     cols = list(df.columns)
     rows = [
         "| " + " | ".join([df.index.name or "strategy"] + [str(c) for c in cols]) + " |",
@@ -144,6 +156,8 @@ def _table(df, fmt="{:.2f}"):
 
 
 def _by_budget(df, value, fmt="{:.2f}"):
+    """The mean of ``value`` per strategy (rows, in ORDER) and nominal budget (columns, in % of the full suite), as a
+    Markdown table; a strategy the replay did not run is left out."""
     t = (
         df.pivot_table(index="strategy", columns="budget", values=value, aggfunc="mean")
         .reindex(ORDER)
@@ -167,6 +181,7 @@ def _properties_section(history, reg) -> list[str]:
     cases = {c.id: c for c in load_catalog()}
     rows = []
     for p in load_properties().values():
+        # the recorded tests that check the property; its pass rate is the mean of theirs on the original app
         tests = [t for t, c in cases.items() if p.id in c.properties and t in history.baseline]
         rate = sum(history.baseline_pass_rate(t) for t in tests) / len(tests) if tests else float("nan")
         met = "yes" if rate >= p.threshold else "**no**"
@@ -203,6 +218,7 @@ def suite_coverage_lines(history, sut_dir) -> list[str]:
     cases = {c.id: c for c in load_catalog()}
     table = ["| dimension | components | declared | observed | not covered |", "|---|---|---|---|---|"]
     for r in suite_coverage(history, cases, load_properties(), sut_dir):
+        # at most eight uncovered components per row; a row with none shows its detail instead (the risk row)
         gaps = ", ".join(r["not covered"][:8]) + (" ..." if len(r["not covered"]) > 8 else "")
         table.append(
             f"| {r['dimension']} | {r['components']} | {'' if r['declared'] is None else r['declared']} | "
@@ -273,12 +289,14 @@ def _coverage_section(workdir, history, df) -> list[str]:
 
 
 def write_report(workdir: Path) -> Path:
+    """Write results/report.md and its figures from replay.csv and, when it exists, prioritization.csv (results/)."""
     workdir = Path(workdir)
     res, figs = workdir / "results", workdir / "results" / "figures"
     figs.mkdir(exist_ok=True, parents=True)
     history = History.load(workdir)
     df = pd.read_csv(res / "replay.csv")
     pr = pd.read_csv(res / "prioritization.csv") if (res / "prioritization.csv").exists() else None
+    # the runs on the changes some test reveals, and on the changes none does
     reg, ben = df[df.is_regression], df[~df.is_regression]
 
     fig_detection_vs_cost(df, figs / "detection_vs_cost.png")
@@ -286,6 +304,8 @@ def write_report(workdir: Path) -> Path:
     if pr is not None:
         fig_apfdc(pr, figs / "apfdc.png")
 
+    # section 1: the changes by category, with how many tests reveal each; the testbed is sane when a change is
+    # revealed exactly when its label says regression
     meta = history.mutation_meta
     truth_rows, sane = [], True
     for v in sorted(history.variants, key=lambda v: (meta.get(v, {}).get("category", ""), v)):
@@ -296,7 +316,9 @@ def write_report(workdir: Path) -> Path:
             f"| `{v}` | {meta.get(v, {}).get('category', '?')} | {'regression' if expected else 'benign'} | {n} |"
         )
     summ = history.summary()
+    # how the method's runs ended, split by whether the change is a regression
     stops = df[df.strategy == "adaptive_bayes"].groupby(["is_regression", "stop_reason"]).size().unstack(fill_value=0)
+    # per strategy: the mean tokens until the first true failure, over the runs that detected one
     c2d = reg[reg.detected].groupby("strategy")["cost_to_detect_fraction"].mean().reindex(ORDER).dropna()
 
     parts = [
@@ -355,6 +377,7 @@ def write_report(workdir: Path) -> Path:
         _table(stops, "{:d}") if not stops.empty else "(no adaptive runs)",
         "",
     ]
+    # section 4, when the prioritization replay was made
     if pr is not None:
         g = pr.groupby("strategy")[["apfd", "apfdc", "selection_recall", "selected_cost_fraction"]].mean()
         parts += [

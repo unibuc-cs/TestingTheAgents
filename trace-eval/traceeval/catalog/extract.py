@@ -50,17 +50,22 @@ def requirements(sut: Path = SUT_ROOT, specs: Path | None = None) -> tuple[str, 
     """The requirements as text, and the source ids a property may cite (the ids change sets use)."""
     specs = specs or Path(__file__).resolve().parents[1] / "specs"
     parts, ids = [], []
+    # Each skill's prose and procedure; a property may cite either part, as a change set names them.
     for skill in sorted((sut / "skills").iterdir()):
         _, proc, prose = _skill_parts((skill / "SKILL.md").read_text(encoding="utf-8"))
         parts.append(f"## Skill {skill.name}\n{prose.strip()}\nProcedure:\n{proc.strip()}")
         ids += [f"skill:{skill.name}#prose", f"skill:{skill.name}#procedure"]
+    # Each agent definition in full, every field but the name citable on its own.
     for path in sorted((sut / "agents").glob("*.yaml")):
         agent = yaml.safe_load(path.read_text(encoding="utf-8"))
         parts.append(f"## Agent {agent['name']}\n{yaml.safe_dump(agent, sort_keys=False, width=110).strip()}")
         ids += [f"agent:{agent['name']}.{k}" for k in agent if k != "name"]
+    # The runtime configuration as written, each setting citable by its dotted key.
     config = (sut / "config" / "runtime.yaml").read_text(encoding="utf-8")
     parts.append(f"## Configuration (config/runtime.yaml)\n{config.strip()}")
     ids += [f"config:{k}" for k in _flatten(yaml.safe_load(config))]
+    # Each spec's intent and the kinds of clause it holds, not the clauses themselves: the model reads
+    # requirements, not checks.
     for path in sorted(specs.glob("FS-*.yaml")):
         spec = yaml.safe_load(path.read_text(encoding="utf-8"))
         uses = ", ".join(sorted({c.get("use", "?") for c in spec.get("clauses", [])}))
@@ -198,17 +203,21 @@ def draft(
     if not 1 <= max_properties <= MAX_PROPERTIES:
         raise ValueError(f"--max must be between 1 and {MAX_PROPERTIES}")
     root = Path(root)
+    # What the two requests are built from: the catalog to keep (none with --fresh), the requirements, and the
+    # tests in batches of BATCH, one tagging call each.
     existing = {} if fresh else {p.id: dict(vars(p)) for p in load_properties(root).values()}
     text, source_ids = requirements()
     entries = test_entries(root)
     batches = [dict(list(entries.items())[i : i + BATCH]) for i in range(0, len(entries), BATCH)]
+    # Saved answers (--replay) stand in for the model; otherwise the llm backend's client, unless one was given.
     saved = json.loads(Path(replay).read_text()) if replay else None
     if client is None and saved is None:
         from traceeval.llm.chat import shared_client
 
         client = shared_client("llm")
     model = getattr(client, "model_id", "")
-    answers = {"catalog": None, "tags": []}
+    answers = {"catalog": None, "tags": []}  # the raw answers, kept as they came for --save-response
+    # First the catalog, checked and merged with the existing entries; then the tags, against that catalog.
     answers["catalog"] = (
         saved["catalog"] if saved else call(client, model, catalog_messages(text, source_ids, existing, max_properties))
     )
@@ -232,6 +241,7 @@ def draft(
 
 def write_report(root: Path, props: dict, tags: dict, existing: dict, entries: dict, notes: list[str]) -> Path:
     """properties.draft.md: the proposed catalog, the properties no test checks, the tags that would change."""
+    # What the test files tag today, and the properties the draft's tags reach at all.
     current = {c.dataset or c.id: c.properties for c in load_catalog(root)}
     tested = {p for ts in tags.values() for p in ts}
     lines = [
@@ -264,7 +274,7 @@ def apply(root: Path = CATALOG_ROOT) -> dict:
     root = Path(root)
     doc = yaml.safe_load((root / "properties.draft.yaml").read_text(encoding="utf-8"))
     target = root / "properties.yaml"
-    # keep the explanatory comments at the top of properties.yaml
+    # keep the explanatory comments at the top of properties.yaml: everything before its first list entry
     old = target.read_text(encoding="utf-8").split("\n") if target.exists() else []
     header = "\n".join(line for line in old[: next((i for i, s in enumerate(old) if s.startswith("-")), 0)])
     body = yaml.safe_dump(doc["properties"], sort_keys=False, width=110)

@@ -95,6 +95,8 @@ def run_case(
     ``judge`` block is judged by the model ``TRACEEVAL_JUDGE`` names (``llm/chat.py::judge_client``)."""
     backend = backend or default_backend()
     tracer = TraceRecorder(test_id=case.id, run_id=f"{variant}:{case.id}:{rep}", variant=variant, backend=backend)
+    # The classes come from the loaded copy of the app (``sut``), not from traceeval.sut: a changed copy must run
+    # its own code.
     State = sut.sub("services.state").State
     Config = sut.sub("harness.config").Config
     Runtime = sut.sub("harness.runtime").Runtime
@@ -106,6 +108,8 @@ def run_case(
     state = None
     initial = None
     try:
+        # Build the app for this one run: the starting data (patched as the case asks), the settings, the model
+        # backend, the fault injector; then run the request through the entry agent.
         state = State.from_fixture(sut.path / "fixtures" / f"{case.fixture}.json")
         if case.fixture_patch:
             _apply_patch(state.data, case.fixture_patch)
@@ -133,6 +137,8 @@ def run_case(
         error, infra = traceback.format_exc(limit=6), is_infrastructure_error(exc)
     wall_ms = (time.perf_counter() - t0) * 1000
 
+    # Score the run: the deterministic checks of the case's ``expect`` against the trace, the final data and the
+    # answer. A run that raised is scored too, as HARNESS_ERROR or INFRA_INVALID.
     trace = tracer.to_dict()
     final_state = state.data if state is not None else {}
     verdict = score_case(case, trace, final_state, run, error=error, infra=infra)
@@ -154,6 +160,8 @@ def run_case(
             verdict.passed = False
             verdict.classification = "INFRA_INVALID" if is_infrastructure_error(exc) else "HARNESS_ERROR"
 
+    # The history record: the verdict, the cost, the shape of the run, and the observed dependencies, which the
+    # strategies read. ``deps`` holds every component as an id; the lists after it are the same facts by kind.
     agent_tokens = trace["tokens"]
     record = {
         "test_id": case.id,
@@ -202,6 +210,8 @@ def attach_code_functions(record: dict, functions: set[str]):
 
 
 def write_jsonl(path: Path, records: list[dict]):
+    """Write the records of a recording, one JSON object per line (``history/baseline.jsonl``,
+    ``history/variants/<change>.jsonl``)."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as fh:
@@ -209,5 +219,6 @@ def write_jsonl(path: Path, records: list[dict]):
 
 
 def read_jsonl(path: Path) -> list[dict]:
+    """Read the records back; blank lines are skipped."""
     with open(path) as fh:
         return [json.loads(line) for line in fh if line.strip()]

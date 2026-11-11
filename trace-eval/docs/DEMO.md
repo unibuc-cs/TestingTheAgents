@@ -155,6 +155,25 @@ If the GPU server is down, run both checks with `--backend replay`: both are rec
 and the timings read 0 seconds. If the server stops answering during a check, the check says so and gives no
 verdict. The run is marked `INFRA_INVALID`, the environment's fault rather than the change's.
 
+If there is time, a day's merges at once, which is how the AEM team runs their tests. `batch_nightly` bundles six
+regressions and two harmless edits (`traceeval mutations` lists its members); the check stops at the first failure
+and names the member it blames:
+
+```bash
+traceeval check batch_nightly --history runs/gemma7 --budget 0.2     # live only: not in the cassette
+```
+
+```text
+  SEO-06                 FAIL ...                                    6,136 tokens
+REGRESSION: SEO-06 failed
+1 runs, 6,136 tokens (0% of the suite), 13 s ...; P(something broke) = 1.00
+blamed: agent:seo.tools 0.77, code:tools/content_tools.py::set_page_metadata 0.55, ...
+```
+
+The SEO agent's lost tool is the culprit; the other members stay near their prior of one half, untested.
+[RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.6 has the three batches, including the nine harmless edits that break a
+test together.
+
 ## 5. The evidence over all changes (4 minutes)
 
 Open `docs/results/gemma7/report.md`, the replay of every strategy on every change, from the recording of the

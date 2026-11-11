@@ -47,6 +47,7 @@ def _parse_overrides(items):
 
 
 def cmd_catalog(args):
+    """One line per eval case: id, risk, entry agent, workflow, fault profile and name."""
     from traceeval.catalog import load_catalog
 
     for c in load_catalog():
@@ -54,13 +55,19 @@ def cmd_catalog(args):
 
 
 def cmd_mutations(args):
-    from traceeval.mutation import MUTATIONS
+    """One line per controlled change (id, category, regression or benign, what it does), then the batches."""
+    from traceeval.mutation.catalog import BATCHES, MUTATIONS
 
     for m in MUTATIONS:
         print(f"{m.id:40s} {m.category:9s} {'regression' if m.expected_regression else 'benign    '} {m.description}")
+    print()
+    for m in BATCHES:  # recorded on request only: traceeval mutants --only <batch>
+        label = "regression" if m.expected_regression else "benign    "
+        print(f"{m.id:40s} {m.category:9s} {label} {m.description} Members: {', '.join(m.members)}.")
 
 
 def cmd_run(args):
+    """Run one case, live or from the recorded answers, and print its record; ``--otel`` also exports its trace."""
     from traceeval.catalog import load_catalog
     from traceeval.experiment.executor import run_case
     from traceeval.experiment.sutloader import load_sut
@@ -82,6 +89,7 @@ def cmd_run(args):
 
 
 def cmd_baseline(args):
+    """Record the baseline: every case ``--reps`` times on the unchanged application, with its code coverage."""
     from traceeval.experiment.runner import record_baseline
 
     # No --workers here: the baseline records code coverage, which follows one case at a time.
@@ -99,6 +107,7 @@ def _workers(args) -> int:
 
 
 def cmd_mutants(args):
+    """Record the variants: each controlled change (or those of ``--only``) applied to a copy, every case run on it."""
     from traceeval.experiment.runner import record_mutants
 
     record_mutants(
@@ -112,15 +121,18 @@ def cmd_mutants(args):
 
 
 def cmd_evaluate(args):
+    """Replay every strategy against the recording: a selection at each budget, and a ranking of the whole suite."""
     from traceeval.experiment.evaluate import DEFAULT_BUDGETS, evaluate, evaluate_prioritization
 
     budgets = tuple(args.budgets) if args.budgets else DEFAULT_BUDGETS
     df = evaluate(Path(args.workdir), strategies=args.strategies or None, budgets=budgets, seeds=args.seeds)
+    # Prioritization (APFD over each strategy's complete order) replays with a third of the seeds.
     pr = evaluate_prioritization(Path(args.workdir), strategies=args.strategies or None, seeds=max(1, args.seeds // 3))
     print(f"replay rows: {len(df)}, prioritization rows: {len(pr)} -> {Path(args.workdir) / 'results'}")
 
 
 def cmd_report(args):
+    """Write the experiment's report and figures from the results in the workdir."""
     from traceeval.experiment.report import write_report
 
     out = write_report(Path(args.workdir))
@@ -128,6 +140,7 @@ def cmd_report(args):
 
 
 def cmd_experiment(args):
+    """The whole experiment in a row: baseline, variants, evaluation, report."""
     cmd_baseline(args)
     cmd_mutants(args)
     cmd_evaluate(args)
@@ -135,12 +148,14 @@ def cmd_experiment(args):
 
 
 def cmd_check(args):
+    """The prototype: one change checked live with the proposed method, against a recorded experiment."""
     from traceeval.experiment.check import check
 
     check(args.change, Path(args.history), args.budget, args.backend)
 
 
 def cmd_coverage(args):
+    """Print what the suite covers, per dimension and component, from a recorded experiment."""
     from traceeval.experiment.history import History
     from traceeval.experiment.report import suite_coverage_lines
     from traceeval.sut import SUT_ROOT
@@ -149,6 +164,7 @@ def cmd_coverage(args):
 
 
 def cmd_properties(args):
+    """Draft the catalog of properties with a model, or apply the draft once a person has reviewed it."""
     from traceeval.catalog import extract
 
     if args.action == "apply":
@@ -166,6 +182,7 @@ def cmd_properties(args):
 
 
 def cmd_sdd(args):
+    """The spec-driven development demo over the demo PRs; ``draft`` instead drafts a new spec with a model."""
     from traceeval.spec.runner import run_demo
 
     if args.action == "draft":
@@ -180,6 +197,7 @@ def cmd_sdd(args):
 
 
 def cmd_sdd_draft(args):
+    """Draft a spec from a change request with a model, and validate it against the application's names."""
     from traceeval.catalog import load_catalog
     from traceeval.spec.draft import draft
     from traceeval.spec.product import ProductModel
@@ -188,6 +206,8 @@ def cmd_sdd_draft(args):
     if not args.request:
         raise SystemExit("sdd draft needs --request <file>")
     catalog = {c.id: c for c in load_catalog()}
+    # The product model (tools, settings, functions, cases the draft may name) comes from a baseline recording;
+    # the default replay backend gives one without a model.
     sut_dir, runs, deps = record_baseline(Path(args.workdir), catalog, backend=args.backend)
     out = Path(args.out) if args.out else Path("traceeval/specs") / f"{args.id}.draft.yaml"
     result = draft(
@@ -205,6 +225,7 @@ def cmd_sdd_draft(args):
 
 
 def main(argv=None):
+    """Parse the command line and run the command it names."""
     p = argparse.ArgumentParser(
         prog="traceeval", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -224,6 +245,7 @@ def main(argv=None):
     # The experiment commands share one set of options, since `experiment` runs the other four in a row; each
     # command reads only the options it needs.
     def common(sp):
+        """The options every experiment command takes."""
         sp.add_argument("--workdir", default="runs/experiment")
         sp.add_argument("--reps", type=int, default=3)
         sp.add_argument("--backend", default="hf", choices=BACKENDS)

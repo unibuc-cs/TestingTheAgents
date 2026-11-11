@@ -65,6 +65,7 @@ class ChangeSet:
     diff: str = ""  # unified diff of the code only (no comments, docstrings or blank lines)
 
     def ids(self) -> set[str]:
+        """The ids of the changed components: what a strategy intersects with a test's dependencies."""
         return {c.id for c in self.components}
 
     def is_provably_benign(self) -> bool:
@@ -72,6 +73,7 @@ class ChangeSet:
         return not self.components
 
     def to_dict(self) -> dict:
+        """The change set as plain data, the form the history keeps it in."""
         return {
             "variant": self.variant,
             "files": self.files,
@@ -81,6 +83,7 @@ class ChangeSet:
 
     @classmethod
     def from_dict(cls, d: dict) -> "ChangeSet":
+        """A change set read back from the form ``to_dict`` writes."""
         # change sets saved by older versions also list comment-only edits, marked "semantic": false
         comps = [
             ChangedComponent(c["id"], c["kind"], c["file"], c.get("detail", ""))
@@ -120,6 +123,7 @@ def _python_code_lines(source: str) -> list[tuple[int, str]]:
     """(line number, text) of every line of ``source`` that holds code. Docstrings, comments and blank
     lines are left out and a trailing comment is cut off, so editing a comment changes nothing here."""
     lines = source.split("\n")
+    # The lines every docstring spans, from the AST.
     docstring_lines: set[int] = set()
     try:
         for node in ast.walk(ast.parse(source)):
@@ -129,11 +133,13 @@ def _python_code_lines(source: str) -> list[tuple[int, str]]:
                 docstring_lines.update(range(doc.lineno, doc.end_lineno + 1))
     except SyntaxError:
         pass  # a variant that does not parse still has its comments removed below
+    # Where each comment starts (line -> column), from the tokenizer: a '#' inside a string is not a comment.
     try:
         tokens = tokenize.generate_tokens(io.StringIO(source).readline)
         comment_at = {t.start[0]: t.start[1] for t in tokens if t.type == tokenize.COMMENT}
     except (SyntaxError, tokenize.TokenError):  # untokenizable variant: drop whole-line comments only
         comment_at = {n: line.index("#") for n, line in enumerate(lines, 1) if line.lstrip().startswith("#")}
+    # What is left of each line once its comment is cut off, unless it is blank or part of a docstring.
     code = []
     for n, line in enumerate(lines, 1):
         text = line[: comment_at[n]] if n in comment_at else line
@@ -150,6 +156,7 @@ def _function_dumps(source: str) -> tuple[dict[str, str], str, dict[str, str]]:
 
     # qualified names as tracing/codecov.py builds them (Class.method, outer.inner), so the ids match
     def visit(node, prefix=""):
+        """Dump every function below ``node`` under its qualified name, and note the ones that are tool adapters."""
         for child in ast.iter_child_nodes(node):
             if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 name = f"{prefix}{child.name}"
@@ -169,6 +176,7 @@ def _function_dumps(source: str) -> tuple[dict[str, str], str, dict[str, str]]:
                 visit(child, prefix)
 
     visit(tree)
+    # The module level on its own: what runs at import, with the functions (dumped above) taken out.
     module_dump = ast.dump(ast.Module(body=_without_functions(tree.body), type_ignores=[]), include_attributes=False)
     return dumps, module_dump, tools
 
@@ -248,10 +256,12 @@ def _yaml_code_lines(source: str) -> list[tuple[int, str]]:
         spans = []  # a variant that does not scan: every '#' outside a token position is still a comment
 
     def opens_comment(n: int, line: str, col: int) -> bool:
+        """Whether the '#' at column ``col`` of line ``n`` starts a comment."""
         # YAML's rule: a comment starts at a '#' that is at the start of the line or follows a space, and that
         # is not inside a token.
         return (col == 0 or line[col - 1] in " \t") and not any((a, b) <= (n, col) < (c, d) for a, b, c, d in spans)
 
+    # Each line up to its first real comment, kept when anything but whitespace is left.
     code = []
     for n, line in enumerate(source.split("\n"), 1):
         cut = next((m.start() for m in re.finditer("#", line) if opens_comment(n, line, m.start())), len(line))
@@ -271,6 +281,7 @@ def _skill_parts(text: str) -> tuple[str, str, str]:
 
 
 def _skill_components(rel: str, old: str, new: str) -> list[ChangedComponent]:
+    """The ``skill:<name>#procedure``, ``#meta`` and ``#prose`` components of a SKILL.md, each part on its own."""
     name = Path(rel).parent.name
     of, op_, opr = _skill_parts(old)
     nf, np_, npr = _skill_parts(new)
@@ -291,11 +302,13 @@ def _ordered(value) -> str:
 
 
 def _agent_components(rel: str, old: str, new: str) -> list[ChangedComponent]:
+    """The ``agent:<name>.<key>`` components of an agent definition: one per top-level key whose value changed."""
     name = Path(rel).stem
     od, nd = yaml.safe_load(old) or {}, yaml.safe_load(new) or {}
     comps = []
     for key in sorted(set(od) | set(nd)):
         if _ordered(od.get(key)) != _ordered(nd.get(key)):
+            # The prompt fields are their own kind: the model reads them, where the harness acts on the other keys.
             kind = "agent-prompt" if key in ("system_prompt", "description") else "agent"
             detail = f"{key} changed"
             if key in ("tools", "skills"):
@@ -320,6 +333,7 @@ def _flatten(d, prefix="") -> dict[str, str]:
 
 
 def _config_components(rel: str, old: str, new: str) -> list[ChangedComponent]:
+    """The ``config:<dotted.key>`` components of a configuration file: one per setting whose value changed."""
     of, nf = _flatten(yaml.safe_load(old) or {}), _flatten(yaml.safe_load(new) or {})
     comps = []
     for key in sorted(set(of) | set(nf)):
@@ -331,6 +345,7 @@ def _config_components(rel: str, old: str, new: str) -> list[ChangedComponent]:
 
 # ---------------------------------------------------------------------------- driver
 def _read(path: Path) -> str | None:
+    """The text of ``path``, or None when the file is not there (added or removed) or is not text."""
     try:
         return path.read_text()
     except (FileNotFoundError, UnicodeDecodeError):
@@ -365,6 +380,7 @@ def _code_lines(rel: str, text: str) -> list[tuple[int, str]]:
 def compute_changeset(baseline: Path, variant: Path, name: str = "variant") -> ChangeSet:
     """Compare two SUT trees file by file (added and removed files included)."""
     baseline, variant = Path(baseline), Path(variant)
+    # Every text file of either tree, so that an added or a removed file is seen too.
     rels = set()
     for root in (baseline, variant):
         for p in root.rglob("*"):
@@ -382,6 +398,7 @@ def compute_changeset(baseline: Path, variant: Path, name: str = "variant") -> C
             continue
         cs.files.append(rel)
         cs.components.extend(comps)
+        # The diff is over the code lines alone, so an edited comment adds no diff line either.
         a = [text + "\n" for _, text in _code_lines(rel, old)]
         b = [text + "\n" for _, text in _code_lines(rel, new)]
         diffs.append("".join(difflib.unified_diff(a, b, f"a/{rel}", f"b/{rel}")))

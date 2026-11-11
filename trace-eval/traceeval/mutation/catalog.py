@@ -1,4 +1,4 @@
-"""The 43 controlled changes ("mutations"), written as data.
+"""The 43 controlled changes ("mutations"), written as data, and the batches that bundle several of them.
 
 A mutation is a controlled change to the system under test, applied as a real file edit. The
 experiment never shows the selectors the mutation label - only the diff. ``regression`` says whether
@@ -11,14 +11,18 @@ Each entry: id, category, description, regression?, edits. An edit is one of
     ("append",       file, text)                 append text to the file
     ("custom",       function)                   call function(sut_dir), for an edit no anchor can express
 Anchors are literal text: if a SUT source is reformatted, re-anchor here (the operators raise).
+
+A batch (``BATCHES``) applies several of the 43 to one copy, as a nightly run or a pull request bundles changes;
+its members edit disjoint files, so their edits compose, and it is a regression when any member is one. The
+experiment records the 43 by default; a batch is recorded on request (``traceeval mutants --only <batch>``).
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import operators as op
 
-CODE, RUNTIME, SKILL, PROMPT, CONFIG, COMBINED, BENIGN = (
+CODE, RUNTIME, SKILL, PROMPT, CONFIG, COMBINED, BENIGN, BATCH = (
     "code",
     "runtime",
     "skill",
@@ -26,6 +30,7 @@ CODE, RUNTIME, SKILL, PROMPT, CONFIG, COMBINED, BENIGN = (
     "config",
     "combined",
     "benign",
+    "batch",
 )
 
 
@@ -35,10 +40,11 @@ class Mutation:
     so reformatting the application breaks them (the operators then raise)."""
 
     id: str  # "skill_publish_drop_link_validation": the kind of part changed, then what the change does
-    category: str  # one of CATEGORIES: code, runtime, skill, prompt, config, combined, benign
+    category: str  # code, runtime, skill, prompt, config, combined, benign; batch for a bundle of changes
     description: str  # what the change does, for people and for the report
     expected_regression: bool  # the label: at least one test should reveal it (True) or none should (False)
     edits: list[tuple]  # (op, file, ...) with op one of replace, delete_line, delete_block, append
+    members: list[str] = field(default_factory=list)  # for a batch, the ids of the changes it bundles
 
     def apply(self, sut_dir: Path):
         for edit in self.edits:
@@ -208,8 +214,70 @@ MUTATIONS: list[Mutation] = [
 # fmt: on
 
 
+def batch(bid: str, description: str, member_ids: list[str]) -> Mutation:
+    """A batch: the members' edits applied in order to one copy. The members must edit disjoint files, so that
+    every anchor is still there when its edit comes; ``tests/test_mutation_and_selection.py`` checks it."""
+    members = [get_mutation(m) for m in member_ids]
+    return Mutation(
+        bid,
+        BATCH,
+        description,
+        any(m.expected_regression for m in members),
+        [e for m in members for e in m.edits],
+        members=member_ids,
+    )
+
+
 def get_mutation(mid: str) -> Mutation:
-    for m in MUTATIONS:
+    """A change or a batch by id."""
+    for m in [*MUTATIONS, *BATCHES]:
         if m.id == mid:
             return m
     raise KeyError(mid)
+
+
+# The batches: what one day's merges, or one pull request, would put in front of the selection at once. Each member
+# edits files no other member touches (the change sets in ``runs/<name>/variants/*/changeset.json`` say which).
+BATCHES: list[Mutation] = []
+BATCHES[:] = [
+    batch(
+        "batch_nightly",
+        "A day's merges: six regressions across tools, harness, skills, an agent definition and a service, plus two "
+        "harmless edits.",
+        [
+            "code_metadata_arg_swap",  # tools/content_tools.py
+            "code_retry_drop_idempotency",  # harness/retry.py
+            "code_links_external_lenient",  # services/links.py
+            "skill_governance_drop_consent",  # skills/governance-ops
+            "skill_translation_wrong_default",  # skills/translation
+            "prompt_seo_tool_removed",  # agents/seo.yaml
+            "benign_code_rename_locals",  # services/workflow.py
+            "benign_brand_skill_prose_reworded",  # skills/brand-governance
+        ],
+    ),
+    batch(
+        "batch_publishing_pr",
+        "One pull request on the publishing path: the skill drops its link validation, the link check lets external "
+        "URLs through, and taking a page down needs no approval token.",
+        [
+            "skill_publish_drop_link_validation",  # skills/publishing-workflow
+            "code_links_external_lenient",  # services/links.py
+            "config_unpublish_no_approval",  # config/runtime.yaml
+        ],
+    ),
+    batch(
+        "batch_benign",
+        "A day of harmless edits: every benign change of the catalog at once.",
+        [
+            "benign_skill_prose_reflow",  # skills/publishing-workflow
+            "benign_code_comment_docstring",  # services/links.py
+            "benign_code_rename_locals",  # services/workflow.py
+            "benign_config_comments_reordered",  # config/runtime.yaml
+            "benign_new_unused_tool",  # tools/content_tools.py
+            "benign_orchestrator_prompt_wording",  # agents/orchestrator.yaml
+            "benign_translation_intents_reordered",  # agents/translation.yaml
+            "benign_brand_skill_prose_reworded",  # skills/brand-governance
+            "benign_routing_guidance_reordered",  # skills/routing
+        ],
+    ),
+]

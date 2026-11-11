@@ -221,3 +221,24 @@ def test_small_end_to_end_experiment(tmp_path, capsys):
     assert log.stop_reason == "regression" and log.p_broken > 0.9
     out = capsys.readouterr().out
     assert "coverage: " in out and "invoked: " in out
+
+
+def test_batches_compose_changes_that_edit_disjoint_files(tmp_path):
+    """A batch applies several catalog changes to one copy; its members must not edit the same file, or the second
+    edit's anchor could be gone, and the batch is a regression exactly when one of its members is."""
+    from traceeval.mutation.catalog import BATCHES
+
+    assert BATCHES, "no batches"
+    for b in BATCHES:
+        assert b.category == "batch" and b.members
+        files_per_member = []
+        for mid in b.members:
+            _, cs = materialize_variant(get_mutation(mid), tmp_path / "m")
+            files_per_member.append(set(cs.files))
+        for i, fa in enumerate(files_per_member):
+            for fb in files_per_member[i + 1 :]:
+                assert not (fa & fb), (b.id, fa & fb)
+        assert b.expected_regression == any(get_mutation(m).expected_regression for m in b.members)
+        _, cs = materialize_variant(b, tmp_path / "b")  # every edit's anchor is still there in order
+        assert set(cs.files) == set().union(*files_per_member), b.id
+        assert get_mutation(b.id) is b

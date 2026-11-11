@@ -234,6 +234,24 @@ ground truths ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4), so they have no colu
 A 0 means that no test reveals the change under that model, a fact about the model rather than a bug in the testbed
 (§4). RESEARCH_PLAN §4.3 gives the criteria a change must meet to be in the set.
 
+### Batches
+
+A batch applies several catalog changes to one copy, as a nightly run or a pull request bundles them (`BATCHES` in
+`mutation/catalog.py`, listed after the 43 by `traceeval mutations`). Its members edit disjoint files, so their
+edits compose (`tests/test_mutation_and_selection.py` checks it), and it is labelled a regression when any member
+is one. The experiment records the 43 by default; a batch is recorded on request (`traceeval mutants --only
+<batch>`), and `traceeval check <batch>` checks it live, printing after the verdict the components the method holds
+responsible (`blamed`).
+
+| batch | what it bundles | revealing tests (Gemma) |
+|---|---|---|
+| `batch_nightly` | a day's merges: six regressions across tools, harness, skills, an agent definition and a service, plus two harmless edits | 28 |
+| `batch_publishing_pr` | one pull request on the publishing path: the skill drops its link validation, the link check lets external URLs through, taking a page down needs no approval token | 9 |
+| `batch_benign` | all nine benign changes at once | 1: two of the prompt edits, harmless alone, change the orchestrator's answer together |
+
+RESEARCH_PLAN §5.6 has what the strategies make of them and [results/gemma7/batches.md](results/gemma7/batches.md)
+the full tables.
+
 ## 7. How to extend
 
 - **Property**: add an entry to `catalog/properties.yaml` (id, category, description, `checked_by`, `mandatory`,

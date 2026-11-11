@@ -345,7 +345,9 @@ The set is written for the models:
 - ten of the changes are aimed at the multi-agent workflows: the orchestrator's approval and brand rules, the
   hand-off of ids between steps, the services behind the AEM-style agents, and two benign ones.
 
-`docs/USER_GUIDE.md` §6 explains each of the 43 and why it is in the set.
+`docs/USER_GUIDE.md` §6 explains each of the 43 and why it is in the set. Three batches bundle several of them, as
+a nightly run or a pull request would (`docs/USER_GUIDE.md` §6, "Batches"); they are recorded on request and kept
+out of the tables of §5.1, which are the 43 single changes.
 
 The report checks a sanity property of the testbed: every regression-inducing change is revealed by ≥ 1 test, and
 no benign change is revealed by any test. Under Gemma five regressions are revealed by no test (§5.1); the
@@ -574,6 +576,31 @@ of the suite's tokens unless said otherwise.
 7. **Text is a strong, cheap baseline.** TF-IDF similarity between the diff and the tests' text has the best
    detection when the whole budget is spent, and it never stops (§5.1, §5.2); it is the fallback order to keep in
    any pipeline.
+
+
+### 5.6 Batches of changes
+
+A nightly run sees a day's merges at once, and a pull request several related edits. Three batches of catalog
+changes, recorded with Gemma like the single changes (`docs/results/gemma7/batches.md`), show what the strategies
+make of that:
+
+- `batch_nightly` (six regressions and two harmless edits, 28 revealing tests): every change-aware strategy finds
+  it within a 5% budget; the adaptive method after one test, 0.3% of the suite, and the live check blames the SEO
+  agent's lost tool at 0.77 while the other members stay near their prior, untested, because the check stops at the
+  first failure.
+- `batch_publishing_pr` (three related changes on the publishing path, 9 revealing tests): the adaptive method
+  after two tests, 1.2% of the suite, blaming the link check and the publishing skill's procedure; `full`,
+  CASPER's slices and the bandit miss it at 5%.
+- `batch_benign` (all nine benign changes): revealed by one test, PUB-02, which fails in all five runs under the
+  batch and passes under every member alone. Two prompt edits do it together, the orchestrator's prompt reworded
+  and its routing guidance reordered: the orchestrator then drops the broken link from the answer it relays. The
+  adaptive method spends the whole 20% budget on 34 tests without reaching PUB-02 and ends without a clean verdict
+  (0.32), since one member adds a tool no agent may use, which no test can reach and nothing can clear.
+
+Two lessons. A batch is checked like a change, and the posterior names the member to blame, which is what a nightly
+pipeline needs after a red run. And harmless edits are not harmless together: the ground truth of a batch is not
+the union of its members', so a nightly batch needs its own recording, not the sum of the day's single-change
+checks.
 
 ---
 

@@ -25,8 +25,8 @@ class TraceRecorder:
     run_id: str = ""  # the executor writes "<variant>:<test id>:<repetition>"
     variant: str = "baseline"
     backend: str = ""
-    events: list[dict] = field(default_factory=list)
-    started: float = field(default_factory=time.perf_counter)
+    events: list[dict] = field(default_factory=list)  # {kind, t, ...attrs}, in the order the SUT emitted them
+    started: float = field(default_factory=time.perf_counter)  # the origin of the events' ``t``, monotonic clock
     # The same moment on the wall clock (epoch seconds): the origin of the events' times in an export
     # (tracing/otel.py). Nothing else reads it, so the runs stay comparable.
     started_at: float = field(default_factory=time.time)
@@ -37,15 +37,19 @@ class TraceRecorder:
 
     # ---------------------------------------------------------------- derived views
     def tool_calls(self) -> list[dict]:
+        """Every tool call in call order, with its arguments, status, result and the dispatcher's bookkeeping."""
         return [e for e in self.events if e["kind"] == "tool.call"]
 
     def tools_called(self) -> list[str]:
+        """The tool of every call, in call order, repeats included."""
         return [e["tool"] for e in self.tool_calls()]
 
     def skills_loaded(self) -> list[str]:
+        """Every skill the run loaded, once each."""
         return sorted({e["skill"] for e in self.events if e["kind"] == "skill.load"})
 
     def agents_involved(self) -> list[str]:
+        """Every agent that took a turn, in the order of their first turn."""
         out = []
         for e in self.events:
             if e["kind"] == "agent.start" and e["agent"] not in out:
@@ -67,6 +71,7 @@ class TraceRecorder:
         return sorted(set(out))
 
     def config_keys(self) -> list[str]:
+        """Every setting the run read, once each: the test's observed ``config:`` dependencies."""
         return sorted({e["key"] for e in self.events if e["kind"] == "config.read"})
 
     def usage(self) -> tuple[int, int]:
@@ -88,8 +93,10 @@ class TraceRecorder:
             "agents": self.agents_involved(),
             "routes": self.routes(),
             "skills": self.skills_loaded(),
+            # the version of each skill as loaded, so a changed skill shows against the baseline's trace
             "skill_versions": {e["skill"]: e["version"] for e in self.events if e["kind"] == "skill.load"},
             "tools": self.tools_called(),
+            # the calls without their times: the scorers check what was called, not when
             "tool_calls": [{k: v for k, v in e.items() if k != "t"} for e in self.tool_calls()],
             "config_keys": self.config_keys(),
             "consulted": self.consulted(),

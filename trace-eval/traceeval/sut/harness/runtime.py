@@ -37,6 +37,7 @@ class Session:
     agent: object  # the AgentDef of the agent this session belongs to
     skills: list  # the Skill objects named in the agent definition, loaded when the agent started
     ctx: dict  # the request context (user id, page id, approval token, ...), shared by all agents of the run
+    # The text the agent works on: the user's request, or the task of one step when the agent was delegated to.
     request: str
 
 
@@ -67,6 +68,7 @@ class Runtime:
         self.dispatcher = Dispatcher(tools, config, state, tracer, faults)  # every tool call except delegation
         # State of the whole run, shared by all agents of the delegation chain.
         self.steps = 0  # tool calls and delegations made so far by all agents; the run's budget limits it
+        # Tokens of every model call of the run, booked by add_usage.
         self.prompt_tokens = 0
         self.completion_tokens = 0
         self.termination_reason = "final"  # becomes "max_tool_calls" when an agent is stopped by the budget
@@ -178,6 +180,8 @@ class Runtime:
         the result of the call. An unknown target, a context that is not an object, or a chain that is
         already at the depth limit gets an error result instead, which the delegating agent sees like any
         other refused call."""
+        # The call's arguments: the specialist, why it was chosen, the instruction of this step (the whole request
+        # when the call gives none) and the values to pass on to it.
         target = action.args.get("agent")
         reason = action.args.get("reason", "")
         task = action.args.get("task") or request

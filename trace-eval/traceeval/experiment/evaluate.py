@@ -53,6 +53,8 @@ def evaluate(
     seeds: int = 5,
     variants: list[str] | None = None,
 ) -> pd.DataFrame:
+    """The replay: one row of results/replay.csv per (change, strategy, budget, seed). The strategy sees the change
+    set and the baseline facts, picks tests, and the oracle answers from the recorded runs of the changed copy."""
     workdir = Path(workdir)
     history = History.load(workdir)
     catalog = {c.id: c for c in load_catalog()}
@@ -60,6 +62,7 @@ def evaluate(
     strategies = _resolve(strategies)
     variants = variants or sorted(history.variants)
     rows = []
+    # a strategy's prioritized order depends on the change (and the seed) only, so it is shared across budgets
     shared = {"order_cache": {}}
     for variant in variants:
         change = history.changesets[variant]
@@ -70,14 +73,17 @@ def evaluate(
         for name in strategies:
             strat = get_strategy(name)
             for b in budgets:
+                # a nominal budget is a share of the full suite's tokens
                 budget = b * history.total_cost()
                 for seed in range(seeds):
                     # from the seed and the variant name, not hash() (salted per process)
                     rng = random.Random(1000 * seed + sum(map(ord, variant)))
+                    # the same generator drives the strategy's choices and the oracle's draws
                     opts = dict(shared, seed=seed)
                     ctx = SelectionContext(change, catalog, history, budget, rng, train_variants=train, options=opts)
                     log = strat.run(ctx, make_oracle(history, variant, rng))
                     row = evaluate_log(log, variant, history, catalog, budget, props, affected, affected_wf)
+                    # the change's label, for the report's ground truth table; the strategy never sees it
                     row.update(
                         {
                             "seed": seed,
@@ -102,11 +108,13 @@ def evaluate_prioritization(
     catalog = {c.id: c for c in load_catalog()}
     strategies = _resolve(strategies)
     variants = variants or sorted(history.variants)
+    # per test: its mean cost on the original app and the weight of its risk level, for APFD_c
     cost = {t: history.cost(t) for t in history.test_ids()}
     sev = {t: catalog[t].severity for t in history.test_ids()}
     rows = []
     shared = {"order_cache": {}}
     for variant in variants:
+        # APFD is undefined for a change no test reveals
         revealing = history.revealing_tests(variant)
         if not revealing:
             continue
@@ -116,11 +124,13 @@ def evaluate_prioritization(
             strat = get_strategy(name)
             for seed in range(seeds):
                 rng = random.Random(seed)
+                # an unlimited budget: what is measured is the order, not what the strategy would run within a budget
                 ctx = SelectionContext(
                     change, catalog, history, float("inf"), rng, train_variants=train, options=dict(shared, seed=seed)
                 )
                 order = strat.order(ctx)
                 seen = set(order)
+                # the tests the strategy left out follow, in suite order, so that every revealing test has a position
                 full_order = order + [t for t in history.test_ids() if t not in seen]
                 rows.append(
                     {
@@ -128,9 +138,11 @@ def evaluate_prioritization(
                         "strategy": name,
                         "seed": seed,
                         "category": history.mutation_meta.get(variant, {}).get("category", "?"),
+                        # how many tests the strategy's order holds: a selecting strategy orders a subset only
                         "selected": len(order),
                         "apfd": apfd(full_order, revealing),
                         "apfdc": apfdc(full_order, revealing, cost, sev),
+                        # what that subset costs, and the share of the revealing tests inside it
                         "selected_cost_fraction": sum(cost[t] for t in order) / history.total_cost(),
                         "selection_recall": len(revealing & seen) / len(revealing),
                     }

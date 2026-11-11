@@ -45,11 +45,14 @@ def changed_components(change) -> list:
 def linked_tests(change, history) -> set[str]:
     """The tests that exercised a changed component (or ran a changed line) on the original app."""
     comps, lines = changed_components(change), {c.id for c in change.components if c.kind == "line"}
+    # a changed line matches a run that executed it; the other components match through ``matches``, so a change to
+    # skill:x#procedure links every test that used skill x
     return {t for t in history.baseline if lines & history.deps(t) or any(matches(c, history.deps(t)) for c in comps)}
 
 
 def affected_properties(change, history, catalog, props) -> set[str]:
     """The properties a change may affect: those whose sources it touches, and those of its linked tests."""
+    # a property's sources name whole components (skill:x), so a change to a part (skill:x#procedure) counts by its base
     ids = {c.id for c in change.components} | {c.base for c in change.components}
     by_source = {p.id for p in props.values() if ids & set(p.sources)}
     by_tests = {p for t in linked_tests(change, history) if t in catalog for p in catalog[t].properties}
@@ -100,21 +103,27 @@ def change_coverage(
     affected mandatory property has at least one executed test. ``affected`` and ``affected_wf`` may be passed when
     they are already known (they depend on the change only)."""
     comps = changed_components(change)
+    # every component the executed tests exercised on the original app, and the properties they check
     deps = set().union(*(history.deps(t) for t in executed)) if executed else set()
     checked = {p for t in executed if t in catalog for p in catalog[t].properties}
     affected = affected if affected is not None else affected_properties(change, history, catalog, props)
+    # the affected properties that are release blockers: each needs at least one executed test
     mandatory = {p for p in affected if p in props and props[p].mandatory}
     workflows = affected_wf if affected_wf is not None else affected_workflows(change, history, catalog)
+    # the workflows the executed tests run end to end
     ran = {catalog[t].workflow for t in executed if t in catalog and catalog[t].workflow}
+    # a feature is reached when an executed test called one of its tools
     feats, called = affected_features(change), tools_called(history, executed)
     reached = {f for f in feats if features()[f].tool_ids() & called}
     paths = affected_error_paths(change)
     return {
+        # the share of the changed components some executed test exercised
         "component_coverage": (sum(matches(c, deps) for c in comps) / len(comps)) if comps else None,
         "affected_property_coverage": (len(affected & checked) / len(affected)) if affected else None,
         "mandatory_covered": mandatory <= checked,
         "affected_workflow_coverage": (len(workflows & ran) / len(workflows)) if workflows else None,
         "affected_feature_coverage": (len(reached) / len(feats)) if feats else None,
+        # the share of the refusals in the changed code some executed test reached
         "error_path_coverage": (sum(p.reached(deps) for p in paths) / len(paths)) if paths else None,
     }
 
@@ -160,11 +169,13 @@ def error_paths(sut_dir: Path = SUT_ROOT) -> tuple[ErrorPath, ...]:
     one of the errors of ``services/errors.py`` (its ``code``), or an error result written out as a literal
     (``{"error": "<code>", ...}``, the dispatcher's gates)."""
     codes = {}  # error class -> the code the agent receives
+    # the error classes of services/errors.py and the code each carries (class NotFound(ToolError): code = "not_found")
     for node in ast.parse((sut_dir / "services" / "errors.py").read_text(encoding="utf-8")).body:
         if isinstance(node, ast.ClassDef):
             for stmt in node.body:
                 if isinstance(stmt, ast.Assign) and getattr(stmt.targets[0], "id", "") == "code":
                     codes[node.name] = stmt.value.value
+    # every simple statement inside a function, in every module of the application
     out = []
     for path in sorted(sut_dir.rglob("*.py")):
         rel = path.relative_to(sut_dir).as_posix()
@@ -190,8 +201,10 @@ def _statements(node, prefix=""):
 
 def _refusal(stmt, codes: dict[str, str]) -> str | None:
     """The error code a statement refuses with, or None."""
+    # raise NotFound(...): the code of the error class, when it is one of the application's
     if isinstance(stmt, ast.Raise) and isinstance(stmt.exc, ast.Call) and isinstance(stmt.exc.func, ast.Name):
         return codes.get(stmt.exc.func.id)
+    # a literal error result, {"error": "<code>", ...}, anywhere in the statement
     for node in ast.walk(stmt):
         if isinstance(node, ast.Dict):
             for key, value in zip(node.keys, node.values, strict=True):
@@ -234,6 +247,7 @@ def tests_per_component(history, catalog, sut_dir: Path) -> dict[str, list[tuple
     recorded runs). A component few tests invoke is thinly covered even when the suite-level row counts it as
     covered; a gap between the two counts is metadata that does not match what the tests do."""
     tests = list(history.baseline)
+    # per test: what its recorded runs invoked, and what its metadata declares
     inv = {t: invoked(history, t) for t in tests}
     dec = {t: catalog[t].declared_components() if t in catalog else set() for t in tests}
     out = {}
@@ -243,6 +257,7 @@ def tests_per_component(history, catalog, sut_dir: Path) -> dict[str, list[tuple
                 (n, sum(f"{dim}:{n}" in dec[t] for t in tests), sum(f"{dim}:{n}" in inv[t] for t in tests))
                 for n in names
             ]
+    # a feature is declared or invoked through its tools
     out["feature"] = [
         (f.name, sum(bool(f.tool_ids() & dec[t]) for t in tests), sum(bool(f.tool_ids() & inv[t]) for t in tests))
         for f in features().values()
@@ -259,6 +274,7 @@ def setting_values(sut_dir: Path, catalog) -> list[str]:
     """The settings at a value other than their default that the suite should cover: the other value of every
     on/off setting, and every value a case sets (``config:`` in the case)."""
     defaults = _flatten(yaml.safe_load((sut_dir / "config" / "runtime.yaml").read_text(encoding="utf-8")))
+    # the other value of every on/off setting (the flattened values are JSON text, so "true" flips to false)
     flipped = {f"config:{k}={json.dumps(v != 'true')}" for k, v in defaults.items() if v in ("true", "false")}
     return sorted(flipped | {setting_value(k, v) for c in catalog.values() for k, v in c.config.items()})
 
@@ -266,10 +282,12 @@ def setting_values(sut_dir: Path, catalog) -> list[str]:
 def suite_coverage(history, catalog, props, sut_dir: Path) -> list[dict]:
     """One row per dimension: how many components it has, how many the tests declare and the traces show, and the
     components no test covers (declared or observed)."""
+    # everything any recorded run invoked, and everything any test declares
     observed = set().union(*(invoked(history, t) for t in history.baseline))
     declared = set().union(*(c.declared_components() for c in catalog.values()))
     comps = _components(sut_dir)
     rows = []
+    # the dimensions whose universe is the application's own list of agents, skills, tools and settings
     for name, prefix in (("agent", "agent"), ("skill", "skill"), ("tool", "tool"), ("configuration", "config")):
         universe = comps[prefix]
         ids = {u: f"{prefix}:{u}" for u in universe}

@@ -75,7 +75,7 @@ class _Span:
         self.end = start  # instant spans keep it
         self.attrs = attrs
         self.events: list[tuple[float, str, dict]] = []  # (t, name, attributes)
-        self.status: dict | None = None
+        self.status: dict | None = None  # {code, message} when the span failed; left out of the document otherwise
         self.agent = agent  # set on agent turns only
         self.input_tokens = 0  # an agent turn's own model calls
         self.output_tokens = 0
@@ -94,8 +94,9 @@ def to_otlp(trace: dict, started_at: float | None = None) -> dict:
     test_id = trace.get("test_id", "")
     # The executor names runs "<variant>:<test id>:<repetition>"; a record without the name gets the same one.
     run_id = trace.get("run_id") or f"{trace.get('variant', 'baseline')}:{test_id}:{trace.get('rep', 0)}"
-    last_t = max((e.get("t", 0.0) for e in events), default=0.0)
+    last_t = max((e.get("t", 0.0) for e in events), default=0.0)  # where a run that broke off ends
 
+    # The root span runs from run.start to run.end; a record without them starts at 0 and ends with the last event.
     start = next((e for e in events if e["kind"] == "run.start"), None)
     end = next((e for e in reversed(events) if e["kind"] == "run.end"), None)
     run = _Span("run", f"run {test_id}".strip(), None, start["t"] if start else 0.0, {})
@@ -103,6 +104,7 @@ def to_otlp(trace: dict, started_at: float | None = None) -> dict:
     open_turns: list[_Span] = []  # the agent turns under way, the innermost last
 
     def current() -> _Span:
+        """The innermost agent turn under way, or the run itself before the entry agent starts."""
         return open_turns[-1] if open_turns else run
 
     def turn_of(agent) -> _Span:
@@ -110,13 +112,16 @@ def to_otlp(trace: dict, started_at: float | None = None) -> dict:
         return next((s for s in reversed(open_turns) if s.agent == agent), current())
 
     def child(i: int, name: str, parent: _Span, t: float, attrs: dict, agent: str | None = None) -> _Span:
+        """Open a span under ``parent`` for the event at index ``i`` and keep it for the document."""
         span = _Span(str(i), name, parent, t, attrs, agent)
         spans.append(span)
         return span
 
+    # Each event opens a span, closes one, or becomes a span event on the agent turn it belongs to.
     for i, e in enumerate(events):
         kind, t = e["kind"], e.get("t", 0.0)
         if kind == "agent.start":
+            # An agent turn opens under the turn that delegated to it (under the run for the entry agent).
             attrs = {
                 "gen_ai.operation.name": "invoke_agent",
                 "gen_ai.agent.name": e.get("agent"),
@@ -135,6 +140,8 @@ def to_otlp(trace: dict, started_at: float | None = None) -> dict:
                     span.attrs["traceeval.agent.message"] = e.get("message")
                     break
         elif kind == "tool.call":
+            # A tool call is a span under the turn of the agent that made it; the GenAI attributes carry the
+            # arguments and the result, the traceeval.* ones what the dispatcher saw (gate, retries, idempotency).
             parent = turn_of(e.get("agent"))
             tool, status, result = e.get("tool"), e.get("status"), e.get("result")
             attrs = {
@@ -155,6 +162,8 @@ def to_otlp(trace: dict, started_at: float | None = None) -> dict:
             span.end = t
             if status == "crash":
                 span.status = {"code": STATUS_ERROR, "message": e.get("message") or "tool crash"}
+            # A plan and an approval are cognition rather than action: they also become span events on the
+            # agent's turn, so that a viewer sees them without opening the tool spans.
             args = e.get("args") if isinstance(e.get("args"), dict) else {}
             if tool == "make_plan":
                 plan = {"goal": args.get("goal"), "steps": args.get("steps"), "status": status}
@@ -169,6 +178,7 @@ def to_otlp(trace: dict, started_at: float | None = None) -> dict:
                 }
                 parent.events.append((t, "approval", approval))
         elif kind == "llm.call":
+            # A model call is an instant span; its tokens also add up on the agent turn that made it.
             parent = turn_of(e.get("agent"))
             p, c = e.get("prompt_tokens", 0), e.get("completion_tokens", 0)
             attrs = {
@@ -194,6 +204,7 @@ def to_otlp(trace: dict, started_at: float | None = None) -> dict:
             }
             child(i, f"load_skill {e.get('skill')}", span, t, attrs)
         elif kind == "agent.route":
+            # A delegation, accepted or refused, is an event on the turn of the agent that asked for it.
             route = {
                 "target": e.get("target"),
                 "status": e.get("status"),
@@ -215,10 +226,12 @@ def to_otlp(trace: dict, started_at: float | None = None) -> dict:
         span.end = last_t
         span.status = {"code": STATUS_ERROR, "message": "the agent's turn did not end"}
     run.end = end["t"] if end else last_t
+    # The run's token totals: those of run.end when it has them, else the sum of the model calls that happened.
     tokens_in = sum(e.get("prompt_tokens", 0) for e in events if e["kind"] == "llm.call")
     tokens_out = sum(e.get("completion_tokens", 0) for e in events if e["kind"] == "llm.call")
     end = end or {}
     start = start or {}
+    # The root span's attributes: what the run was (test, variant, backend, request), how it ended, and its cost.
     run.attrs = {
         "traceeval.test_id": test_id,
         "traceeval.run_id": run_id,
@@ -235,16 +248,19 @@ def to_otlp(trace: dict, started_at: float | None = None) -> dict:
         "traceeval.config_keys": sorted({e["key"] for e in events if e["kind"] == "config.read"}),
     }
     error = trace.get("error")  # a run record's harness error (a traceback), if any
+    # A run that raised, or never reached run.end, is an error at the root; the message is the traceback's last line.
     if not end or error:
         message = error.strip().splitlines()[-1] if error else "the run ended without a run.end event"
         run.status = {"code": STATUS_ERROR, "message": message}
 
-    trace_id = _hex_id(run_id, "trace", 32)
+    trace_id = _hex_id(run_id, "trace", 32)  # shared by every span of the run
 
     def ns(t: float) -> str:
+        """A recorder time as nanoseconds on the wall clock, written as a string like every OTLP int64."""
         return str(round(origin * 1e9) + round(t * 1e9))
 
     def write(span: _Span) -> dict:
+        """One span in OTLP/JSON: ids from the run id and the span's key; events and status only when present."""
         attrs = dict(span.attrs)
         if span.agent is not None:
             attrs["gen_ai.usage.input_tokens"] = span.input_tokens
@@ -268,6 +284,7 @@ def to_otlp(trace: dict, started_at: float | None = None) -> dict:
             out["status"] = span.status
         return out
 
+    # One resource (the application under test), one scope (this exporter), and every span of the run under them.
     resource = {"attributes": _attributes({"service.name": SERVICE_NAME})}
     scope_spans = {"scope": {"name": SCOPE_NAME, "version": __version__}, "spans": [write(s) for s in spans]}
     return {"resourceSpans": [{"resource": resource, "scopeSpans": [scope_spans]}]}

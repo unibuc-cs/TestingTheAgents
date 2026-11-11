@@ -19,13 +19,16 @@ class TestStats:
 
     def __init__(self, test_id: str):
         self.test_id = test_id
+        # one record per repetition, as executor.run_case writes it (outcome, classification, tokens, deps, ...)
         self.runs: list[dict] = []
 
     def add(self, rec: dict):
+        """One more recorded run: a line of the history file."""
         self.runs.append(rec)
 
     @property
     def n(self) -> int:
+        """How many runs were recorded, those the environment broke included."""
         return len(self.runs)
 
     @property
@@ -41,6 +44,7 @@ class TestStats:
 
     @property
     def mean_tokens(self) -> float:
+        """The mean cost of a run in tokens, over the valid runs (over all of them when none is valid)."""
         return statistics.fmean(r["tokens"] for r in (self.valid_runs or self.runs))
 
     # The two below are cached on first use: runs are only added while History.load reads the files.
@@ -73,10 +77,12 @@ class History:
         """Read ``history/baseline.jsonl``, ``history/variants/*.jsonl`` and each variant's change set and
         mutation metadata (``variants/<id>/changeset.json``, ``mutation.json``)."""
         h, workdir = cls(), Path(workdir)
+        # the original app: one record per test and repetition
         base = workdir / "history" / "baseline.jsonl"
         if base.exists():
             for rec in read_jsonl(base):
                 h.baseline.setdefault(rec["test_id"], TestStats(rec["test_id"])).add(rec)
+        # each changed copy: its runs, then what its diff touched and how its mutation is labelled
         vdir = workdir / "history" / "variants"
         if vdir.exists():
             for path in sorted(vdir.glob("*.jsonl")):
@@ -84,6 +90,7 @@ class History:
                 stats = h.variants.setdefault(name, {})
                 for rec in read_jsonl(path):
                     stats.setdefault(rec["test_id"], TestStats(rec["test_id"])).add(rec)
+                # the change set and the label sit next to the copy itself, under variants/<id>/
                 vroot = workdir / "variants" / name
                 if (vroot / "changeset.json").exists():
                     h.changesets[name] = ChangeSet.from_dict(json.loads((vroot / "changeset.json").read_text()))
@@ -93,6 +100,7 @@ class History:
 
     # ---------------------------------------------------------------- derived facts
     def test_ids(self) -> list[str]:
+        """The tests the baseline ran, in the order the file lists them."""
         return list(self.baseline.keys())
 
     def cost(self, test_id: str) -> float:
@@ -100,6 +108,7 @@ class History:
         return self.baseline[test_id].mean_tokens
 
     def total_cost(self) -> float:
+        """The cost of the whole suite: what a budget fraction is a share of."""
         return sum(self.cost(t) for t in self.baseline)
 
     def seconds(self, test_id: str) -> float:
@@ -109,15 +118,19 @@ class History:
         return statistics.fmean(r["latency_ms"] for r in (st.valid_runs or st.runs)) / 1000
 
     def total_seconds(self) -> float:
+        """The run time of the whole suite, one case after another."""
         return sum(self.seconds(t) for t in self.baseline)
 
     def deps(self, test_id: str) -> set[str]:
+        """The observed dependencies of a test: every component its baseline runs exercised."""
         return self.baseline[test_id].deps
 
     def baseline_pass_rate(self, test_id: str) -> float:
+        """The share of a test's valid runs on the original app that passed."""
         return self.baseline[test_id].pass_rate
 
     def variant_pass_rate(self, variant: str, test_id: str) -> float:
+        """The share of a test's valid runs on the changed copy that passed."""
         # a test the variant did not run, or ran only in runs the environment broke, counts as behaving like the
         # baseline
         st = self.variants.get(variant, {}).get(test_id)
@@ -136,9 +149,11 @@ class History:
         return {
             "tests": len(self.baseline),
             "variants": len(self.variants),
+            # the number of repetitions: the most runs any test has
             "baseline_reps": max((s.n for s in self.baseline.values()), default=0),
             "failing_tests": sorted(t for t, s in self.baseline.items() if s.pass_rate < 0.5),  # model mistakes
             "total_tokens_full_suite": round(self.total_cost()),
+            # runs the environment broke, on the original app and the changed copies together; they count nowhere else
             "infra_invalid_runs": sum(
                 s.n - len(s.valid_runs) for stats in (self.baseline, *self.variants.values()) for s in stats.values()
             ),

@@ -34,11 +34,12 @@ class CachedClient:
     seen. Calls may come from several threads at once."""
 
     def __init__(self, inner, path: str | Path, model_id: str):
-        self.inner = inner
+        """Read the recorded answers at ``path`` into memory; a file that does not exist yet is an empty cache."""
+        self.inner = inner  # the client asked for what is not recorded; None means replay only
         self.path = Path(path)
         self.model_id = model_id  # the model name requests carry; the LLM backend reads it from the client
         self._lock = threading.Lock()
-        self.answers: dict[str, dict] = {}
+        self.answers: dict[str, dict] = {}  # request key -> recorded answer
         if self.path.exists():
             with open(self.path, encoding="utf-8") as fh:
                 for line in fh:
@@ -50,6 +51,7 @@ class CachedClient:
 
     def create(self, **request):
         """One model call: the recorded answer to ``request``, or a new one from ``inner``, recorded."""
+        # The key is a hash of exactly what the model is sent, so a prompt that differs in one character misses.
         key = request_key(request)
         answer = self.answers.get(key)
         if answer is None:

@@ -26,6 +26,8 @@ def function_index(sut_dir: Path) -> dict[str, list[tuple[str, int, int]]]:
 
 def _collect_functions(node, entries: list, prefix: str = ""):
     """Append (qualified name, first line, last line) of every function below ``node``."""
+    # The qualified names are the ones change sets use (Class.method, outer.inner; mutation/changeset.py builds
+    # them the same way), so a covered function and a changed function compare by id.
     for child in ast.iter_child_nodes(node):
         if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
             name = f"{prefix}{child.name}"
@@ -34,7 +36,7 @@ def _collect_functions(node, entries: list, prefix: str = ""):
         elif isinstance(child, ast.ClassDef):
             _collect_functions(child, entries, f"{prefix}{child.name}.")
         else:
-            _collect_functions(child, entries, prefix)
+            _collect_functions(child, entries, prefix)  # an if, try or with block may hold functions too
 
 
 def line_to_function(index_entries: list[tuple[str, int, int]], line: int) -> str | None:
@@ -55,12 +57,14 @@ class CoverageSession:
     each test, so every executed line is tagged with the test that ran it."""
 
     def __init__(self, sut_dir: Path):
+        """Start measuring the SUT copy at ``sut_dir``; the measurement lives in a temporary file until ``finish``."""
         import coverage
 
         self.sut_dir = Path(sut_dir).resolve()
-        self.index = function_index(self.sut_dir)
+        self.index = function_index(self.sut_dir)  # maps each covered line to its function at finish
         fd, self.data_file = tempfile.mkstemp(prefix="traceeval-cov-", suffix=".db")
         os.close(fd)
+        # Only the SUT copy is measured: the executor, the scorers and the model client are not dependencies.
         self.cov = coverage.Coverage(data_file=self.data_file, source=[str(self.sut_dir)], branch=False)
         self.cov.start()
         # Lines run before the first test (module imports, decorators) belong to no test; finish() drops them.
@@ -87,6 +91,8 @@ class CoverageSession:
             if rel is None or rel not in self.index:
                 continue
             entries = self.index[rel]
+            # Every line a test ran counts twice: as the function it is in (what a change set names) and as the
+            # line itself (what a change's ``line:`` components are intersected with).
             for line, contexts in (data.contexts_by_lineno(filename) or {}).items():
                 fn = line_to_function(entries, line)
                 comp = f"code:{rel}::{fn}" if fn else f"code:{rel}"
@@ -96,6 +102,7 @@ class CoverageSession:
                     bucket = result.setdefault(ctx, set())
                     bucket.add(comp)
                     bucket.add(f"line:{rel}:{line}")
+        # The measurement is in memory now; the temporary file has served.
         try:
             os.remove(self.data_file)
         except OSError:
