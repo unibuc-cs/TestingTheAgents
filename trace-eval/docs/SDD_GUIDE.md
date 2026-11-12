@@ -126,9 +126,10 @@ request and a *slice of the product model*:
 It must answer in JSON, with template names and slot values only.
 
 The answer is expanded through the catalog, and clauses that do not fit a template are dropped and reported.
-The result is validated against the product model: an unknown tool, case, skill or directory is an *error*,
-and a function or configuration key that the request introduces is a *note*. The draft is written as
-`FS-0106.draft.yaml`, with a plain-language rendering in `FS-0106.draft.md`:
+The result is validated against the product model: an unknown tool, case, skill or directory is an *error*, and a
+function or configuration key that the request introduces is a *note*. The draft is written as `<id>.draft.yaml`,
+with a plain-language rendering in `<id>.draft.md`. The worked example in [sdd/draft_example/](sdd/draft_example/)
+(the request, Qwen's answer, the generated draft and its rendering) begins:
 
 ```
 1. publishing.approval_validity_days is an integer between 1 and 365
@@ -139,9 +140,8 @@ and a function or configuration key that the request introduces is a *note*. The
 ```
 
 The spec owner reads the rendering, edits the YAML (drops or adds a clause, changes a slot, raises a `require`) and
-confirms the spec by renaming the file to `.yaml`. [sdd/draft_example/](sdd/draft_example/) has a worked example:
-the request, Qwen's answer, the generated draft and its rendering. The draft shows the validation at work: one slot
-the model wrote as prose is reported as an error for the owner to fix.
+confirms the spec by renaming the file to `.yaml`. The example shows the validation at work: one slot the model
+wrote as prose is reported as an error for the owner to fix.
 
 ## 5. Rungs: achieved vs required
 
@@ -195,27 +195,24 @@ For each spec the runner also writes an *agent brief*: the files and functions a
 change (the tool adapters, the services behind them, the skills that call them, the configuration keys), with their
 share of the repository's tokens.
 
-## 7. Related tools we looked at, and why none of them is the answer alone
+## 7. Related tools, and what each lacks
 
-- **nl2spec**: LLM turns natural language into LTL (linear temporal logic) formulas, with sub-translations a person
-  can correct. Not enough here: its output is temporal logic over abstract propositions. Someone still has to bind
-  each proposition to an actual event, and it covers only the temporal kind of clause, with no settings, examples,
-  contracts or placement.
-- **SpecGen, AutoSpec**: LLM generates JML / ACSL contracts (specification languages for Java and C) for existing
-  Java / C code, refined until a verifier accepts them. Not enough here: they describe what the *code already does*
-  (code $\to$ spec), not what a *request wants*. They work at function level only, and their verifiers are for Java
-  and C, while this system is Python, prompts and YAML.
-- **Hypothesis ghostwriter**: writes property-based test skeletons from a function's signature (round-trip,
-  idempotence, equivalence). Not enough here: the properties are generic rather than derived from a requirement,
-  and they are function-level. A person still has to make them meaningful.
-- **ArchUnit, import-linter, Semgrep rule packs**: assert structural rules: layers, dependency direction, forbidden
-  imports, naming. Not enough here: static only and written by developers. They say nothing about behaviour,
-  settings, examples or run-time evidence, and have no link to a change request.
-- **Dafny, Verus, F*, Lean, Alloy, TLA+**: whole-program or model proofs. Not enough here: the system would have to
-  be rewritten in the proof language, where agents, prompts and skills have no counterpart. Here, proofs are
-  confined to pure functions (via Z3), and the rest is monitored or tested.
-- **Spec Kit, Kiro-style spec-driven agent workflows**: prose specs that guide a coding agent. Not enough here:
-  prose only. Nothing is machine-checked, so there is no evidence and no rung.
+- **nl2spec** turns natural language into temporal-logic formulas (LTL), with sub-translations a person can
+  correct. Its output is logic over abstract propositions that someone still has to bind to actual events, and it
+  covers only the temporal kind of clause: no settings, examples, contracts or placement.
+- **SpecGen, AutoSpec** generate JML or ACSL contracts (specification languages for Java and C) for existing code,
+  refined until a verifier accepts them. They describe what the code already does (code $ o$ spec), not what a
+  request wants, at function level, for Java and C; this system is Python, prompts and YAML.
+- **Hypothesis ghostwriter** writes property-based test skeletons from a function's signature (round-trip,
+  idempotence, equivalence). The properties are generic rather than derived from a requirement, and function-level.
+- **ArchUnit, import-linter, Semgrep rule packs** assert structural rules: layers, dependency direction, forbidden
+  imports, naming. Static only and written by developers, with nothing about behaviour, settings, examples or
+  run-time evidence, and no link to a change request.
+- **Dafny, Verus, F\*, Lean, Alloy, TLA+** prove whole programs or models, which would mean rewriting the system in
+  the proof language, where agents, prompts and skills have no counterpart. Here proofs are confined to pure
+  functions (via Z3); the rest is monitored or tested.
+- **Spec Kit and Kiro-style spec-driven agent workflows** are prose specs that guide a coding agent. Nothing is
+  machine-checked, so there is no evidence and no rung.
 
 This layer takes something from each and puts it behind one catalog and one evidence record: nl2spec's
 idea of a constrained translation that a person confirms, SpecGen's loop of generating and checking, the
