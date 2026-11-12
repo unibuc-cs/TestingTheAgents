@@ -127,6 +127,7 @@ skill_routing_drop_approval: changed skill:routing#prose
   WF3-03                 FAIL required:request_approval,response~not approved,tool_error:unpublish_page  19,161 tokens
 REGRESSION: WF3-03 failed
 2 runs, 23,096 tokens (1% of the suite), 16 s (the whole suite takes about 375 s, one test at a time); P(something broke) = 1.00
+blamed: skill:routing#prose 0.63
 coverage: 100% of the changed components exercised, 20% of the 15 affected properties checked, 17% of the 6 affected workflows run, 100% of the 3 affected features reached
 ... then what the tests invoked, the properties left unchecked and the workflows not run
 ```
