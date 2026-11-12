@@ -21,8 +21,8 @@ University of Bucharest / ILDS. The results are in `docs/results/gemma7/report.m
 - **Results (§5, Gemma).** Trace-based selection and the adaptive method beat hand-written dependencies by a wide
   margin, and the adaptive method returns most of the budget while giving no false verdict (the README's table,
   §5.1). Qwen's and gpt-oss's recordings of the same app are not clean ground truths (§5.4).
-- **Next.** The demo for the AEM team (`docs/AEM_ALIGNMENT.md` §4), then tau2-bench as the second system under test
-  (§6).
+- **Next.** Re-planning after a failed step waits for a product decision (`docs/AEM_ALIGNMENT.md` §4.1); then
+  tau2-bench as the second system under test (§6).
 
 ---
 
@@ -159,7 +159,7 @@ A test run ends in one of five outcomes:
 An INFRA_INVALID run is left out, as if it had not been made. Of the other outcomes, only pass or fail enters the
 ground truth. With $K$ repetitions per variant, the ground truth "$t$ reveals $\Delta$" is a *majority flip*: the
 baseline pass rate is $\ge 0.5$ and the variant pass rate is $< 0.5$. A test that the model fails on the original
-app ($f_t = 1 -$ its baseline pass rate) cannot reveal anything, and $f_t$ is a direct input to the selectors.
+app cannot reveal anything; its fail rate there, $f_t$, is a direct input to the selectors.
 
 ```mermaid
 flowchart LR
@@ -235,7 +235,8 @@ The loop is the one pictured in `docs/USER_GUIDE.md` §5; the paragraphs below d
 *Hypotheses (step 1 of the five in `adaptive_bayes.py`'s docstring).* Each changed component $c$ is broken with a
 prior $\pi_c$ that depends on its kind: about 0.45 to 0.5 for code, skill, config and agent components, 0.12 to
 0.15 for prompt wording and prose. The posterior is kept exactly over all $2^k$ subsets $B$ of the $k$ changed
-components ($k \le 8$).
+components ($k \le 8$). The `tool:` and `line:` ids of a code change are views of it, not hypotheses of their own,
+and a change set with more than eight components keeps the eight with the highest prior.
 
 *Likelihood (step 2).* Under the hypothesis that the components in $B$ are broken, a test fails with probability
 
@@ -355,9 +356,9 @@ The set is written for the models:
 - ten of the changes are aimed at the multi-agent workflows: the orchestrator's approval and brand rules, the
   hand-off of ids between steps, the services behind the AEM-style agents, and two benign ones.
 
-`docs/USER_GUIDE.md` §6 explains each of the 43 and why it is in the set. Three batches bundle several of them, as
-a nightly run or a pull request would (`docs/USER_GUIDE.md` §6, "Batches"); they are recorded on request and kept
-out of the tables of §5.1, which are the 43 single changes.
+`docs/USER_GUIDE.md` §6 explains each of the 43 and why it is in the set. Three batches by hand and twenty drawn at
+random bundle several of them, as a nightly run or a pull request would (§5.6); they are kept out of the tables of
+§5.1, which are the 43 single changes.
 
 The report checks a sanity property of the testbed: every regression-inducing change is revealed by at least one
 test, and no benign change is revealed by any test. Under Gemma five regressions are revealed by no test (§5.1);
@@ -371,14 +372,14 @@ strategy, budget, seed), with the budget one of 2, 5, 10, 20, 30, 50 or 100% of 
 sees the baseline facts and the change set only. Each execution is answered from the recorded runs of that variant
 (a random repetition supplies the outcome and cost), and adaptive strategies interact sequentially. The metrics:
 
-   - change coverage, which needs no ground truth (`docs/USER_GUIDE.md` §4; the dimensions are defined in
-     `docs/AEM_ALIGNMENT.md` §3.5);
-   - property coverage: of the properties a change breaks, those its selected tests exercise;
-   - detection (at least one revealing test executed and failed), recall of revealing tests, tokens actually spent,
-     cost to first detection, false alarms, safety recall, stop reason and stop correctness;
-   - APFD and $\mathrm{APFD}_c$ of the complete prioritized order (Rothermel et al. 2001; Elbaum et al. 2001; the
-     formulas are in `docs/USER_GUIDE.md` §4 and the papers in `docs/REFERENCES.md`);
-   - selection recall and selected-subset cost.
+- change coverage, which needs no ground truth (`docs/USER_GUIDE.md` §4; the dimensions are defined in
+  `docs/AEM_ALIGNMENT.md` §3.5);
+- property coverage: of the properties a change breaks, those its selected tests exercise;
+- detection (at least one revealing test executed and failed), recall of revealing tests, tokens actually spent,
+  cost to first detection, false alarms, safety recall, stop reason and stop correctness;
+- APFD and $\mathrm{APFD}_c$ of the complete prioritized order (Rothermel et al. 2001; Elbaum et al. 2001; the
+  formulas are in `docs/USER_GUIDE.md` §4 and the papers in `docs/REFERENCES.md`);
+- selection recall and selected-subset cost.
 
 ---
 
@@ -548,9 +549,9 @@ Neither recording is a clean ground truth (`docs/EXPERIMENT.md` §6 has the test
 | the same under the first three runs | by two to four tests | by one to four tests |
 | (change, test) pairs on which the two votes differ | 75, and the revealing sets of 40 of the 43 changes | 95 |
 | pairs on which a change's own runs disagree | 357 | 577 |
-| tests that carry the variation | seven: one of the two cases a model judges against a rubric (PUB-20), the 60-character boundary (SEO-05), four long workflows (WF2-01, WF2-02, WF4-02, WF5-02) and AUT-05 | thirteen, mostly the long workflows: WF1-01 and WF1-03 pass on the original app and fail on nearly every changed copy, whichever the change, the empty one included; MNT-05 flips on twenty changes |
+| tests that carry the variation | seven: PUB-20 (judged against a rubric), SEO-05 (the 60-character title boundary), AUT-05 and four long workflows (WF2-01, WF2-02, WF4-02, WF5-02) | thirteen, mostly long workflows; WF1-01 and WF1-03 pass on the original app and fail on nearly every changed copy, the empty one included; MNT-05 flips on twenty changes |
 | regressions with a revealing test outside those | 29 of 34 | 25 of 34 |
-| CASPER's representatives | include SEO-05, WF5-02 and WF2-02, which "reveal" 40, 34 and 15 of the 43 changes, so its slices appear to detect 90% of the changes at a 20% budget | include the three unstable tests, so its slices appear to detect 98% at a 20% budget |
+| CASPER's representatives | include SEO-05, WF5-02 and WF2-02, which "reveal" 40, 34 and 15 of the 43 changes: its slices appear to detect 90% at a 20% budget | include the three unstable tests: 98% at a 20% budget |
 
 Two remedies fall short:
 
@@ -565,11 +566,21 @@ Two remedies fall short:
 Recording the empty change one test at a time, as the baseline is recorded, separates the two causes, and recording
 it fifteen times in batches says whether more runs settle the vote:
 
-| | Gemma | Qwen | gpt-oss |
-|---|---|---|---|
-| one test at a time, against the baseline | no test flips and no test's runs disagree (five runs of a benign change, `docs/results/gemma7/false_alarm_one_at_a_time.md`) | no test flips; the runs disagree on one test, WF5-02, which sits at the majority line in the baseline too (`docs/results/qwen7/one_at_a_time.md`) | ten tests flip between the baseline and a new start of the server, six of them with every run agreeing on each side; five or six tests disagree with themselves within a recording (`docs/results/gptoss7/one_at_a_time.md`) |
-| in batches, against the baseline | no test flips, at any number of runs from three to fifteen (`docs/results/gemma7/noise_floor.md`) | five or six tests flip at every number of runs from three to fifteen, three of them from pass to fail, and two of the five are a shift, not noise: SEO-05 fails every batched run and passes every run one at a time, DS-ROUTING/r40 the reverse (`docs/results/qwen7/noise_floor.md`) | eight tests flip; two tests that fail in every run one at a time pass in batches |
-| what the variation is | none to speak of: the runs are not bit-exact, but no difference changes an outcome | batching: one test at a time Qwen is as repeatable as Gemma, and more batched runs converge to the batch's labels, not the baseline's | the model and the server: a test's outcome can hold for the life of one server and change with the next start, and batching adds flips of its own |
+- **Gemma.** One test at a time: no test flips and no test's runs disagree (five runs of a benign change,
+  `docs/results/gemma7/false_alarm_one_at_a_time.md`). In batches: no test flips, at any number of runs from three
+  to fifteen (`docs/results/gemma7/noise_floor.md`). The runs are not bit-exact, but no difference changes an
+  outcome.
+- **Qwen.** One test at a time: no test flips; the runs disagree on one test, WF5-02, which sits at the majority
+  line in the baseline too (`docs/results/qwen7/one_at_a_time.md`). In batches: five or six tests flip at every
+  number of runs from three to fifteen, three of them from pass to fail; two of the five are a shift, not noise:
+  SEO-05 fails every batched run and passes every run one at a time, DS-ROUTING/r40 the reverse
+  (`docs/results/qwen7/noise_floor.md`). The variation is batching: one test at a time Qwen is as repeatable as
+  Gemma, and more batched runs converge to the batch's labels, not the baseline's.
+- **gpt-oss.** One test at a time: ten tests flip between the baseline and a new start of the server, six of them
+  with every run agreeing on each side, and five or six tests disagree with themselves within a recording
+  (`docs/results/gptoss7/one_at_a_time.md`). In batches: eight tests flip, and two tests that fail in every run one
+  at a time pass in batches. The variation is the model and the server: a test's outcome can hold for the life of
+  one server and change with the next start, and batching adds flips of its own.
 
 A ground truth for Qwen therefore needs the changed copies recorded one test at a time, at about 1.2 hours per
 repetition per server: neither more batched runs nor vLLM's batch-invariant mode, which Qwen3.8 cannot use, gives
@@ -616,7 +627,6 @@ of the suite's tokens unless said otherwise.
    detection when the whole budget is spent, and it never stops (§5.1, §5.2); it is the fallback order to keep in
    any pipeline.
 
-
 ### 5.6 Batches of changes
 
 A nightly run sees a day's merges at once, and a pull request several related edits. Three batches of catalog
@@ -628,8 +638,8 @@ make of that:
   agent's lost tool at 0.77 while the other members stay near their prior, untested, because the check stops at the
   first failure.
 - `batch_publishing_pr` (three related changes on the publishing path, 9 revealing tests): the adaptive method
-  after two tests, 1.2% of the suite, blaming the link check and the publishing skill's procedure; `full`,
-  CASPER's slices and the bandit miss it at 5%.
+  after two tests, 1.2% of the suite, blaming the link check and the publishing skill's procedure; `full` and
+  CASPER's slices miss it at 5%, `random` and the bandit find it in one seed of five.
 - `batch_benign` (all nine benign changes): revealed by one test, PUB-02, which fails in all five runs under the
   batch and passes under every member alone. Two prompt edits do it together, the orchestrator's prompt reworded
   and its routing guidance reordered: the orchestrator then drops the broken link from the answer it relays. The
@@ -680,9 +690,9 @@ needs its own recording, not the sum of the day's single-change checks.
 | 2. Methods | baselines + cost-aware + predictive + adaptive Bayesian selector with stopping | done, with the mandatory-coverage rule (§5.3); open: tuning $\varepsilon$, the priors and the discount |
 | 3. Method improvements | (a) test-level learned sensitivities (per test and component kind) instead of kind-level; (b) IR relevance inside the Bayesian likelihood; (c) CASPER-style slices and the Risk-Aware Adaptive Evaluation bandit as reproduced baselines | (a) done; (b) done as an option (§5.2); (c) done: `casper_slices` and `risk_aware_ts` (§5.1) |
 | 4. Models | ContentOps with three models (local vLLM): all changes, $K$ repetitions | done: Gemma (`runs/gemma7`); Qwen's (`runs/qwen7`) and gpt-oss's (`runs/gptoss7`) recordings of the same app are spoiled by run-to-run variation and are not used for the results (§5.4) |
-| 5. Second system under test | tau2-bench, a public benchmark of tool-using agents with a simulated user (`docs/REFERENCES.md`): the airline domain, 50 tasks with a reward computed from the database state and the agent's communication, no model judge; the local model plays both the agent and the user, the controlled changes mutate the policy and the tool code (12 mutations: 6 policy, 4 tool-code, 2 benign), and the replay evaluator and the strategies run unchanged | after the demo for the AEM team |
+| 5. Second system under test | tau2-bench, a public benchmark of tool-using agents with a simulated user (`docs/REFERENCES.md`): the airline domain, 50 tasks with a reward computed from the database state and the agent's communication, no model judge; the local model plays both the agent and the user, the controlled changes mutate the policy and the tool code (12 mutations: 6 policy, 4 tool-code, 2 benign), and the replay evaluator and the strategies run unchanged | next |
 | 6. Scale/robustness | more mutations (mutation operators generated systematically: step deletion/swap/condition negation in procedures, argument swaps in adapters, config boundary values), equivalent-mutant analysis, sensitivity to budget definitions (time vs. tokens), ablations of each model ingredient, more repetitions for the models whose answers vary (five recorded for all three models; the noise floor against the number of runs is measured, §5.4) | with the paper |
-| 7. Paper | see §7 | drafting can start from this document and the report |
+| 7. Paper | see §7 | drafted: `docs/paper/main.tex` |
 
 Re-planning after a failed step is built on a branch and waits for one product decision (`docs/AEM_ALIGNMENT.md`
 §4.1).
