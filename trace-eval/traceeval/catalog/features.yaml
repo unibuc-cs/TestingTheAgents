@@ -1,5 +1,5 @@
 # The features of ContentOps (docs/AEM_ALIGNMENT.md, section 3.5): the capabilities a user sees, the unit of
-# coverage the AEM team suggested. `tools` are the tools that carry out the feature: a test covers the feature when
+# coverage the Adobe Team suggested. `tools` are the tools that carry out the feature: a test covers the feature when
 # its metadata declares one of them (declared) or a recorded run calls one of them (observed). `parts` are the
 # other components the feature is made of, in the component ids of change sets (skill:, agent:, config:,
 # code:<file> or code:<file>::<function>): a change affects the feature when it touches one of its tools or parts.

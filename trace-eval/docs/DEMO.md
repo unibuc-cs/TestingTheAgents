@@ -149,7 +149,7 @@ traceeval check benign_skill_prose_reflow --history runs/gemma7 --budget 0.2    
 It ends with "no regression: the method is confident nothing broke" after nine tests and 4% of the suite's tokens,
 with $P(\text{something broke}) = 0.05$. Before it ends, it has run a test of every mandatory property the change
 may affect, because the catalog's `mandatory` flag acts as a stopping rule. The coverage lines are the change
-coverage of [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5. The features are the unit the AEM team suggested: this
+coverage of [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5. The features are the unit the Adobe Team suggested: this
 change affects three (publish, schedule, take a page down), and the nine tests reached all three.
 
 If the GPU server is down, run the checks of this section, the batch below included, with `--backend replay`: all
@@ -157,7 +157,7 @@ three are recorded in `tests/cassettes/gemma.jsonl` ([EXPERIMENT.md](EXPERIMENT.
 the same outcomes, and the timings read 0 seconds. If the server stops answering during a check, the check says so
 and gives no verdict. The run is marked `INFRA_INVALID`, the environment's fault rather than the change's.
 
-If there is time, a day's merges at once, which is how the AEM team runs their tests. `batch_nightly` bundles six
+If there is time, a day's merges at once, which is how the Adobe Team runs their tests. `batch_nightly` bundles six
 regressions and two harmless edits (`traceeval mutations` lists its members); the check stops at the first failure
 and names the member it blames:
 
@@ -263,7 +263,7 @@ cases:
   model.
 - *How would this run at Adobe?* Nightly full-suite runs provide the recordings the method learns from. For each
   change, `traceeval check` selects the tests, orders them and decides when to stop. The traces are OpenTelemetry,
-  and the catalog of properties maps onto the metrics of DeepEval, the evaluation library the AEM team uses.
+  and the catalog of properties maps onto the metrics of DeepEval, the evaluation library the Adobe Team uses.
 - *Does the replay predict the live run?* Yes: run live on all 43 changes, the check gives the replayed verdict on
   42, with the same tests and tokens. The exception is a live false alarm on a benign change, a one-off of the
   model that five more recordings of the change do not repeat ([EXPERIMENT.md](EXPERIMENT.md) §5); the live check
@@ -273,8 +273,8 @@ cases:
   one decision: whether a single publication with a broken link is repaired or refused
   ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4.1). Then tau2-bench, a public agent benchmark, as a second application.
 
-## Questions for the AEM team
+## Questions for the Adobe Team
 
-Close with the questions for the AEM team, the re-planning decision first: should a single publish request for a
+Close with the questions for the Adobe Team, the re-planning decision first: should a single publish request for a
 page with a broken link be repaired or refused? [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §8 keeps the list, with what
 each answer decides.

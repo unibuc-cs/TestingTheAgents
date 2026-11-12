@@ -1,4 +1,4 @@
-"""Coverage from several angles (docs/AEM_ALIGNMENT.md §3.5, a feature the AEM team asked for).
+"""Coverage from several angles (docs/AEM_ALIGNMENT.md §3.5, a feature the Adobe Team asked for).
 
 Two levels:
 

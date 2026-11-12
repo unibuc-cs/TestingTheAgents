@@ -5,7 +5,7 @@ the gaps (section 3), and what comes next (section 4). The "today" column of sec
 
 ## 1. What Adobe's platform looks like
 
-From Adobe's requirements, the AEM team's written answers to our questions about their test practice, Adobe's
+From Adobe's requirements, the Adobe Team's written answers to our questions about their test practice, Adobe's
 Agent Orchestrator deck and Adobe's public documentation:
 
 - **More than 50 agents** for AEM workflows, tested with unit, integration and end-to-end tests and with
@@ -199,7 +199,7 @@ The model is a good first author of the catalog; the tags need the person's revi
 
 ### 3.5 Coverage from several angles
 
-The AEM team has no formal definition of coverage and named it as one of the metrics they want. Adobe's
+The Adobe Team has no formal definition of coverage and named it as one of the metrics they want. Adobe's
 requirements name nine dimensions (agent, feature, skill, tool, configuration, workflow, execution path, property,
 risk) and three kinds: declared (test metadata), observed (traces) and required (mandatory properties and risks);
 the testbed adds tool error paths and setting values, eleven in all. The testbed reports coverage at two levels and
@@ -309,7 +309,7 @@ Gemma ([USER_GUIDE.md](USER_GUIDE.md) §6 lists them with the tests that reveal 
 ## 4. Next steps
 
 One item of section 2 is open: re-planning after a failed step. It is built and recorded on a branch and waits for
-one product decision (§4.1); tau2-bench, a second application, follows (§4.2). The questions for the AEM team are
+one product decision (§4.1); tau2-bench, a second application, follows (§4.2). The questions for the Adobe Team are
 in [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §8.
 
 ### 4.1 Re-planning after a failed step

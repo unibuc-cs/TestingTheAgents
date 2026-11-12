@@ -30,7 +30,7 @@ University of Bucharest / ILDS. The results are in `docs/results/gemma7/report.m
 
 In reading order: the problem (§1), the abstractions the method rests on (§2), the methods (§3), the evaluation
 environment (§4), the results and the take-aways (§5), the roadmap (§6), the paper (§7) and the open questions for
-the AEM team (§8). The research problem is kept general: any agent platform built from skills, prompts, tools,
+the Adobe Team (§8). The research problem is kept general: any agent platform built from skills, prompts, tools,
 harness code and configuration. AEM, Adobe's platform, is the motivating instance, and the method does not depend
 on it.
 
@@ -38,7 +38,7 @@ on it.
 
 | Topic | Decision | Reason |
 |---|---|---|
-| System under test (SUT) | A purpose-built mini content-operations platform ("ContentOps": pages, assets, publishing, SEO, translation, governance, rollback) is the primary SUT. | The primary SUT gives a multi-agent structure with shared components built in on purpose (the hard case the AEM team describes) and full control over mutations. Its agents run on a local model, and recorded answers make reruns free and exact. tau2-bench, the second system under test, adds external validity (§6). |
+| System under test (SUT) | A purpose-built mini content-operations platform ("ContentOps": pages, assets, publishing, SEO, translation, governance, rollback) is the primary SUT. | The primary SUT gives a multi-agent structure with shared components built in on purpose (the hard case the Adobe Team describes) and full control over mutations. Its agents run on a local model, and recorded answers make reruns free and exact. tau2-bench, the second system under test, adds external validity (§6). |
 | Agent runtime | A pure Python harness with an OpenAI-compatible LLM backend. | It is the shortest path, and the harness code must itself be mutable and instrumentable (coverage contexts). |
 | Observability | Our own trace recorder with an OpenTelemetry-compatible event model (agent, skill, tool, config and llm events) and an OTLP JSON exporter (`tracing/otel.py`). | No services in the loop, and the export needs no dependency. |
 | Oracles (what decides pass or fail) | Deterministic checks (final state, tool trajectories, audit log, response substrings). An LLM judge (Gemma or Qwen, against the case's rubric) runs only for explicitly marked answer-quality properties, and only after the deterministic checks pass. | Regression tracking must not depend on judge noise. |
@@ -503,8 +503,8 @@ tests and changes are worded differently (tau2-bench, §6), shows whether the ga
 
 ### 5.3 Coverage, and mandatory properties in the method
 
-Coverage is a metric the AEM team asked for (`docs/AEM_ALIGNMENT.md` §3.5); the report's section 6 gives it for the
-suite and for each change. On this app:
+Coverage is a metric the Adobe Team asked for (`docs/AEM_ALIGNMENT.md` §3.5); the report's section 6 gives it for
+the suite and for each change. On this app:
 
 - every agent, skill, configuration key, property and workflow has a test;
 - one tool (`get_asset`) and two setting values have none;
@@ -709,9 +709,9 @@ D&B or EMNLP, with the testbed as the headline.
 
 ---
 
-## 8. Questions still to settle with the AEM team
+## 8. Questions still to settle with the Adobe Team
 
-The AEM team's written answers (`docs/AEM_ALIGNMENT.md` §1) settled part of this list: nightly and model-update
+The Adobe Team's written answers (`docs/AEM_ALIGNMENT.md` §1) settled part of this list: nightly and model-update
 runs, prompt $\to$ answer and prompt $\to$ tool-call datasets, the thresholds and mandatory properties wanted, and
 budgets with early stopping.
 

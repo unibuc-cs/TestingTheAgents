@@ -126,10 +126,10 @@ holds: the empty change recorded fifteen times flips nothing, and the whole expe
 4 of 7,740 labels. The models are used as they are served, so the two recordings are a finding, not a result
 ([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.4).
 
-## Built for Adobe's AEM team
+## Built for the Adobe Team
 
-The AEM team (Adobe Experience Manager, Adobe's content management system) listed what they lack today and want in
-the prototype, and the testbed has it:
+The Adobe Team, who work on Adobe Experience Manager (AEM), Adobe's content management system, listed what they
+lack today and want in the prototype, and the testbed has it:
 
 - a catalog of properties, some of them release blockers;
 - coverage of the suite and of each change;
@@ -137,8 +137,8 @@ the prototype, and the testbed has it:
 - budgets with early stopping;
 - OpenTelemetry export of the traces.
 
-[docs/AEM_ALIGNMENT.md](docs/AEM_ALIGNMENT.md) checks each requirement in its §2, with the AEM team's answers, and
-its §4 has the next steps.
+[docs/AEM_ALIGNMENT.md](docs/AEM_ALIGNMENT.md) checks each requirement in its §2, with the Adobe Team's answers,
+and its §4 has the next steps.
 
 ## Spec-driven development on the same testbed
 

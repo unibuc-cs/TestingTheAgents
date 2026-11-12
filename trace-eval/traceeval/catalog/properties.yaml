@@ -7,7 +7,7 @@
 #   mandatory   a release blocker: a change that touches it should never ship without one of its tests
 #   threshold   the share of its tests that must pass on a run for the property to count as met
 #
-# Requested by the AEM team (docs/AEM_ALIGNMENT.md): "prompt, properties and threshold", with categories.
+# Requested by the Adobe Team (docs/AEM_ALIGNMENT.md): "prompt, properties and threshold", with categories.
 
 - id: task_completion
   category: correctness

@@ -4,7 +4,7 @@ Every item becomes an ``EvalCase``. Dataset items inherit the dataset's agent, c
 dependencies, risk and properties, and carry ``dataset`` = the dataset id so that selectors can
 reason about "subsets of eval datasets". The properties a case checks must be in the catalog of properties
 (``properties.yaml``), loaded as ``Property``; the workflow a case runs end to end (``workflow: W1``) must be in
-``workflows.yaml``, loaded as ``Workflow``. The features of the application, the unit of coverage the AEM team
+``workflows.yaml``, loaded as ``Workflow``. The features of the application, the unit of coverage the Adobe Team
 suggested, are in ``features.yaml``, loaded as ``Feature``."""
 
 import json
