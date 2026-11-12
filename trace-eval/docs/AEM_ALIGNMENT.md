@@ -32,20 +32,20 @@ Agent Orchestrator deck and Adobe's public documentation:
 
 | requirement | today | gap |
 |---|---|---|
-| shared components, changes to skills, harness and config | yes (ContentOps, 43 controlled changes, ten of them aimed at the workflows) | — |
-| statistical evals over datasets | yes (50 routing items, 24 intent items); pass-rate thresholds per property | — |
-| tests that run several agents from one prompt | yes: six workflows of two to five specialists (§3.3), each with a variant where a step must stop | — |
+| shared components, changes to skills, harness and config | yes (ContentOps, 43 controlled changes, ten of them aimed at the workflows) | none |
+| statistical evals over datasets | yes (50 routing items, 24 intent items); pass-rate thresholds per property | none |
+| tests that run several agents from one prompt | yes: six workflows of two to five specialists (§3.3), each with a variant where a step must stop | none |
 | plans, data passed between agents, approvals, re-planning | yes: the orchestrator plans (`make_plan`), gives each step its own instruction and the ids of the earlier steps, and asks a person before publishing, scheduling or taking pages down (`request_approval`) | re-planning after a failed step: our routing skill says stop; Qwen re-plans on its own (WF1-02, WF5-02; [EXPERIMENT.md](EXPERIMENT.md) §6). Built on a branch and recorded with three models (§4.1) |
-| workflows as a coverage dimension | yes: `catalog/workflows.yaml` lists the six; suite and change coverage count them (§3.5) | — |
-| a catalog of properties with categories and thresholds | yes: `traceeval/catalog/properties.yaml`, pass rates against thresholds and property coverage in the report; a model can draft it from the requirements, for people to edit (`traceeval properties draft`; Qwen's draft in §3.4) | — |
-| coverage over the requirements' dimensions, declared, observed and required | yes: suite coverage per dimension and change coverage per strategy in the report and in `traceeval check`; the method tests every mandatory property a change may affect (§3.5) | — |
-| per-test metadata (agents, skills, tools, workflow, risk, cost, history) | yes (declared + observed + history; a workflow test names its workflow) | — |
-| trace assertions | yes: final state, required and forbidden tools, attempts, audit, step limit, termination, agent order and tool order (`agents_in_order`, `tools_in_order`) | — |
-| budgets and early stopping | yes (`adaptive_bayes`, `traceeval check`) | — |
-| a day's changes checked at once, with the culprit named | yes: batches of changes, three by hand and twenty drawn at random ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.6); the live check prints the components the method blames, a member that is a regression on its own on every regression batch | — |
+| workflows as a coverage dimension | yes: `catalog/workflows.yaml` lists the six; suite and change coverage count them (§3.5) | none |
+| a catalog of properties with categories and thresholds | yes: `traceeval/catalog/properties.yaml`, pass rates against thresholds and property coverage in the report; a model can draft it from the requirements, for people to edit (`traceeval properties draft`; Qwen's draft in §3.4) | none |
+| coverage over the requirements' dimensions, declared, observed and required | yes: suite coverage per dimension and change coverage per strategy in the report and in `traceeval check`; the method tests every mandatory property a change may affect (§3.5) | none |
+| per-test metadata (agents, skills, tools, workflow, risk, cost, history) | yes (declared + observed + history; a workflow test names its workflow) | none |
+| trace assertions | yes: final state, required and forbidden tools, attempts, audit, step limit, termination, agent order and tool order (`agents_in_order`, `tools_in_order`) | none |
+| budgets and early stopping | yes (`adaptive_bayes`, `traceeval check`) | none |
+| a day's changes checked at once, with the culprit named | yes: batches of changes, three by hand and twenty drawn at random ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.6); the live check prints the components the method blames, a member that is a regression on its own on every regression batch | none |
 | OpenTelemetry | yes: `traceeval run --otel` exports a run as OTLP JSON spans, with the plan, the routing decisions and the approvals as span events (§3.6) | pushing to a collector, if wanted |
-| environment failures kept apart | yes: such a run is `INFRA_INVALID` and left out of pass rates, the ground truth and the replays ([USER_GUIDE.md](USER_GUIDE.md) §8) | — |
-| agents like AEM's | yes: authoring, publishing, assets (with asset search), SEO, translation, governance, maintenance, and brand governance, data insights, site optimization | — |
+| environment failures kept apart | yes: such a run is `INFRA_INVALID` and left out of pass rates, the ground truth and the replays ([USER_GUIDE.md](USER_GUIDE.md) §8) | none |
+| agents like AEM's | yes: authoring, publishing, assets (with asset search), SEO, translation, governance, maintenance, and brand governance, data insights, site optimization | none |
 
 Testing one agent at a time is the easy part. What makes Adobe's case hard is one prompt that crosses several
 agents, where a change to one agent or to the orchestrator's planning breaks a workflow far from the change. That
@@ -96,10 +96,10 @@ sequenceDiagram
   request, and in `context` the values it needs (the ids earlier steps reported). The specialist runs
   on a copy of the request context with those values; its answer comes back to the orchestrator for the next step.
 - `request_approval(summary)` stands for the human in the loop. The answer is in the starting data (the fixture,
-  `approvals`: who approves, and whether), so a run is repeatable; a test refuses with `fixture_patch:
-  {approvals.decision: refuse}`. An approval holds for the rest of the request: the runtime adds the approver and
-  their approval token to the orchestrator's context, so the steps after it carry them. Guarded tools such as
-  `unpublish_page` need the token, and the publishing skill has the approver approve a page's review
+  `approvals`: who approves, and whether), so a run is repeatable; a test refuses with
+  `fixture_patch: {approvals.decision: refuse}`. An approval holds for the rest of the request: the runtime adds
+  the approver and their approval token to the orchestrator's context, so the steps after it carry them. Guarded
+  tools such as `unpublish_page` need the token, and the publishing skill has the approver approve a page's review
   (`approve_review`) instead of only requesting one.
 - The routing skill states the rules a plan must keep: a campaign page passes the brand check before it is
   scheduled or published; a person approves before anything is published, scheduled or taken down, and a refusal
@@ -124,8 +124,8 @@ state, audit log, trace order); the tests are in `catalog/tests/workflows.yaml`.
 
 Fifteen tests in all, each running two to five specialists, with `agents_in_order` and `tools_in_order` as their
 trace assertions ([USER_GUIDE.md](USER_GUIDE.md) §7) and three properties: `workflow_completion` (orchestration),
-`safety_human_approval` and `safety_brand_compliance` (both mandatory). Gemma fails WF2-03, WF5-02 and WF6-02 on
-the original app ([EXPERIMENT.md](EXPERIMENT.md) §6).
+`safety_human_approval` and `safety_brand_compliance` (both mandatory). Gemma fails four of them on the original
+app, WF1-01, WF2-03, WF5-02 and WF6-02 ([EXPERIMENT.md](EXPERIMENT.md) §6).
 
 ### 3.4 A catalog of properties
 
@@ -298,36 +298,35 @@ an OpenTelemetry collector accepts on `/v1/traces` (`traceeval/tracing/otel.py`,
 Ten changes, so that the workflows matter for selection: eight regressions and two benign ones, each checked under
 Gemma ([USER_GUIDE.md](USER_GUIDE.md) §6 lists them with the tests that reveal each).
 
-- The orchestrator's approval rule, removed from the routing skill, is revealed by eleven tests, in four of the six
-  workflows (W1 to W4).
-- The brand gate and the hand-off of ids between steps are revealed by the W1 and W2 tests.
-- The insights ranking and the page search are revealed by their single-agent tests and by W2 and W3.
+- The orchestrator's approval rule, removed from the routing skill, is revealed by eleven tests, ten of them in the
+  six workflows and one a single publication.
+- The brand gate is revealed by one W1 test, the hand-off of ids between steps by W1 and W2 tests.
+- The insights ranking and the page search are revealed by their single-agent tests and by W2 and W3 respectively.
 - Three regressions are revealed by no workflow test although a workflow runs the changed code (the audit's
   alt-text rule, the brand check's letter case, the approval gate on taking pages down): covering a change is not
   revealing it, the case the method is built for.
 
 ## 4. Next steps
 
-The demo for the AEM team shows the testbed, the features of section 3 and the method on Gemma's recording, with
-one change checked live ([DEMO.md](DEMO.md)). The questions for the AEM team close the walkthrough. One item of
-section 2 is open: re-planning after a failed step. It is built and recorded on a branch, and waits for one product
-decision (§4.1).
+One item of section 2 is open: re-planning after a failed step. It is built and recorded on a branch and waits for
+one product decision (§4.1); tau2-bench, a second application, follows (§4.2). The questions for the AEM team are
+in [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §8.
 
 ### 4.1 Re-planning after a failed step
 
 Adobe's orchestrator re-plans when a step fails. Ours stops: the routing skill's rule is that a failed step stops
 the steps that depend on it. Re-planning is built on the branch `replanning` and recorded there with three models
-(three repetitions each): Gemma, Qwen and gpt-oss-120b. The application in the demo does not have it.
+(three repetitions each): Gemma, Qwen and gpt-oss-120b. The application on the main branch does not have it.
 
 - **What may be re-planned.** Broken links only: the one failure another specialist can repair without changing
   what the user asked for. The optimizer unlinks them with a tool of its own, `fix_broken_links`, which checks the
   permission to edit and writes an audit entry. A refusal stays a stop: a refused approval, a brand or policy
   violation, a missing permission or consent. Re-planning must never route around a safety check.
 - **How.** When publishing refuses a page for broken links, or a rollback's link check fails, the orchestrator
-calls `make_plan` again, with the repair before the publication, and runs it (a rule of the branch's routing
-skill). A setting limits the number of new plans (`routing.max_replans`, 1), and `make_plan` refuses a plan beyond
-it, so the limit holds even when the model ignores it. Every plan is in the trace and is a `plan` event in the
-OpenTelemetry export.
+  calls `make_plan` again, with the repair before the publication, and runs it (a rule of the branch's routing
+  skill). A setting limits the number of new plans (`routing.max_replans`, 1), and `make_plan` refuses a plan
+  beyond it, so the limit holds even when the model ignores it. Every plan is in the trace and is a `plan` event in
+  the OpenTelemetry export.
 - **Tests and changes.** The branch adds a `replans` expectation (the number of `make_plan` calls after the first),
   a property `orchestration_replanning`, three repair cases (WF5-02, WF2-02 and WF2-03), a case with re-planning
   switched off (WF5-03) and five controlled changes: four regressions, which Gemma and Qwen each reveal, and one
@@ -357,8 +356,8 @@ What the recordings show:
   product decision. If repaired, these become repair cases; if refused, the rule needs a limit that Gemma follows
   too, and the wording "in a plan" broke the W3 cases under Gemma.
 
-The branch is merged after the demo, once that decision is made. Gemma's known mistakes change with it, and the
-replay answers are recorded again.
+The branch is merged once that decision is made. Gemma's known mistakes change with it, and the replay answers are
+recorded again.
 
 gpt-oss-120b varies more from run to run than the other two models ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4),
 so its column is the least firm.
@@ -367,7 +366,7 @@ so its column is the least firm.
 
 | step | changes the application | new recording | when |
 |---|---|---|---|
-| re-planning after a failed step | yes: the routing skill, one setting, `make_plan`, a repair tool | recorded on the branch with three models; recorded again with Gemma once merged | after the demo, once single publications are decided |
+| re-planning after a failed step | yes: the routing skill, one setting, `make_plan`, a repair tool | recorded on the branch with three models; recorded again with Gemma once merged | once single publications are decided |
 | tau2-bench as a second application | no | its own | after re-planning |
 
 ### 4.3 Limits
