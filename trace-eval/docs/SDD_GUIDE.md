@@ -201,7 +201,7 @@ share of the repository's tokens.
   correct. Its output is logic over abstract propositions that someone still has to bind to actual events, and it
   covers only the temporal kind of clause: no settings, examples, contracts or placement.
 - **SpecGen, AutoSpec** generate JML or ACSL contracts (specification languages for Java and C) for existing code,
-  refined until a verifier accepts them. They describe what the code already does (code $ o$ spec), not what a
+  refined until a verifier accepts them. They describe what the code already does (code $\to$ spec), not what a
   request wants, at function level, for Java and C; this system is Python, prompts and YAML.
 - **Hypothesis ghostwriter** writes property-based test skeletons from a function's signature (round-trip,
   idempotence, equivalence). The properties are generic rather than derived from a requirement, and function-level.
