@@ -57,7 +57,7 @@ Each layer is a folder or file you can open:
 | Skills | One `SKILL.md` per skill: a `Procedure` block with the steps to follow, plus rules in plain prose. Two skills are shared by several agents | [`sut/skills/`](../traceeval/sut/skills/) |
 | Tools | Thin adapters. Each has a name, a kind (`read`, `write` or `guarded`) and a parameter schema. The orchestrator also has a control tool, `route_to_agent`, and two of its own, `make_plan` and `request_approval` | [`sut/tools/`](../traceeval/sut/tools/) |
 | Services | The business logic: pages, versions and assets; review, publish, schedule and unpublish; links; SEO; roles and permissions; consent, export, audit and approvals; translation; brand guidelines; analytics and the site audit | [`sut/services/`](../traceeval/sut/services/) |
-| Data | An in-memory copy of a JSON file with the users, pages, assets, consents, translation jobs, brand guidelines, analytics, approver and audit log, plus a memory of idempotency keys | [`fixtures/base.json`](../traceeval/sut/fixtures/base.json), [`services/state.py`](../traceeval/sut/services/state.py) |
+| Data | An in-memory copy of a JSON file with the users, the pages and their reviews, assets, the data subjects and their consents, translation jobs, brand guidelines, analytics, external links, the approver's decision and the audit log, plus a logical clock and a memory of idempotency keys | [`fixtures/base.json`](../traceeval/sut/fixtures/base.json), [`services/state.py`](../traceeval/sut/services/state.py) |
 | Harness | What runs the agents: the agent loop, the dispatcher that every tool call passes through, the skill loader, fault injection and retries | [`sut/harness/`](../traceeval/sut/harness/) |
 | Settings | The step budgets (per agent and per request), retries, idempotency keys, disabled and guarded tools, the default agent, the review and scheduling switches, SEO limits, default languages and the slow-page limit | [`config/runtime.yaml`](../traceeval/sut/config/runtime.yaml) |
 | Backends | What makes the decisions: a model, behind an OpenAI-style chat client ([EXPERIMENT.md](EXPERIMENT.md) §3) | [`harness/backends/`](../traceeval/sut/harness/backends/), [`traceeval/llm/chat.py`](../traceeval/llm/chat.py) |
@@ -88,11 +88,11 @@ Click an agent to see its definition, or a skill to read its procedure:
 |---|---|---|---|
 | [orchestrator](../traceeval/sut/agents/orchestrator.yaml) | sending each request to the right specialist, or planning and running the steps of a request that needs several | [routing](../traceeval/sut/skills/routing/SKILL.md) | `route_to_agent`, `make_plan`, `request_approval` |
 | [authoring](../traceeval/sut/agents/authoring.yaml) | creating draft pages and editing page text, and asking for a review when told to | [page-authoring](../traceeval/sut/skills/page-authoring/SKILL.md) | `search_pages`, `get_page`, `create_page`, `update_page_content`, `set_page_metadata`, `validate_links`, `request_review`, `list_versions`, `check_permission` |
-| [publishing](../traceeval/sut/agents/publishing.yaml) | putting pages live, scheduling them, taking them down | [publishing-workflow](../traceeval/sut/skills/publishing-workflow/SKILL.md) | `get_page`, `check_permission`, `validate_links`, `request_review`, `approve_review`†, `publish_page`, `schedule_publish`, `unpublish_page`† |
+| [publishing](../traceeval/sut/agents/publishing.yaml) | putting pages live, scheduling them, taking them down | [publishing-workflow](../traceeval/sut/skills/publishing-workflow/SKILL.md) | `get_page`, `check_permission`, `validate_links`, `request_review`, `approve_review` (guarded), `publish_page`, `schedule_publish`, `unpublish_page` (guarded) |
 | [seo](../traceeval/sut/agents/seo.yaml) | checking and setting a page's title, description and keywords, within the title-length limit | [seo-metadata](../traceeval/sut/skills/seo-metadata/SKILL.md) | `get_page`, `get_seo_report`, `set_page_metadata`, `check_permission` |
 | [assets](../traceeval/sut/agents/assets.yaml) | uploading files to the asset library, finding assets by their tags (only licensed ones may be used), and attaching them to pages | [asset-management](../traceeval/sut/skills/asset-management/SKILL.md) | `get_page`, `upload_asset`, `search_assets`, `get_asset`, `attach_asset`, `check_permission` |
 | [translation](../traceeval/sut/agents/translation.yaml) | starting translation jobs and reporting how far they are | [translation](../traceeval/sut/skills/translation/SKILL.md) | `get_page`, `check_permission`, `create_translation_job`, `get_translation_status` |
-| [governance](../traceeval/sut/agents/governance.yaml) | exporting a person's data when they have consented, and answering audit questions | [governance-ops](../traceeval/sut/skills/governance-ops/SKILL.md) | `check_permission`, `check_consent`, `export_user_data`†, `get_audit_log` |
+| [governance](../traceeval/sut/agents/governance.yaml) | exporting a person's data when they have consented, and answering audit questions | [governance-ops](../traceeval/sut/skills/governance-ops/SKILL.md) | `check_permission`, `check_consent`, `export_user_data` (guarded), `get_audit_log` |
 | [maintenance](../traceeval/sut/agents/maintenance.yaml) | restoring an earlier version of a page | [rollback](../traceeval/sut/skills/rollback/SKILL.md) | `get_page`, `list_versions`, `rollback_page`, `validate_links`, `check_permission` |
 | [brand](../traceeval/sut/agents/brand.yaml) | checking pages against the brand guidelines (forbidden terms, the offer disclaimer, licensed assets) and finding the pages that use a term | [brand-governance](../traceeval/sut/skills/brand-governance/SKILL.md) | `get_brand_guidelines`, `check_brand_policy`, `search_pages` |
 | [insights](../traceeval/sut/agents/insights.yaml) | how pages perform: views, bounce rate, conversions, and the best or worst pages of a section | [data-insights](../traceeval/sut/skills/data-insights/SKILL.md) | `get_page_metrics` |
@@ -101,8 +101,8 @@ Click an agent to see its definition, or a skill to read its procedure:
 The last three agents, and asset search, are modelled on AEM's Brand Governance, Data Insights, Site
 Optimization and Content Advisor agents ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md)).
 
-† A *guarded* tool: the dispatcher refuses the call unless the request carries an approval token. What the services
-check on top of that is under "Who enforces which rule".
+A guarded tool is one the dispatcher refuses unless the request carries an approval token. What the services check
+on top of that is under "Who enforces which rule".
 
 ### The shared skills
 
