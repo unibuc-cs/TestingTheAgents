@@ -77,8 +77,8 @@ For each request it also shows which checks will run and the agent brief ([SDD_G
 shows:
 
 - the brief is 9–20% of the repository (12% on average);
-- all 25 verdicts are as expected: every wrong PR is rejected, and the report names the clause, the counterexample
-  or the misplaced code;
+- all 25 verdicts are as expected, the two correct PRs that Gemma's behaviour rejects included (below): every
+  wrong PR is rejected, and the report names the clause, the counterexample or the misplaced code;
 - two rules are proven for all inputs (FS-0101, FS-0103);
 - two specs find defects in the current app before any PR is written (FS-0102, FS-0105).
 
@@ -111,5 +111,5 @@ The prototype does not include:
 - a real repository: it runs on the testbed;
 - a second proof backend.
 
-The next step is to run the loop spec -> brief -> coding agent -> PR -> evidence, and to measure first-pass
-acceptance, placement, minimality and cost against the same requests done without a spec.
+The next step is to run the loop spec $\to$ brief $\to$ coding agent $\to$ PR $\to$ evidence, and to
+measure first-pass acceptance, placement, minimality and cost against the same requests done without a spec.
