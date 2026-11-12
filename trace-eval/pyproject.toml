@@ -9,7 +9,7 @@ description = "TRACE-Eval: change-aware, cost-bounded regression test selection 
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "Ciprian Paduraru" }]
+authors = [{ name = "University of Bucharest / ILDS" }]
 dependencies = [
     "pyyaml>=6.0",
     "numpy>=1.26",

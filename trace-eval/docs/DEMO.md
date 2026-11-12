@@ -150,17 +150,17 @@ affect, because the catalog's `mandatory` flag acts as a stopping rule. The cove
 of [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5. The features are the unit the AEM team suggested: this change affects
 three (publish, schedule, take a page down), and the nine tests reached all three.
 
-If the GPU server is down, run both checks with `--backend replay`: both are recorded in
-`tests/cassettes/gemma.jsonl` ([EXPERIMENT.md](EXPERIMENT.md) §5), so the same tests run with the same outcomes,
-and the timings read 0 seconds. If the server stops answering during a check, the check says so and gives no
-verdict. The run is marked `INFRA_INVALID`, the environment's fault rather than the change's.
+If the GPU server is down, run the checks of this section, the batch below included, with `--backend replay`: all
+three are recorded in `tests/cassettes/gemma.jsonl` ([EXPERIMENT.md](EXPERIMENT.md) §5), so the same tests run with
+the same outcomes, and the timings read 0 seconds. If the server stops answering during a check, the check says so
+and gives no verdict. The run is marked `INFRA_INVALID`, the environment's fault rather than the change's.
 
 If there is time, a day's merges at once, which is how the AEM team runs their tests. `batch_nightly` bundles six
 regressions and two harmless edits (`traceeval mutations` lists its members); the check stops at the first failure
 and names the member it blames:
 
 ```bash
-traceeval check batch_nightly --history runs/gemma7 --budget 0.2     # live only: not in the cassette
+traceeval check batch_nightly --history runs/gemma7 --budget 0.2     # live
 ```
 
 ```text

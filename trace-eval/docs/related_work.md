@@ -64,9 +64,9 @@ search, but their full text has not been checked; they should be read before the
 - **ATLAS: Adaptive Testing for LLM Evaluation.** Li et al., arXiv 2511.04689. Computerized adaptive testing with
   IRT and item selection by Fisher information, using up to 90% fewer items. Its sequential selection by
   information gain is a template for budget-aware stopping.
-- **Efficient Benchmarking of AI Agents.** Ndzomga, arXiv 2603.23749, 2026. Keeps the tasks of mid-range
-  difficulty (pass rate in [0.3, 0.7]) on Terminal-Bench 2.0 and the HAL benchmarks, which removes 44–70% of the
-  tasks with rank fidelity ρ≈0.91. It is the strongest existing baseline for cheap subsets of agent evals, but it
+- **Efficient Benchmarking of AI Agents.** Ndzomga, arXiv 2603.23749, 2026. Keeps the tasks of mid-range difficulty
+  (pass rate in [0.3, 0.7]) on Terminal-Bench 2.0 and the HAL benchmarks, which removes 44–70% of the tasks with
+  rank fidelity $\rho \approx 0.91$. It is the strongest existing baseline for cheap subsets of agent evals, but it
   optimizes the ranking of models and not the detection of regressions after a change.
 - **Risk-Aware Adaptive Evaluation.** Maji & Chowdhury (Georgia Tech), arXiv 2609.38914, Sep 2026. Contextual
   Thompson sampling over τ-bench airline scenarios with impact weights. With 6% of the corpus it recovers 86% of
@@ -101,9 +101,9 @@ Fault-injection work that can generate a ground truth or serve as a contrast:
   types and 275 traces, each paired with a fault-free reference.
 - **When Tools Fail (ToolMaze).** Zhu et al., arXiv 2606.05806, 2026. A taxonomy of tool perturbations and a
   Perturbation Recovery Rate.
-- **ReliabilityBench.** Gupta, arXiv 2601.06112, 2026. A reliability surface R(k, ε, λ) over pass^k, the
-  intensity of prompt perturbations and the intensity of faults (timeouts, rate limits, partial responses, schema
-  drift), with metamorphic relations over actions.
+- **ReliabilityBench.** Gupta, arXiv 2601.06112, 2026. A reliability surface $R(k, \varepsilon, \lambda)$ over
+  $\mathrm{pass}^k$, the intensity of prompt perturbations and the intensity of faults (timeouts, rate limits,
+  partial responses, schema drift), with metamorphic relations over actions.
 - **GameDevBench.** Chi et al. (CMU), arXiv 2602.11103, 2026. 333 Godot tasks with deterministic unit tests. Its
   failure analysis is qualitative and gives no formal taxonomy.
 - **SkillsBench.** Li et al., arXiv 2602.12670, 2026. 87 tasks in 8 domains with deterministic verifiers. Curated
@@ -119,8 +119,8 @@ Fault-injection work that can generate a ground truth or serve as a contrast:
 - Rothermel, Untch, Chu, Harrold, "Prioritizing test cases for regression testing", ICSM 1999 / TSE 27(10), 2001.
   APFD, and the total and additional greedy orderings.
 - Elbaum, Malishevsky, Rothermel, "Incorporating varying test costs and fault severities into TCP", ICSE 2001
-  (APFD_c); Malishevsky, Ruthruff, Rothermel, Elbaum, "Cost-cognizant test case prioritization", technical
-  report TR-UNL-CSE-2006-0004, University of Nebraska–Lincoln, 2006.
+  ($\mathrm{APFD}_c$); Malishevsky, Ruthruff, Rothermel, Elbaum, "Cost-cognizant test case prioritization",
+  technical report TR-UNL-CSE-2006-0004, University of Nebraska–Lincoln, 2006.
 - Saha, Zhang, Khurshid, Perry, "An IR approach for regression test prioritization based on program changes"
   (REPiR), ICSE 2015.
 - Spieker, Gotlieb, Marijan, Mossige, "RL for automatic TCP and selection in CI" (RETECS), ISSTA 2017.
@@ -134,7 +134,7 @@ Fault-injection work that can generate a ground truth or serve as a contrast:
 ## 5. Agent benchmarks with executable environments and deterministic verification
 
 - **τ-bench.** Yao et al. (Sierra), arXiv 2406.12045. Compares the database end state with the goal state, and
-  introduces pass^k.
+  introduces $\mathrm{pass}^k$.
 - **τ²-bench.** Barres et al., arXiv 2506.07982. Adds a dual-control telecom domain and a compositional generator
   of verifiable tasks.
 - **AppWorld.** Trivedi et al., arXiv 2407.18901, ACL 2024. 9 apps, 457 APIs and 750 tasks, checked by
@@ -151,7 +151,7 @@ Fault-injection work that can generate a ground truth or serve as a contrast:
 
 ## 6. Agent reliability / nondeterminism statistics
 
-- **pass^k** (τ-bench). The probability that all k trials succeed.
+- **$\mathrm{pass}^k$** (τ-bench). The probability that all $k$ trials succeed.
 - **ReliabilityBench** (§3).
 - **Beyond pass@1: A Reliability Science Framework for Long-Horizon LLM Agents.** Khanal, Tao, Zhou, arXiv
   2603.29231, 2026. Defines a Reliability Decay Curve and a Variance Amplification Factor.
@@ -184,8 +184,8 @@ Fault-injection work that can generate a ground truth or serve as a contrast:
    analogue of coverage-based or IR-based RTS. Trace spans (`execute_tool`, skill loads, config reads) are an
    untapped proxy for coverage.
 2. **Cost is measured in tokens and time, not in tests.** The cost of agent tests varies by a factor of 10–100.
-   Cost-cognizant APFD_c with token or latency costs, and budget-aware stopping, have not been applied to agent
-   evals.
+   Cost-cognizant $\mathrm{APFD}_c$ with token or latency costs, and budget-aware stopping, have not been applied
+   to agent evals.
 3. **Selection that accounts for nondeterminism.** Allocating runs and tests jointly under a budget, with
    anytime-valid stopping, is an open problem. Risk-Aware Adaptive Evaluation allocates runs with a bandit but
    ignores the change.

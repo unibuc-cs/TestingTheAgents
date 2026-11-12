@@ -12,16 +12,16 @@ the paper (`docs/paper/`) cites the same works from `docs/paper/refs.bib`.
   Defines APFD, the average percentage of faults detected by an order of the suite
   (`experiment/metrics.py::apfd`; [USER_GUIDE.md](USER_GUIDE.md) §4 gives the formula and how to read it).
 - Elbaum, S., Malishevsky, A. G., Rothermel, G. *Incorporating varying test costs and fault severities into test
-  case prioritization.* ICSE 2001, pp. 329–338. doi:10.1109/ICSE.2001.919106.
-  Defines APFD_c, the cost-cognizant form of APFD, which weighs each fault by its severity and each test by its
-  cost (`experiment/metrics.py::apfdc`). The report's section 4 gives both.
+  case prioritization.* ICSE 2001, pp. 329–338. doi:10.1109/ICSE.2001.919106. Defines $\mathrm{APFD}_c$, the
+  cost-cognizant form of APFD, which weighs each fault by its severity and each test by its cost
+  (`experiment/metrics.py::apfdc`). The report's section 4 gives both.
 - Elbaum, S., Malishevsky, A. G., Rothermel, G. *Test case prioritization: a family of empirical studies.* IEEE
   Transactions on Software Engineering 28(2): 159–182, 2002. doi:10.1109/32.988497.
   The empirical protocol for comparing prioritization techniques: many orders, many faulty versions, APFD.
 - Malishevsky, A. G., Ruthruff, J. R., Rothermel, G., Elbaum, S. *Cost-cognizant test case prioritization.*
-  Technical report TR-UNL-CSE-2006-0004, University of Nebraska–Lincoln, 2006.
-  Prioritization with estimated costs and severities, and the argument for reading APFD_c rather than APFD when
-  costs differ by an order of magnitude, as tokens do here.
+  Technical report TR-UNL-CSE-2006-0004, University of Nebraska–Lincoln, 2006. Prioritization with estimated costs
+  and severities, and the argument for reading $\mathrm{APFD}_c$ rather than APFD when costs differ by an order of
+  magnitude, as tokens do here.
 
 ## Regression test selection and prioritization
 
@@ -83,7 +83,7 @@ the paper (`docs/paper/`) cites the same works from `docs/paper/refs.bib`.
 - Yao, S., Shinn, N., Razavi, P., Narasimhan, K. *τ-bench: a benchmark for tool-agent-user interaction in
   real-world domains.* arXiv 2406.12045, 2024. Barres, V., et al. *τ²-bench: evaluating conversational agents in
   a dual-control environment.* arXiv 2506.07982, 2025.
-  State-based verification and pass^k; tau2-bench is the planned second system under test.
+  State-based verification and $\mathrm{pass}^k$; tau2-bench is the planned second system under test.
 - Ma, W., Yang, C., Kästner, C. *(Why) is my prompt getting worse? Rethinking regression testing for evolving LLM
   APIs.* CAIN 2024; arXiv 2311.11123.
   The obstacles to regression testing LLM applications: no crisp oracle, brittle prompts, nondeterminism.

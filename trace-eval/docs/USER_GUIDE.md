@@ -75,20 +75,22 @@ Everything else is plumbing (loaders, tracing, report).
   cannot see). Its stop-reason table shows whether the adaptive strategy said `clean` on benign changes and
   `regression` on regressions.
 - Section 4 gives selection recall (the share of the revealing tests inside the selected subset) and how well the
-  complete order is prioritized, by APFD and APFD_c (`experiment/metrics.py`; the papers are in
+  complete order is prioritized, by APFD and $\mathrm{APFD}_c$ (`experiment/metrics.py`; the papers are in
   [REFERENCES.md](REFERENCES.md)). Both score an order of the whole suite with every test run and no stopping, so
   they measure prioritization alone. Each revealing test counts as one fault, found when that test runs.
-  - APFD (Rothermel et al. 2001) is the area under the curve of faults found against tests run. With n tests, m
-    faults and TF_i the position of the test that finds fault i: `APFD = 1 - (TF_1 + ... + TF_m) / (n * m) + 1 / (2
-    * n)`. It is near 1 when the first tests find every fault and near 0 when the last ones do; a random order
-    scores about 0.5. A fault no test in the order finds counts as found at position n + 1.
-  - APFD_c (Elbaum, Malishevsky and Rothermel 2001) replaces the position of a test by the cost spent up to it and
-    weighs each fault by its severity. With c_j the cost of the j-th test in the order, s_i the severity of fault i
-    (the risk weight of the revealing test, 1 to 4) and C the cost of the whole order: `APFD_c = sum_i s_i * (C -
-    cost spent before test TF_i - c_TF_i / 2) / (C * sum_i s_i)`. Finding a fault after a few cheap tests costs
-    little and scores high; finding it after the long workflows scores low, however few tests came before. Tokens
-    per test vary by a factor of ten or more on this suite, so APFD_c is the one to read: an order can score well
-    on APFD and poorly on APFD_c by putting the expensive tests first.
+  - APFD (Rothermel et al. 2001) is the area under the curve of faults found against tests run. With $n$ tests, $m$
+    faults and $TF_i$ the position of the test that finds fault $i$:
+    $\mathrm{APFD} = 1 - (TF_1 + \cdots + TF_m)/(nm) + 1/(2n)$. It is near 1 when the first tests find every fault
+    and near 0 when the last ones do; a random order scores about 0.5. A fault no test in the order finds counts as
+    found at position $n + 1$.
+  - $\mathrm{APFD}_c$ (Elbaum, Malishevsky and Rothermel 2001) replaces the position of a test by the cost spent up
+    to it and weighs each fault by its severity. With $c_j$ the cost of the $j$-th test in the order, $s_i$ the
+    severity of fault $i$ (the risk weight of the revealing test, 1 to 4), $C_i$ the cost spent before the test
+    that finds fault $i$ and $C$ the cost of the whole order:
+    $\mathrm{APFD}_c = \sum_i s_i \,(C - C_i - c_{TF_i}/2) \big/ (C \sum_i s_i)$. Finding a fault after a few cheap
+    tests costs little and scores high; finding it after the long workflows scores low, however few tests came
+    before. Tokens per test vary by a factor of ten or more on this suite, so $\mathrm{APFD}_c$ is the one to read:
+    an order can score well on APFD and poorly on $\mathrm{APFD}_c$ by putting the expensive tests first.
   - What to expect: `random` sits near 0.54 on both and `full` (catalog order) near 0.6; an order that uses the
     change scores about 0.75 or more. The adaptive method's order is the one its model would pick if every test
     passed, followed by the rest in cost-aware order.
@@ -134,7 +136,7 @@ flowchart LR
 | factor | what it is | example |
 |---|---|---|
 | kind ratio | for the other recorded changes of this kind (code, skill, prompt or config; §6), the fraction of the tests each one touched that caught it, averaged over those changes | for a code change, tests that ran a changed line caught it 19% of the time on average: 6 of the 12 tests that ran the changed line of the link check caught `code_links_external_lenient`, but only 5 of the 180 that ran the changed line of the agent loop caught `code_termination_off_by_six`. Tests that only called a changed function, without running the changed line, caught nothing (the 1% floor). A ratio learned from one or two changes is padded with 2 changes' worth of a default for its kind, so it stays near that default |
-| test record | the number of other recorded changes of this kind that touched the test and that it caught, over the number an average touched test would have caught; both are padded with 2 (`prior_strength`) | AUT-02 caught 3 where an average test would have caught 1.03: (3 + 2) / (1.03 + 2) = 1.65. AUT-13 caught none of an expected 1.03: (0 + 2) / (1.03 + 2) = 0.66 |
+| test record | the number of other recorded changes of this kind that touched the test and that it caught, over the number an average touched test would have caught; both are padded with 2 (`prior_strength`) | AUT-02 caught 3 where an average test would have caught 1.03: $(3 + 2)/(1.03 + 2) = 1.65$. AUT-13 caught none of an expected 1.03: $(0 + 2)/(1.03 + 2) = 0.66$ |
 | coverage | how often the test ran the changed code in its runs on the original app, from 0 to 1. When an agent loses a tool or a skill, it is how often the test used that tool or skill, because the agent's other tests cannot notice the loss | PUB-12 runs the changed line of `harness/retry.py` in every run: 1.0 |
 | tilt | the text similarity between the test and the diff (0.5 to 1.5), plus 0.5 if the test's author declared the dependency. The similarity is word overlap by default. `adaptive_bayes_tfidf` uses TF-IDF instead (word overlap that gives rare words more weight), and `adaptive_bayes_notext` uses no text at all. `--strategies adaptive_bayes adaptive_bayes_tfidf adaptive_bayes_notext` compares the three (RESEARCH_PLAN §5.2) | a test whose request mentions publishing gets more weight for a change to the publishing skill |
 
@@ -304,7 +306,7 @@ and checks them live, with the results in [results/gemma7/batch_sweep.md](result
   ([SDD_GUIDE.md](SDD_GUIDE.md)) that writes its own `expect` gets it by default.
 - **Change**: add a `Mutation(...)` to the table in `mutation/catalog.py` with `replace`, `delete_line`,
   `delete_block` or `append` edits. Anchors are literal text, so reformatting `sut/` breaks them, and the
-  operators then raise an error. A regression must be revealed by ≥1 test, and a benign change by none.
+  operators then raise an error. A regression must be revealed by at least one test, and a benign change by none.
 - **Strategy**: in `selection/strategies.py`, subclass `Strategy` (from `selection/base.py`) and decorate the
   class with `@register`. Implement `order(ctx)`, which returns a prioritized list; tests left out of it are not
   selected. Adaptive strategies implement `run(ctx, oracle)`. Use only `ctx.change`, `ctx.catalog`, the baseline

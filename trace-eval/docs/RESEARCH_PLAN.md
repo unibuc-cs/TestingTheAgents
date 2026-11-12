@@ -2,7 +2,7 @@
 
 **Change-aware, cost-bounded selection, prioritization and stopping of tests and evals for LLM agent systems**
 
-Ciprian Păduraru · University of Bucharest · the results are in `docs/results/gemma7/report.md`
+University of Bucharest / ILDS · the results are in `docs/results/gemma7/report.md`
 
 ---
 
@@ -49,11 +49,11 @@ on it.
 
 ## 1. Problem statement and research questions
 
-A change set Δ (edits to skill files, prompts or agent definitions, harness or tool code, configuration) arrives
-at an agent platform with a suite T of tests and eval-dataset items, each with a cost c(t) in tokens and time. We
-must choose a subset S ⊆ T and an order, possibly adaptively, under a budget B, so that the regressions Δ
-introduces are detected with high probability and at low cost. The procedure should stop when more evidence is
-not worth its price.
+A change set $\Delta$ (edits to skill files, prompts or agent definitions, harness or tool code, configuration)
+arrives at an agent platform with a suite $T$ of tests and eval-dataset items, each with a cost $c(t)$ in tokens
+and time. We must choose a subset $S \subseteq T$ and an order, possibly adaptively, under a budget $B$, so that
+the regressions $\Delta$ introduces are detected with high probability and at low cost. The procedure should stop
+when more evidence is not worth its price.
 
 We keep the three sub-problems of Adobe's requirements document (not in this repository; `docs/AEM_ALIGNMENT.md` §1
 sums it up) separate throughout: selection (which tests), prioritization (in which order) and budget-aware stopping
@@ -65,7 +65,7 @@ sums it up) separate throughout: selection (which tests), prioritization (in whi
   RQ1 and RQ3 metrics for `declared` vs. the strategies built on observed dependencies (`observed`, `cost_aware`,
   `adaptive_bayes`).*
 - **RQ3 (prioritization)** Can we order tests to detect regressions earlier? *Metric: APFD, cost-cognizant
-  APFD_c, cost to first detection.*
+  $\mathrm{APFD}_c$, cost to first detection.*
 - **RQ4 (budget)** Can we reduce time and tokens while retaining acceptable detection and coverage? *Metric:
   detection rate vs. budget curves, tokens actually spent, waste on the changes no test reveals, stopping
   accuracy.*
@@ -157,9 +157,9 @@ A test run ends in one of five outcomes:
   replay had no recorded answer.
 
 An INFRA_INVALID run is left out, as if it had not been made. Of the other outcomes, only pass or fail enters the
-ground truth. With K repetitions per variant, the ground truth "t reveals Δ" is a *majority flip*: the baseline
-pass rate is ≥ 0.5 and the variant pass rate is < 0.5. A test that the model fails on the original app
-(f(t) = 1 − baseline pass rate) cannot reveal anything, and f(t) is a direct input to the selectors.
+ground truth. With $K$ repetitions per variant, the ground truth "$t$ reveals $\Delta$" is a *majority flip*: the
+baseline pass rate is $\ge 0.5$ and the variant pass rate is $< 0.5$. A test that the model fails on the original
+app ($f_t = 1 -$ its baseline pass rate) cannot reveal anything, and $f_t$ is a direct input to the selectors.
 
 ```mermaid
 flowchart LR
@@ -232,47 +232,56 @@ variants of the proposed method differ from it only in how text is compared (§5
 
 The loop is the one pictured in `docs/USER_GUIDE.md` §5; the paragraphs below define each box.
 
-*Hypotheses (step 1 of the five in `adaptive_bayes.py`'s docstring).* Each changed component c is broken with a
-prior π_c that depends on its kind: ≈ 0.45–0.5 for code, skill, config and agent components, ≈ 0.12–0.15 for prompt
-wording and prose. The posterior is kept exactly over all 2^k subsets B of the changed components (k ≤ 8
-components).
+*Hypotheses (step 1 of the five in `adaptive_bayes.py`'s docstring).* Each changed component $c$ is broken with a
+prior $\pi_c$ that depends on its kind: about 0.45 to 0.5 for code, skill, config and agent components, 0.12 to
+0.15 for prompt wording and prose. The posterior is kept exactly over all $2^k$ subsets $B$ of the $k$ changed
+components ($k \le 8$).
 
-*Likelihood (step 2).* P(t fails | B) = 1 − (1 − f_t) ∏_{c∈B} (1 − s_tc). The sensitivity s_tc of test t to
-component c is s_tc = r_kind(c) · lift_t,kind(c) · freq_t(c) · tilt_t, where
+*Likelihood (step 2).* Under the hypothesis that the components in $B$ are broken, a test fails with probability
 
-- r_kind is the empirical reveal ratio learned from the other recorded changes: the fraction of statically impacted
-  tests that actually revealed a change of that kind. Kinds separate, for example, tests that executed the changed
-  line from tests that executed only the changed function, and agent fields are calibrated per field. The ratio is
-  where "covered is not revealed" enters the model, as measured numbers rather than hand-set constants. A ratio
-  learned from few changes is padded toward a default for its kind (m = 2 changes' worth, as below), so that one
-  earlier change cannot make a whole kind look certain.
-- lift_t,k = (O_tk + m) / (E_tk + m) is the test's own record on the earlier changes of kind k that impacted it.
-  O_tk is how many of them it revealed, E_tk how many an average impacted test would have revealed (the sum of
-  those changes' reveal rates), and m = 2 pads a short record. A test that ran many changed functions and never
-  caught anything gets a lift below 1; one that caught changes most impacted tests missed gets a lift above 1.
-  Comparing with E, instead of counting catches, matters because a change that breaks a large part of the suite
-  (link validation turned off everywhere: 49 tests) says little about each test it breaks. Like r_kind, the records
-  are recomputed from the recordings at every run, without the change under evaluation (`docs/USER_GUIDE.md` §5).
-  The record is there because kind-level sensitivities alone let the method spend on cheap tests that merely call a
-  changed function.
-- freq_t(c) is how often t exercised c in its baseline runs. For an agent's tool or skill list that only lost
-  items, it is how often t used one of the removed items.
-- tilt_t ∈ [0.5, 2.0] combines the lexical relevance of the change text (code only, never comments) to the test's
+$$P(t \text{ fails} \mid B) = 1 - (1 - f_t) \prod_{c \in B} (1 - s_{tc}),$$
+
+where $f_t$ is the test's fail rate on the original app and $s_{tc}$, the sensitivity of test $t$ to component $c$,
+is the product of four factors,
+
+$$s_{tc} = r_{k(c)} \cdot \ell_{t,k(c)} \cdot \phi_t(c) \cdot \tau_t,$$
+
+in the paper's notation (`docs/USER_GUIDE.md` §5 calls them kind ratio, test record, coverage and tilt):
+
+- $r_k$ is the empirical reveal ratio of kind $k$, learned from the other recorded changes: the fraction of
+  statically impacted tests that actually revealed a change of that kind. Kinds separate, for example, tests that
+  executed the changed line from tests that executed only the changed function, and agent fields are calibrated per
+  field. The ratio is where "covered is not revealed" enters the model, as measured numbers rather than hand-set
+  constants. A ratio learned from few changes is padded toward a default for its kind ($m = 2$ changes' worth, as
+  below), so that one earlier change cannot make a whole kind look certain.
+- $\ell_{tk} = (O_{tk} + m)/(E_{tk} + m)$ is the test's own record on the earlier changes of kind $k$ that impacted
+  it. $O_{tk}$ is how many of them it revealed, $E_{tk}$ how many an average impacted test would have revealed (the
+  sum of those changes' reveal rates), and $m = 2$ pads a short record. A test that ran many changed functions and
+  never caught anything gets a record below 1; one that caught changes most impacted tests missed gets a record
+  above 1. Comparing with $E_{tk}$, instead of counting catches, matters because a change that breaks a large part
+  of the suite (link validation turned off everywhere: 49 tests) says little about each test it breaks. Like $r_k$,
+  the records are recomputed from the recordings at every run, without the change under evaluation
+  (`docs/USER_GUIDE.md` §5). The record is there because kind-level sensitivities alone let the method spend on
+  cheap tests that merely call a changed function.
+- $\phi_t(c)$ is how often $t$ exercised $c$ in its baseline runs. For an agent's tool or skill list that only lost
+  items, it is how often $t$ used one of the removed items.
+- $\tau_t \in [0.5, 2]$ combines the lexical relevance of the change text (code only, never comments) to the test's
   own text (name, request, expectations) with a bonus when the author declared the dependency. It is a proxy for
-  whether the test's oracle plausibly observes the changed behaviour. The relevance measure is an option
-  (`text`): word overlap (the default), TF-IDF, or none (§5.2).
+  whether the test's oracle plausibly observes the changed behaviour. The relevance measure is an option (`text`):
+  word overlap (the default), TF-IDF, or none (§5.2).
 
-*Policy (step 3).* The next test is the argmax over t of (expected information gain about B, tilted by risk) /
-c(t). After a pass, the sensitivities of tests with the same behaviour signature (agents, tools, fault profile,
-dataset) are discounted (×0.35), because near-duplicate tests give correlated evidence rather than independent
-draws. Each test runs at most once: the models decode greedily, so a rerun almost always gives the same answer
-(§5.4 measures where it does not).
+*Policy (step 3).* The next test is $\arg\max_t\, g_t / c(t)$, where $g_t$ is the expected information gain about
+$B$, tilted by risk, and $c(t)$ the test's cost. After a pass, the sensitivities of tests with the same behaviour
+signature (agents, tools, fault profile, dataset) are multiplied by $\delta = 0.35$, because near-duplicate tests
+give correlated evidence rather than independent draws. Each test runs at most once: the models decode greedily, so
+a rerun almost always gives the same answer (§5.4 measures where it does not).
 
 *Stopping (step 4).* The method stops with the verdict "regression" at the first failure of a test that passed on
 the original app: that failure shows a changed behaviour, which is what the ground truth calls revealing, while a
 failure the model also produces on the original app says nothing about the change. It stops with the verdict
-"clean" when P(any component broken | evidence) < ε_clean (0.05). Otherwise it runs until the budget is exhausted
-or no test is informative. Selection, prioritization and stopping all come from the same model.
+"clean" when $P(B \neq \emptyset \mid \text{evidence}) < \varepsilon$, with $\varepsilon = 0.05$. Otherwise it runs
+until the budget is exhausted or no test is informative. Selection, prioritization and stopping all come from the
+same model.
 
 *Mandatory coverage (step 5).* A coverage rule sits on top of the model. A run that found no regression then
 tests every mandatory property the change may affect that is still untested, with the cheapest test that checks
@@ -349,7 +358,7 @@ The set is written for the models:
 a nightly run or a pull request would (`docs/USER_GUIDE.md` §6, "Batches"); they are recorded on request and kept
 out of the tables of §5.1, which are the 43 single changes.
 
-The report checks a sanity property of the testbed: every regression-inducing change is revealed by ≥ 1 test, and
+The report checks a sanity property of the testbed: every regression-inducing change is revealed by at least one test, and
 no benign change is revealed by any test. Under Gemma five regressions are revealed by no test (§5.1); the
 other models' recordings are the subject of §5.4.
 
@@ -364,10 +373,10 @@ supplies the outcome and cost), and adaptive strategies interact sequentially. T
    - change coverage, which needs no ground truth (`docs/USER_GUIDE.md` §4; the dimensions are defined in
      `docs/AEM_ALIGNMENT.md` §3.5);
    - property coverage: of the properties a change breaks, those its selected tests exercise;
-   - detection (≥ 1 revealing test executed and failed), recall of revealing tests, tokens actually spent, cost
-     to first detection, false alarms, safety recall, stop reason and stop correctness;
-   - APFD and APFD_c of the complete prioritized order (Rothermel et al. 2001; Elbaum et al. 2001; the formulas
-     are in `docs/USER_GUIDE.md` §4 and the papers in `docs/REFERENCES.md`);
+   - detection (at least one revealing test executed and failed), recall of revealing tests, tokens actually spent,
+     cost to first detection, false alarms, safety recall, stop reason and stop correctness;
+   - APFD and $\mathrm{APFD}_c$ of the complete prioritized order (Rothermel et al. 2001; Elbaum et al. 2001; the
+     formulas are in `docs/USER_GUIDE.md` §4 and the papers in `docs/REFERENCES.md`);
    - selection recall and selected-subset cost.
 
 ---
@@ -414,16 +423,17 @@ Detection of the 29 regressions Gemma reveals, by nominal budget, and tokens act
 | risk_aware_ts (Risk-Aware Adaptive Evaluation, reproduced) | 0.28 | 0.35 | 0.57 | 0.83 | 1.00 | 0.20 | 0.98 | 1.00 |
 | adaptive_bayes | 0.74 | 0.78 | 0.78 | 0.81 | 0.81 | 0.03 | 0.03 | 0.20 |
 
-APFD_c of the full prioritized order runs from 0.54 (random) to 0.76–0.81 for the strategies that use the change,
-the adaptive method's 0.81 the best; its first detection comes after 1.7% of the suite's tokens, the reproduced
-methods' after 12–14%. The report's sections 2 and 4 hold the full tables; time spent follows tokens closely.
+$\mathrm{APFD}_c$ of the full prioritized order runs from 0.54 (random) to 0.76–0.81 for the strategies that use
+the change, the adaptive method's 0.81 the best; its first detection comes after 1.7% of the suite's tokens, the
+reproduced methods' after 12–14%. The report's sections 2 and 4 hold the full tables; time spent follows tokens
+closely.
 
 **Reading.**
 - *RQ1/RQ2.* Declared metadata caps detection at 62%, because shared skills reached through `include`, harness
   code and most configuration keys are not declared. Observed dependencies recover full selection recall and
   reach 86% within a 20% budget. The main argument for trace-informed selection holds.
-- *RQ3.* Informed strategies raise APFD_c from 0.54 (random) to 0.76–0.81. The adaptive method's order is the
-  best, and it finds the first regression soonest.
+- *RQ3.* Informed strategies raise $\mathrm{APFD}_c$ from 0.54 (random) to 0.76–0.81. The adaptive method's order
+  is the best, and it finds the first regression soonest.
 - *RQ4.* The adaptive method is the only one that returns budget: it catches 74% of the regressions at a 5% budget
   and 78% at 20%, for under 3% of the tokens. Its ceiling is 81%. On narrow regressions, revealed by one to five
   tests, it can stop with a "clean" verdict before reaching them (145 of 1,015 replays of regressions). The changes
@@ -442,11 +452,11 @@ methods' after 12–14%. The report's sections 2 and 4 hold the full tables; tim
   adaptive method leads (74% against 69%).
 - *The reproduced methods.* CASPER's slices and the risk-aware bandit do not look at the diff, and it shows: 59%
   and 57% of the regressions at a 20% budget, close to random (56%) and far from the strategies that read the diff
-  and the traces (78–93%; hand-written dependencies alone 62%); an order no better than random's (APFD_c 0.52 and
-  0.60); and a first detection at 12–14% of the suite, where the change-aware strategies need 2–6%. The bandit's
-  impact score is the test's risk, so it does better on the changes that break a safety property (71% at 20%, 98%
-  at 50%). It rewards any failure, so it also runs Gemma's red tests early (the *Red tests* bullet). Neither stops:
-  both spend the whole budget on every change.
+  and the traces (78–93%; hand-written dependencies alone 62%); an order no better than random's ($\mathrm{APFD}_c$
+  0.52 and 0.60); and a first detection at 12–14% of the suite, where the change-aware strategies need 2–6%. The
+  bandit's impact score is the test's risk, so it does better on the changes that break a safety property (71% at
+  20%, 98% at 50%). It rewards any failure, so it also runs Gemma's red tests early (the *Red tests* bullet).
+  Neither stops: both spend the whole budget on every change.
 - *Where CASPER fits.* The numbers above measure what the diff is worth, not CASPER in its own setting.
   - CASPER was built for changes that have no diff a test can be mapped to: a model upgrade, a provider's silent
     update, a prompt-level change whose effect spreads through the model's behaviour. It needs only the logs of the
@@ -666,7 +676,7 @@ needs its own recording, not the sum of the day's single-change checks.
 | Phase | Deliverable | Status |
 |---|---|---|
 | 1. Testbed | SUT, catalog, tracing, mutations, change sets, record/replay, metrics, report, CLI, tests | done |
-| 2. Methods | baselines + cost-aware + predictive + adaptive Bayesian selector with stopping | done, with the mandatory-coverage rule (§5.3); open: tuning ε, the priors and the discount |
+| 2. Methods | baselines + cost-aware + predictive + adaptive Bayesian selector with stopping | done, with the mandatory-coverage rule (§5.3); open: tuning $\varepsilon$, the priors and the discount |
 | 3. Method improvements | (a) test-level learned sensitivities (per test × component-kind reveal history) instead of kind-level; (b) IR relevance inside the Bayesian likelihood; (c) CASPER-style slices and the Risk-Aware Adaptive Evaluation bandit as reproduced baselines | (a) done; (b) done as an option (§5.2); (c) done: `casper_slices` and `risk_aware_ts` (§5.1) |
 | 4. Models | ContentOps with three models (local vLLM): all changes × K reps | done: Gemma (`runs/gemma7`); Qwen's (`runs/qwen7`) and gpt-oss's (`runs/gptoss7`) recordings of the same app are spoiled by run-to-run variation and are not used for the results (§5.4) |
 | 5. Second system under test | tau2-bench, a public benchmark of tool-using agents with a simulated user (`docs/REFERENCES.md`): the airline domain, 50 tasks with a reward computed from the database state and the agent's communication, no model judge; the local model plays both the agent and the user, the controlled changes mutate the policy and the tool code (12 mutations: 6 policy, 4 tool-code, 2 benign), and the replay evaluator and the strategies run unchanged | after the demo for the AEM team |
@@ -683,8 +693,8 @@ Re-planning after a failed step is built on a branch and waits for one product d
 The draft is `docs/paper/main.tex` (build with `latexmk -pdf main`): what a team needs, how the testbed was built,
 the abstractions, the methods, the evaluation with its threats, the take-aways, and the conclusion with future
 work. The venues are ASE, ISSTA or ICST, with a software-engineering framing: regression test selection and
-prioritization for LLM-based systems, a mutation-based ground truth, APFD_c. The alternative is NeurIPS D&B or
-EMNLP, with the testbed as the headline.
+prioritization for LLM-based systems, a mutation-based ground truth, $\mathrm{APFD}_c$. The alternative is NeurIPS
+D&B or EMNLP, with the testbed as the headline.
 
 ---
 
@@ -698,8 +708,8 @@ with early stopping.
    prompts and config under version control together with the harness code? The change-set extractor assumes
    files in one tree.
 2. Dependency registry. Is there a mapping from agents to skills, tools and config, and are traces (tool calls,
-   skills loaded, config reads) retained for the nightly runs? Observed dependencies need ≥ 1 baseline run per
-   test with tracing.
+   skills loaded, config reads) retained for the nightly runs? Observed dependencies need at least one baseline run
+   per test with tracing.
 3. Eval datasets. Can items be run individually and their costs attributed? Our dataset items are selectable
    units; the routing dataset is run in route-only mode.
 4. Oracles. Which properties are deterministic and which are judged? Which are release blockers (the safety set)?

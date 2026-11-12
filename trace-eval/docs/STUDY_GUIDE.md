@@ -112,8 +112,9 @@ The proof works as follows:
 
 1. the source of `review_age_ok` is parsed, and its single `return` expression is rewritten into Z3 operators:
    `and`, `or`, `not` and chained comparisons become `z3.And/Or/Not`;
-2. the inputs become `z3.Int` symbols, and the solver is asked for an input that satisfies `assume ∧ ¬ensures`,
-   that is, one that meets the precondition and breaks the postcondition;
+2. the inputs become `z3.Int` symbols, and the solver is asked for an input that satisfies
+   $\mathit{assume} \land \lnot\,\mathit{ensures}$, that is, one that meets the precondition and breaks the
+   postcondition;
 3. if the answer is `unsat`, no such input exists, and that is the proof; if the solver finds a model, a concrete
    assignment of the inputs, that model is the counterexample.
 

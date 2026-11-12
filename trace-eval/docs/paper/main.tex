@@ -32,7 +32,7 @@
 \algnewcommand{\Phase}[1]{\Statex \textit{#1}}
 
 \title{TRACE-Eval: change-aware, cost-bounded regression test selection\\for LLM agent systems}
-\author{Ciprian Păduraru\\University of Bucharest\\\texttt{ciprian.paduraru@unibuc.ro}}
+\author{University of Bucharest / ILDS}
 \date{}
 
 \begin{document}
@@ -486,7 +486,7 @@ subset and order it, \strat{declared} on what the authors wrote down and \strat{
 two order the whole suite, \strat{ir\_tfidf} by text alone and \strat{cost\_aware} by affinity, risk, history and
 cost.
 
-\begin{algorithm}[H]
+\begin{algorithm}[!htbp]
 \caption{The four non-adaptive change-aware orders}
 \label{alg:orders}
 \begin{algorithmic}[1]
@@ -524,7 +524,7 @@ search; and, because a replay (Section~\ref{sec:evaluation}) returns an outcome 
 scored by the shift of its representatives' failure rate. For the prioritization metrics its order is that of a
 run without a budget limit in which every test passes.
 
-\begin{algorithm}[H]
+\begin{algorithm}[!htbp]
 \caption{\strat{casper\_slices}}
 \label{alg:casper}
 \begin{algorithmic}[1]
@@ -556,7 +556,7 @@ definition and of the shape of its baseline runs, standardized, with an intercep
 \rho_t$; the budget is in tokens, each test runs once, and $\sigma$ is the logistic function. For the
 prioritization metrics its order is static: by impact, cheapest first.
 
-\begin{algorithm}[H]
+\begin{algorithm}[!htbp]
 \caption{\strat{risk\_aware\_ts}}
 \label{alg:bandit}
 \begin{algorithmic}[1]
@@ -799,7 +799,7 @@ link validation that ignores asset references (skill) & a non-blocking asset ref
 \end{tabular}
 \end{table}
 
-\begin{table}[t]
+\begin{table}[!htbp]
 \centering\small
 \caption{Detection of the 29 revealed regressions by nominal budget (share of the full-suite tokens), and the
 tokens actually spent: on regressions at a 20\% and a 100\% budget, and on the 14 changes no test reveals at 100\%.
