@@ -52,7 +52,7 @@ The testbed provides the raw material for most of it:
 
 | what the note asks for | the testbed provides | the SDD layer adds |
 |---|---|---|
-| a spec that machines can check | — | `specs/FS-*.yaml`: prose intent plus clauses of five kinds; `spec/checks/` holds one checker per kind |
+| a spec that machines can check | none | `specs/FS-*.yaml`: prose intent plus clauses of five kinds; `spec/checks/` holds one checker per kind |
 | an up-to-date product model | files, functions, the tool registry, skill procedures and config (static); traces (dynamic) | `spec/product.py` puts both behind queries: `locate(tools)`, `cases_calling(tools)`, `status_setters()`, `skill_write_tools(skill)` |
 | generation of only the needed code, in the right place | the mutation machinery: a PR is a set of file edits applied to a copy of the app | `spec/prs.py`, 25 PRs with expected verdicts |
 | an evidence record | the `observed` strategy on a change set, as the regression line of every record | `spec/runner.py` (evidence record and agent brief), `spec/report.py` |
@@ -95,7 +95,7 @@ combination of clauses.
 | clause (kind) | pr_correct | no lower bound | off by one (`<`) | logic in adapter | not wired in |
 |---|---|---|---|---|---|
 | `setting_in_range:publishing.review_max_age_days` (setting) | pass | pass | pass | pass | pass |
-| `function_contract:review_age_ok` (contract, proof) | **L5** | fail: age = −1 | fail: age = max | fail: not in the service | **L5** |
+| `function_contract:review_age_ok` (contract, proof) | **L5** | fail: age = -1 | fail: age = max | fail: not in the service | **L5** |
 | `always_on_calls:publish_page+schedule_publish` (trace) | pass | pass | pass | **fail** (PUB-10) | **fail** (PUB-10) |
 | `scenario:please-publish-the-staleapproval` (p11, 45 days) | pass | pass | pass | pass | **fail: published** |
 | `scenario:PUB-01` (an approval exactly 30 days old) | pass | pass | **fail** | pass | pass |
@@ -127,7 +127,7 @@ Loops, branches and calls are not translated; for those the clause stays at L2 a
 | `spec/catalog.yaml` + `model.py` | the clause templates; `Spec`, `Clause`, `ClauseResult`; expansion of `use/with` clauses, generated ids and texts; `validate_spec` against the product model |
 | `spec/draft.py` | `traceeval sdd draft`: product-model slice and catalog $\to$ prompt $\to$ model answer $\to$ expanded, validated draft spec and its plain-language rendering |
 | `spec/product.py` | the product model: files and token counts, functions (AST), tool registry (from decorators), skill procedures, config; queries `locate`, `cases_calling`, `status_setters`, `skill_write_tools`, `model_set` |
-| `spec/context.py` | `CheckContext`: runs cases on the variant with cost accounting (in parallel when asked), builds the expression environment; the helpers usable in clauses (`config`, `approval_age`, `expected_broken`, `audit_count`, `applied`, `token_owner`, `call_token`, `title_of_length`, `first_case_calling`, `baseline_run`) |
+| `spec/context.py` | `CheckContext`: runs cases on the variant with cost accounting (in parallel when asked), builds the expression environment; the helpers usable in clauses ([SDD_GUIDE.md](SDD_GUIDE.md) §3) |
 | `spec/checks/settings.py` | schema check |
 | `spec/checks/examples.py` | one run, catalog-format expectations, `=expr` values |
 | `spec/checks/placement.py` | the five lint rules |
