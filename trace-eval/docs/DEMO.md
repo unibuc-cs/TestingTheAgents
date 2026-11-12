@@ -212,8 +212,8 @@ current app ([USER_GUIDE.md](USER_GUIDE.md) §4 says how to read it):
   one of them a regression.
 - Section 5: the catalog of properties, with each property's pass rate against its threshold.
 - Section 6: the coverage of [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5. Point at the `not covered` column (the
-  tests reach 15 of the 31 places where a tool refuses) and at one declared-against-invoked gap. `traceeval
-  coverage --history runs/gemma7` prints the same in the terminal.
+  tests reach 15 of the 31 places where a tool refuses) and at one declared-against-invoked gap.
+  `traceeval coverage --history runs/gemma7` prints the same in the terminal.
 
 Mention the finding of [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.3: the mandatory rule is what catches the publishing
 skill without its link check. Its §5.1 goes through the results by research question, and §5.5 has the take-aways.
