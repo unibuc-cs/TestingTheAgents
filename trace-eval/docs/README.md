@@ -4,7 +4,7 @@
 |----------------------------------------------------------------------------------------------------------------------------------------------------------|---|
 | understand the goals, the pieces and the main results                                                                                                    | [README](../README.md) |
 | see the application the tests exercise: its users, agents, skills, tools and rules                                                                       | [CONTENTOPS.md](CONTENTOPS.md) |
-| Adobe's platform, what Georgiana asked for, the features built for it, the next steps                                                                    | [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) |
+| Adobe's platform, what the AEM team asked for, the features built for it, the next steps                                                                 | [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) |
 | the research: the problem, the abstractions, the methods, the results, the take-aways, the roadmap                                                       | [RESEARCH_PLAN.md](RESEARCH_PLAN.md) |
 | work in the repository: the vocabulary, how to read a report, how the method weighs a test, the controlled changes, how to add a test, a change or a strategy | [USER_GUIDE.md](USER_GUIDE.md) |
 | record with a model: a local GPU server, the commands, recording and replay, what the recordings show, what the models get wrong                         | [EXPERIMENT.md](EXPERIMENT.md) |
@@ -53,3 +53,4 @@ flowchart TD
   answers, so the draft can be replayed without a GPU.
 - `diagrams/` and `figures/`: the Mermaid sources and the rendered images the guides use.
 - `paper/`: the LaTeX paper, its bibliography and the overview figure.
+- `experiments/`: the author's working files, not part of the testbed.
