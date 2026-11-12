@@ -66,11 +66,9 @@ traceeval sdd --workdir runs/sdd                            # spec-driven develo
 ```
 
 
-Recording an experiment needs a model, used as it is served, decoding greedily:
-
-- `--backend hf`: Gemma on a local GPU, in this process;
-- `--backend vllm`: Gemma served from the GPU server ([docs/EXPERIMENT.md](docs/EXPERIMENT.md));
-- `--backend llm`: Qwen, gpt-oss, or any other OpenAI-compatible endpoint.
+Recording an experiment needs a model, used as it is served: Gemma on the GPU server (`--backend vllm`), or Qwen,
+gpt-oss or any other OpenAI-compatible endpoint (`--backend llm`). [docs/EXPERIMENT.md](docs/EXPERIMENT.md) §3 says
+where each model runs.
 
 ```bash
 scripts/gpu_remote.sh up gemma
@@ -112,7 +110,7 @@ full-suite tokens, and what it actually spends:
   a benign change as a regression. Of the 21 changes that break a safety property, it catches 84%.
 - Its misses are mostly narrow regressions, revealed by one to five tests, where it concludes too early that
   nothing broke.
-- On the 23 batches of changes it finds every batch with a regression member after one or two tests and at most
+- On the 23 batches of changes it finds every batch with a regression member after one to five tests and at most
   1.2% of the suite, and names the member to blame; its misses are the two batches of harmless edits that break a
   test together ([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.6).
 - `declared` and `observed` also spend less than the budget, but only because they run out of tests to select.
@@ -123,10 +121,9 @@ The full numbers are in the [Gemma report](docs/results/gemma7/report.md), and t
 [RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.5.
 
 Qwen3.8-27B's and gpt-oss-120b's recordings of the same app are not clean ground truths: recorded many tests at
-once, their answers vary with the batch, so every benign change appears revealed by a few tests. Qwen recorded one
-test at a time is as repeatable as Gemma, whose empty change flips nothing in fifteen runs and whose whole
-experiment recorded a second time moves 4 of 7,740 labels; gpt-oss is not, and its outcomes change with a restart
-of the server. The models are used as they are served, so these two recordings are a finding, not a result
+once, their answers vary with the batch, and every benign change appears revealed by a few tests. Gemma's recording
+holds: the empty change recorded fifteen times flips nothing, and the whole experiment recorded a second time moves
+4 of 7,740 labels. The models are used as they are served, so the two recordings are a finding, not a result
 ([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.4).
 
 ## Built for Adobe's AEM team
@@ -154,5 +151,4 @@ the layer and [docs/SDD_DEMO.md](docs/SDD_DEMO.md) has the results.
 ## How to read the documentation
 
 [docs/README.md](docs/README.md) lists the documents by what you want to do and gives the reading order; each
-document uses only what the ones before it define. [CLAUDE.md](CLAUDE.md) holds the conventions for coding agents
-working in the repository.
+document uses only what the ones before it define.
