@@ -251,23 +251,24 @@ cases:
   disagree on.
 - *Why are some workflow tests red?* They are Gemma's own mistakes on the original app, not faults of the testbed:
   it schedules the launch page right after requesting a review (WF1-01), goes on to publishing after the rollback's
-  link check failed (WF5-02) and stops a whole plan after a refused export (WF6-02); [EXPERIMENT.md](EXPERIMENT.md)
-  §6 lists them. A test the model already fails cannot reveal a change, which is why the method discounts it.
+  link check failed (WF5-02), stops a whole plan after a refused export (WF6-02) and misreports the site
+  optimization of section 3 (WF2-03); [EXPERIMENT.md](EXPERIMENT.md) §6 lists them. A test the model already fails
+  cannot reveal a change, which is why the method discounts it.
 - *Why only Gemma's numbers?* Qwen's and gpt-oss's recordings of the same app are not clean ground truths
   ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4): recorded many tests at once, a change that alters nothing appears to
-  break a few tests. Recorded one test at a time, Qwen is as repeatable as Gemma; gpt-oss is not, and its outcomes
-  change with a restart of the server. A larger model does not automatically give a cleaner ground truth, and the
-  lesson for Adobe is to measure first how much the answers vary under the real serving setup. The harmless change
-  of section 4, checked with gpt-oss from its cassette, gives a false alarm on PUB-22, a test whose runs disagree
-  under that model.
+  break a few tests. One test at a time Qwen is as repeatable as Gemma; gpt-oss is not, and its outcomes change
+  with a restart of the server. A larger model does not give a cleaner ground truth by itself, so the lesson for
+  Adobe is to measure first how much the answers vary under the real serving setup. The harmless change of section
+  4, checked with gpt-oss from its cassette, is a false alarm on PUB-22, a test whose runs disagree under that
+  model.
 - *How would this run at Adobe?* Nightly full-suite runs provide the recordings the method learns from. For each
   change, `traceeval check` selects the tests, orders them and decides when to stop. The traces are OpenTelemetry,
   and the catalog of properties maps onto the metrics of DeepEval, the evaluation library the AEM team uses.
 - *Does the replay predict the live run?* Yes: run live on all 43 changes, the check gives the replayed verdict on
-  42, with the same tests and tokens. The exception is a live false alarm on a benign change, the one-off
-  difference in the model's answer that [EXPERIMENT.md](EXPERIMENT.md) §3 describes; recorded five more times one
-  test at a time, the change does not repeat it, and the live check reads one run where the replay reads five. On
-  twenty batches of changes drawn at random, the live verdict is the replay's on 19.
+  42, with the same tests and tokens. The exception is a live false alarm on a benign change, a one-off of the
+  model that five more recordings of the change do not repeat ([EXPERIMENT.md](EXPERIMENT.md) §5); the live check
+  reads one run where the replay reads five. On twenty batches of changes drawn at random, the live verdict is the
+  replay's on 19.
 - *What is next?* Re-planning after a failed step is built on a branch and recorded with three models. It waits for
   one decision: whether a single publication with a broken link is repaired or refused
   ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4.1). Then tau2-bench, a public agent benchmark, as a second application.
