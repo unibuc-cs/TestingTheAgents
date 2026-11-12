@@ -100,7 +100,7 @@ combination of clauses.
 | `scenario:please-publish-the-staleapproval` (p11, 45 days) | pass | pass | pass | pass | **fail: published** |
 | `scenario:PUB-01` (an approval exactly 30 days old) | pass | pass | **fail** | pass | pass |
 | `scenario:PUB-01#2` (a fresh approval) | pass | pass | pass | pass | pass |
-| placement (`function_in_layer` ×2, `forbid_import_in`, `forbid_literal_in`) | pass | pass | pass | **fail** (three) | pass |
+| placement (`function_in_layer` twice, `forbid_import_in`, `forbid_literal_in`) | pass | pass | pass | **fail** (three) | pass |
 | `regression-tests` (the change-selected cases) | pass | pass | pass | pass | pass |
 
 The trace monitor's failures come from Gemma. In PUB-10 it schedules a page with no approved review. The PRs
@@ -125,7 +125,7 @@ Loops, branches and calls are not translated; for those the clause stays at L2 a
 | file | role |
 |---|---|
 | `spec/catalog.yaml` + `model.py` | the clause templates; `Spec`, `Clause`, `ClauseResult`; expansion of `use/with` clauses, generated ids and texts; `validate_spec` against the product model |
-| `spec/draft.py` | `traceeval sdd draft`: product-model slice + catalog → prompt → model answer → expanded, validated draft spec and its plain-language rendering |
+| `spec/draft.py` | `traceeval sdd draft`: product-model slice and catalog $\to$ prompt $\to$ model answer $\to$ expanded, validated draft spec and its plain-language rendering |
 | `spec/product.py` | the product model: files and token counts, functions (AST), tool registry (from decorators), skill procedures, config; queries `locate`, `cases_calling`, `status_setters`, `skill_write_tools`, `model_set` |
 | `spec/context.py` | `CheckContext`: runs cases on the variant with cost accounting (in parallel when asked), builds the expression environment; the helpers usable in clauses (`config`, `approval_age`, `expected_broken`, `audit_count`, `applied`, `token_owner`, `call_token`, `title_of_length`, `first_case_calling`, `baseline_run`) |
 | `spec/checks/settings.py` | schema check |

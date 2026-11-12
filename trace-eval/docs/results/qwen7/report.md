@@ -50,7 +50,7 @@
 | `skill_seo_drop_length_guard` | skill | regression | 4 |
 | `skill_translation_wrong_default` | skill | regression | 6 |
 
-Testbed sanity (every regression revealed by ≥1 test, no benign change revealed): **VIOLATED**.
+Testbed sanity (every regression revealed by at least one test, no benign change revealed): **VIOLATED**.
 
 ## 2. Detection within a budget
 

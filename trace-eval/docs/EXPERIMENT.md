@@ -97,8 +97,8 @@ The `--backend` option picks who plays the agents:
 |---|---|---|
 | `hf` (default) | Gemma in this Python process, on a local GPU, one call at a time | a quick look at one case, no server needed |
 | `vllm` | Gemma served by vLLM (the server that runs a model and answers over an OpenAI-style API) on the GPU server (GPU0), reached through an SSH tunnel; many calls at once | recording experiments with Gemma |
-| `llm` | an OpenAI-compatible endpoint: by default Qwen on the GPU server (GPU1), or the one named by `TRACEEVAL_LLM_BASE_URL` and `TRACEEVAL_LLM_MODEL` | recording experiments with Qwen or gpt-oss-120b; a model behind OpenAI's API would use it too |
-| `replay` | Gemma's recorded answers, no model (`tests/cassettes/gemma.jsonl`, or the file named by `TRACEEVAL_CACHE`) | the test suite and the spec-driven development (SDD) demo; running a recorded experiment again |
+| `llm` | an OpenAI-compatible endpoint: by default Qwen on the GPU server (GPU1), or the one named by `TRACEEVAL_LLM_BASE_URL` and `TRACEEVAL_LLM_MODEL` | recording experiments with Qwen or gpt-oss-120b; a model behind OpenAI's API would use it too. With `TRACEEVAL_CACHE` its answers are recorded and replayed like Gemma's (§5) |
+| `replay` | Gemma's recorded answers, no model (`tests/cassettes/gemma.jsonl`, or the file named by `TRACEEVAL_CACHE`); for Qwen or gpt-oss, `llm` with `TRACEEVAL_CACHE` naming their cassette (§5) | the test suite and the spec-driven development (SDD) demo; running a recorded experiment again |
 
 The models are wired in slightly differently:
 
@@ -396,14 +396,20 @@ member that is a regression on its own.
 
 ### Recorded answers: running without a model
 
-Every answer Gemma gives can be recorded, keyed by exactly what it was sent
+Every answer a model gives can be recorded, keyed by exactly what it was sent
 ([`traceeval/llm/cache.py`](../traceeval/llm/cache.py)). Decoding is greedy and the app has no clock and no
 randomness, so a run that starts from recorded answers sends the same prompts again and replays exactly.
 
 - **`--backend replay`** answers only from recorded answers, with no model and no GPU. The test suite and
   `traceeval sdd` do this by default, from `tests/cassettes/gemma.jsonl`.
-- **`TRACEEVAL_CACHE=<file>`** with `--backend hf` or `vllm` answers what the file has, asks Gemma for the rest
-  and adds those answers to the file. Running the same experiment again then costs nothing.
+- **`TRACEEVAL_CACHE=<file>`** with `--backend hf`, `vllm` or `llm` answers what the file has, asks the model for
+  the rest and adds those answers to the file. Running the same experiment again then costs nothing.
+- With the `llm` backend the key numbers the tool calls instead of carrying the ids the server makes up, which go
+  back into later prompts, and a run whose every answer is recorded never reaches the server. So Qwen and gpt-oss
+  replay from their own cassettes: `tests/cassettes/qwen.jsonl` and `tests/cassettes/gptoss.jsonl` hold the three
+  checks of [DEMO.md](DEMO.md) §4, recorded against `runs/qwen7` and `runs/gptoss7`. A replay must send the same
+  request as the recording, so gpt-oss's needs its model name and length limit (`TRACEEVAL_LLM_MODEL`,
+  `TRACEEVAL_LLM_MAX_TOKENS`) as below.
 - When the app changes a prompt through a skill, an agent definition, a config value or a tool result,
   the recorded answer no longer matches, and a replay run ends as `INFRA_INVALID` with `CacheMiss`. Start
   Gemma, run `TRACEEVAL_BACKEND=vllm pytest -q`, which replays what it can and records the rest, and commit
@@ -415,6 +421,10 @@ scripts/gpu_remote.sh up gemma
 TRACEEVAL_BACKEND=vllm pytest -q            # records into tests/cassettes/gemma.jsonl what the tests lack
 TRACEEVAL_CACHE=tests/cassettes/gemma.jsonl traceeval sdd --backend vllm --workers 32   # the SDD demo, faster
 scripts/gpu_remote.sh down
+# the demo's checks with Qwen and with gpt-oss, from their cassettes: no server
+TRACEEVAL_CACHE=tests/cassettes/qwen.jsonl traceeval check batch_nightly --history runs/qwen7 --backend llm
+TRACEEVAL_CACHE=tests/cassettes/gptoss.jsonl TRACEEVAL_LLM_MODEL=openai/gpt-oss-120b TRACEEVAL_LLM_MAX_TOKENS=4096 \
+  traceeval check batch_nightly --history runs/gptoss7 --backend llm
 ```
 
 ## 6. What the models get wrong, and how the prompts and checks allow for it

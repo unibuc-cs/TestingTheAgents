@@ -12,6 +12,7 @@ scripts/gpu_remote.sh status            # GPU0 of the GPU server (fmi0) free? th
 scripts/gpu_remote.sh up gemma          # a few minutes; "ready" at the end
 pytest -q                               # green (the known model mistakes are expected failures inside the tests)
 ls runs/gemma7/history runs/gemma7/variants   # the recording and the changed copies the live check needs
+ls runs/qwen7/history runs/gptoss7/history    # the same for the Qwen and gpt-oss checks of section 4
 ```
 
 Open these in the editor: `docs/CONTENTOPS.md` (the figure), `traceeval/catalog/tests/publishing.yaml` (PUB-01),
@@ -145,10 +146,10 @@ traceeval check benign_skill_prose_reflow --history runs/gemma7 --budget 0.2    
 ```
 
 It ends with "no regression: the method is confident nothing broke" after nine tests and 4% of the suite's tokens,
-with P(something broke) = 0.05. Before it ends, it has run a test of every mandatory property the change may
-affect, because the catalog's `mandatory` flag acts as a stopping rule. The coverage lines are the change coverage
-of [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5. The features are the unit the AEM team suggested: this change affects
-three (publish, schedule, take a page down), and the nine tests reached all three.
+with $P(\text{something broke}) = 0.05$. Before it ends, it has run a test of every mandatory property the change
+may affect, because the catalog's `mandatory` flag acts as a stopping rule. The coverage lines are the change
+coverage of [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5. The features are the unit the AEM team suggested: this
+change affects three (publish, schedule, take a page down), and the nine tests reached all three.
 
 If the GPU server is down, run the checks of this section, the batch below included, with `--backend replay`: all
 three are recorded in `tests/cassettes/gemma.jsonl` ([EXPERIMENT.md](EXPERIMENT.md) §5), so the same tests run with
@@ -174,6 +175,26 @@ The SEO agent's lost tool is the culprit; the other members stay near their prio
 [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.6 has the three batches, including the nine harmless edits that break a
 test together, and the twenty batches of two to eight changes drawn at random, on which the size makes no
 difference and the blame falls on a member that is a regression on its own every time.
+
+The same three checks with Qwen and with gpt-oss are in cassettes of their own, so they replay without a server
+(`--backend llm` with `TRACEEVAL_CACHE`; [EXPERIMENT.md](EXPERIMENT.md) §5). They are a two-minute answer to "what
+about a bigger model?":
+
+```bash
+TRACEEVAL_CACHE=tests/cassettes/qwen.jsonl traceeval check benign_skill_prose_reflow --history runs/qwen7 --budget 0.2 --backend llm
+TRACEEVAL_CACHE=tests/cassettes/gptoss.jsonl TRACEEVAL_LLM_MODEL=openai/gpt-oss-120b TRACEEVAL_LLM_MAX_TOKENS=4096 \
+  traceeval check benign_skill_prose_reflow --history runs/gptoss7 --budget 0.2 --backend llm
+```
+
+| check | Gemma | Qwen | gpt-oss |
+|---|---|---|---|
+| the routing skill without its approval rule | regression: WF3-03, after 2 tests, 1% of the suite | regression: WF3-03, after 2 tests, 1% | regression: WF3-03, after 3 tests, 2% |
+| the publishing skill's prose reflowed (harmless) | clean after 9 tests, 4% | clean after 7 tests, 3% | a false alarm: PUB-22 fails after 6 tests; its runs disagree under gpt-oss ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4) |
+| the nightly batch | regression: SEO-06 after 1 test; blames the SEO agent's tools | regression: DS-INTENTS/i20 after 3 tests; blames the governance skill's procedure | regression: SEO-06 after 1 test; blames the SEO agent's tools |
+
+Each model runs the tests its own recording ranks first, so the first failure differs; the verdicts agree except on
+the harmless change under gpt-oss, where a single live run of an unstable test is a false alarm that the
+recording's majority would absorb.
 
 ## 5. The evidence over all changes (4 minutes)
 
@@ -235,7 +256,9 @@ cases:
   ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4): recorded many tests at once, a change that alters nothing appears to
   break a few tests. Recorded one test at a time, Qwen is as repeatable as Gemma; gpt-oss is not, and its outcomes
   change with a restart of the server. A larger model does not automatically give a cleaner ground truth, and the
-  lesson for Adobe is to measure first how much the answers vary under the real serving setup.
+  lesson for Adobe is to measure first how much the answers vary under the real serving setup. The harmless change
+  of section 4, checked with gpt-oss from its cassette, gives a false alarm on PUB-22, a test whose runs disagree
+  under that model.
 - *How would this run at Adobe?* Nightly full-suite runs provide the recordings the method learns from. For each
   change, `traceeval check` selects the tests, orders them and decides when to stop. The traces are OpenTelemetry,
   and the catalog of properties maps onto the metrics of DeepEval, the evaluation library the AEM team uses.

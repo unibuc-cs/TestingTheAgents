@@ -69,8 +69,8 @@ search, but their full text has not been checked; they should be read before the
   rank fidelity $\rho \approx 0.91$. It is the strongest existing baseline for cheap subsets of agent evals, but it
   optimizes the ranking of models and not the detection of regressions after a change.
 - **Risk-Aware Adaptive Evaluation.** Maji & Chowdhury (Georgia Tech), arXiv 2609.38914, Sep 2026. Contextual
-  Thompson sampling over τ-bench airline scenarios with impact weights. With 6% of the corpus it recovers 86% of
-  the impact-weighted failure discovery of an oracle. It competes directly with our allocation of runs, although
+  Thompson sampling over $\tau$-bench airline scenarios with impact weights. With 6% of the corpus it recovers 86%
+  of the impact-weighted failure discovery of an oracle. It competes directly with our allocation of runs, although
   it ignores the change and depends on impact scores. It is reproduced as the `risk_aware_ts` strategy
   (`traceeval/selection/reproduced.py`), with a test's risk level as its impact score.
 - **Efficient Evaluation of LLM Performance with Statistical Guarantees (FAQ).** Wu, Nair, Candès, arXiv
@@ -86,7 +86,7 @@ We found no paper that defines mutation operators for prompts, skills or harness
 truth. Searches for prompt mutation testing return LLM-assisted mutation testing of code (MuTAP, arXiv
 2308.16557; LLMorpheus, arXiv 2404.09952). SABER (Cuadron et al., arXiv 2512.07850, ICLR 2026) is not mutation
 testing either: its "mutating steps" are actions that modify the environment. It shows that deviations in such
-steps cut the odds of success by up to 92–96% on τ-bench, and it releases τ-Bench Verified, with cleaned
+steps cut the odds of success by up to 92–96% on $\tau$-bench, and it releases $\tau$-Bench Verified, with cleaned
 annotations, which is usable as a SUT.
 
 Fault-injection work that can generate a ground truth or serve as a contrast:
@@ -133,10 +133,10 @@ Fault-injection work that can generate a ground truth or serve as a contrast:
 
 ## 5. Agent benchmarks with executable environments and deterministic verification
 
-- **τ-bench.** Yao et al. (Sierra), arXiv 2406.12045. Compares the database end state with the goal state, and
+- **$\tau$-bench.** Yao et al. (Sierra), arXiv 2406.12045. Compares the database end state with the goal state, and
   introduces $\mathrm{pass}^k$.
-- **τ²-bench.** Barres et al., arXiv 2506.07982. Adds a dual-control telecom domain and a compositional generator
-  of verifiable tasks.
+- **$\tau^2$-bench.** Barres et al., arXiv 2506.07982. Adds a dual-control telecom domain and a compositional
+  generator of verifiable tasks.
 - **AppWorld.** Trivedi et al., arXiv 2407.18901, ACL 2024. 9 apps, 457 APIs and 750 tasks, checked by
   state-based unit tests that also flag collateral damage.
 - **SkillsBench** (§3). Deterministic verifiers, and a paired design with and without skills.
@@ -151,7 +151,7 @@ Fault-injection work that can generate a ground truth or serve as a contrast:
 
 ## 6. Agent reliability / nondeterminism statistics
 
-- **$\mathrm{pass}^k$** (τ-bench). The probability that all $k$ trials succeed.
+- **$\mathrm{pass}^k$** ($\tau$-bench). The probability that all $k$ trials succeed.
 - **ReliabilityBench** (§3).
 - **Beyond pass@1: A Reliability Science Framework for Long-Horizon LLM Agents.** Khanal, Tao, Zhou, arXiv
   2603.29231, 2026. Defines a Reliability Decay Curve and a Variance Amplification Factor.
@@ -194,16 +194,16 @@ Fault-injection work that can generate a ground truth or serve as a contrast:
    selector's detection rate. This is the testbed's main methodological addition; the contribution itself is the
    method (RESEARCH_PLAN §1). It is also the testbed's main credibility risk: reviewers will ask whether mutants
    resemble real regressions, so the mutants should be paired with real version histories.
-5. **Evaluation on several systems.** CASPER covers one domain. τ²-bench, AppWorld, SkillsBench, Terminal-Bench
-   and AgentDojo offer deterministic verifiers for validation across domains.
+5. **Evaluation on several systems.** CASPER covers one domain. $\tau^2$-bench, AppWorld, SkillsBench,
+   Terminal-Bench and AgentDojo offer deterministic verifiers for validation across domains.
 
 ## Closest competitors (ranked)
 
 1. **CASPER** (2608.00378). The same problem in the same community. We differ in diff-awareness, the cost model,
    stopping, the mutation-based ground truth and evaluation on several systems. Reproduced as
    `casper_slices`.
-2. **Risk-Aware Adaptive Evaluation** (2609.38914). Adaptive allocation under a budget on τ-bench; reproduced as
-   `risk_aware_ts`.
+2. **Risk-Aware Adaptive Evaluation** (2609.38914). Adaptive allocation under a budget on $\tau$-bench; reproduced
+   as `risk_aware_ts`.
 3. **Efficient Benchmarking of AI Agents** (2603.23749). A baseline that keeps tasks of mid-range difficulty.
 4. **GBV-PD** (2606.28037). Reviewers will ask why it does not apply here: the LLMs are black boxes.
 5. **ATLAS / tinyBenchmarks.** Baselines for adaptive selection with IRT.
@@ -248,8 +248,8 @@ Full bibliographic entries for the works the project builds on, with what each i
 24. Chi et al. GameDevBench. arXiv 2602.11103. https://arxiv.org/abs/2602.11103
 25. Li et al. SkillsBench. arXiv 2602.12670. https://arxiv.org/abs/2602.12670
 26. Dakhel et al. MuTAP. arXiv 2308.16557. https://arxiv.org/abs/2308.16557
-27. Yao et al. τ-bench. arXiv 2406.12045. https://arxiv.org/abs/2406.12045
-28. Barres et al. τ²-Bench. arXiv 2506.07982. https://arxiv.org/abs/2506.07982
+27. Yao et al. $\tau$-bench. arXiv 2406.12045. https://arxiv.org/abs/2406.12045
+28. Barres et al. $\tau^2$-Bench. arXiv 2506.07982. https://arxiv.org/abs/2506.07982
 29. Trivedi et al. AppWorld. arXiv 2407.18901, ACL 2024. https://arxiv.org/abs/2407.18901
 30. Merrill et al. Terminal-Bench. arXiv 2601.11868, ICLR 2026. https://arxiv.org/abs/2601.11868
 31. Debenedetti et al. AgentDojo. arXiv 2406.13352. https://arxiv.org/abs/2406.13352

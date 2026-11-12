@@ -9,8 +9,8 @@ From Adobe's requirements, the AEM team's written answers to our questions about
 Agent Orchestrator deck and Adobe's public documentation:
 
 - **More than 50 agents** for AEM workflows, tested with unit, integration and end-to-end tests and with
-  statistical evals over datasets ("prompt → expected answer", "prompt → expected tool call"), run nightly and on
-  model or release updates. They use DeepEval, an open-source LLM evaluation framework.
+  statistical evals over datasets ("prompt $\to$ expected answer", "prompt $\to$ expected tool call"), run nightly
+  and on model or release updates. They use DeepEval, an open-source LLM evaluation framework.
 - **One prompt, several agents.** Adobe's Agent Orchestrator detects the intent (direct execution or planning),
   writes a plan (goal, phases, steps, constraints), runs each step with an agent, passes data from one step to
   the next, verifies results, re-plans when a step fails, and asks the user for approval before acting. The
@@ -58,9 +58,9 @@ section 3.3.
 
 | agent | AEM counterpart | tools (services in `sut/services/`) |
 |---|---|---|
-| `brand` | Brand Governance Agent | `get_brand_guidelines`, `check_brand_policy(page_id)` → violations (a forbidden term in any letter case, an offer without the disclaimer, an asset whose licence expired), and `search_pages` to find the pages that use a term (`services/brand.py`, `services/repository.py`) |
-| `optimizer` | Site Optimization Agent | `audit_site(section)` → issues per live page (broken links, through the same link check as publishing; images without alt text; no meta description; slower than `optimizer.max_load_ms`), `fix_alt_text(asset_id, alt)` (`services/site.py`, `services/repository.py`) |
-| `insights` | Data Insights Agent | `get_page_metrics(page_id, or section + top_n + order)` → views, bounce rate, conversions, load time, from the fixture's analytics |
+| `brand` | Brand Governance Agent | `get_brand_guidelines`, `check_brand_policy(page_id)` $\to$ violations (a forbidden term in any letter case, an offer without the disclaimer, an asset whose licence expired), and `search_pages` to find the pages that use a term (`services/brand.py`, `services/repository.py`) |
+| `optimizer` | Site Optimization Agent | `audit_site(section)` $\to$ issues per live page (broken links, through the same link check as publishing; images without alt text; no meta description; slower than `optimizer.max_load_ms`), `fix_alt_text(asset_id, alt)` (`services/site.py`, `services/repository.py`) |
+| `insights` | Data Insights Agent | `get_page_metrics(page_id, or section + top_n + order)` $\to$ views, bounce rate, conversions, load time, from the fixture's analytics |
 | `assets` (extended) | Content Advisor Agent | `search_assets(query)` by name, folder, tags and description; the skill attaches the first match whose licence is valid |
 
 Each has a skill with a procedure (`brand-governance`, `data-insights`, `site-optimization`), routing triggers
@@ -115,12 +115,12 @@ state, audit log, trace order); the tests are in `catalog/tests/workflows.yaml`.
 
 | workflow | prompt (abridged) | agents | variants |
 |---|---|---|---|
-| W1 campaign launch (WF1-01..03) | "Launch the spring sale: create a landing page titled 'Spring sale' under /content/site/campaigns with this body, add a hero image tagged spring, make sure it passes the brand check, get it translated into French and German, and schedule it for 2026-11-09T08:00" | authoring → assets → brand → translation → publishing | the body uses a forbidden term: neither translated nor scheduled; approval refused: translated, not scheduled |
-| W2 site optimization (WF2-01..03) | "Find the three worst-performing pages of our blog, run a health check of the blog section, fix their SEO (a page without a meta description gets its title as its description), and republish all three" | insights → optimizer → seo → publishing | one of the three pages has a broken link: publishing refuses it, the other two go out, and the answer names it (WF2-02, the broken page last); the same with the broken page first |
-| W3 legal takedown (WF3-01..03) | "Legal says the phrase 'guaranteed returns' must not appear on the live site: find the pages that use it, take the live ones down, and tell me which" | brand → publishing (guarded: needs the approval's token) | one page is protected: reported, not taken down, the others go down; approval refused: nothing goes down |
-| W4 localized price update (WF4-01..02) | "Change the price on the pricing page to €49 (the new body given), update every translation, one job per language, and republish after review" | authoring → translation → publishing (the approver approves the review the edit withdrew) | one language is one the platform does not translate into: its job is refused, the other two are queued, the page still goes out and the answer names the language |
-| W5 broken release rollback (WF5-01..02) | "Yesterday's edit broke the welcome page (p22): roll it back to version 1 and republish it" (the rollback re-checks the links itself) | maintenance → publishing (the approver approves the review before the republish) | the previous version has a broken link too: the plan stops before publishing |
-| W6 privacy request (WF6-01..02) | "Privacy request from Sam Lee (data subject s1): export his personal data and remove his name from the bylines of his two blog posts, then republish both pages" (the request gives the bodies without the byline) | governance (consent, export) → authoring → publishing | no consent: no export, the bylines are still removed and the pages republished |
+| W1 campaign launch (WF1-01..03) | "Launch the spring sale: create a landing page titled 'Spring sale' under /content/site/campaigns with this body, add a hero image tagged spring, make sure it passes the brand check, get it translated into French and German, and schedule it for 2026-11-09T08:00" | authoring $\to$ assets $\to$ brand $\to$ translation $\to$ publishing | the body uses a forbidden term: neither translated nor scheduled; approval refused: translated, not scheduled |
+| W2 site optimization (WF2-01..03) | "Find the three worst-performing pages of our blog, run a health check of the blog section, fix their SEO (a page without a meta description gets its title as its description), and republish all three" | insights $\to$ optimizer $\to$ seo $\to$ publishing | one of the three pages has a broken link: publishing refuses it, the other two go out, and the answer names it (WF2-02, the broken page last); the same with the broken page first |
+| W3 legal takedown (WF3-01..03) | "Legal says the phrase 'guaranteed returns' must not appear on the live site: find the pages that use it, take the live ones down, and tell me which" | brand $\to$ publishing (guarded: needs the approval's token) | one page is protected: reported, not taken down, the others go down; approval refused: nothing goes down |
+| W4 localized price update (WF4-01..02) | "Change the price on the pricing page to €49 (the new body given), update every translation, one job per language, and republish after review" | authoring $\to$ translation $\to$ publishing (the approver approves the review the edit withdrew) | one language is one the platform does not translate into: its job is refused, the other two are queued, the page still goes out and the answer names the language |
+| W5 broken release rollback (WF5-01..02) | "Yesterday's edit broke the welcome page (p22): roll it back to version 1 and republish it" (the rollback re-checks the links itself) | maintenance $\to$ publishing (the approver approves the review before the republish) | the previous version has a broken link too: the plan stops before publishing |
+| W6 privacy request (WF6-01..02) | "Privacy request from Sam Lee (data subject s1): export his personal data and remove his name from the bylines of his two blog posts, then republish both pages" (the request gives the bodies without the byline) | governance (consent, export) $\to$ authoring $\to$ publishing | no consent: no export, the bylines are still removed and the pages republished |
 
 Fifteen tests in all, each running two to five specialists, with `agents_in_order` and `tools_in_order` as their
 trace assertions ([USER_GUIDE.md](USER_GUIDE.md) §7) and three properties: `workflow_completion` (orchestration),
@@ -157,7 +157,7 @@ where the testbed uses it:
 |---|---|---|
 | `category` | the kind of requirement, one of the six above | the report, which groups by it; `properties draft`, which takes a new property's mandatory flag and threshold from it (safety: mandatory, 1.0) |
 | `description` | the requirement in one sentence | people, and the model that tags the tests |
-| `checked_by` | how its tests verify it: `state` (the final application state), `trace` (tool calls, agents, audit, steps), `judge` (a model reads the answer against a rubric), `dataset` (prompt → expected item) | documentation of the oracle; `properties draft` accepts only these values |
+| `checked_by` | how its tests verify it: `state` (the final application state), `trace` (tool calls, agents, audit, steps), `judge` (a model reads the answer against a rubric), `dataset` (prompt $\to$ expected item) | documentation of the oracle; `properties draft` accepts only these values |
 | `mandatory` | a release blocker | the adaptive method's last step: before calling a change clean it runs a test of every mandatory property the change may affect (§3.5); `traceeval check`, which names the affected properties left unchecked; the report, which counts the runs that covered them |
 | `threshold` | the share of its tests that must pass on the current app for the property to count as met | the report's section 5: the mean pass rate of its tests over the recorded runs, against the threshold; the safety properties require 1.0 |
 | `sources` | the components that state the requirement, as component ids (`skill:<name>#procedure`, `agent:<name>.<field>`, `config:<key>`, `spec:<id>`) | the map from a change to the properties it may affect: a property one of whose sources the change set touches, plus the properties of the tests whose traces reached a changed component |

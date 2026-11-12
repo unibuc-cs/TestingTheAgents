@@ -9,6 +9,11 @@ again and replays exactly, tool-call ids and token counts included.
 Without a wrapped client the cache only replays: a request it has not recorded raises ``CacheMiss``. That is
 how the test suite and ``--backend replay`` run without a model (``tests/cassettes/``). Answers that a later
 version of the app no longer asks for stay in the file; to drop them, record into a new file.
+
+A server that makes up the ids of the tool calls (vLLM's chat API, which serves Qwen and gpt-oss) puts other ids
+in the next start's answers, and the app sends them back in later prompts. With ``canonical_ids`` the key
+replaces every tool-call id by its order of appearance in the conversation, so the recorded answers are found
+again whatever the ids; the answers keep the ids the server gave.
 """
 
 import hashlib
@@ -22,22 +27,45 @@ class CacheMiss(RuntimeError):
     """A request that was never recorded, met while the cache can only replay."""
 
 
-def request_key(request: dict) -> str:
-    """The hash that identifies a request: SHA-256 of its JSON with sorted keys."""
+def request_key(request: dict, canonical_ids: bool = False) -> str:
+    """The hash that identifies a request: SHA-256 of its JSON with sorted keys. With ``canonical_ids`` the
+    tool-call ids in the messages are replaced by their order of appearance first (``call_0``, ``call_1``, ...)."""
+    if canonical_ids:
+        request = _with_canonical_ids(request)
     text = json.dumps(request, sort_keys=True, ensure_ascii=False, default=str)
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _with_canonical_ids(request: dict) -> dict:
+    """A copy of ``request`` in which every tool-call id (an assistant message's ``tool_calls[i].id`` and a tool
+    message's ``tool_call_id``) is numbered by its first appearance; the original is left as it is."""
+    ids: dict[str, str] = {}
+
+    def canon(i):
+        return ids.setdefault(i, f"call_{len(ids)}")
+
+    messages = []
+    for m in request.get("messages") or []:
+        m = dict(m)
+        if m.get("tool_calls"):
+            m["tool_calls"] = [{**tc, "id": canon(tc.get("id"))} for tc in m["tool_calls"]]
+        if "tool_call_id" in m:
+            m["tool_call_id"] = canon(m["tool_call_id"])
+        messages.append(m)
+    return {**request, "messages": messages}
+
+
 class CachedClient:
     """A chat client with the ``client.chat.completions.create(...)`` shape that answers from the file at
-    ``path`` and asks ``inner`` (a Gemma client from ``chat.py``, or None to replay only) for what it has not
-    seen. Calls may come from several threads at once."""
+    ``path`` and asks ``inner`` (a Gemma client from ``chat.py``, the ``Servers`` of the llm backend, or None to
+    replay only) for what it has not seen. Calls may come from several threads at once."""
 
-    def __init__(self, inner, path: str | Path, model_id: str):
+    def __init__(self, inner, path: str | Path, model_id: str, canonical_ids: bool = False):
         """Read the recorded answers at ``path`` into memory; a file that does not exist yet is an empty cache."""
         self.inner = inner  # the client asked for what is not recorded; None means replay only
         self.path = Path(path)
         self.model_id = model_id  # the model name requests carry; the LLM backend reads it from the client
+        self.canonical_ids = canonical_ids  # key on the tool calls' order, not on the ids a server made up
         self._lock = threading.Lock()
         self.answers: dict[str, dict] = {}  # request key -> recorded answer
         if self.path.exists():
@@ -52,7 +80,7 @@ class CachedClient:
     def create(self, **request):
         """One model call: the recorded answer to ``request``, or a new one from ``inner``, recorded."""
         # The key is a hash of exactly what the model is sent, so a prompt that differs in one character misses.
-        key = request_key(request)
+        key = request_key(request, self.canonical_ids)
         answer = self.answers.get(key)
         if answer is None:
             if self.inner is None:

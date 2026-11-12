@@ -335,7 +335,7 @@ def write_report(workdir: Path) -> Path:
         "|---|---|---|---|",
         *truth_rows,
         "",
-        "Testbed sanity (every regression revealed by ≥1 test, no benign change revealed): "
+        "Testbed sanity (every regression revealed by at least one test, no benign change revealed): "
         f"**{'OK' if sane else 'VIOLATED'}**.",
         "",
         "## 2. Detection within a budget",

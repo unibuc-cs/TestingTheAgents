@@ -2,7 +2,7 @@
 
 **Change-aware, cost-bounded selection, prioritization and stopping of tests and evals for LLM agent systems**
 
-University of Bucharest / ILDS · the results are in `docs/results/gemma7/report.md`
+University of Bucharest / ILDS. The results are in `docs/results/gemma7/report.md`
 
 ---
 
@@ -125,7 +125,7 @@ for dependencies:
 | `config:<dotted.key>` | `config:runtime.retries` | Changes of the effective value only. |
 | comments and formatting | — | Left out. Comments, docstrings, blank lines, YAML comments and the order of config mappings add no component, file or diff line, so no selector or probability depends on them. |
 
-### 2.3 Dependency model (declared · observed · required)
+### 2.3 Dependency model (declared, observed, required)
 
 - **Declared** dependencies are the metadata a test author wrote (the `declared:` block in the catalog). They are
   incomplete on purpose, as in practice: shared skills reached through `include`, harness code and most
@@ -140,10 +140,10 @@ for dependencies:
 
 ### 2.4 Cost model
 
-c(t) = agent tokens (prompt + completion over all LLM calls in the delegation chain) + judge tokens (only when a
-judge runs). Latency is recorded alongside. Tokens come from the model server's usage fields, so a case that
-delegates, retries or reads long skills costs more. A full-suite run of the 180 tests costs about 2.1M tokens
-under Gemma and 2.5M under Qwen.
+$c(t)$ is the agent tokens (prompt and completion over all model calls in the delegation chain) plus the judge
+tokens (only when a judge runs). Latency is recorded alongside. Tokens come from the model server's usage fields,
+so a case that delegates, retries or reads long skills costs more. A full-suite run of the 180 tests costs about
+2.1M tokens under Gemma and 2.5M under Qwen.
 
 ### 2.5 Outcome model and ground truth
 
@@ -163,8 +163,8 @@ app ($f_t = 1 -$ its baseline pass rate) cannot reveal anything, and $f_t$ is a 
 
 ```mermaid
 flowchart LR
-    B["K runs on the original app"] --> PB["majority: pass?"]
-    V["K runs on the changed copy"] --> PV["majority: fail?"]
+    B["repeated runs on the original app"] --> PB["majority: pass?"]
+    V["repeated runs on the changed copy"] --> PV["majority: fail?"]
     PB --> AND{"both?"}
     PV --> AND
     AND -->|"yes"| REV["the test reveals the change"]
@@ -326,8 +326,9 @@ The catalog holds 106 scenario tests and two dataset-style evals:
   across five specialists, W2 site optimization across four, and W3 legal takedown, W4 localized price update, W5
   rollback of a broken release and W6 privacy request across two or three. Each has variants where the plan must
   stop.
-- Dataset-style evals: 50 routing items (prompt → expected delegation, run in route-only mode, where the delegation
-  is recorded and the specialist is not run) and 24 intent items (prompt → expected tool invocation).
+- Dataset-style evals: 50 routing items (prompt $\to$ expected delegation, run in route-only mode, where the
+  delegation is recorded and the specialist is not run) and 24 intent items (prompt $\to$ expected tool
+  invocation).
 
 ### 4.3 Controlled changes (43)
 
@@ -358,17 +359,17 @@ The set is written for the models:
 a nightly run or a pull request would (`docs/USER_GUIDE.md` §6, "Batches"); they are recorded on request and kept
 out of the tables of §5.1, which are the 43 single changes.
 
-The report checks a sanity property of the testbed: every regression-inducing change is revealed by at least one test, and
-no benign change is revealed by any test. Under Gemma five regressions are revealed by no test (§5.1); the
-other models' recordings are the subject of §5.4.
+The report checks a sanity property of the testbed: every regression-inducing change is revealed by at least one
+test, and no benign change is revealed by any test. Under Gemma five regressions are revealed by no test (§5.1);
+the other models' recordings are the subject of §5.4.
 
 ### 4.4 Protocol and metrics
 
-The recording is `docs/EXPERIMENT.md` §5's `baseline` and `mutants` steps with K repetitions; a 43-change × 5-rep
-recording of the 180 tests is about 39k runs. `evaluate` then replays, once per (change, strategy, budget, seed),
-with the budget one of 2, 5, 10, 20, 30, 50 or 100% of the full-suite tokens. The strategy sees the baseline facts
-and the change set only. Each execution is answered from the recorded runs of that variant (a random repetition
-supplies the outcome and cost), and adaptive strategies interact sequentially. The metrics:
+The recording is `docs/EXPERIMENT.md` §5's `baseline` and `mutants` steps with $K$ repetitions; a recording of the
+180 tests under 43 changes with 5 repetitions is about 39k runs. `evaluate` then replays, once per (change,
+strategy, budget, seed), with the budget one of 2, 5, 10, 20, 30, 50 or 100% of the full-suite tokens. The strategy
+sees the baseline facts and the change set only. Each execution is answered from the recorded runs of that variant
+(a random repetition supplies the outcome and cost), and adaptive strategies interact sequentially. The metrics:
 
    - change coverage, which needs no ground truth (`docs/USER_GUIDE.md` §4; the dimensions are defined in
      `docs/AEM_ALIGNMENT.md` §3.5);
@@ -383,7 +384,7 @@ supplies the outcome and cost), and adaptive strategies interact sequentially. T
 
 ## 5. Results
 
-### 5.1 Gemma (`runs/gemma7`: 180 tests × 5 reps, 43 changes × 5 reps, the model judge, 5 replay seeds)
+### 5.1 Gemma (`runs/gemma7`: 180 tests and 43 changes, 5 repetitions each, the model judge, 5 replay seeds)
 
 The agents are played by Gemma 4 E4B, served with vLLM on a GPU server (`docs/EXPERIMENT.md`). §5.4 covers Qwen's
 and gpt-oss's recordings of the same app. The ground truth belongs to the model:
@@ -677,8 +678,8 @@ needs its own recording, not the sum of the day's single-change checks.
 |---|---|---|
 | 1. Testbed | SUT, catalog, tracing, mutations, change sets, record/replay, metrics, report, CLI, tests | done |
 | 2. Methods | baselines + cost-aware + predictive + adaptive Bayesian selector with stopping | done, with the mandatory-coverage rule (§5.3); open: tuning $\varepsilon$, the priors and the discount |
-| 3. Method improvements | (a) test-level learned sensitivities (per test × component-kind reveal history) instead of kind-level; (b) IR relevance inside the Bayesian likelihood; (c) CASPER-style slices and the Risk-Aware Adaptive Evaluation bandit as reproduced baselines | (a) done; (b) done as an option (§5.2); (c) done: `casper_slices` and `risk_aware_ts` (§5.1) |
-| 4. Models | ContentOps with three models (local vLLM): all changes × K reps | done: Gemma (`runs/gemma7`); Qwen's (`runs/qwen7`) and gpt-oss's (`runs/gptoss7`) recordings of the same app are spoiled by run-to-run variation and are not used for the results (§5.4) |
+| 3. Method improvements | (a) test-level learned sensitivities (per test and component kind) instead of kind-level; (b) IR relevance inside the Bayesian likelihood; (c) CASPER-style slices and the Risk-Aware Adaptive Evaluation bandit as reproduced baselines | (a) done; (b) done as an option (§5.2); (c) done: `casper_slices` and `risk_aware_ts` (§5.1) |
+| 4. Models | ContentOps with three models (local vLLM): all changes, $K$ repetitions | done: Gemma (`runs/gemma7`); Qwen's (`runs/qwen7`) and gpt-oss's (`runs/gptoss7`) recordings of the same app are spoiled by run-to-run variation and are not used for the results (§5.4) |
 | 5. Second system under test | tau2-bench, a public benchmark of tool-using agents with a simulated user (`docs/REFERENCES.md`): the airline domain, 50 tasks with a reward computed from the database state and the agent's communication, no model judge; the local model plays both the agent and the user, the controlled changes mutate the policy and the tool code (12 mutations: 6 policy, 4 tool-code, 2 benign), and the replay evaluator and the strategies run unchanged | after the demo for the AEM team |
 | 6. Scale/robustness | more mutations (mutation operators generated systematically: step deletion/swap/condition negation in procedures, argument swaps in adapters, config boundary values), equivalent-mutant analysis, sensitivity to budget definitions (time vs. tokens), ablations of each model ingredient, more repetitions for the models whose answers vary (five recorded for all three models; the noise floor against the number of runs is measured, §5.4) | with the paper |
 | 7. Paper | see §7 | drafting can start from this document and the report |
@@ -701,8 +702,8 @@ D&B or EMNLP, with the testbed as the headline.
 ## 8. Questions still to settle with the AEM team
 
 The AEM team's written answers (`docs/AEM_ALIGNMENT.md` §1) settled part of this list: nightly and model-update
-runs, prompt → answer and prompt → tool-call datasets, the thresholds and mandatory properties wanted, and budgets
-with early stopping.
+runs, prompt $\to$ answer and prompt $\to$ tool-call datasets, the thresholds and mandatory properties wanted, and
+budgets with early stopping.
 
 1. Change identification. Is the diff available per PR or nightly batch, and does the platform keep skills,
    prompts and config under version control together with the harness code? The change-set extractor assumes

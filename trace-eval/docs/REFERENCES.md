@@ -1,8 +1,8 @@
 # References
 
 The works the project builds on or cites, with full bibliographic details and what each one is used for. The survey
-of related work, one entry per paper with its positioning, is [related_work.md](related_work.md). The LaTeX draft of
-the paper (`docs/paper/`) cites the same works from `docs/paper/refs.bib`.
+of related work, one entry per paper with its positioning, is [related_work.md](related_work.md). The LaTeX draft
+of the paper (`docs/paper/`) cites the same works from `docs/paper/refs.bib`.
 
 ## Metrics
 
@@ -80,10 +80,10 @@ the paper (`docs/paper/`) cites the same works from `docs/paper/refs.bib`.
 
 ## Agent evaluation
 
-- Yao, S., Shinn, N., Razavi, P., Narasimhan, K. *τ-bench: a benchmark for tool-agent-user interaction in
-  real-world domains.* arXiv 2406.12045, 2024. Barres, V., et al. *τ²-bench: evaluating conversational agents in
-  a dual-control environment.* arXiv 2506.07982, 2025.
-  State-based verification and $\mathrm{pass}^k$; tau2-bench is the planned second system under test.
+- Yao, S., Shinn, N., Razavi, P., Narasimhan, K. *$\tau$-bench: a benchmark for tool-agent-user interaction in
+  real-world domains.* arXiv 2406.12045, 2024. Barres, V., et al. *$\tau^2$-bench: evaluating conversational agents
+  in a dual-control environment.* arXiv 2506.07982, 2025. State-based verification and $\mathrm{pass}^k$;
+  tau2-bench is the planned second system under test.
 - Ma, W., Yang, C., Kästner, C. *(Why) is my prompt getting worse? Rethinking regression testing for evolving LLM
   APIs.* CAIN 2024; arXiv 2311.11123.
   The obstacles to regression testing LLM applications: no crisp oracle, brittle prompts, nondeterminism.

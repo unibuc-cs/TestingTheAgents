@@ -41,10 +41,10 @@ member whose change set holds it.
 | batch | revealing tests | adaptive, 5% | adaptive, 20% | live verdict | live tests, tokens | top blamed | its member: a regression alone? |
 |---|---|---|---|---|---|---|---|
 | `batch_sweep_2_1` | 9 | 1.0, 1 test, 0.3% | 1.0, 1 test, 0.3% | regression: INS-01 | 1, 0.3% | `code:harness/retry.py::with_retry` 0.72, tied with `code:services/site.py::page_metrics` 0.72 | `code_retry_drop_idempotency`: yes; the failed test reveals `code_insights_rank_reversed` alone |
-| `batch_sweep_2_2` | 0 | 0.0, 15 tests, 4.9% | 0.0, 28 tests, 18.5% | no failure; P = 0.05 | 30, 19.9% | `code:services/workflow.py::publish_page` 0.05 | `benign_code_rename_locals`: no (harmless) |
+| `batch_sweep_2_2` | 0 | 0.0, 15 tests, 4.9% | 0.0, 28 tests, 18.5% | no failure; $P = 0.05$ | 30, 19.9% | `code:services/workflow.py::publish_page` 0.05 | `benign_code_rename_locals`: no (harmless) |
 | `batch_sweep_2_3` | 26 | 1.0, 1 test, 0.7% | 1.0, 1 test, 0.7% | regression: PUB-03 | 2, 1.2% | `skill:publishing-workflow#procedure` 0.92 | `skill_publish_drop_link_validation`: yes |
 | `batch_sweep_3_1` | 12 | 1.0, 2 tests, 0.9% | 1.0, 2 tests, 0.9% | regression: PUB-11 | 3, 0.9% | `config:runtime.retries` 0.88 | `config_retries_0`: yes |
-| `batch_sweep_3_2` | 0 | 0.0, 17 tests, 4.9% | 0.0, 51 tests, 20.0% | no failure; P = 0.18 | 52, 20.0% | `code:tools/content_tools.py::get_page_stats` 0.15 | `benign_new_unused_tool`: no (harmless) |
+| `batch_sweep_3_2` | 0 | 0.0, 17 tests, 4.9% | 0.0, 51 tests, 20.0% | no failure; $P = 0.18$ | 52, 20.0% | `code:tools/content_tools.py::get_page_stats` 0.15 | `benign_new_unused_tool`: no (harmless) |
 | `batch_sweep_3_3` | 7 | 1.0, 1 test, 0.8% | 1.0, 1 test, 0.8% | regression: PUB-03 | 2, 1.2% | `skill:publishing-workflow#procedure` 0.90 | `skill_publish_drop_link_validation`: yes |
 | `batch_sweep_4_1` | 9 (members: 8; + PUB-02) | 1.0, 1 test, 0.2% | 1.0, 1 test, 0.2% | regression: DS-ROUTING/r40 | 1, 0.2% | `config:routing.default_agent` 0.82 | `config_default_agent_publishing`: yes |
 | `batch_sweep_4_2` | 17 | 1.0, 1 test, 0.2% | 1.0, 1 test, 0.2% | regression: DS-INTENTS/i20 | 1, 0.2% | `agent:governance.tools` 0.94 | `prompt_governance_consent_tool_removed`: yes |
@@ -52,8 +52,8 @@ member whose change set holds it.
 | `batch_sweep_5_1` | 4 | 1.0, 1 test, 0.2% | 1.0, 1 test, 0.2% | regression: BRD-02 | 1, 0.3% | `code:services/brand.py::check_page` 0.86 | `code_brand_case_sensitive`: yes |
 | `batch_sweep_5_2` | 14 | 1.0, 1 test, 0.5% | 1.0, 1 test, 0.5% | regression: TRN-06 | 4, 1.1% | `code:tools/content_tools.py::get_page` 0.68 | `code_get_page_review_flag`: yes; the failed test reveals `config_retries_0` alone |
 | `batch_sweep_5_3` | 2 | 1.0, 1 test, 0.3% | 1.0, 1 test, 0.3% | regression: OPT-01 | 1, 0.3% | `code:services/site.py::audit_site` 0.89 | `code_audit_ignores_alt_text`: yes |
-| `batch_sweep_6_1` | 1 (members: 0; + PUB-02) | 0.0, 15 tests, 4.9% | 0.0, 35 tests, 20.0% | no failure; P = 0.30 | 34, 20.0% | `code:tools/content_tools.py::get_page_stats` 0.20 | `benign_new_unused_tool`: no (harmless) |
-| `batch_sweep_6_2` | 0 | 0.0, 15 tests, 5.0% | 0.0, 33 tests, 19.9% | no failure; P = 0.33 | 33, 20.0% | `code:tools/content_tools.py::get_page_stats` 0.23 | `benign_new_unused_tool`: no (harmless) |
+| `batch_sweep_6_1` | 1 (members: 0; + PUB-02) | 0.0, 15 tests, 4.9% | 0.0, 35 tests, 20.0% | no failure; $P = 0.30$ | 34, 20.0% | `code:tools/content_tools.py::get_page_stats` 0.20 | `benign_new_unused_tool`: no (harmless) |
+| `batch_sweep_6_2` | 0 | 0.0, 15 tests, 5.0% | 0.0, 33 tests, 19.9% | no failure; $P = 0.33$ | 33, 20.0% | `code:tools/content_tools.py::get_page_stats` 0.23 | `benign_new_unused_tool`: no (harmless) |
 | `batch_sweep_6_3` | 24 | 1.0, 1 test, 0.3% | 1.0, 1 test, 0.3% | regression: SEO-06 | 1, 0.3% | `agent:seo.tools` 0.79 | `prompt_seo_tool_removed`: yes |
 | `batch_sweep_7_1` | 20 | 1.0, 2 tests, 0.9% | 1.0, 2 tests, 0.9% | regression: INS-01 | 5, 1.0% | `code:services/site.py::page_metrics` 0.80 | `code_insights_rank_reversed`: yes |
 | `batch_sweep_7_2` | 23 | 1.0, 1 test, 0.2% | 1.0, 1 test, 0.2% | regression: GOV-02 | 1, 0.4% | `agent:governance.tools` 0.80 | `prompt_governance_consent_tool_removed`: yes |
@@ -79,8 +79,8 @@ member whose change set holds it.
   `ir_tfidf`) at 20%, spending the budget; the adaptive method detects 94% at both budgets for 1.6% of the suite on
   average at 20%.
 - Live against the replay: the live verdict is the replay's on 19 of 20 batches. On `batch_sweep_2_2` the replay
-  ends clean after 28 tests and the live check spends the budget on 30 with P(something broke) = 0.05. The live
-  check learns from the 43 single changes of `runs/gemma7` and the replay from the 62 other recordings of
+  ends clean after 28 tests and the live check spends the budget on 30 with $P(\text{something broke}) = 0.05$. The
+  live check learns from the 43 single changes of `runs/gemma7` and the replay from the 62 other recordings of
   `runs/gemma7_sweep`, so the first tests differ on a few batches (`batch_sweep_5_2`: four tests live, one in the
   replay).
 - Blame: on all 16 regression verdicts the top-blamed component belongs to a member that is a regression alone, and
@@ -96,7 +96,8 @@ member whose change set holds it.
   `batch_sweep_3_2`. The routing guidance reordered alone fails PUB-02 in one run of five; with three other edits
   (`batch_sweep_4_1`, two of them regressions on other tests) PUB-02 fails in three runs of five and becomes a
   revealing test no member has alone. No strategy reaches PUB-02 under `batch_sweep_6_1` except the bandit, in two
-  seeds of five at 20%; the live check spends the budget on 34 tests without it, at P(something broke) = 0.30.
+  seeds of five at 20%; the live check spends the budget on 34 tests without it, at
+  $P(\text{something broke}) = 0.30$.
 - Batches also hide what their members reveal: under `batch_sweep_8_1` WF4-01 passes in all five runs, where
   `skill_translation_wrong_default` alone fails it in three of five; under `batch_sweep_8_2` WF1-02, the one test
   that reveals `skill_routing_drop_brand_gate` alone (five failures of five), fails in two of five. Sixteen of the

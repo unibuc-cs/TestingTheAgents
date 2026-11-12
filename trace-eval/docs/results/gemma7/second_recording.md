@@ -106,7 +106,7 @@ of the full suite.
 - `casper_slices` falls from 0.59 to 0.48: of the shared regressions it loses four and gains two. Its slices come
   from behavioural signals averaged over the baseline runs, the runs' size in tokens among them, and those of 37
   tests differ slightly between the recordings; k-means then draws other slices, and 3 of the 12 slices and 15 of
-  the 24 representatives are the same in both. Its APFD_c falls from 0.525 to 0.482.
+  the 24 representatives are the same in both. Its $\mathrm{APFD}_c$ falls from 0.525 to 0.482.
 
 Gemma's ground truth holds up to a second recording: the original app is the same run for run, 4 of 7,740 labels
 move, and the set of changes counted as regressions trades one change for another. What moves rests on one test: a

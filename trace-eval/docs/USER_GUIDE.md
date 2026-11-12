@@ -31,7 +31,7 @@ Paths are relative to `traceeval/`.
 - **Change set**: the diff turned into components with the same identifiers (`mutation/changeset.py`).
   Comments, docstrings, blank lines and formatting are left out, so they add no component and no diff line.
 - **Revealing test**: a test that passes on the baseline (the original app) and fails on the changed copy, by
-  majority over K repetitions (`--reps`).
+  majority over $K$ repetitions (`--reps`).
 - **Budget**: tokens, shown as a fraction of the full-suite cost.
 - **Stop reason** (`adaptive_bayes` only): why the adaptive method stopped, one of `clean`, `regression` (a test
   that passed on the original app failed), `budget`, `uninformative` (no remaining test could change the verdict)

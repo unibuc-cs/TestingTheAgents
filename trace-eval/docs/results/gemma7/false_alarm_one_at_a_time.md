@@ -27,9 +27,9 @@ PUB-10, SEO-02, WF1-01, WF2-03, WF5-02, WF6-02), and they fail in every run. WF3
 
 | recording | outcomes | tokens | final answer |
 |---|---|---|---|
-| baseline, one test at a time | pass ×5 | 10,980 once, 10,990 ×4 | the approval "was not granted" once, "was denied by carol" four times |
-| the change, one test at a time | pass ×5 | 10,996 once, 11,010 ×4 | the approval "was not granted" once, "was not granted by the approver" four times |
-| the change, 32 tests at a time | pass ×5 | 11,006 ×4, 11,154 once | the approval "was denied by carol" four times; once an account of the plan |
+| baseline, one test at a time | pass, all five | 10,980 once, 10,990 four times | the approval "was not granted" once, "was denied by carol" four times |
+| the change, one test at a time | pass, all five | 10,996 once, 11,010 four times | the approval "was not granted" once, "was not granted by the approver" four times |
+| the change, 32 tests at a time | pass, all five | 11,006 four times, 11,154 once | the approval "was denied by carol" four times; once an account of the plan |
 | the live check | fail | 24,165 | no approval asked, `unpublish_page` called and refused |
 
 The false alarm does not come back. In fifteen recorded runs of WF3-03 under the change, five of them one test at a

@@ -203,8 +203,8 @@ share of the repository's tokens.
   contracts or placement.
 - **SpecGen, AutoSpec**: LLM generates JML / ACSL contracts (specification languages for Java and C) for existing
   Java / C code, refined until a verifier accepts them. Not enough here: they describe what the *code already does*
-  (code → spec), not what a *request wants*. They work at function level only, and their verifiers are for Java and
-  C, while this system is Python, prompts and YAML.
+  (code $\to$ spec), not what a *request wants*. They work at function level only, and their verifiers are for Java
+  and C, while this system is Python, prompts and YAML.
 - **Hypothesis ghostwriter**: writes property-based test skeletons from a function's signature (round-trip,
   idempotence, equivalence). Not enough here: the properties are generic rather than derived from a requirement,
   and they are function-level. A person still has to make them meaningful.

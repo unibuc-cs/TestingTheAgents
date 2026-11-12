@@ -1,10 +1,11 @@
 # Qwen without batching
 
-The empty change (`benign_code_comment_docstring`, whose change set is empty) recorded with Qwen3.8-27B one test at a
-time (`traceeval mutants --only benign_code_comment_docstring --reps 5 --workers 1 --backend llm`: two repetitions on
-fmi0's GPU1, three on the cluster's job, 900 runs in all), against Qwen's baseline of `runs/qwen7`, also one test at a
-time, and against the same change as `runs/qwen7` recorded it, 64 tests at a time. A test's majority label is the
-majority of its runs; a test "disagrees with itself" when its runs do not all end the same way.
+The empty change (`benign_code_comment_docstring`, whose change set is empty) recorded with Qwen3.8-27B one test at
+a time (`traceeval mutants --only benign_code_comment_docstring --reps 5 --workers 1 --backend llm`: two
+repetitions on fmi0's GPU1, three on the cluster's job, 900 runs in all), against Qwen's baseline of `runs/qwen7`,
+also one test at a time, and against the same change as `runs/qwen7` recorded it, 64 tests at a time. A test's
+majority label is the majority of its runs; a test "disagrees with itself" when its runs do not all end the same
+way.
 
 | recording | runs per test | tests failing by majority | tests whose runs disagree |
 |---|---|---|---|

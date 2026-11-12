@@ -32,12 +32,12 @@ posterior holds responsible (`blamed`):
 |---|---|---|---|
 | `batch_nightly` | regression: SEO-06 failed | 1 test, 0.3% | `agent:seo.tools` 0.77; the other members stay near their prior (0.50 to 0.55), untested |
 | `batch_publishing_pr` | regression: PUB-02 failed | 2 tests, 1.2% | `code:services/links.py::validate_links` 0.68, `skill:publishing-workflow#procedure` 0.59, `config:tools.requires_approval` 0.49 |
-| `batch_benign` | no failure within the budget; P(something broke) = 0.32 | 34 tests, 20% | `code:tools/content_tools.py::get_page_stats` 0.21, the tool no agent may use: no test can reach it, so nothing can clear it |
+| `batch_benign` | no failure within the budget; $P(\text{something broke}) = 0.32$ | 34 tests, 20% | `code:tools/content_tools.py::get_page_stats` 0.21, the tool no agent may use: no test can reach it, so nothing can clear it |
 
-The benign batch is revealed by one test, PUB-02 (publish a page with a broken link: the answer must name the link),
-which fails in every one of its five runs under the batch and passes in every run under each member alone. Two of
-the members do it together: PUB-02 run live, three times, on every combination of the three prompt edits on its
-path gives
+The benign batch is revealed by one test, PUB-02 (publish a page with a broken link: the answer must name the
+link), which fails in every one of its five runs under the batch and passes in every run under each member alone.
+Two of the members do it together: PUB-02 run live, three times, on every combination of the three prompt edits on
+its path gives
 
 | prompt edits applied | PUB-02 |
 |---|---|
