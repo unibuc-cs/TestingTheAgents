@@ -11,8 +11,9 @@ which the `fs-*` specs are written against. Code: `traceeval/spec/`.
 
 ### Requirement: The `fs-*` capabilities are the executable specs
 
-`load_specs` SHALL load `openspec/specs/fs-*/spec.md` and read only each file's heading, owner, purpose and fenced
-clauses. Every scenario there MUST carry exactly one clause, and a file that breaks this MUST be refused.
+`load_specs` SHALL load `openspec/specs/fs-*/spec.md` and read only each file's heading, purpose and fenced clauses;
+the owner line and the WHEN/THEN prose are for people. Every scenario there MUST carry exactly one clause, and a file
+that breaks this MUST be refused.
 
 #### Scenario: A scenario without a clause
 
@@ -79,6 +80,17 @@ over data or a set, L3 for a monitor, L4 for a static check, L5 for a proof.
 - **WHEN** a function has a branch, a loop or inputs other than int and bool
 - **THEN** the clause stays at L2 and the record says why
 
+#### Scenario: A rule stated in a skill's prose
+
+- **WHEN** a `skill_states` clause is checked
+- **THEN** it holds at L4 when the skill's text contains the sentence, runs of whitespace counting as one space; it
+  shows that the rule is in the model's prompt, not that the model follows it
+
+#### Scenario: A monitor's expression ranges over the run
+
+- **WHEN** a trace rule's expression uses a comprehension over `run.events` that refers to `event`
+- **THEN** the comprehension sees `event`, `run` and the helpers, because they are the expression's globals
+
 #### Scenario: A monitor that cannot be evaluated
 
 - **WHEN** a trace rule's expression raises on an event
@@ -108,6 +120,11 @@ rung or does not cover what the product model found, and accepted otherwise.
 
 - **WHEN** a catalog case whose baseline trace touches the change set fails
 - **THEN** the `regression-tests` entry fails and the verdict is "rejected", whatever the clauses say
+
+#### Scenario: A case the model already fails is not a regression test
+
+- **WHEN** a change-selected case fails on the baseline, one of the model's mistakes
+- **THEN** it is not run, and the `regression-tests` entry says how many were left out
 
 ### Requirement: The demo's expected verdicts stay hidden from the checkers
 
@@ -156,3 +173,26 @@ the WHEN/THEN prose.
 
 - **WHEN** a clause quantifies over a set of tools
 - **THEN** all of those tools count as named
+
+### Requirement: An as-built spec accepts the system and rejects its own regressions
+
+An `fs-02*` spec MUST accept the current code. Each change listed for it in `AS_BUILT` (`spec/prs.py`) MUST be rejected
+by a clause of the spec itself, and each change listed as accepted MUST be accepted; `tests/test_sdd.py` checks both.
+A run without recorded answers is no evidence either way.
+
+#### Scenario: A rejection that rests on a missing recording
+
+- **WHEN** the only failing clauses of a rejected change used a run that ended `INFRA_INVALID`, and none of them is a
+  monitor
+- **THEN** the test is skipped and names the runs to record with `TRACEEVAL_BACKEND=vllm pytest -q`
+
+#### Scenario: A monitor's violation counts
+
+- **WHEN** a trace clause fails on a run that later stopped for a missing recording
+- **THEN** the rejection counts, because the violating event is one the changed app really produced before the replay
+  stopped
+
+#### Scenario: An accepted change that needs new recordings
+
+- **WHEN** a change listed as accepted leads to any run that ended `INFRA_INVALID`
+- **THEN** the test is skipped until those answers are recorded

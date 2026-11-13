@@ -4,8 +4,10 @@
 
 A run of a case produces a trace, and the trace says what the run touched. These observed dependencies are the
 central input of trace-informed selection and of the spec layer's product model, and they use the same identifiers
-as change sets so that the two can be intersected directly. Code: `traceeval/tracing/`,
-`traceeval/experiment/executor.py`, and the events emitted in `traceeval/sut/harness/`.
+as change sets so that the two can be intersected directly. A trace can also leave the testbed as OpenTelemetry
+spans, and the traces of the whole suite give its coverage by dimension. Code: `traceeval/tracing/`,
+`traceeval/experiment/executor.py`, `traceeval/experiment/coverage.py`, and the events emitted in
+`traceeval/sut/harness/`.
 
 ## Requirements
 
@@ -64,3 +66,41 @@ The coverage session SHALL record which application code each test executed, as 
 
 - **WHEN** an executed line lies outside any function
 - **THEN** it is attributed to `code:<file>`
+
+### Requirement: A trace exports as OpenTelemetry spans
+
+A run's trace SHALL export as one OTLP/JSON document, built without the OpenTelemetry packages: a root span for the
+run, a span per agent turn (a delegated agent's under the delegating one's), a span per tool call, model call and skill
+load, and the plan, delegations, approvals and consultations as span events. The same trace MUST always give the same
+document.
+
+#### Scenario: One run as spans
+
+- **WHEN** `traceeval run --test <id> --otel trace.json` runs a case
+- **THEN** the file holds the run's spans: `run <id>`, an `invoke_agent` span per agent turn and an `execute_tool`
+  span per tool call under its agent's span
+
+#### Scenario: Ids do not come from a random source
+
+- **WHEN** the same trace is exported twice
+- **THEN** the documents are equal, because span ids are digests of the run id and the index of the event that opens
+  the span
+
+### Requirement: Coverage is reported by dimension
+
+The suite's coverage SHALL be reported per dimension (agent, feature, skill, tool, tool error path, configuration,
+setting value, property, workflow, execution path, risk), declared by the tests and observed in their traces, with
+what no test covers. A change's coverage MUST need no ground truth: what of the change the tests a strategy ran
+exercised.
+
+#### Scenario: Coverage of the suite
+
+- **WHEN** `traceeval coverage --history <dir>` runs
+- **THEN** each dimension shows the share of its components that at least one test covers, declared and observed,
+  and lists the ones no test covers
+
+#### Scenario: What a change may affect
+
+- **WHEN** a change touches components
+- **THEN** the properties it may affect are those whose sources it touches and those of the tests that exercised a
+  changed component on the original app, and the workflows are those of the same tests

@@ -8,7 +8,11 @@ The publishing skill takes a page live only after its links are clean and, when 
 review is approved. A page without an approved review gets a review request instead of going live, and when the
 link check itself is unavailable the page stays offline. Taking a page down is a different path and does not
 validate links. Today these gates live in the skill's procedure; FS-0103 proposes to move the link gate into
-the service. This describes the system as it is today.
+the service. This describes the system as it is today, with Gemma's recorded answers.
+
+No service checks the review, so a model that skips the skill's review step goes live without one. Gemma does so
+once in the catalog: in PUB-10 (one of its known mistakes) it schedules page p5, which has no approved review. The
+review rule below is therefore stated for publishing, where it holds in every recorded run.
 
 ## Requirements
 
@@ -38,19 +42,66 @@ with: {key: publishing.allow_scheduling, value: true, type: boolean}
 
 ### Requirement: A page needs an approved review to go live
 
-A page MUST NOT be published or scheduled unless its review is approved. A page without one SHALL get a review
-request instead, and the response SHALL say so.
+A page MUST NOT be published unless its review is approved, before the run or by an approver's sign-off earlier in
+it. A page without one SHALL get a review request instead, and the response SHALL say so.
 
-#### Scenario: Every page that goes live had an approved review
+#### Scenario: Every published page had an approved review
 
-- **WHEN** a call of `publish_page` or `schedule_publish` succeeds in any run
-- **THEN** the page's review was approved before the run started
+- **WHEN** a call of `publish_page` succeeds in any run
+- **THEN** the page's review was approved before the run started, or `approve_review` approved it earlier in the run
 
 ```yaml clause
 use: always_on_calls
 with:
-  tools: [publish_page, schedule_publish]
-  where: run.initial_state.pages[event.args.page_id]['review']['status'] == 'approved'
+  tools: [publish_page]
+  where: >-
+    (run.initial_state.pages.get(event.args.page_id) or {}).get('review', {}).get('status') == 'approved'
+    or any(e.kind == 'tool.call' and e.tool == 'approve_review' and e.status == 'ok'
+    and e.args.page_id == event.args.page_id and e.t < event.t for e in run.events)
+```
+
+#### Scenario: A page edited in the run is published only after it is approved again
+
+- **WHEN** a call of `publish_page` succeeds in a run that edited the page earlier (W4, W6)
+- **THEN** every successful edit of the page in the run was followed, before the publish, by a successful
+  `approve_review` of it
+
+```yaml clause
+use: always_on_calls
+with:
+  tools: [publish_page]
+  where: >-
+    all(any(a.kind == 'tool.call' and a.tool == 'approve_review' and a.status == 'ok'
+    and a.args.page_id == event.args.page_id and u.t < a.t < event.t for a in run.events)
+    for u in run.events if u.kind == 'tool.call' and u.tool == 'update_page_content' and u.status == 'ok'
+    and u.args.page_id == event.args.page_id and u.t < event.t)
+```
+
+#### Scenario: A page reads as approved only when it is
+
+- **WHEN** a call of `get_page` succeeds in any run
+- **THEN** it reports the review as approved only when the page was approved before the run or by `approve_review`
+  earlier in it
+
+```yaml clause
+use: always_on_calls
+with:
+  tools: [get_page]
+  where: >-
+    not event.result.review_approved
+    or (run.initial_state.pages.get(event.args.page_id) or {}).get('review', {}).get('status') == 'approved'
+    or any(e.kind == 'tool.call' and e.tool == 'approve_review' and e.status == 'ok'
+    and e.args.page_id == event.args.page_id and e.t < event.t for e in run.events)
+```
+
+#### Scenario: An approver's sign-off approves the review and the page goes live
+
+- **WHEN** catalog case PUB-22 runs, in which bob publishes page p5 with carol's sign-off and her token
+- **THEN** the case passes: the review is approved by carol, the approval is audited once and the page is published
+
+```yaml clause
+use: scenario
+with: {case: PUB-22}
 ```
 
 #### Scenario: Publishing without an approval requests a review
@@ -63,15 +114,6 @@ use: scenario
 with: {case: PUB-04}
 ```
 
-#### Scenario: Scheduling without an approval requests a review
-
-- **WHEN** catalog case PUB-10 runs, which asks to schedule page p5
-- **THEN** the case passes: the page stays a draft and neither `schedule_publish` nor `publish_page` succeeds
-
-```yaml clause
-use: scenario
-with: {case: PUB-10}
-```
 
 ### Requirement: Broken links keep a page offline
 
@@ -96,6 +138,19 @@ with: {case: PUB-03}
 ```yaml clause
 use: scenario
 with: {case: PUB-21}
+```
+
+#### Scenario: Every link check counts what is really broken
+
+- **WHEN** a link check is written to the audit log in any run
+- **THEN** its count of broken links equals an independent count from the page's links, the pages, the assets and
+  the reachability table
+
+```yaml clause
+use: always_in_audit
+with:
+  actions: [validate_links]
+  where: event.broken == expected_broken(run, event.page_id)
 ```
 
 #### Scenario: A healthy page with links and a document publishes

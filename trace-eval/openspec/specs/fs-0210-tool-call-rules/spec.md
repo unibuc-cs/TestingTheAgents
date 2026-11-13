@@ -5,18 +5,19 @@
 ## Purpose
 
 Agents act on the world only through tool calls, and every call passes through the dispatcher, whatever the agent
-or the backend. A run has a budget of tool calls shared by all its agents, tools can be switched off by
-configuration, and an unexpected exception in a tool is a defect to be reported, never a normal outcome. The code
-is layered: backends do not touch tools directly, adapters do not depend on the harness, and services know neither.
-This describes the system as it is today.
+or the backend. Each agent has a budget of steps (its tool calls and delegations), and the whole request has a
+larger one shared by all its agents, so that a plan over several specialists fits while no single agent loops for
+long. Tools can be switched off by configuration, and an unexpected exception in a tool is a defect to be reported,
+never a normal outcome. The code is layered: backends do not touch tools directly, adapters do not depend on the
+harness, and services know neither. This describes the system as it is today, with Gemma's recorded answers.
 
 ## Requirements
 
-### Requirement: The budget and the feature flags are settings
+### Requirement: The budgets and the feature flags are settings
 
-A run MUST have a budget of 12 tool calls, and no tool MUST be switched off.
+Each agent MUST have a budget of 12 steps and a request one of 40, and no tool MUST be switched off.
 
-#### Scenario: The budget is configured
+#### Scenario: The budget of an agent is configured
 
 - **WHEN** the platform configuration is checked
 - **THEN** `runtime.max_tool_calls` is an integer between 8 and 50 with the value 12
@@ -24,6 +25,16 @@ A run MUST have a budget of 12 tool calls, and no tool MUST be switched off.
 ```yaml clause
 use: setting_in_range
 with: {key: runtime.max_tool_calls, min: 8, max: 50, value: 12}
+```
+
+#### Scenario: The budget of a request is configured
+
+- **WHEN** the platform configuration is checked
+- **THEN** `runtime.max_run_tool_calls` is an integer between 12 and 200 with the value 40
+
+```yaml clause
+use: setting_in_range
+with: {key: runtime.max_run_tool_calls, min: 12, max: 200, value: 40}
 ```
 
 #### Scenario: No tool is switched off
@@ -36,26 +47,55 @@ use: setting_equals
 with: {key: tools.disabled, value: [], type: list}
 ```
 
-### Requirement: A run stays inside its budget
+### Requirement: A run stays inside its budgets
 
-A run MUST NOT make more steps than the budget, the normal requests of the platform MUST finish within it, and a
-call MUST NOT be tried more often than the retry setting allows.
+No agent MUST make more steps than its budget and no request more than the request's budget, every request of the
+catalog MUST end with a final answer rather than at a budget, and a call MUST NOT be tried more often than the
+retry setting allows.
 
-#### Scenario: No run exceeds the budget
+#### Scenario: No agent exceeds its budget
 
-- **WHEN** a call of `get_page` or `check_permission` succeeds in any run
-- **THEN** the run's steps are at most `runtime.max_tool_calls`
+- **WHEN** a call of `get_page`, `check_permission` or `validate_links` succeeds in any run
+- **THEN** the agent making it has made at most `runtime.max_tool_calls` tool calls and delegations in the run
 
 ```yaml clause
 use: always_on_calls
 with:
-  tools: [get_page, check_permission]
-  where: run.steps <= config('runtime.max_tool_calls')
+  tools: [get_page, check_permission, validate_links]
+  where: >-
+    len([e for e in run.events if (e.kind == 'tool.call' and e.agent == event.agent)
+    or (e.kind == 'agent.route' and e.source == event.agent)]) <= config('runtime.max_tool_calls')
 ```
 
-#### Scenario: A long request finishes normally
+#### Scenario: No request exceeds its budget
 
-- **WHEN** catalog case ORC-03 runs, one of the two longest requests in the catalog
+- **WHEN** a call of `get_page`, `check_permission` or `validate_links` succeeds in any run
+- **THEN** the run's steps are at most `runtime.max_run_tool_calls` (a run cut short because a recorded answer is
+  missing, `INFRA_INVALID`, has no step count and says nothing about the budget)
+
+```yaml clause
+use: always_on_calls
+with:
+  tools: [get_page, check_permission, validate_links]
+  where: run.classification == 'INFRA_INVALID' or run.steps <= config('runtime.max_run_tool_calls')
+```
+
+#### Scenario: Every request ends with an answer, not at a budget
+
+- **WHEN** a call of `get_page`, `check_permission` or `validate_links` succeeds in any run
+- **THEN** the run ended with the agents' final answer, unless it was cut short because a recorded answer is
+  missing (`INFRA_INVALID`)
+
+```yaml clause
+use: always_on_calls
+with:
+  tools: [get_page, check_permission, validate_links]
+  where: run.classification == 'INFRA_INVALID' or run.termination == 'final'
+```
+
+#### Scenario: A request with several steps for one specialist finishes normally
+
+- **WHEN** catalog case ORC-03 runs, which creates a page, sets its metadata, checks its links and requests a review
 - **THEN** the case passes: it takes at most 8 steps and ends with a final answer
 
 ```yaml clause
@@ -107,7 +147,7 @@ A tool MUST NOT raise an unexpected exception on any request of the catalog.
 ```yaml clause
 use: never_on_calls
 with:
-  tools: [search_pages, get_page, create_page, update_page_content, set_page_metadata, list_versions, rollback_page, validate_links, request_review, approve_review, publish_page, schedule_publish, unpublish_page, upload_asset, get_asset, attach_asset, create_translation_job, get_translation_status, get_seo_report, check_permission, check_consent, export_user_data, get_audit_log]
+  tools: [search_pages, get_page, create_page, update_page_content, set_page_metadata, list_versions, rollback_page, validate_links, request_review, approve_review, publish_page, schedule_publish, unpublish_page, upload_asset, get_asset, search_assets, attach_asset, create_translation_job, get_translation_status, get_seo_report, check_permission, check_consent, export_user_data, get_audit_log, get_brand_guidelines, check_brand_policy, get_page_metrics, audit_site, fix_alt_text, make_plan, request_approval]
   where: event.status == 'crash'
 ```
 

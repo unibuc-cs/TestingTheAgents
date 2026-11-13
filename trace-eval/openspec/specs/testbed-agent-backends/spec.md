@@ -1,28 +1,58 @@
-# Testbed: agent backends and the skill procedure language
+# Testbed: the agents' model, its engines and the skills it reads
 
 ## Purpose
 
-An agent's next move comes from a backend, and the same runtime drives both: a simulated backend that follows a skill's
-machine-readable procedure, so runs are free and deterministic, and an LLM backend over any OpenAI-compatible endpoint.
-A change to a procedure therefore changes both at the same place. Code: `traceeval/sut/harness/backends/`,
-`skills.py`, `expressions.py`, `runtime.py`.
+An agent's next move comes from a chat model. One backend, `llm_openai`, asks the model at every step through an
+OpenAI-style client, and the same runtime carries out what it proposes, whichever engine serves the model: `hf`
+(Gemma in-process), `vllm` (Gemma on a vLLM server), `llm` (Qwen or gpt-oss through vLLM's chat API) or `replay`
+(recorded answers, no model). A skill is the workflow the model reads: its procedure is shown as numbered plain
+steps, with included skills written out and settings shown with their values. Code: `traceeval/sut/harness/backends/`,
+`traceeval/sut/harness/skills.py`, `traceeval/sut/harness/runtime.py`, `traceeval/llm/`.
 
 ## Requirements
 
-### Requirement: Both backends drive the same runtime
+### Requirement: The model only proposes; the runtime acts
 
-A backend SHALL only propose the next action. The runtime MUST carry it out through the same dispatcher and budget for
-both backends.
+A backend SHALL only propose the next action, a tool call or the final answer. The runtime MUST carry it out through
+the dispatcher and the step budgets, for every engine.
 
-#### Scenario: A scripted model drives a request
+#### Scenario: A scripted client drives a request
 
-- **WHEN** a scripted OpenAI-compatible client plays case PUB-01 through the LLM backend
-- **THEN** the case passes, and the tokens the server reports are the run's tokens
+- **WHEN** a scripted OpenAI-style client plays a catalog case through the backend
+- **THEN** its tool calls go through the dispatcher and the tokens the client reports are the run's tokens
 
-### Requirement: A skill's procedure is the canonical workflow
+#### Scenario: The default engine replays
 
-A skill SHALL be front matter, prose and a `## Procedure` YAML block. The simulated backend MUST execute the block, and
-the LLM backend MUST receive the skill's whole text.
+- **WHEN** a run names no backend and `TRACEEVAL_BACKEND` is not set
+- **THEN** it runs on `replay`, answering from the test suite's cassette `tests/cassettes/gemma.jsonl`
+
+### Requirement: The prompt holds the agent, its skills and the request
+
+The system prompt SHALL be the agent's own prompt, then for the orchestrator every specialist with its description and
+triggers and the default agent, then the agent's intents, then its skills, then a few operating rules. The first user
+message SHALL be the request and its context as JSON.
+
+#### Scenario: The orchestrator sees every specialist
+
+- **WHEN** the orchestrator's prompt is built
+- **THEN** it lists every other agent with its description and triggers, and names `routing.default_agent` for a
+  request no specialist owns
+
+#### Scenario: The entry skill's procedure is written out as steps
+
+- **WHEN** an agent's prompt is built
+- **THEN** its entry skill's `## Procedure` block is replaced by numbered sentences, included skills written out in
+  place, and a skill it includes points there instead of repeating its steps
+
+#### Scenario: A setting in a procedure is shown with its value
+
+- **WHEN** a procedure step reads `config('<key>')`
+- **THEN** the prompt shows the key with its current value, and the read is recorded as a `config.read` event
+
+### Requirement: A skill's procedure is read, not executed
+
+A skill SHALL be front matter, prose and a `## Procedure` YAML block. Nothing MUST evaluate the procedure's
+expressions: the model reads them, rewritten as plain text where that helps.
 
 #### Scenario: An included skill is inlined
 
@@ -39,57 +69,7 @@ the LLM backend MUST receive the skill's whole text.
 - **WHEN** two steps of one procedure include the same skill, with no cycle
 - **THEN** both are expanded
 
-### Requirement: Procedure steps stop on failure unless they say otherwise
-
-An error result MUST stop the agent unless its step says `on_error: continue`, and a false `require` MUST stop it with the
-step's message unless it says `on_fail: continue`.
-
-#### Scenario: A tool error
-
-- **WHEN** a call returns an error and the step has no handler
-- **THEN** the agent answers "I could not complete the request (<code>): <message>"
-
-#### Scenario: An unmet requirement
-
-- **WHEN** a call succeeds and its `require` expression is false
-- **THEN** the agent stops and answers the step's `fail_message`
-
-#### Scenario: A step's guard is false
-
-- **WHEN** a step's `when` is false
-- **THEN** the step is skipped, whatever it would have done
-
-### Requirement: Procedure expressions run in a whitelist
-
-Expressions MUST be parsed and checked before they run, against a whitelist of syntax, and MUST NOT see Python's builtins
-beyond a safe list.
-
-#### Scenario: An attempt to reach the interpreter
-
-- **WHEN** an expression uses a dunder name such as `__import__`, an attribute starting with an underscore, or a syntax outside the whitelist
-- **THEN** evaluation raises `ValueError` before anything runs
-
-#### Scenario: A failing placeholder
-
-- **WHEN** a placeholder of a message cannot be evaluated
-- **THEN** it renders as `?` and the message still goes out
-
-### Requirement: Simulated runs are deterministic unless flakiness is asked for
-
-With flakiness 0 the same case SHALL give the same outcome and tokens. With flakiness above 0 an agent MAY slip once, by
-garbling one identifier, and the slip MUST be reproducible from the seed.
-
-#### Scenario: The draw does not depend on the setting
-
-- **WHEN** the flakiness setting changes
-- **THEN** the draw is still made, so the token jitter uses the same random numbers
-
-#### Scenario: Tokens are synthesised
-
-- **WHEN** a simulated run books a model call
-- **THEN** the prompt tokens come from the prompt material it read, plus 28 per earlier tool call and up to 7 of seeded jitter
-
-### Requirement: The LLM backend keeps a run alive when the model misbehaves
+### Requirement: The backend keeps a run alive when the model misbehaves
 
 Malformed output from a model MUST reach the runtime as a refused call and MUST NOT crash the run.
 
@@ -112,3 +92,29 @@ Malformed output from a model MUST reach the runtime as a refused call and MUST 
 
 - **WHEN** a tool result is long
 - **THEN** it is sent to the model cut to 4000 characters
+
+#### Scenario: An empty answer
+
+- **WHEN** the model answers with neither a tool call nor any text
+- **THEN** it is asked once more to reply, and its next answer is the agent's final message
+
+### Requirement: A run replays exactly from recorded answers
+
+Decoding SHALL be greedy, at temperature 0, and the app has no clock and no randomness, so the same request MUST build
+the same prompts. An answer SHALL be recorded under a hash of the whole request and replayed from it.
+
+#### Scenario: A recorded request is answered from the file
+
+- **WHEN** a request was recorded before
+- **THEN** it is answered from the cache, and a run that starts from recorded answers replays exactly, tool-call ids
+  and token counts included
+
+#### Scenario: A request that was never recorded
+
+- **WHEN** a replay meets a request it has not recorded
+- **THEN** the cache raises `CacheMiss` and the run is classified `INFRA_INVALID`
+
+#### Scenario: Servers that make up tool-call ids
+
+- **WHEN** the `llm` engine is cached
+- **THEN** the key numbers the tool calls by their order of appearance instead of carrying the ids the server made up

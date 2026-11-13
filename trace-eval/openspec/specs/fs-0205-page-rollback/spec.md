@@ -7,7 +7,7 @@
 The maintenance agent restores an earlier version of a page. History is never rewritten: the old body is saved
 again as a new version. Rolling back is reserved for admins, the requested version must exist, and the links of
 the restored body are validated afterwards. Unlike an edit, a rollback leaves the page's review as it is. This
-describes the system as it is today.
+describes the system as it is today, with Gemma's recorded answers.
 
 ## Requirements
 
@@ -65,13 +65,17 @@ with:
 #### Scenario: A rollback leaves the review as it is
 
 - **WHEN** a call of `rollback_page` succeeds in any run
-- **THEN** the page's review at the end of the run equals its review at the start
+- **THEN** the page's review at the end of the run equals its review at the start, unless `approve_review`
+  approved the page after the rollback (as the next step of a plan does before republishing it, W5)
 
 ```yaml clause
 use: always_on_calls
 with:
   tools: [rollback_page]
-  where: run.final_state.pages[event.args.page_id]['review'] == run.initial_state.pages[event.args.page_id]['review']
+  where: >-
+    run.final_state.pages[event.args.page_id]['review'] == run.initial_state.pages[event.args.page_id]['review']
+    or any(e.kind == 'tool.call' and e.tool == 'approve_review' and e.status == 'ok'
+    and e.args.page_id == event.args.page_id and e.t > event.t for e in run.events)
 ```
 
 ### Requirement: A rollback is checked before and after

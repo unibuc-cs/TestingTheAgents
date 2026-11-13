@@ -4,14 +4,18 @@
 
 Strategies are compared without re-running agents: the full suite is recorded once per change, and every strategy is
 then replayed offline against those recordings. This decouples method development from execution cost, and is what lets
-detection be measured honestly against a known fault matrix. Code: `traceeval/experiment/`, `traceeval/cli.py`.
+detection be measured honestly against a known fault matrix. The agents are played by a real model (Gemma by default),
+so a test may pass in some repetitions and fail in others: the ground truth is a vote over K repetitions, and a run that
+the environment broke (`INFRA_INVALID`: a server down, an answer the cassette lacks) is left out of it. Code:
+`traceeval/experiment/`, `traceeval/cli.py`.
 
 ## Requirements
 
 ### Requirement: Runs are recorded once per variant
 
 The baseline SHALL be recorded with per-test coverage and the variants without it, each for K repetitions of the whole
-suite.
+suite. With a served model the cases of a variant MAY run in parallel threads; the baseline MUST run one case at a
+time, because its coverage contexts are process-wide.
 
 #### Scenario: Baseline
 
@@ -30,22 +34,34 @@ suite.
 
 ### Requirement: Runs reproduce across processes
 
-Seeds MUST be derived with a stable hash, never Python's `hash`, because string hashes are salted per process.
+Seeds MUST be derived from names by a stable function of their characters, never Python's `hash`, because string
+hashes are salted per process.
 
 #### Scenario: Different hash salts
 
-- **WHEN** the same cases run under different values of `PYTHONHASHSEED`
+- **WHEN** the same cases replay under different values of `PYTHONHASHSEED`
 - **THEN** their token counts are the same
+
+#### Scenario: The seed of a replay
+
+- **WHEN** a replay of a change starts with seed number s
+- **THEN** its generator is seeded with 1000 × s plus the sum of the character codes of the change's id
 
 ### Requirement: Ground truth is a majority flip
 
 A test SHALL reveal a change when its baseline pass rate is at least 0.5 and its pass rate under the change is below 0.5.
-A change with at least one revealing test is a regression.
+A change with at least one revealing test is a regression. Pass rates MUST count only the runs the environment did not
+break.
 
-#### Scenario: One flaky failure is not a reveal
+#### Scenario: One unstable failure is not a reveal
 
 - **WHEN** a test fails in a minority of its repetitions under a change
 - **THEN** it does not reveal the change
+
+#### Scenario: A run the environment broke counts nowhere
+
+- **WHEN** a recorded run is `INFRA_INVALID`
+- **THEN** it is left out of every pass rate and never drawn by the replay, and the report's header counts it
 
 #### Scenario: A test already failing does not reveal
 
@@ -60,7 +76,8 @@ each test it runs MUST be answered from a recorded run of that variant.
 #### Scenario: A test is executed in replay
 
 - **WHEN** a strategy asks the oracle for a test
-- **THEN** the outcome and the cost come from one repetition of that variant's recording, chosen by the seeded generator
+- **THEN** the outcome and the cost come from one valid repetition of that variant's recording, chosen by the seeded
+  generator; a test the variant never ran validly answers as on the original app
 
 #### Scenario: The defaults of a replay
 

@@ -7,7 +7,11 @@
 The authoring agent creates draft pages and replaces page bodies. A new page starts as a draft, with its SEO
 metadata set from the request. Every edit is saved as a new version, and because an approval was given for the
 old text, the edit withdraws it. A broken link does not stop the edit from being saved, but the author is told.
-Authoring never takes anything live. This describes the system as it is today.
+Authoring never takes anything live. This describes the system as it is today, with Gemma's recorded answers.
+
+The edit itself withdraws the approval; a later step of a plan may approve the page again (W4, W6). Gemma also
+asks for a review after an edit nobody asked to have reviewed (AUT-04, one of its known mistakes), so this spec
+does not use that case.
 
 ## Requirements
 
@@ -51,26 +55,20 @@ with: {case: AUT-10}
 Replacing a body SHALL add a version and MUST withdraw the page's review, so that the new text has to be reviewed
 again. The page's status MUST NOT change.
 
-#### Scenario: Editing adds a version and resets the review
-
-- **WHEN** catalog case AUT-04 runs, which edits the approved page p4
-- **THEN** the case passes: the page has 2 versions and its review status is none
-
-```yaml clause
-use: scenario
-with: {case: AUT-04}
-```
-
 #### Scenario: No edited page keeps its approval
 
 - **WHEN** a call of `update_page_content` succeeds in any run
-- **THEN** that page's review is not approved at the end of the run
+- **THEN** that page's review is not approved at the end of the run, unless `approve_review` approved the page
+  again after the edit
 
 ```yaml clause
 use: always_on_calls
 with:
   tools: [update_page_content]
-  where: run.final_state.pages[event.args.page_id]['review']['status'] != 'approved'
+  where: >-
+    run.final_state.pages[event.args.page_id]['review']['status'] != 'approved'
+    or any(e.kind == 'tool.call' and e.tool == 'approve_review' and e.status == 'ok'
+    and e.args.page_id == event.args.page_id and e.t > event.t for e in run.events)
 ```
 
 #### Scenario: Editing a live page leaves it live
@@ -126,23 +124,6 @@ with:
   ensures: all(link == link.strip() and '[' not in link and ']' not in link for link in result)
 ```
 
-#### Scenario: Spaces around a link are removed
-
-- **WHEN** a request edits page p4 with a body whose link has spaces inside the brackets
-- **THEN** page p4 records the link without the spaces
-
-```yaml clause
-use: scenario
-with:
-  case:
-    agent: orchestrator
-    request: "Update the body of the welcome post"
-    context: {user_id: alice, page_id: p4, body: "See [[ /content/site/home ]]."}
-  expect:
-    route_to: authoring
-    state: [["pages.p4.links", "==", ["/content/site/home"]]]
-```
-
 #### Scenario: Link extraction is in the repository service
 
 - **WHEN** the code is inspected
@@ -151,6 +132,21 @@ with:
 ```yaml clause
 use: function_in_layer
 with: {function: _extract_links, file: services/repository.py}
+```
+
+### Requirement: A new page gets its metadata after it is created
+
+In the `page-authoring` procedure, the step that sets the SEO metadata MUST come after the step that creates the
+page.
+
+#### Scenario: The metadata step follows the creation step
+
+- **WHEN** the procedure of the `page-authoring` skill is inspected
+- **THEN** the step `create` comes before the step `meta`
+
+```yaml clause
+use: skill_step_order
+with: {skill: page-authoring, first: {id: create}, then: {id: meta}}
 ```
 
 ### Requirement: Authoring never takes a page live

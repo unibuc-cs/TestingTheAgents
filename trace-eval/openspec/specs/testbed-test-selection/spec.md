@@ -45,8 +45,10 @@ dependencies. A module-level code change MUST touch a test that used any functio
 
 ### Requirement: Each strategy has its own defined behaviour
 
-The default comparison MUST hold `full`, `random`, `declared`, `ir_tfidf`, `observed`, `cost_aware` and `adaptive_bayes`.
-`observed_diverse` and `history_ml` SHALL be optional and run only with `--strategies all` or by name.
+The default comparison MUST hold `full`, `random`, `declared`, `ir_tfidf`, `observed`, `cost_aware`, the two
+reproduced published methods `casper_slices` and `risk_aware_ts`, and `adaptive_bayes`. `observed_diverse`,
+`history_ml` and the variants of the proposed method (`adaptive_bayes_tfidf`, `adaptive_bayes_notext`,
+`adaptive_bayes_nomandatory`) SHALL be optional and run only with `--strategies all` or by name.
 
 #### Scenario: Reference order
 
@@ -72,6 +74,18 @@ The default comparison MUST hold `full`, `random`, `declared`, `ir_tfidf`, `obse
 
 - **WHEN** `cost_aware` orders the tests
 - **THEN** it ranks every test by `severity * (0.05 + affinity) * (2 - pass_rate) / cost`, with 1 added to the affinity of a test that executed a changed line
+
+#### Scenario: Slices of tests that behave alike
+
+- **WHEN** `casper_slices` runs
+- **THEN** it cuts the suite into slices of tests that behave alike on the original app, runs two representatives of
+  every slice (cheaper slices first), and then the slices whose failure rate moved, without looking at the diff
+
+#### Scenario: A bandit over the tests' risk
+
+- **WHEN** `risk_aware_ts` runs
+- **THEN** it runs, one test at a time and each at most once, the test whose sampled failure probability times its
+  risk weight is highest, until no unrun test fits the budget, without looking at the diff and without a verdict
 
 #### Scenario: Prediction falls back when it cannot learn
 

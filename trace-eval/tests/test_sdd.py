@@ -7,6 +7,8 @@ import pytest
 
 from traceeval.catalog import load_catalog
 from traceeval.spec import load_specs
+from traceeval.spec.checks import CHECKERS
+from traceeval.spec.context import CheckContext
 from traceeval.spec.model import Clause, validate_spec
 from traceeval.spec.product import ProductModel
 from traceeval.spec.prs import AS_BUILT_PRS, PRS, prs_for
@@ -44,14 +46,51 @@ def test_as_built_specs_name_only_what_the_system_has(world):
 
 
 @pytest.mark.parametrize("pr", AS_BUILT_PRS, ids=lambda p: p.id)
-def test_as_built_spec_accepts_the_system_and_catches_its_own_regressions(world, pr):
+def test_as_built_spec_accepts_the_system_and_catches_its_own_regressions(world, pr, monkeypatch):
+    """The spec accepts the current code, and a clause of the spec itself rejects each listed change.
+
+    A change can lead to prompts the cassette does not hold; those runs end INFRA_INVALID and are no evidence
+    either way. A rejection counts when a failing clause used no such run, or is a monitor (its violation is an
+    event the variant really produced before the replay stopped). Otherwise the PR is skipped until the answers
+    are recorded."""
     workdir, catalog, runs, deps, _ = world
     spec = next(s for s in load_specs() if s.id == pr.spec_id)
+    used, infra, current = {}, set(), [None]  # clause id -> cases it ran; cases without recorded answers
+    run = CheckContext.run
+
+    def recording_run(self, case, fault_profile=None, cache=True):
+        rec = run(self, case, fault_profile, cache)
+        used.setdefault(current[0], set()).add(case.id)
+        if rec.get("classification") == "INFRA_INVALID":
+            infra.add(case.id)
+        return rec
+
+    def tracked(check):
+        def checker(clause, ctx):
+            current[0] = clause.id
+            try:
+                return check(clause, ctx)
+            finally:
+                current[0] = None  # the regression tests run after the clauses, outside any clause
+
+        return checker
+
+    monkeypatch.setattr(CheckContext, "run", recording_run)
+    for kind, check in list(CHECKERS.items()):
+        monkeypatch.setitem(CHECKERS, kind, tracked(check))
     ev = evaluate_pr(spec, pr, workdir, catalog, runs, deps)
-    assert ev["verdict"] == pr.expected, [c for c in ev["clauses"] if c["status"] != "pass"]
     # a regression test can reject a PR on its own, so a rejection has to come from a clause of the spec itself
-    own = [c["clause_id"] for c in ev["clauses"] if c["status"] == "fail" and c["clause_id"] != "regression-tests"]
-    assert bool(own) == (pr.expected == "rejected"), own
+    own = [c for c in ev["clauses"] if c["status"] == "fail" and c["clause_id"] != "regression-tests"]
+    decisive = [c["clause_id"] for c in own if c["kind"] == "trace" or not used.get(c["clause_id"], set()) & infra]
+    record = f"{len(infra)} runs need recorded answers (TRACEEVAL_BACKEND=vllm pytest -q): {sorted(infra)[:5]}"
+    if pr.expected == "rejected":
+        if not decisive and infra:
+            pytest.skip(record)
+        assert ev["verdict"] == "rejected" and decisive, [c for c in ev["clauses"] if c["status"] != "pass"]
+    else:
+        if infra:
+            pytest.skip(record)
+        assert ev["verdict"] == pr.expected and not own, [c for c in ev["clauses"] if c["status"] != "pass"]
 
 
 def test_fs0101_verdicts_and_proof(world):

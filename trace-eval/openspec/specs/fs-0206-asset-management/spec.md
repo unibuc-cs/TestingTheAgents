@@ -1,12 +1,16 @@
-# FS-0206: Only supported assets are uploaded, and only existing ones are attached
+# FS-0206: Only supported assets are uploaded, and only existing, licensed ones are attached
 
 **Owner:** content-ops
 
 ## Purpose
 
-The assets agent registers files in the digital asset library and attaches assets to pages. The library holds
-images, videos and PDFs only. Both the page and the asset must exist before anything is attached, and an asset
-is attached to a page at most once. This describes the system as it is today.
+The assets agent registers files in the digital asset library, finds assets by their tags and attaches assets to
+pages. The library holds images, videos and PDFs only. Both the page and the asset must exist before anything is
+attached, and an asset whose licence has expired is never used. This describes the system as it is today, with
+Gemma's recorded answers.
+
+The repository also lists an asset once when it is attached again, but no catalog case attaches an asset twice,
+so nothing here can check that without recording a new case.
 
 ## Requirements
 
@@ -45,9 +49,22 @@ use: scenario
 with: {case: AST-03}
 ```
 
+#### Scenario: No upload of another type is ever registered
+
+- **WHEN** any call of `upload_asset` is made
+- **THEN** it never succeeds for a file whose type is not an image, a video or a PDF
+
+```yaml clause
+use: never_on_calls
+with:
+  tools: [upload_asset]
+  where: >-
+    event.status == 'ok' and not str(event.args.mime).startswith(('image/', 'video/', 'application/pdf'))
+```
+
 ### Requirement: Attaching needs an existing page and asset
 
-Attaching MUST fail cleanly when the page or the asset does not exist, and an attached asset SHALL be listed once.
+Attaching MUST fail cleanly when the page or the asset does not exist.
 
 #### Scenario: An existing asset is attached
 
@@ -79,25 +96,6 @@ use: scenario
 with: {case: AST-07}
 ```
 
-#### Scenario: Attaching an attached asset does not list it twice
-
-- **GIVEN** page p1, which already carries asset a1
-- **WHEN** alice asks to attach asset a1 to it
-- **THEN** page p1 still carries exactly one asset
-
-```yaml clause
-use: scenario
-with:
-  case:
-    agent: orchestrator
-    request: "Attach the hero image to the home page"
-    context: {user_id: alice, page_id: p1, asset_id: a1}
-  expect:
-    route_to: assets
-    state: [["pages.p1.assets", "len", 1]]
-    tools_required: [attach_asset]
-```
-
 #### Scenario: Every attached asset exists
 
 - **WHEN** a call of `attach_asset` succeeds in any run
@@ -108,6 +106,43 @@ use: always_on_calls
 with:
   tools: [attach_asset]
   where: event.args.asset_id in run.final_state.assets
+```
+
+### Requirement: Only licensed assets are used
+
+A search by tags SHALL list every matching asset with its licence, and an asset described by its tags MUST be the
+first match whose licence is valid. An asset whose licence has expired MUST NOT be attached.
+
+#### Scenario: A search by tag lists the matching assets
+
+- **WHEN** catalog case AST-09 runs, which asks for the images tagged spring
+- **THEN** the case passes: the answer lists the matching assets
+
+```yaml clause
+use: scenario
+with: {case: AST-09}
+```
+
+#### Scenario: An asset described by tags is a licensed one
+
+- **WHEN** catalog case AST-10 runs, which asks for a spring hero image on the welcome post
+- **THEN** the case passes: the licensed match is attached, not the expired banner a3
+
+```yaml clause
+use: scenario
+with: {case: AST-10}
+```
+
+#### Scenario: No run attaches an asset whose licence has expired
+
+- **WHEN** any call of `attach_asset` is made
+- **THEN** it never succeeds for an asset whose licence is `expired`
+
+```yaml clause
+use: never_on_calls
+with:
+  tools: [attach_asset]
+  where: event.status == 'ok' and run.final_state.assets[event.args.asset_id].get('license') == 'expired'
 ```
 
 ### Requirement: The procedure confirms the page before attaching

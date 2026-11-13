@@ -4,10 +4,12 @@
 
 ## Purpose
 
-A transient failure of a tool is retried by the harness. Write tools receive an idempotency key that stays the same
-across the retries, so a service that honours it answers a retry with its first result. Reads carry no key. This
-covers the six write tools whose services honour the key today; FS-0105 asks for the same of the publishing tools
-that do not yet. A tool that stays down is reported, not worked around. This describes the system as it is today.
+A transient failure of a tool is retried by the harness. Write tools receive an idempotency key derived from the
+operation (the request, the tool, its arguments and how often that call has already succeeded), so the key stays the
+same across the retries and every run gets the same keys; a service that honours it answers a retry with its first
+result. Reads carry no key. This covers the six write tools whose services honour the key today; FS-0105 asks for
+the same of the publishing tools that do not yet. A tool that stays down is reported, not worked around. This
+describes the system as it is today, with Gemma's recorded answers.
 
 ## Requirements
 
@@ -152,19 +154,33 @@ with:
 #### Scenario: Keys are made in the harness
 
 - **WHEN** the code is inspected
-- **THEN** `new_idempotency_key` is defined in `harness/retry.py`
+- **THEN** `idempotency_key` is defined in `harness/retry.py`
 
 ```yaml clause
 use: function_in_layer
-with: {function: new_idempotency_key, file: harness/retry.py}
+with: {function: idempotency_key, file: harness/retry.py}
+```
+
+#### Scenario: A key names its operation and nothing else
+
+- **WHEN** `idempotency_key` receives any operation
+- **THEN** the key is `idem-` followed by ten hexadecimal digits
+
+```yaml clause
+use: function_contract
+with:
+  function: harness/retry.py::idempotency_key
+  inputs: {operation: str}
+  ensures: >-
+    result.startswith('idem-') and len(result) == 15 and all(c in '0123456789abcdef' for c in result[5:])
 ```
 
 #### Scenario: Adapters and services do not make keys
 
 - **WHEN** the code under `tools` and `services` is inspected
-- **THEN** nothing there uses the name `new_idempotency_key`
+- **THEN** nothing there hard-codes the key prefix `idem-`
 
 ```yaml clause
-use: forbid_name_in
-with: {name: new_idempotency_key, dirs: [tools, services]}
+use: forbid_literal_in
+with: {value: idem-, dirs: [tools, services]}
 ```

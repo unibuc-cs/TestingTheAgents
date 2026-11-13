@@ -5,15 +5,31 @@
 ## Purpose
 
 The SEO agent reads a page's report, applies the requested metadata and quotes the new score. Only the fields a
-request names change, a title over the configured limit changes nothing, and the SEO title never renames the page.
-The title limit's value is the subject of FS-0104, so nothing here pins it: every check reads it from the
-configuration. This describes the system as it is today.
+request names change, and the SEO title never renames the page. The title limit's value is the subject of FS-0104,
+so nothing here pins it: every check reads it from the configuration. This describes the system as it is today,
+with Gemma's recorded answers.
+
+The limit is enforced by one step of the skill, which stops before `set_page_metadata` when the title is too long;
+no service refuses a long title, and the report only flags it. Gemma does not stop at that step: in SEO-02 (one of
+its known mistakes) it applies an 83-character title. This spec therefore requires the step and the report, not
+the refusal.
 
 ## Requirements
 
-### Requirement: A description is required for a full score
+### Requirement: A description is required for a full score, and the title limit is a sane setting
 
-The setting `seo.require_description` MUST be the boolean true.
+The setting `seo.require_description` MUST be the boolean true, and `seo.max_title_length` MUST be an integer
+between 30 and 120 (its value is FS-0104's subject).
+
+#### Scenario: The title limit is in range
+
+- **WHEN** the platform configuration is checked
+- **THEN** `seo.max_title_length` is an integer between 30 and 120
+
+```yaml clause
+use: setting_in_range
+with: {key: seo.max_title_length, min: 30, max: 120}
+```
 
 #### Scenario: A description is required
 
@@ -28,6 +44,20 @@ with: {key: seo.require_description, value: true, type: boolean}
 ### Requirement: Metadata is applied field by field
 
 Applying metadata SHALL change only the fields the request names, and the response MUST quote the new score.
+
+#### Scenario: The stored metadata is what was asked
+
+- **WHEN** a call of `set_page_metadata` succeeds in any run
+- **THEN** each field the call gave is stored as given
+
+```yaml clause
+use: always_on_calls
+with:
+  tools: [set_page_metadata]
+  where: >-
+    all(event.args.get(f) is None or event.result.metadata[f] == event.args.get(f)
+    for f in ('title', 'description', 'keywords'))
+```
 
 #### Scenario: Title, description and keywords are applied
 
@@ -69,19 +99,37 @@ use: scenario
 with: {case: SEO-07}
 ```
 
-### Requirement: A title over the limit changes nothing
+### Requirement: The title limit is a step of the skill, and the report flags a title over it
 
-A title longer than `seo.max_title_length` MUST be refused without any change, and a title within it MUST be
-accepted.
+In the `seo-metadata` procedure, a step MUST stop before `meta` when the requested title is longer than
+`seo.max_title_length`. The SEO report MUST flag a title as too long exactly when it is longer than the limit, and a
+title within the limit MUST be accepted.
 
-#### Scenario: An over-long title is refused
+#### Scenario: The length guard comes before the metadata step
 
-- **WHEN** catalog case SEO-02 runs, whose title is longer than the limit
-- **THEN** the case passes: `set_page_metadata` does not succeed and the response says the title is above the limit
+- **WHEN** the procedure of the `seo-metadata` skill is inspected
+- **THEN** the step guarded by the title-length condition comes before the step `meta`
 
 ```yaml clause
-use: scenario
-with: {case: SEO-02}
+use: skill_step_order
+with:
+  skill: seo-metadata
+  first: {when: "ctx.get('seo_title') is not None and len(ctx['seo_title']) > config('seo.max_title_length')"}
+  then: {id: meta}
+```
+
+#### Scenario: Every report flags exactly the titles over the limit
+
+- **WHEN** a call of `get_seo_report` succeeds in any run
+- **THEN** the report lists a `too_long` title issue if and only if its title length is above `seo.max_title_length`
+
+```yaml clause
+use: always_on_calls
+with:
+  tools: [get_seo_report]
+  where: >-
+    any(i.issue == 'too_long' for i in event.result.issues)
+    == (event.result.title_length > config('seo.max_title_length'))
 ```
 
 #### Scenario: A long title within the limit is accepted

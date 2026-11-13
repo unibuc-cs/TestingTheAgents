@@ -162,3 +162,10 @@ skill_step_order:
   slots: {skill: skill, first: any, then: any}
   require: L4
   clause: {rules: [{skill_order: {skill: "{skill}", first: "{first}", then: "{then}"}}]}
+
+skill_states:
+  kind: placement
+  gloss: "skill {skill} states: {text}"
+  slots: {skill: skill, text: str}
+  require: L4
+  clause: {rules: [{skill_text: {skill: "{skill}", contains: "{text}"}}]}

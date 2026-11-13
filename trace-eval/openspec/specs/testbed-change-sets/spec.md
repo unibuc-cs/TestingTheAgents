@@ -95,7 +95,19 @@ Each kind of file SHALL produce its own components, and these MUST use the same 
 #### Scenario: An agent definition changes
 
 - **WHEN** a key of an agent definition changes, including only the order of a mapping such as its intents
-- **THEN** the component is `agent:<name>.<key>`
+- **THEN** the component is `agent:<name>.<key>`, of kind `agent-prompt` for its system prompt or description and
+  `agent` otherwise
+
+#### Scenario: An agent loses tools
+
+- **WHEN** an agent's tool or skill list only loses items
+- **THEN** the component names them in its detail (`removed: tool:<name>`), so that only the tests that used one of
+  them are reached
+
+#### Scenario: The starting data changes
+
+- **WHEN** a fixture file changes
+- **THEN** the component is `fixture:<name>`
 
 #### Scenario: A configuration value changes
 
@@ -104,8 +116,7 @@ Each kind of file SHALL produce its own components, and these MUST use the same 
 
 ### Requirement: Skill text counts word for word
 
-Skill prose MUST count as a change even though the simulated backend does not read it, because a model reads it word
-for word.
+Skill prose MUST count as a change, because the model reads a skill's whole text word for word.
 
 #### Scenario: Prose is reworded
 
@@ -114,8 +125,8 @@ for word.
 
 ### Requirement: The catalogue of changes is sound
 
-Every change expected to be a regression MUST be revealed by at least one test, and no benign change MUST be revealed
-by any test.
+Every change expected to be a regression MUST be revealed by at least one test under at least one model, and no benign
+change MUST be revealed by any test.
 
 #### Scenario: The report checks the expectation
 
@@ -126,3 +137,13 @@ by any test.
 
 - **WHEN** each catalogue entry is materialised
 - **THEN** it yields files and components, except the two comment- and format-only changes, which yield none
+
+### Requirement: Changes can be bundled
+
+A batch SHALL apply several catalogue changes to one copy, as a nightly run or a pull request bundles them. Its members
+MUST edit disjoint files, and the batch SHALL count as a regression when any member is one.
+
+#### Scenario: A batch is materialised
+
+- **WHEN** a batch is materialised
+- **THEN** every member's edits are applied in order to one copy, and the change set holds the components of all of them

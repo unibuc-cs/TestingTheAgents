@@ -9,7 +9,7 @@ systems. Read `README.md` (5 minutes), then `docs/USER_GUIDE.md` only when you n
 ```
 uv venv --python 3.12 .venv         # the project venv (git-ignored); use .venv/Scripts/python on Windows
 pip install -e ".[dev,ml]"          # or: uv pip install --python .venv -e ".[dev,ml]" ruff
-pytest -q                           # ~90 s; must stay green; replays Gemma's recorded answers (tests/cassettes/)
+pytest -q                           # ~2.5 min; must stay green; replays Gemma's recorded answers (tests/cassettes/)
 ruff check traceeval tests          # rules and line length come from pyproject.toml
 ruff format traceeval tests         # see "Gotchas" before formatting sut/
 traceeval experiment --backend vllm --workdir runs/gemma7 --reps 5   # full experiment, Gemma on the GPU server, about two hours
@@ -50,7 +50,8 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
   they ship in the package): each `#### Scenario:` carries one fenced clause, catalog template + slots (see
   `docs/SDD_GUIDE.md`). Only the fenced clauses are checked; the WHEN/THEN prose must be kept true to them by hand.
   FS-01xx are the demo's change requests; FS-02xx describe ContentOps as it is, must pass on the baseline and must
-  be rejected by their own clauses under the changes listed in `AS_BUILT` (`spec/prs.py`). `testbed-*` capabilities
+  be rejected by their own clauses under the changes listed in `AS_BUILT` (`spec/prs.py`); a change whose verdict
+  needs answers the cassette lacks is skipped until they are recorded. `testbed-*` capabilities
   are prose about this repository: nothing executes them, so changing the code they describe means changing them.
 - `tests/` — pytest; `runs/` — experiment outputs (git-ignored); `docs/` — guide, plan, related work, references,
   results, and the paper draft (`docs/paper/`, LaTeX).

@@ -38,8 +38,10 @@ def wrap(value):
 
 
 def evaluate(expr: str, env: dict):
-    """Evaluate a clause expression. Specs are trusted repository content; builtins are limited anyway."""
-    return eval(compile(str(expr), "<clause>", "eval"), {"__builtins__": SAFE_BUILTINS}, env)
+    """Evaluate a clause expression. Specs are trusted repository content; builtins are limited anyway. The names
+    are globals, not locals, so that a comprehension in the expression sees them too (``event`` inside
+    ``any(e.t < event.t for e in run.events)``)."""
+    return eval(compile(str(expr), "<clause>", "eval"), {**env, "__builtins__": SAFE_BUILTINS})
 
 
 def resolve(value, env: dict):

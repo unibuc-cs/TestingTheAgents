@@ -99,6 +99,7 @@ its recorded runs (which cases exercise which tools and functions).
 | `forbid_name_in` | placement | name, dirs | nothing under *dirs* uses the name *name* | L4 |
 | `forbid_literal_in` | placement | value, dirs | nothing under *dirs* hard-codes *value* | L4 |
 | `skill_step_order` | placement | skill, first, then | in skill *skill*, step *first* comes before step *then* | L4 |
+| `skill_states` | placement | skill, text | skill *skill* states *text* (a rule in its prose: present in the prompt, not proof the model follows it) | L4 |
 
 ![The clause kinds](figures/sdd_3_kinds.svg)
 
@@ -254,13 +255,25 @@ depend on the others.
 | capabilities | what they are | how they are checked |
 |---|---|---|
 | `fs-01*` | the demo's five change requests; some fail on today's code, by design | the 25 PRs in `spec/prs.py`, in `traceeval sdd` |
-| `fs-02*` | ContentOps as it is: routing, role permissions, publishing gates, authoring, rollback, assets, translation, SEO metadata, data export, tool-call rules, retries | `AS_BUILT` in `spec/prs.py`: accepted on the baseline, and rejected by the spec's *own* clauses under each listed change (`tests/test_sdd.py`); run one with `traceeval sdd --specs FS-0203` |
+| `fs-02*` | ContentOps as it is: routing and plans, role permissions, publishing gates, authoring, rollback, assets, translation, SEO metadata, data export, tool-call rules, retries, the six multi-agent workflows (FS-0212 to FS-0217), brand governance, insights and the site health check | `AS_BUILT` in `spec/prs.py`: accepted on the baseline, and rejected by the spec's *own* clauses under each listed change (`tests/test_sdd.py`); run one with `traceeval sdd --specs FS-0203` |
 | `testbed-*` | the testbed itself: eval cases, tracing, change sets, selection, adaptive stopping, record and replay, backends, this layer | nothing executes them: the clause catalog can only talk about the application, so they are prose kept true by hand |
 
 An as-built spec is only useful if it can fail, and a rejection alone does not show that: a PR is also rejected when a
 change-selected regression test fails, whatever the clauses say. So the test for an `fs-02*` spec requires a failing
 clause of the spec itself. As-built specs must also not contradict the change requests: none pins a value a request
-changes (FS-0208 reads the title limit from the configuration rather than naming it).
+changes (FS-0208 bounds the title limit but reads its value from the configuration).
+
+The cases replay Gemma's recorded answers, and an as-built spec describes the app *with* that model. Where Gemma does
+not follow a skill's rule in a recorded run (it schedules an unreviewed page in PUB-10, applies an over-long title in
+SEO-02, edits without a permission check in DS-INTENTS/i08), the spec states what does hold, the step in the procedure
+or the check in the service, and says so in its purpose; the model's known mistakes (`KNOWN_MODEL_MISTAKES` in
+`tests/test_sut.py`) are not used as scenarios. Most workflow rules live in the routing skill's prose, so their specs
+also use `skill_states`, which shows that the rule is in the prompt and nothing more.
+
+A change that alters what an agent is shown (a skill, an agent definition, a tool's answer) leads to prompts the
+cassette lacks, and those runs end `INFRA_INVALID`. A listed change then counts as rejected only when a failing clause
+used no such run, or is a monitor whose violation the changed app produced before the replay stopped; otherwise its
+test is skipped until `TRACEEVAL_BACKEND=vllm pytest -q` records the missing answers.
 
 ## 9. Questions people ask
 

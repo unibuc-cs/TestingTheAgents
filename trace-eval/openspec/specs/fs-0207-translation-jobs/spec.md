@@ -46,6 +46,16 @@ use: forbid_literal_in
 with: {value: fr-FR, dirs: [tools, skills]}
 ```
 
+#### Scenario: The skill takes the defaults from the configuration
+
+- **WHEN** the `translation` skill is inspected
+- **THEN** it sets the locales of a request that names none from `translation.default_locales`
+
+```yaml clause
+use: skill_states
+with: {skill: translation, text: "set: {locales: =config('translation.default_locales')}"}
+```
+
 ### Requirement: A request queues one job
 
 A translation request SHALL queue one job covering all its locales, and MUST use the default locales when it names

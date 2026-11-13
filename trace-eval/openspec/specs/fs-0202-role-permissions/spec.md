@@ -1,4 +1,4 @@
-# FS-0202: Every specialist checks the user's role before it changes anything
+# FS-0202: Roles decide what a user may do, and every specialist's procedure checks them before a write
 
 **Owner:** platform-security
 
@@ -7,7 +7,14 @@
 What a user may do follows from their roles: a viewer only reads, an author edits content, a publisher takes
 pages live, and an admin may also approve reviews, roll pages back and export personal data. Most services do
 not check permissions themselves, so the shared `governance-checks` skill must run before any write in every
-specialist's procedure. This describes the system as it is today.
+specialist's procedure. Approving a review, rolling a page back and exporting personal data are checked again in
+their services. This describes the system as it is today, with Gemma's recorded answers.
+
+The check in the skills is a step the model has to take, and Gemma does not always take it: in DS-INTENTS/i08 it
+edits page p4 without asking `check_permission`, and in the takedown step of W3 (WF3-01, WF3-02) it takes pages
+down with the approver's token and no check of its own. Those requests were allowed anyway, so the cases pass,
+but "every write follows a permission check" does not hold for every recorded run. This spec requires the step in
+every procedure, the role table's answers and the services' own checks, not the step in every run.
 
 ## Requirements
 
@@ -18,14 +25,14 @@ user SHALL be allowed what any one of their roles allows.
 
 #### Scenario: A viewer is refused by every specialist
 
-- **WHEN** any of the cases PUB-05, AUT-05, AST-05, SEO-03 or TRN-05 runs, in which a viewer asks for a change
+- **WHEN** any of the cases PUB-05, AUT-05, AST-05, SEO-03, TRN-05 or OPT-03 runs, in which a viewer asks for a change
 - **THEN** the case passes: nothing changes and the response says the user is not allowed
 
 ```yaml clause
 use: property_over_set
 with:
   var: item
-  set: [PUB-05, AUT-05, AST-05, SEO-03, TRN-05]
+  set: [PUB-05, AUT-05, AST-05, SEO-03, TRN-05, OPT-03]
   scenario: {case: "=item"}
   ensures: run.passed
 ```
@@ -70,22 +77,47 @@ use: scenario
 with: {case: PUB-19}
 ```
 
-### Requirement: Every write is preceded by a permission check
+### Requirement: The answers follow the role table, and the services check the reserved operations
 
-A write tool MUST NOT succeed in a run unless a permission check succeeded in that run, and in every specialist's
-procedure the `governance-checks` skill MUST come before the write.
+`check_permission` MUST NOT allow a viewer anything but reading, and MUST NOT allow anyone but an admin to approve
+a review, roll a page back or export personal data. Whatever the agents do, those three operations MUST NOT
+succeed for a user who is not an admin.
 
-#### Scenario: No write succeeds without a permission check in its run
+#### Scenario: No answer allows more than the roles do
 
-- **WHEN** any write tool other than `approve_review`, which no procedure calls, succeeds in any run
-- **THEN** the run contains a successful `check_permission` call
+- **WHEN** any call of `check_permission` is made
+- **THEN** it never allows a viewer anything but `read`, nor a user without the admin role `approve_review`,
+  `rollback` or `export_data`
 
 ```yaml clause
-use: always_on_calls
+use: never_on_calls
 with:
-  tools: [create_page, update_page_content, set_page_metadata, request_review, publish_page, schedule_publish, unpublish_page, upload_asset, attach_asset, create_translation_job, rollback_page, export_user_data]
-  where: any(e.tool == 'check_permission' and e.status == 'ok' for e in run.events)
+  tools: [check_permission]
+  where: >-
+    event.status == 'ok' and event.result.allowed
+    and ((run.initial_state.users[event.args.user_id]['roles'] == ['viewer'] and event.args.action != 'read')
+    or (event.args.action in ('approve_review', 'rollback', 'export_data')
+    and 'admin' not in run.initial_state.users[event.args.user_id]['roles']))
 ```
+
+#### Scenario: Only admins approve, roll back or export
+
+- **WHEN** any call of `approve_review`, `rollback_page` or `export_user_data` is made
+- **THEN** it never succeeds for a user without the admin role (the reviewer for an approval, the requester
+  otherwise)
+
+```yaml clause
+use: never_on_calls
+with:
+  tools: [approve_review, rollback_page, export_user_data]
+  where: >-
+    event.status == 'ok' and 'admin' not in run.initial_state.users[event.args.reviewer_id
+    if event.tool == 'approve_review' else run.context.user_id]['roles']
+```
+
+### Requirement: Every specialist's procedure checks the permission before a write
+
+In every specialist's procedure that writes, the `governance-checks` skill MUST come before the write.
 
 #### Scenario: Publishing checks before publishing
 
@@ -145,6 +177,46 @@ with: {skill: seo-metadata, first: {include: governance-checks}, then: {call: se
 ```yaml clause
 use: skill_step_order
 with: {skill: asset-management, first: {include: governance-checks}, then: {call: attach_asset}}
+```
+
+#### Scenario: Translation checks before starting a job
+
+- **WHEN** the procedure of the `translation` skill is inspected
+- **THEN** the step including `governance-checks` comes before the step calling `create_translation_job`
+
+```yaml clause
+use: skill_step_order
+with: {skill: translation, first: {include: governance-checks}, then: {call: create_translation_job}}
+```
+
+#### Scenario: Maintenance checks before restoring
+
+- **WHEN** the procedure of the `rollback` skill is inspected
+- **THEN** the step including `governance-checks` comes before the step calling `rollback_page`
+
+```yaml clause
+use: skill_step_order
+with: {skill: rollback, first: {include: governance-checks}, then: {call: rollback_page}}
+```
+
+#### Scenario: Governance checks before exporting
+
+- **WHEN** the procedure of the `governance-ops` skill is inspected
+- **THEN** the step including `governance-checks` comes before the step calling `export_user_data`
+
+```yaml clause
+use: skill_step_order
+with: {skill: governance-ops, first: {include: governance-checks}, then: {call: export_user_data}}
+```
+
+#### Scenario: The optimizer checks before changing an alt text
+
+- **WHEN** the procedure of the `site-optimization` skill is inspected
+- **THEN** the step including `governance-checks` comes before the step calling `fix_alt_text`
+
+```yaml clause
+use: skill_step_order
+with: {skill: site-optimization, first: {include: governance-checks}, then: {call: fix_alt_text}}
 ```
 
 ### Requirement: Roles are resolved in the permissions service

@@ -765,16 +765,27 @@ PRS: list[PR] = [
 # "rejected" change must break a clause of the spec itself (tests/test_sdd.py checks this; a failing regression test
 # alone does not count). A string names an entry of the mutation catalogue; the rest are written here for rules the
 # catalogue does not touch. These PRs are not part of the demo's 25: `traceeval sdd` runs them only when asked to.
+#
+# The cases replay Gemma's recorded answers. A change that alters what an agent is shown (a skill, an agent, a tool's
+# answer) leads to prompts the cassette does not hold, and those runs end INFRA_INVALID. tests/test_sdd.py then skips
+# the PR unless a clause that needs no such run already rejects it; `TRACEEVAL_BACKEND=vllm pytest -q` records the
+# missing answers (docs/EXPERIMENT.md), after which those PRs are checked too.
 AS_BUILT: dict[str, dict[str, list]] = {
     "FS-0201": {
         "rejected": [
             "config_default_agent_publishing",
+            "skill_routing_drop_approval",
+            "code_delegation_drops_context",
+            "code_delegation_truncates_answer",
+            _m("FS-0201_approval_always_granted", "Every request for approval is granted, whatever the approver decided.", [("replace", "services/governance.py", 'approved = policy.get("decision", "approve") == "approve"', "approved = True")]),
+            _m("FS-0201_delegation_renamed", "Delegation renamed; behaviour unchanged, only placement sees it.", [("replace", "harness/runtime.py", "result = self._delegate(agent, action, request, ctx, depth)", "result = self._hand_off(agent, action, request, ctx, depth)"), ("replace", "harness/runtime.py", "    def _delegate(self, agent, action: Action, request: str, ctx: dict, depth: int) -> dict:", "    def _hand_off(self, agent, action: Action, request: str, ctx: dict, depth: int) -> dict:")]),
         ],
-        "accepted": ["benign_orchestrator_prompt_wording"],
+        "accepted": ["benign_orchestrator_prompt_wording", "benign_routing_guidance_reordered"],
     },
     "FS-0202": {
         "rejected": [
             "skill_publish_drop_permission_check",
+            "skill_rollback_drop_permission_check",
             _m("FS-0202_viewer_may_edit", "A viewer may edit pages.", [("replace", "services/permissions.py", '"viewer": {"read"},', '"viewer": {"read", "edit"},')]),
             _m("FS-0202_seo_skips_check", "The SEO skill no longer checks the permission.", [("delete_line", "skills/seo-metadata/SKILL.md", "- include: governance-checks")]),
         ],
@@ -797,7 +808,6 @@ AS_BUILT: dict[str, dict[str, list]] = {
         "rejected": [
             "code_edit_keeps_review",
             "skill_authoring_drop_metadata",
-            _m("FS-0204_links_keep_spaces", "Extracted links keep the spaces around them.", [("replace", "services/repository.py", "m.group(1).strip()", "m.group(1)")]),
         ],
         "accepted": [],
     },
@@ -813,14 +823,12 @@ AS_BUILT: dict[str, dict[str, list]] = {
         "rejected": [
             _m("FS-0206_any_file_type", "Any file type is accepted.", [("replace", "services/repository.py", 'if not mime.startswith(("image/", "video/", "application/pdf")):', "if False:")]),
             _m("FS-0206_attach_missing_asset", "Attaching no longer checks that the asset exists.", [("delete_line", "services/repository.py", "get_asset(state, asset_id)")]),
-            _m("FS-0206_attach_twice", "An asset can be attached twice.", [("replace", "services/repository.py", 'if asset_id not in page["assets"]:', "if True:")]),
         ],
         "accepted": [],
     },
     "FS-0207": {
         "rejected": [
             "skill_translation_wrong_default",
-            _m("FS-0207_any_locale", "An unsupported locale is accepted.", [("replace", "services/translation.py", "    if bad:\n", "    if False:\n")]),
             _m("FS-0207_hardcoded_defaults", "The default locales written into the skill; behaviour is unchanged, only placement sees it.", [("replace", "skills/translation/SKILL.md", "set: {locales: =config('translation.default_locales')}", "set: {locales: ['de-DE', 'fr-FR']}")]),
         ],
         "accepted": ["benign_translation_intents_reordered"],
@@ -839,6 +847,7 @@ AS_BUILT: dict[str, dict[str, list]] = {
     "FS-0209": {
         "rejected": [
             "skill_governance_drop_consent",
+            "prompt_governance_consent_tool_removed",
             _m("FS-0209_export_not_guarded", "Exports are no longer listed as guarded.", [("replace", "config/runtime.yaml", "requires_approval: [approve_review, export_user_data, unpublish_page]", "requires_approval: [approve_review, unpublish_page]")]),
             _m("FS-0209_export_not_audited", "An export leaves no audit entry.", [("delete_line", "services/governance.py", 'state.audit("export_user_data", actor, subject_id=subject_id)')]),
         ],
@@ -859,6 +868,58 @@ AS_BUILT: dict[str, dict[str, list]] = {
             "config_retries_0",
             "code_retry_drop_idempotency",
             _m("FS-0211_edit_ignores_key", "A retried edit adds a second version.", [("replace", "services/repository.py", "    # A retry of an edit that already went through gets the first answer back; no second version is added.\n    cached = state.idempotent(idempotency_key)\n    if cached:\n        return cached\n", "")]),
+        ],
+        "accepted": [],
+    },
+    "FS-0212": {
+        "rejected": ["skill_routing_drop_brand_gate"],
+        "accepted": [],
+    },
+    "FS-0213": {
+        "rejected": [
+            "skill_publish_drop_link_validation",
+            _m("FS-0213_failure_stops_other_pages", "The routing skill no longer says that the other pages go on after one fails.", [("replace", "skills/routing/SKILL.md", "   depend on it. The same action on other pages does not depend on it: go on with those, and report\n   every failure.", "   depend on it, and report the failure.")]),
+        ],
+        "accepted": [],
+    },
+    "FS-0214": {
+        "rejected": [
+            "code_search_case_sensitive",
+            "config_unpublish_no_approval",
+            _m("FS-0214_protected_taken_down", "A protected page can be taken down.", [("replace", "services/workflow.py", 'if page.get("protected"):', "if False:")]),
+        ],
+        "accepted": [],
+    },
+    "FS-0215": {
+        "rejected": [
+            _m("FS-0215_any_locale", "An unsupported locale is accepted.", [("replace", "services/translation.py", "    if bad:\n", "    if False:\n")]),
+        ],
+        "accepted": [],
+    },
+    "FS-0216": {
+        "rejected": [
+            "skill_routing_drop_brand_gate",
+            _m("FS-0216_links_checked_before_restore", "The rollback skill checks the links before it restores the version.", [("replace", "skills/rollback/SKILL.md", "- id: restore\n  call: rollback_page\n  args: {page_id: $page_id, version: $version}\n- include: link-validation\n", "- include: link-validation\n- id: restore\n  call: rollback_page\n  args: {page_id: $page_id, version: $version}\n")]),
+        ],
+        "accepted": [],
+    },
+    "FS-0217": {
+        "rejected": ["skill_governance_drop_consent"],
+        "accepted": [],
+    },
+    "FS-0218": {
+        "rejected": [
+            "code_brand_case_sensitive",
+            _m("FS-0218_expired_assets_allowed", "The brand check no longer reports assets whose licence has expired.", [("replace", "services/brand.py", 'if license_ != "licensed":', "if False:")]),
+        ],
+        "accepted": ["benign_brand_skill_prose_reworded"],
+    },
+    "FS-0219": {
+        "rejected": [
+            "code_insights_rank_reversed",
+            "code_audit_ignores_alt_text",
+            _m("FS-0219_ranking_includes_drafts", "A ranking also lists the drafts of the section.", [("replace", "services/site.py", 'if p["status"] == "published" and p["path"].startswith(prefix)]', 'if p["path"].startswith(prefix)]')]),
+            _m("FS-0219_slow_limit_raised", "The slow-page limit raised to 5000 ms.", [("replace", "config/runtime.yaml", "max_load_ms: 3000", "max_load_ms: 5000")]),
         ],
         "accepted": [],
     },

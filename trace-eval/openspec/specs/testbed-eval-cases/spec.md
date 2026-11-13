@@ -4,15 +4,18 @@
 
 The eval catalog is the test suite that selection strategies choose from, and scoring is the deterministic oracle
 that decides whether a run passed. Regression tracking must not depend on judge noise, so every check is
-deterministic and a judge only runs on cases that already passed. Code: `traceeval/catalog/`, `traceeval/scoring/`,
-`traceeval/experiment/executor.py`.
+deterministic and a judge only runs on cases that already passed. Next to the cases, the catalog holds the
+properties the cases check (`properties.yaml`), the multi-agent workflows some cases run end to end
+(`workflows.yaml`) and the features of the application (`features.yaml`). Code: `traceeval/catalog/`,
+`traceeval/scoring/`, `traceeval/experiment/executor.py`.
 
 ## Requirements
 
 ### Requirement: The catalog holds scenario tests and dataset items
 
 The loader SHALL read scenario tests from `catalog/tests/*.yaml` and dataset items from `catalog/datasets/*.yaml`
-into one list of cases, and MUST refuse duplicate ids.
+into one list of cases, and MUST refuse duplicate ids, a property missing from `properties.yaml` and a workflow
+missing from `workflows.yaml`.
 
 #### Scenario: A dataset item inherits from its dataset
 
@@ -29,15 +32,21 @@ into one list of cases, and MUST refuse duplicate ids.
 - **WHEN** two entries of the catalog have the same id
 - **THEN** loading raises `ValueError` naming the duplicates
 
-### Requirement: The catalog passes on the baseline
+#### Scenario: An unknown property or workflow is refused
 
-Every case of the catalog MUST pass on the unmodified application, so that a failure under a change can be read as
-caused by that change.
+- **WHEN** a case names a property that `properties.yaml` lacks, or a workflow that `workflows.yaml` lacks
+- **THEN** loading raises `ValueError` naming them
 
-#### Scenario: The whole catalog runs on the baseline
+### Requirement: The catalog passes on the baseline, apart from the model's known mistakes
 
-- **WHEN** every case runs on the unmodified application with the simulated backend
-- **THEN** none of them fails
+Every case of the catalog MUST pass on the unmodified application, except the cases listed as the model's known
+mistakes, so that a failure under a change can be read as caused by that change. A known mistake is a case the
+application handles correctly and the model gets wrong.
+
+#### Scenario: The whole catalog replays on the baseline
+
+- **WHEN** every case replays Gemma's recorded answers on the unmodified application
+- **THEN** exactly the cases in `KNOWN_MODEL_MISTAKES` (`tests/test_sut.py`) fail
 
 ### Requirement: Risk and declared dependencies are metadata of a case
 
@@ -56,13 +65,18 @@ dependencies MUST stay what an author would plausibly write by hand, which is de
 
 ### Requirement: A run is classified by one outcome
 
-Scoring SHALL classify every run as `PASS`, `TOOL_ERROR`, `AGENT_FAILURE` or `HARNESS_ERROR`. Running a case MUST NOT
-raise an exception: a failure of the run itself becomes a record.
+Scoring SHALL classify every run as `PASS`, `TOOL_ERROR`, `AGENT_FAILURE`, `HARNESS_ERROR` or `INFRA_INVALID`.
+Running a case MUST NOT raise an exception: a failure of the run itself becomes a record.
 
 #### Scenario: The run itself fails
 
 - **WHEN** a run raises, for example because its fixture does not exist
 - **THEN** the record is classified `HARNESS_ERROR` and has not passed
+
+#### Scenario: The environment breaks the run
+
+- **WHEN** the model server or the network does not answer, or a replay meets a request it has no recorded answer for
+- **THEN** the record is classified `INFRA_INVALID`, has not passed, and is left out of pass rates and replays
 
 #### Scenario: An expectation fails with clean tool calls
 
@@ -101,7 +115,8 @@ succeeded, and a crash MUST always fail it.
 
 ### Requirement: Expectations look at what took effect
 
-`tools_required` and `tools_forbidden` SHALL be judged on successful calls only, and a response check MUST ignore case.
+`tools_required` and `tools_forbidden` SHALL be judged on successful calls only, and a response check MUST ignore case
+and compare typographic hyphens, spaces and quotes as the plain ones.
 
 #### Scenario: A refused call does not break a forbidden tool
 
@@ -113,10 +128,20 @@ succeeded, and a crash MUST always fail it.
 - **WHEN** a case expects `route_to`
 - **THEN** the check compares it with the target of the run's first successful delegation
 
+#### Scenario: A plan is checked by its order
+
+- **WHEN** a case expects `agents_in_order` or `tools_in_order`
+- **THEN** the run's delegations, or its successful calls, must reach them in that order, with others allowed in between
+
+#### Scenario: An answer must say something
+
+- **WHEN** a run ends with the agents' own answer and the case is not route-only
+- **THEN** the check `answered` fails if the answer is empty
+
 ### Requirement: A judge runs only after the deterministic checks pass
 
 A judged case MUST be sent to the judge only when its deterministic checks passed, and the judge's tokens SHALL be
-charged to the run.
+charged to the run. The judge is the model `TRACEEVAL_JUDGE` names, by default the one that plays the agents.
 
 #### Scenario: A failing case costs no judge tokens
 
