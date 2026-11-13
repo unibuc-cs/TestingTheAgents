@@ -27,7 +27,7 @@
   <!-- person: confirmed spec -->
   <rect x="720" y="70" width="150" height="70" rx="6" fill="#ffffff" stroke="#9a3412"/>
   <text x="795" y="98" text-anchor="middle" font-weight="bold">confirms</text>
-  <text x="795" y="118" text-anchor="middle" font-size="13">FS-0106.yaml</text>
+  <text x="795" y="118" text-anchor="middle" font-size="13">fs-0106/spec.md</text>
 
   <!-- person: decides -->
   <rect x="900" y="70" width="160" height="70" rx="6" fill="#ffffff" stroke="#9a3412"/>
@@ -84,8 +84,8 @@
   <text x="348" y="342" font-size="13">JSON: use + with</text>
   <!-- expand -> review -->
   <path d="M440,415 L470,415 L470,140" fill="none" stroke="#4b5563" stroke-width="1.5" marker-end="url(#a)"/>
-  <text x="478" y="300" font-size="13">FS-0106.draft.yaml</text>
-  <text x="478" y="318" font-size="13">+ plain-language rendering</text>
+  <text x="478" y="300" font-size="13">spec.draft.md</text>
+  <text x="478" y="318" font-size="13">+ plain-language readings</text>
   <!-- review -> confirm -->
   <path d="M660,105 L720,105" fill="none" stroke="#4b5563" stroke-width="1.5" marker-end="url(#a)"/>
   <!-- confirm -> check -->

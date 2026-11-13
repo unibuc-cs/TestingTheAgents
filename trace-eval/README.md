@@ -39,11 +39,12 @@ benign changes. ([experiment 1 report](docs/results/exp1/report.md), [flaky-agen
 ## Spec-driven development on the same testbed
 
 `traceeval sdd` applies five change requests written as machine-checkable specs
-([`traceeval/specs/`](traceeval/specs/), clauses picked from a [catalog of templates](traceeval/spec/catalog.yaml))
+([`openspec/specs/`](openspec/specs/), OpenSpec files whose clauses are picked from a [catalog of templates](traceeval/spec/catalog.yaml))
 to 25 pull requests (1–4 files each) and writes an evidence report: which clause failed, the counterexample
 or the misplaced code, the assurance rung reached versus required (example-tested … proven), and what a
 coding agent had to read and run. `traceeval sdd draft` lets a model draft a spec from a prose request for
-a person to confirm. Start with [docs/SDD_GUIDE.md](docs/SDD_GUIDE.md) (from scratch) or
+a person to confirm. [`openspec/specs/`](openspec/specs/) also holds specs of ContentOps as it is today (`fs-02*`,
+executable) and of the testbed itself (`testbed-*`, prose). Start with [docs/SDD_GUIDE.md](docs/SDD_GUIDE.md) (from scratch) or
 [docs/SDD_DEMO.md](docs/SDD_DEMO.md) (the results); the report is in [docs/sdd/report.md](docs/sdd/report.md).
 
 ## Read more only if you need it

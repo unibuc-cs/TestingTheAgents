@@ -1,6 +1,6 @@
 """Draft a spec from a prose change request with an LLM, constrained by the catalog and the product model.
 
-    traceeval sdd draft --request request.md --id FS-0106 [--out traceeval/specs/FS-0106.draft.yaml]
+    traceeval sdd draft --request request.md --id FS-0106 [--out openspec/specs/fs-0106/spec.draft.md]
                         [--replay response.json] [--save-response response.json]
 
 The model receives three things: the clause catalog (templates, slots, glosses), a slice of the product
@@ -8,8 +8,8 @@ model (tools and the services behind them, configuration keys, skills and the to
 code paths that change a page status, the catalog cases), and the request. It must answer with JSON
 ``{title, intent, clauses: [{use, with, require?}]}`` - template names and slot values only, so it
 cannot write free text into the spec. The answer is expanded through the catalog, validated against the
-product model, and written as a draft spec plus a plain-language rendering for the owner to review,
-edit and confirm (rename ``.draft.yaml`` to ``.yaml``).
+product model, and written as a draft OpenSpec file, each clause with its plain-language reading, for the
+owner to review, edit and confirm (rename ``spec.draft.md`` to ``spec.md``).
 
 ``--replay`` uses a saved model answer instead of calling the endpoint (for demos without a model);
 ``--save-response`` saves the live answer for that purpose. The endpoint is configured like the LLM
@@ -155,42 +155,43 @@ def draft_from_answer(answer: dict, spec_id: str, catalog: dict | None = None) -
     return spec, problems
 
 
-def write_draft(spec: Spec, answer: dict, notes: list[str], out: Path) -> tuple[Path, Path]:
-    """Write <out> (the draft spec, in catalog form) and <out>.md (its plain-language rendering)."""
+def write_draft(spec: Spec, notes: list[str], out: Path, catalog: dict) -> Path:
+    """Write <out>: the draft as an OpenSpec file, one requirement per clause with its plain-language reading."""
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    doc = {
-        "id": spec.id,
-        "title": spec.title,
-        "intent": spec.intent + "\n",
-        "clauses": [
-            {k: v for k, v in raw.items() if k in ("use", "with", "require")}
-            for raw in answer.get("clauses", [])
-            if "use" in raw
-        ],
-    }
-    header = "# DRAFT - generated from a change request; review, edit, then rename to .yaml to confirm.\n"
-    if notes:
-        header += "".join(f"# {n}\n" for n in notes)
-    out.write_text(header + yaml.dump(doc, Dumper=_Dumper, sort_keys=False, allow_unicode=True, width=110))
-    md = [f"# {spec.id} (draft): {spec.title}", "", spec.intent, "", "## Clauses to confirm", ""]
-    for i, c in enumerate(spec.clauses, 1):
-        md.append(f"{i}. **{c.text}**  \n   `{c.id}` - {c.kind}, must reach {c.require}")
+    md = [
+        f"# {spec.id}: {spec.title}",
+        "",
+        "> DRAFT - generated from a change request; review, edit, then rename to `spec.md` to confirm.",
+        "",
+        "## Purpose",
+        "",
+        spec.intent,
+        "",
+        "## Requirements",
+    ]
+    for c in spec.clauses:
+        written = {"use": c.template, "with": c.slots}
+        if c.require != catalog[c.template].get("require", "L1"):
+            written["require"] = c.require
+        block = yaml.safe_dump(written, sort_keys=False, allow_unicode=True, width=110)
+        md += [
+            "",
+            f"### Requirement: {c.id}",
+            "",
+            f"The system MUST satisfy: {c.text}",
+            "",
+            f"#### Scenario: {c.kind} check, must reach {c.require}",
+            "",
+            f"- **WHEN** the {c.kind} check of this clause runs",
+            f"- **THEN** {c.text}",
+            "",
+            f"```yaml clause\n{block}```",
+        ]
     if notes:
         md += ["", "## Notes from the checks before any run", ""] + [f"- {n}" for n in notes]
-    md_path = out.with_suffix(".md")
-    md_path.write_text("\n".join(md) + "\n")
-    return out, md_path
-
-
-class _Dumper(yaml.SafeDumper):
-    """Multi-line strings (the intent) as readable ``|`` blocks."""
-
-
-_Dumper.add_representer(
-    str,
-    lambda d, v: d.represent_scalar("tag:yaml.org,2002:str", v, style="|" if "\n" in v else None),
-)
+    out.write_text("\n".join(md) + "\n")
+    return out
 
 
 def draft(
@@ -205,7 +206,7 @@ def draft(
     client=None,
     settings=None,
 ) -> dict:
-    """The whole flow; returns {spec, problems, validation, draft, rendering, answer_text}."""
+    """The whole flow; returns {spec, problems, validation, draft, answer_text}."""
     catalog = load_catalog(CATALOG_PATH)
     request_text = Path(request_path).read_text()
     if replay:
@@ -217,12 +218,11 @@ def draft(
             Path(save_response).write_text(json.dumps({"content": text}, indent=1))
     spec, problems = draft_from_answer(parse_answer(text), spec_id, catalog)
     validation = [f"{level}: {msg}" for level, msg in validate_spec(spec, model, catalog)]
-    draft_path, md_path = write_draft(spec, parse_answer(text), problems + validation, out)
+    draft_path = write_draft(spec, problems + validation, out, catalog)
     return {
         "spec": spec,
         "problems": problems,
         "validation": validation,
         "draft": draft_path,
-        "rendering": md_path,
         "answer_text": text,
     }

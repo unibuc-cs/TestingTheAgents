@@ -727,5 +727,134 @@ PRS: list[PR] = [
 ]
 
 
+# ---------------------------------------------------------------------------- as-built specs (FS-02xx)
+# An as-built spec describes ContentOps as it is, so the current code is accepted. It has to be able to fail too: each
+# "rejected" change must break a clause of the spec itself (tests/test_sdd.py checks this; a failing regression test
+# alone does not count). A string names an entry of the mutation catalogue; the rest are written here for rules the
+# catalogue does not touch. These PRs are not part of the demo's 25: `traceeval sdd` runs them only when asked to.
+AS_BUILT: dict[str, dict[str, list]] = {
+    "FS-0201": {
+        "rejected": [
+            "config_default_agent_publishing",
+            "code_router_phrase_weight",
+            "prompt_publishing_triggers_removed",
+            "code_delegation_depth_zero",
+        ],
+        "accepted": ["benign_orchestrator_prompt_wording"],
+    },
+    "FS-0202": {
+        "rejected": [
+            "skill_publish_drop_permission_check",
+            _m("FS-0202_viewer_may_edit", "A viewer may edit pages.", [("replace", "services/permissions.py", '"viewer": {"read"},', '"viewer": {"read", "edit"},')]),
+            _m("FS-0202_seo_skips_check", "The SEO skill no longer checks the permission.", [("delete_line", "skills/seo-metadata/SKILL.md", "- include: governance-checks")]),
+        ],
+        "accepted": [],
+    },
+    "FS-0203": {
+        "rejected": [
+            "skill_publish_drop_link_validation",
+            "config_require_review_false",
+            "code_get_page_review_flag",
+            "code_links_external_lenient",
+            "code_links_unknown_url_crash",
+            "skill_linkval_ignore_assets",
+            "config_disable_validate_links",
+            "code_approval_gate_bypass",
+            "config_approval_drop_unpublish",
+        ],
+        "accepted": ["benign_skill_prose_reflow", "benign_code_rename_locals", "benign_code_comment_docstring"],
+    },
+    "FS-0204": {
+        "rejected": [
+            "code_edit_keeps_review",
+            "skill_authoring_drop_metadata",
+            _m("FS-0204_links_keep_spaces", "Extracted links keep the spaces around them.", [("replace", "services/repository.py", "m.group(1).strip()", "m.group(1)")]),
+        ],
+        "accepted": [],
+    },
+    "FS-0205": {
+        "rejected": [
+            "skill_rollback_restores_latest",
+            _m("FS-0205_rewrites_history", "A rollback adds no version.", [("delete_line", "services/repository.py", 'page["versions"].append(new_v)')]),
+            _m("FS-0205_resets_review", "A rollback withdraws the review; no catalog case looks at this, only the monitor does.", [("replace", "services/repository.py", '    page["links"] = _extract_links(target["body"])\n', '    page["links"] = _extract_links(target["body"])\n    page["review"] = {"status": "none", "reviewer": None}\n')]),
+        ],
+        "accepted": [],
+    },
+    "FS-0206": {
+        "rejected": [
+            _m("FS-0206_any_file_type", "Any file type is accepted.", [("replace", "services/repository.py", 'if not mime.startswith(("image/", "video/", "application/pdf")):', "if False:")]),
+            _m("FS-0206_attach_missing_asset", "Attaching no longer checks that the asset exists.", [("delete_line", "services/repository.py", "get_asset(state, asset_id)")]),
+            _m("FS-0206_attach_twice", "An asset can be attached twice.", [("replace", "services/repository.py", 'if asset_id not in page["assets"]:', "if True:")]),
+        ],
+        "accepted": [],
+    },
+    "FS-0207": {
+        "rejected": [
+            "skill_translation_wrong_default",
+            "prompt_translation_intents_reordered",
+            _m("FS-0207_any_locale", "An unsupported locale is accepted.", [("replace", "services/translation.py", "    if bad:\n", "    if False:\n")]),
+            _m("FS-0207_hardcoded_defaults", "The default locales written into the skill; behaviour is unchanged, only placement sees it.", [("replace", "skills/translation/SKILL.md", "set: {locales: =config('translation.default_locales')}", "set: {locales: ['de-DE', 'fr-FR']}")]),
+        ],
+        "accepted": [],
+    },
+    "FS-0208": {
+        "rejected": [
+            "code_metadata_arg_swap",
+            "prompt_seo_tool_removed",
+            "code_metadata_keywords_crash",
+            "combined_seo_keyword_limit",
+            "skill_seo_drop_length_guard",
+            "config_seo_title_20",
+            _m("FS-0208_renames_page", "The SEO title also renames the page.", [("replace", "services/repository.py", '        meta["title"] = title\n', '        meta["title"] = title\n        page["title"] = title\n')]),
+        ],
+        "accepted": [],
+    },
+    "FS-0209": {
+        "rejected": [
+            "skill_governance_drop_consent",
+            _m("FS-0209_export_not_guarded", "Exports are no longer listed as guarded.", [("replace", "config/runtime.yaml", "requires_approval: [approve_review, export_user_data, unpublish_page]", "requires_approval: [approve_review, unpublish_page]")]),
+            _m("FS-0209_export_not_audited", "An export leaves no audit entry.", [("delete_line", "services/governance.py", 'state.audit("export_user_data", actor, subject_id=subject_id)')]),
+        ],
+        "accepted": [],
+    },
+    "FS-0210": {
+        "rejected": [
+            "config_max_tool_calls_5",
+            "code_termination_off_by_six",
+            "config_disable_validate_links",
+            "code_links_unknown_url_crash",
+            _m("FS-0210_service_reads_config", "A service reads the configuration; behaviour is unchanged, only placement sees it.", [("replace", "services/seo.py", '    meta = page.get("metadata", {})\n', '    config = state.data.get("config")\n    meta = page.get("metadata", {}) if config is None else {}\n')]),
+            _m("FS-0210_service_imports_harness", "A service imports the harness; behaviour is unchanged, only placement sees it.", [("replace", "services/seo.py", '    meta = page.get("metadata", {})\n', '    from ..harness import retry  # noqa: F401\n\n    meta = page.get("metadata", {})\n')]),
+        ],
+        "accepted": ["benign_new_unused_tool", "benign_config_comments_reordered"],
+    },
+    "FS-0211": {
+        "rejected": [
+            "code_retry_disabled",
+            "config_retries_0",
+            "code_retry_drop_idempotency",
+            _m("FS-0211_edit_ignores_key", "A retried edit adds a second version.", [("replace", "services/repository.py", "    # A retry of an edit that already went through gets the first answer back; no second version is added.\n    cached = state.idempotent(idempotency_key)\n    if cached:\n        return cached\n", "")]),
+        ],
+        "accepted": [],
+    },
+}
+
+
+def _as_built_pr(spec_id: str, change, expected: str) -> PR:
+    m = get_mutation(change) if isinstance(change, str) else change
+    return PR(f"{spec_id}/{m.id.removeprefix(spec_id + '_')}", spec_id, m.description, expected, m, "as-built spec")
+
+
+AS_BUILT_PRS: list[PR] = [
+    pr
+    for spec_id, changes in AS_BUILT.items()
+    for pr in (
+        PR(f"{spec_id}/current", spec_id, "The current code", ACCEPTED, None, "as-built spec"),
+        *(_as_built_pr(spec_id, c, REJECTED) for c in changes["rejected"]),
+        *(_as_built_pr(spec_id, c, ACCEPTED) for c in changes["accepted"]),
+    )
+]
+
+
 def prs_for(spec_id: str) -> list[PR]:
-    return [p for p in PRS if p.spec_id == spec_id]
+    return [p for p in PRS + AS_BUILT_PRS if p.spec_id == spec_id]

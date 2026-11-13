@@ -7,12 +7,14 @@ systems. Read `README.md` (5 minutes), then `docs/USER_GUIDE.md` only when you n
 
 ```
 pip install -e ".[dev,ml]"          # or: uv pip install -e ".[dev,ml]"
-pytest -q                           # ~60 s; must stay green
+pytest -q                           # ~90 s; must stay green
 ruff check traceeval tests --select E,F,W,I,B --line-length 120
 ruff format traceeval tests --line-length 120   # see "Gotchas" before formatting sut/
 traceeval experiment --workdir runs/exp1 --reps 3 --seeds 10     # full simulated experiment, ~5 min
 traceeval sdd --workdir runs/sdd                                 # spec-driven development demo, ~30 s
+traceeval sdd --workdir runs/sdd --specs FS-0203                 # one spec, as-built ones included
 traceeval sdd draft --request r.md --id FS-0106 [--replay a.json]  # draft a spec with a model
+openspec validate --specs --strict                               # structure of the specs (Node tool, npm i -g @fission-ai/openspec)
 ```
 
 ## Layout (one line each)
@@ -27,7 +29,12 @@ traceeval sdd draft --request r.md --id FS-0106 [--replay a.json]  # draft a spe
 - `traceeval/experiment/` — SUT loader, executor, history, runner, replay evaluator, metrics, report.
 - `traceeval/spec/` — spec-driven development layer: clause catalog (`catalog.yaml`) and model, one checker per
   clause kind (`checks/`), product model, demo PRs, runner, report, drafting with a model (`draft.py`).
-  Specs live in `traceeval/specs/FS-*.yaml` as catalog templates + slots (see `docs/SDD_GUIDE.md`).
+  Specs live in `openspec/specs/<capability>/spec.md` (OpenSpec format; `traceeval/specs` is a symlink to them so
+  they ship in the package): each `#### Scenario:` carries one fenced clause, catalog template + slots (see
+  `docs/SDD_GUIDE.md`). Only the fenced clauses are checked; the WHEN/THEN prose must be kept true to them by hand.
+  FS-01xx are the demo's change requests; FS-02xx describe ContentOps as it is, must pass on the baseline and must
+  be rejected by their own clauses under the changes listed in `AS_BUILT` (`spec/prs.py`). `testbed-*` capabilities
+  are prose about this repository: nothing executes them, so changing the code they describe means changing them.
 - `tests/` — pytest; `runs/` — experiment outputs (git-ignored); `docs/` — guide, plan, related work, results.
 
 ## Conventions

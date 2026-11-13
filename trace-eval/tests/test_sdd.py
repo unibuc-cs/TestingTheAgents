@@ -7,9 +7,9 @@ import pytest
 
 from traceeval.catalog import load_catalog
 from traceeval.spec import load_specs
-from traceeval.spec.model import Clause
+from traceeval.spec.model import Clause, validate_spec
 from traceeval.spec.product import ProductModel
-from traceeval.spec.prs import PRS, prs_for
+from traceeval.spec.prs import AS_BUILT_PRS, PRS, prs_for
 from traceeval.spec.runner import agent_brief, evaluate_pr, record_baseline
 
 
@@ -29,9 +29,29 @@ def _verdicts(world, spec_id):
 
 def test_specs_load_and_every_pr_has_a_spec():
     ids = {s.id for s in load_specs()}
-    assert ids == {"FS-0101", "FS-0102", "FS-0103", "FS-0104", "FS-0105"}
-    assert {p.spec_id for p in PRS} <= ids
-    assert len({p.id for p in PRS}) == len(PRS)
+    assert {p.spec_id for p in PRS} == {"FS-0101", "FS-0102", "FS-0103", "FS-0104", "FS-0105"}
+    assert {p.spec_id for p in AS_BUILT_PRS} == {i for i in ids if i.startswith("FS-02")}
+    assert {p.spec_id for p in PRS + AS_BUILT_PRS} == ids  # testbed-* capabilities are not specs to run
+    assert len({p.id for p in PRS + AS_BUILT_PRS}) == len(PRS + AS_BUILT_PRS)
+
+
+def test_as_built_specs_name_only_what_the_system_has(world):
+    _, _, runs, deps, sut_dir = world
+    model = ProductModel(sut_dir, runs, deps)
+    for spec in load_specs():
+        if spec.id.startswith("FS-02"):
+            assert validate_spec(spec, model) == [], spec.id  # no errors, and nothing "the request introduces"
+
+
+@pytest.mark.parametrize("pr", AS_BUILT_PRS, ids=lambda p: p.id)
+def test_as_built_spec_accepts_the_system_and_catches_its_own_regressions(world, pr):
+    workdir, catalog, runs, deps, _ = world
+    spec = next(s for s in load_specs() if s.id == pr.spec_id)
+    ev = evaluate_pr(spec, pr, workdir, catalog, runs, deps)
+    assert ev["verdict"] == pr.expected, [c for c in ev["clauses"] if c["status"] != "pass"]
+    # a regression test can reject a PR on its own, so a rejection has to come from a clause of the spec itself
+    own = [c["clause_id"] for c in ev["clauses"] if c["status"] == "fail" and c["clause_id"] != "regression-tests"]
+    assert bool(own) == (pr.expected == "rejected"), own
 
 
 def test_fs0101_verdicts_and_proof(world):
@@ -161,7 +181,7 @@ def test_draft_from_request_with_a_fake_model_and_by_replay(world, tmp_path):
     live = draft(
         example / "request.md",
         "FS-0101",
-        tmp_path / "live.draft.yaml",
+        tmp_path / "live" / "spec.draft.md",
         model,
         catalog,
         client=FakeClient(),
@@ -171,7 +191,7 @@ def test_draft_from_request_with_a_fake_model_and_by_replay(world, tmp_path):
     replayed = draft(
         example / "request.md",
         "FS-0101",
-        tmp_path / "replay.draft.yaml",
+        tmp_path / "replay" / "spec.draft.md",
         model,
         catalog,
         replay=tmp_path / "saved.json",
@@ -183,7 +203,23 @@ def test_draft_from_request_with_a_fake_model_and_by_replay(world, tmp_path):
     assert "publish_page: write" in slice_text and "## Configuration keys" in slice_text
     assert len(build_messages("x", load_catalog(), slice_text)) == 2
 
-    spec = load_spec(tmp_path / "live.draft.yaml")
+    spec = load_spec(tmp_path / "live" / "spec.draft.md")
     pr = next(p for p in PRS if p.id == "FS-0101/pr_correct")
     ev = evaluate_pr(spec, pr, workdir, catalog, runs, deps)
     assert ev["verdict"] == "accepted"
+
+
+def test_a_scenario_without_exactly_one_clause_is_refused(tmp_path):
+    """A scenario with no clause would read as a requirement while nothing ever checks it."""
+    from traceeval.spec.model import load_spec
+
+    head = "# FS-9999: t\n\n## Purpose\n\nwhy\n\n## Requirements\n\n### Requirement: r\n\nIt MUST hold.\n\n"
+    clause = "```yaml clause\nuse: scenario\nwith: {case: PUB-01}\n```\n\n"
+    spec = tmp_path / "spec.md"
+
+    spec.write_text(head + "#### Scenario: s\n\n" + clause)
+    assert [c.id for c in load_spec(spec).clauses] == ["scenario:PUB-01"]
+    for bad in ("#### Scenario: s\n\nprose only\n\n", "#### Scenario: s\n\n" + clause * 2, clause):
+        spec.write_text(head + bad)
+        with pytest.raises(ValueError, match="clause"):
+            load_spec(spec)

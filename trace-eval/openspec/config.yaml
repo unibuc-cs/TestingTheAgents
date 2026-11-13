@@ -1,0 +1,36 @@
+schema: spec-driven
+
+# Project context (optional)
+# This is shown to AI when creating artifacts.
+context: |
+  TRACE-Eval is a Python research testbed. There are two families of spec here.
+  openspec/specs/fs-*/spec.md are executable: `traceeval sdd` loads them and checks them against pull requests
+  of the application in traceeval/sut/. FS-01xx are change requests (some fail on today's code, by design);
+  FS-02xx describe the application as it is and must pass on it. Such a spec starts with `# FS-<nnnn>: <title>`,
+  then `**Owner:** <team>`; the prose intent is `## Purpose`. Clause templates and their slots are in
+  traceeval/spec/catalog.yaml; see docs/SDD_GUIDE.md.
+  openspec/specs/testbed-*/spec.md are prose about the testbed itself (selection, tracing, experiments, the spec
+  layer). The clause catalog can only talk about the application, so nothing executes these.
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+rules:
+  specs:
+    - In an fs-* capability, every "#### Scenario:" carries exactly one fenced ```yaml clause block (use, with,
+      optional require) after its WHEN/THEN lines; `traceeval sdd` refuses a spec where one is missing
+    - In an fs-* capability, clause templates and slots come only from traceeval/spec/catalog.yaml, and names (tools,
+      config keys, functions, cases) from the application; do not invent templates
+    - In an fs-* capability, clause order is meaningful, because repeated clause ids are numbered in document order
+    - A testbed-* capability has no clause blocks; state only what the code does and check it against the code
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing

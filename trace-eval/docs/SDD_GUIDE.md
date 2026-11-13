@@ -24,27 +24,40 @@ product model do not know.*
 
 ## 2. A spec file
 
-Specs live in `traceeval/specs/FS-*.yaml` (the `FS` ids are just "feature spec" numbers). A spec is:
+Specs live in `openspec/specs/<capability>/spec.md` (the `FS` ids are just "feature spec" numbers), in the
+[OpenSpec](https://github.com/Fission-AI/OpenSpec) format. A spec is:
 
-```yaml
-id: FS-0104
-title: The SEO title limit is a setting, raised to 70
-intent: |
-  The maximum length of an SEO title is a platform setting. Raise it from 60 to 70 characters. ...
+````markdown
+# FS-0104: The SEO title limit is a setting, raised to 70
 
-clauses:
-  - use: setting_in_range                      # a template from the catalog ...
-    with: {key: seo.max_title_length, min: 10, max: 120, value: 70}     # ... and its slots
-  - use: property_over_range
-    with:
-      var: n
-      min: 1
-      max: 120
-      scenario: {case: SEO-01, context: {seo_title: "=title_of_length(n)"}}
-      ensures: applied(run, 'set_page_metadata') == (n <= config('seo.max_title_length'))
-  - use: forbid_literal_in
-    with: {value: 70, dirs: [tools, services, skills]}
+**Owner:** seo-team
+
+## Purpose
+
+The maximum length of an SEO title is a platform setting. Raise it from 60 to 70 characters. ...
+
+## Requirements
+
+### Requirement: The title limit is a bounded platform setting
+
+The setting `seo.max_title_length` MUST be an integer between 10 and 120, set to 70.
+
+#### Scenario: The configured limit is valid
+
+- **WHEN** the platform configuration is checked
+- **THEN** `seo.max_title_length` is an integer between 10 and 120 with the value 70
+
+```yaml clause
+use: setting_in_range                      # a template from the catalog ...
+with: {key: seo.max_title_length, min: 10, max: 120, value: 70}     # ... and its slots
 ```
+````
+
+Two tools read the same file. `openspec validate --specs --strict` checks its structure (and ignores what is
+inside code fences); `traceeval sdd` reads the heading, the owner, the purpose and the fenced clauses, in
+document order, and ignores the rest. Every scenario must carry exactly one clause, so a scenario cannot sit
+in a spec unchecked; the loader refuses one that does not. The WHEN/THEN lines are for people: nothing checks
+them against the clause, so keep them true by hand.
 
 Nobody writes ids, kinds or checker fields: a clause is a **template name plus slot values**. The loader
 (`traceeval/spec/model.py`) expands it, generates the id (`setting_in_range:seo.max_title_length`) and
@@ -111,19 +124,31 @@ calls, the code paths that change a page status, every recorded case) and the re
 with JSON: template names and slot values only. The answer is expanded through the catalog (clauses that
 do not fit a template are dropped and reported), validated against the product model (an unknown tool,
 case, skill or directory is an *error*; a function or configuration key the request introduces is a
-*note*), and written as `FS-0106.draft.yaml` with a plain-language rendering `FS-0106.draft.md`:
+*note*), and written as `openspec/specs/fs-0106/spec.draft.md`, one requirement per clause with its plain-language reading:
 
-```
-1. publishing.review_max_age_days is an integer between 1 and 365
-   setting_in_range:publishing.review_max_age_days - setting, must reach L4
-2. services/workflow.py::review_age_ok: for every input with max_age_days >= 1, result == (0 <= age_days <= max_age_days)
-   function_contract:review_age_ok - contract, must reach L5
-...
-```
+````markdown
+### Requirement: setting_in_range:publishing.review_max_age_days
 
-The owner reads the rendering, edits the YAML (drop, add, change a slot, raise a `require`), and renames
-the file to `.yaml`: that is the confirmation. A worked example — request, the model's answer, the
-generated draft and rendering — is in [sdd/draft_example/](sdd/draft_example/) (the answer there was
+The system MUST satisfy: publishing.review_max_age_days is an integer between 1 and 365
+
+#### Scenario: setting check, must reach L4
+
+- **WHEN** the setting check of this clause runs
+- **THEN** publishing.review_max_age_days is an integer between 1 and 365
+
+```yaml clause
+use: setting_in_range
+with:
+  key: publishing.review_max_age_days
+  min: 1
+  max: 365
+  value: 30
+```
+````
+
+The owner reads the draft, edits its clauses (drop, add, change a slot, raise a `require`) and, usually, the
+requirement names, and renames the file to `spec.md`: that is the confirmation. A worked example — request,
+the model's answer, the generated draft — is in [sdd/draft_example/](sdd/draft_example/) (the answer there was
 written by hand in the model's format because no endpoint was reachable when the example was made;
 `--save-response` on a live run replaces it).
 
@@ -186,7 +211,23 @@ What this layer takes from them: nl2spec's idea of a constrained translation a p
 SpecGen's loop of generating and checking; the ghostwriter's property templates; the architecture
 linters' rule shapes; the solver from the proof world — behind one catalog, one evidence record.
 
-## 8. Questions people ask
+## 8. The specs beyond the demo
+
+`openspec/specs/` holds three families. `traceeval sdd` runs only the first by default, so the demo's numbers do not
+depend on the others.
+
+| capabilities | what they are | how they are checked |
+|---|---|---|
+| `fs-01*` | the demo's five change requests; some fail on today's code, by design | the 25 PRs in `spec/prs.py`, in `traceeval sdd` |
+| `fs-02*` | ContentOps as it is: routing, role permissions, publishing gates, authoring, rollback, assets, translation, SEO metadata, data export, tool-call rules, retries | `AS_BUILT` in `spec/prs.py`: accepted on the baseline, and rejected by the spec's *own* clauses under each listed change (`tests/test_sdd.py`); run one with `traceeval sdd --specs FS-0203` |
+| `testbed-*` | the testbed itself: eval cases, tracing, change sets, selection, adaptive stopping, record and replay, backends, this layer | nothing executes them: the clause catalog can only talk about the application, so they are prose kept true by hand |
+
+An as-built spec is only useful if it can fail, and a rejection alone does not show that: a PR is also rejected when a
+change-selected regression test fails, whatever the clauses say. So the test for an `fs-02*` spec requires a failing
+clause of the spec itself. As-built specs must also not contradict the change requests: none pins a value a request
+changes (FS-0208 reads the title limit from the configuration rather than naming it).
+
+## 9. Questions people ask
 
 *Why YAML and not a proof language?* Because the clauses are of five different natures and only one of
 them (a pure-function contract) is a proof obligation; the YAML is the intermediate representation the

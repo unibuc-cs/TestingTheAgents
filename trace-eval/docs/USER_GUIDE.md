@@ -66,7 +66,7 @@ Everything else is plumbing (loaders, tracing, report).
   e.g. `tool_errors: {unpublish_page: approval_required}`. Any other error fails the test as `tool_error:<tool>`
   unless a later call of the same tool succeeded; a crash in tool or service code (any exception other than a
   `ToolError`) always fails it as `crash:<tool>`. Both are classified `TOOL_ERROR`. `tool_errors: "*"` allows
-  any error; a spec scenario (`traceeval/specs/`) that writes its own `expect` gets that by default.
+  any error; a spec scenario (`openspec/specs/`) that writes its own `expect` gets that by default.
 - **Change**: add a `Mutation(...)` to the table in `mutation/catalog.py` with `replace` / `delete_line` /
   `delete_block` / `append` edits. Anchors are literal text (reformatting `sut/` breaks them; the operators
   raise). A regression must be revealed by ≥1 test, a benign change by none.

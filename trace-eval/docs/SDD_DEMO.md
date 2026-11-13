@@ -5,7 +5,7 @@
 change - while a coding agent reads less and runs fewer checks than "read the repo, run everything"?
 
 **What this adds.** A spec layer (`traceeval/spec/`) on top of the ContentOps testbed: five change
-requests written as specs (`traceeval/specs/FS-010x.yaml`, clauses picked from the template catalog
+requests written as specs (`openspec/specs/fs-010x-*/spec.md`, clauses picked from the template catalog
 `traceeval/spec/catalog.yaml`), 25 pull requests with known verdicts (`traceeval/spec/prs.py`; every
 accepted PR is a real code change of 1–4 files), a command that produces the evidence report, and a
 command that drafts a spec from a prose request with a model. New to this? Read [SDD_GUIDE.md](SDD_GUIDE.md)
@@ -15,7 +15,7 @@ first; the application is described in [CONTENTOPS.md](CONTENTOPS.md).
 pip install -e ".[dev]"                 # adds hypothesis + z3-solver
 traceeval sdd --workdir runs/sdd        # ~30 s  ->  runs/sdd/report.md (+ evidence/*.json, one figure)
 traceeval sdd draft --request docs/sdd/draft_example/request.md --id FS-0101 \
-    --replay docs/sdd/draft_example/answer.json --out /tmp/FS-0101.draft.yaml   # draft a spec (offline example)
+    --replay docs/sdd/draft_example/answer.json --out /tmp/FS-0101/spec.draft.md   # draft a spec (offline example)
 ```
 
 A copy of the report is in [`docs/sdd/report.md`](sdd/report.md).
