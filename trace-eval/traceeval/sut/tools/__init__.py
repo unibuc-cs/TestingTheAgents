@@ -9,12 +9,14 @@ the dispatcher turns into an error result for the agent."""
 # are imported only for that side effect, which is why the unused-import warning is silenced.
 from . import (  # noqa: F401
     asset_tools,
+    brand_tools,
     content_tools,
     control_tools,
     governance_tools,
     publish_tools,
+    site_tools,
     translation_tools,
 )
-from .registry import TOOLS, ToolContext, ToolSpec, get_tool  # re-exported, so callers can import them from here
+from .registry import TOOLS  # the filled registry; the experiment's SUT loader reads it from here
 
-__all__ = ["TOOLS", "ToolContext", "ToolSpec", "get_tool"]
+__all__ = ["TOOLS"]

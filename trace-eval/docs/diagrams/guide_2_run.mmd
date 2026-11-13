@@ -3,7 +3,7 @@ sequenceDiagram
     participant C as case PUB-01
     participant E as executor
     participant R as runtime
-    participant B as backend
+    participant B as backend (the model)
     participant D as dispatcher
     participant T as tool → service → state
     participant REC as recorder
@@ -13,13 +13,13 @@ sequenceDiagram
     R->>B: next_action
     B-->>R: route_to_agent(publishing)
     Note over R: loads publishing-workflow + included skills
-    loop each Procedure step
+    loop until the model answers (it follows the procedure, written out as numbered steps)
         B-->>R: tool call (get_page, check_permission, validate_links, publish_page)
         R->>D: call(tool, args, ctx)
-        D->>T: gate, retry + idempotency key, fault injection
+        D->>T: gates, retry with idempotency key, fault injection
         T-->>D: result or error
         D->>REC: tool.call event
-        D-->>B: observe(result): require / on_error / then
+        D-->>B: the result, added to the conversation
     end
     B-->>R: final message "Published p4 ..."
     E->>E: score expectations, observed deps, coverage

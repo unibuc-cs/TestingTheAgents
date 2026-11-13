@@ -2,8 +2,8 @@
 
 Each user has a list of ``roles`` in the user table and may perform every action that any of those roles
 allows; a role this module does not know grants nothing. Most services do not check permissions themselves:
-the skills ask ``check_permission`` before they act. Only approving a review and exporting personal data are
-checked inside the service, with ``require``."""
+the skills ask ``check_permission`` before they act. Only approving a review, exporting personal data and
+rolling a page back are checked inside the service, with ``require``."""
 
 from .errors import NotFound, PermissionDenied
 

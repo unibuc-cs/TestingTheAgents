@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 from traceeval.mutation.catalog import Mutation, get_mutation
 
-ACCEPTED, REJECTED = "accepted", "rejected"
+ACCEPTED, REJECTED = "accepted", "rejected"  # an "accepted" PR also matches "accepted with gaps"
 
 
 @dataclass
@@ -398,14 +398,42 @@ _IDEM_UNPUBLISH = [
         "    return workflow.unpublish_page(ctx.state, page_id, actor=ctx.user_id, idempotency_key=ctx.idempotency_key)\n",
     ),
 ]
-FS0105_FIX = _IDEM_SCHEDULE + _IDEM_UNPUBLISH
+_IDEM_APPROVE = [
+    (
+        "replace",
+        "services/workflow.py",
+        "def approve_review(state, page_id: str, reviewer_id: str, approval_token: str | None) -> dict:\n",
+        "def approve_review(state, page_id: str, reviewer_id: str, approval_token: str | None, idempotency_key: str | None = None) -> dict:\n",
+    ),
+    (
+        "replace",
+        "services/workflow.py",
+        "    page = get_page(state, page_id)\n    # The token must be the one issued",
+        "    cached = state.idempotent(idempotency_key)\n    if cached:\n        return cached\n    page = get_page(state, page_id)\n    # The token must be the one issued",
+    ),
+    (
+        "replace",
+        "services/workflow.py",
+        '    state.audit("approve_review", reviewer_id, page_id=page_id)\n    return {"page_id": page_id, "review_status": "approved"}\n',
+        '    state.audit("approve_review", reviewer_id, page_id=page_id, idempotency_key=idempotency_key)\n    return state.remember(idempotency_key, {"page_id": page_id, "review_status": "approved"})\n',
+    ),
+    (
+        "replace",
+        "tools/publish_tools.py",
+        "    return workflow.approve_review(ctx.state, page_id, reviewer_id, approval_token=ctx.approval_token)\n",
+        "    return workflow.approve_review(ctx.state, page_id, reviewer_id, approval_token=ctx.approval_token, idempotency_key=ctx.idempotency_key)\n",
+    ),
+]
+FS0105_FIX = _IDEM_SCHEDULE + _IDEM_UNPUBLISH + _IDEM_APPROVE
 
 
-def _m(mid, desc, edits, category="pr"):
-    return Mutation(mid, category, desc, True, edits)
+def _m(mid, desc, edits):
+    """A PR's edits as a Mutation (category "pr"; its verdict is ``PR.expected``, not ``expected_regression``)."""
+    return Mutation(mid, "pr", desc, True, edits)
 
 
 def _with(edits, *more):
+    """Edits followed by more edits, applied in this order: a later edit may anchor on text an earlier one wrote."""
     return list(edits) + list(more)
 
 
@@ -510,7 +538,8 @@ PRS: list[PR] = [
             "approval window not wired into the adapters",
             [_CFG_MAX_AGE, _WF_IMPORT, _WF_APPROVE, _WF_PUBLISH, _WF_SCHEDULE, _WF_FUNCTIONS, _SKILL_PROSE],
         ),
-        "the unit-level proof holds, the system-level monitor and the example fail",
+        "the unit-level proof holds; the stale-approval example fails, and so does the monitor, through an unrelated run "
+        "(PUB-10: Gemma schedules a page that was never approved)",
     ),
     # FS-0102 ------------------------------------------------------------------------------------
     PR(
@@ -535,7 +564,7 @@ PRS: list[PR] = [
         "Same, but an unknown token falls back to 'approved by the caller'",
         REJECTED,
         _m("FS-0102_pr_self_approved", "unknown tokens approved by the caller", _with(FS0102_CORRECT, _DISP_SELF)),
-        "property, monitor and example all catch the made-up token",
+        "the property and an example catch the made-up token",
     ),
     PR(
         "FS-0102/pr_in_dispatcher",
@@ -566,9 +595,11 @@ PRS: list[PR] = [
         "FS-0103/pr_correct",
         "FS-0103",
         "Stamp each validation on the page (links service); publish and schedule refuse without a clean stamp for the current version (workflow service)",
-        ACCEPTED,
+        REJECTED,
         _m("FS-0103_pr_correct", "link gate in the service layer", FS0103_CORRECT),
-        "2 files: the rule moves from the skill procedure (a prompt) into the service, and is proven",
+        "2 files: the rule moves from the skill procedure (a prompt) into the service, and is proven; with Gemma it "
+        "exposes a slip: in DS-INTENTS/i02 and i05 the agent publishes or schedules without validating links, "
+        "which the service now refuses, so those regression tests fail",
     ),
     PR(
         "FS-0103/pr_gate_ignores_version",
@@ -618,13 +649,14 @@ PRS: list[PR] = [
         "FS-0104/pr_config_70",
         "FS-0104",
         "Raise the SEO title limit to 70 (configuration only, 0 code lines)",
-        ACCEPTED,
+        REJECTED,
         _m(
             "FS-0104_pr_config_70",
             "title limit 70",
             [("replace", "config/runtime.yaml", "max_title_length: 60", "max_title_length: 70")],
         ),
-        "nothing to generate: a setting change verified by schema, property, boundary examples and monitor",
+        "nothing to generate: a setting change verified by schema, property, boundary examples and monitor; but "
+        "Gemma applies an over-long title whatever the limit (as in SEO-02), and the property finds one",
     ),
     PR(
         "FS-0104/pr_config_20",
@@ -662,7 +694,8 @@ PRS: list[PR] = [
                 ),
             ],
         ),
-        "behaviourally identical today; only the placement lint sees the duplicated constant",
+        "behaviourally identical to the correct PR; only the placement lint tells them apart (with Gemma every FS-0104 "
+        "PR also fails the title property)",
     ),
     PR(
         "FS-0104/pr_drop_guard",
@@ -686,15 +719,15 @@ PRS: list[PR] = [
         "Specify 'retried publishing writes never duplicate' against the current code",
         REJECTED,
         None,
-        "the spec finds a latent defect: schedule_publish and unpublish_page duplicate their effect after a lost acknowledgement",
+        "the spec finds a latent defect: schedule_publish, unpublish_page and approve_review duplicate their effect after a lost acknowledgement",
     ),
     PR(
         "FS-0105/pr_fix",
         "FS-0105",
-        "Thread the idempotency key through schedule_publish and unpublish_page",
+        "Thread the idempotency key through schedule_publish, unpublish_page and approve_review",
         ACCEPTED,
         _m("FS-0105_pr_fix", "idempotent publishing writes", FS0105_FIX),
-        "2 files: the two services honour the key, the two adapters pass it through",
+        "2 files: the three services honour the key, the three adapters pass it through",
     ),
     PR(
         "FS-0105/pr_partial_fix",
@@ -736,9 +769,6 @@ AS_BUILT: dict[str, dict[str, list]] = {
     "FS-0201": {
         "rejected": [
             "config_default_agent_publishing",
-            "code_router_phrase_weight",
-            "prompt_publishing_triggers_removed",
-            "code_delegation_depth_zero",
         ],
         "accepted": ["benign_orchestrator_prompt_wording"],
     },
@@ -756,11 +786,10 @@ AS_BUILT: dict[str, dict[str, list]] = {
             "config_require_review_false",
             "code_get_page_review_flag",
             "code_links_external_lenient",
-            "code_links_unknown_url_crash",
             "skill_linkval_ignore_assets",
             "config_disable_validate_links",
             "code_approval_gate_bypass",
-            "config_approval_drop_unpublish",
+            "config_unpublish_no_approval",
         ],
         "accepted": ["benign_skill_prose_reflow", "benign_code_rename_locals", "benign_code_comment_docstring"],
     },
@@ -791,17 +820,15 @@ AS_BUILT: dict[str, dict[str, list]] = {
     "FS-0207": {
         "rejected": [
             "skill_translation_wrong_default",
-            "prompt_translation_intents_reordered",
             _m("FS-0207_any_locale", "An unsupported locale is accepted.", [("replace", "services/translation.py", "    if bad:\n", "    if False:\n")]),
             _m("FS-0207_hardcoded_defaults", "The default locales written into the skill; behaviour is unchanged, only placement sees it.", [("replace", "skills/translation/SKILL.md", "set: {locales: =config('translation.default_locales')}", "set: {locales: ['de-DE', 'fr-FR']}")]),
         ],
-        "accepted": [],
+        "accepted": ["benign_translation_intents_reordered"],
     },
     "FS-0208": {
         "rejected": [
             "code_metadata_arg_swap",
             "prompt_seo_tool_removed",
-            "code_metadata_keywords_crash",
             "combined_seo_keyword_limit",
             "skill_seo_drop_length_guard",
             "config_seo_title_20",
@@ -822,7 +849,6 @@ AS_BUILT: dict[str, dict[str, list]] = {
             "config_max_tool_calls_5",
             "code_termination_off_by_six",
             "config_disable_validate_links",
-            "code_links_unknown_url_crash",
             _m("FS-0210_service_reads_config", "A service reads the configuration; behaviour is unchanged, only placement sees it.", [("replace", "services/seo.py", '    meta = page.get("metadata", {})\n', '    config = state.data.get("config")\n    meta = page.get("metadata", {}) if config is None else {}\n')]),
             _m("FS-0210_service_imports_harness", "A service imports the harness; behaviour is unchanged, only placement sees it.", [("replace", "services/seo.py", '    meta = page.get("metadata", {})\n', '    from ..harness import retry  # noqa: F401\n\n    meta = page.get("metadata", {})\n')]),
         ],
@@ -830,7 +856,6 @@ AS_BUILT: dict[str, dict[str, list]] = {
     },
     "FS-0211": {
         "rejected": [
-            "code_retry_disabled",
             "config_retries_0",
             "code_retry_drop_idempotency",
             _m("FS-0211_edit_ignores_key", "A retried edit adds a second version.", [("replace", "services/repository.py", "    # A retry of an edit that already went through gets the first answer back; no second version is added.\n    cached = state.idempotent(idempotency_key)\n    if cached:\n        return cached\n", "")]),

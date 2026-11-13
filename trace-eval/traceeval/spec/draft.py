@@ -12,8 +12,8 @@ product model, and written as a draft OpenSpec file, each clause with its plain-
 owner to review, edit and confirm (rename ``spec.draft.md`` to ``spec.md``).
 
 ``--replay`` uses a saved model answer instead of calling the endpoint (for demos without a model);
-``--save-response`` saves the live answer for that purpose. The endpoint is configured like the LLM
-backend: TRACEEVAL_LLM_BASE_URL, TRACEEVAL_LLM_API_KEY, TRACEEVAL_LLM_MODEL.
+``--save-response`` saves the live answer for that purpose. The endpoint is the LLM backend's: Qwen on the
+GPU server by default, or TRACEEVAL_LLM_BASE_URL, TRACEEVAL_LLM_API_KEY, TRACEEVAL_LLM_MODEL.
 """
 
 import json
@@ -22,8 +22,9 @@ from pathlib import Path
 
 import yaml
 
-from .model import CATALOG_PATH, Spec, expand_clause, load_catalog, validate_spec
+from .model import Spec, expand_clause, load_catalog, number_duplicates, validate_spec
 
+# the expression helpers of context.py, described for the model
 HELPERS = (
     "config('dotted.key') -> the configured value; "
     "approval_age(run, page_id) -> days since the page's approval; "
@@ -31,6 +32,7 @@ HELPERS = (
     "audit_count(run, action, **fields) -> number of matching audit entries; "
     "applied(run, tool) -> True when the run called the tool successfully; "
     "token_owner(run, token) -> user id owning an approval token, or None; "
+    "call_token(run, event) -> the approval token a tool call was made with; "
     "title_of_length(n) -> a title of n characters; "
     "first_case_calling(tool) -> id of a recorded case that calls the tool; "
     "baseline_run(test_id) -> the baseline record of a case. "
@@ -70,6 +72,7 @@ def product_slice(model, catalog_cases: dict) -> str:
 
 
 def _flatten(node: dict, prefix: str = "") -> dict:
+    """Nested configuration -> {dotted.key: value}."""
     out = {}
     for k, v in node.items():
         key = f"{prefix}{k}"
@@ -81,6 +84,7 @@ def _flatten(node: dict, prefix: str = "") -> dict:
 
 
 def build_messages(request_text: str, catalog: dict, slice_text: str) -> list[dict]:
+    """The chat prompt: rules, the catalog of templates and the product slice as system message; the request."""
     templates = "\n".join(
         f"- {name}: kind {t['kind']}, slots {json.dumps(t['slots'])}"
         + (f", optional {t['optional']}" if t.get("optional") else "")
@@ -137,22 +141,16 @@ def parse_answer(text: str) -> dict:
 
 
 # ---------------------------------------------------------------------------- from answer to draft
-def draft_from_answer(answer: dict, spec_id: str, catalog: dict | None = None) -> tuple[Spec, list[str]]:
+def draft_from_answer(answer: dict, spec_id: str, catalog: dict) -> tuple[Spec, list[str]]:
     """Expand the answer's clauses; clauses that do not fit the catalog are dropped and reported."""
-    catalog = catalog or load_catalog()
     clauses, problems = [], []
     for i, raw in enumerate(answer.get("clauses", []), 1):
         try:
             clauses.append(expand_clause(raw, catalog))
-        except (ValueError, KeyError, TypeError) as exc:
+        except (ValueError, KeyError, TypeError) as exc:  # a model's answer may be malformed in any way
             problems.append(f"clause {i} dropped: {exc} ({json.dumps(raw)[:120]})")
-    seen: dict[str, int] = {}
-    for c in clauses:
-        seen[c.id] = seen.get(c.id, 0) + 1
-        if seen[c.id] > 1:
-            c.id = f"{c.id}#{seen[c.id]}"
-    spec = Spec(spec_id, answer.get("title", spec_id), str(answer.get("intent", "")).strip(), clauses)
-    return spec, problems
+    intent = str(answer.get("intent", "")).strip()
+    return Spec(spec_id, answer.get("title", spec_id), intent, number_duplicates(clauses)), problems
 
 
 def write_draft(spec: Spec, notes: list[str], out: Path, catalog: dict) -> Path:
@@ -207,16 +205,18 @@ def draft(
     settings=None,
 ) -> dict:
     """The whole flow; returns {spec, problems, validation, draft, answer_text}."""
-    catalog = load_catalog(CATALOG_PATH)
+    catalog = load_catalog()
     request_text = Path(request_path).read_text()
     if replay:
         saved = json.loads(Path(replay).read_text())
+        # a file written by --save-response ({"content": text}), or the answer's JSON itself
         text = saved["content"] if isinstance(saved, dict) and "content" in saved else json.dumps(saved)
     else:
         text = call_model(build_messages(request_text, catalog, product_slice(model, catalog_cases)), client, settings)
         if save_response:
             Path(save_response).write_text(json.dumps({"content": text}, indent=1))
-    spec, problems = draft_from_answer(parse_answer(text), spec_id, catalog)
+    answer = parse_answer(text)
+    spec, problems = draft_from_answer(answer, spec_id, catalog)
     validation = [f"{level}: {msg}" for level, msg in validate_spec(spec, model, catalog)]
     draft_path = write_draft(spec, problems + validation, out, catalog)
     return {

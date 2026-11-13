@@ -1,101 +1,190 @@
 # ContentOps: the application under test
 
-ContentOps is a small content-management platform operated by agents — a toy version of what a CMS such
-as AEM looks like when an LLM agent sits in front of it. It is the system that every test, every
-controlled change and every spec in this repository talks about. Everything is in `traceeval/sut/`.
+ContentOps is a small, made-up content platform run by AI agents. Picture a content management system (CMS) such as
+Adobe Experience Manager (AEM) with an assistant in front of it: instead of clicking through screens, people type
+what they want and a team of agents does the work. Every test, every controlled change and every spec in this
+repository is about this one application, and all of its code lives in [`traceeval/sut/`](../traceeval/sut/).
 
-## What a user can do
+## What people ask it to do
 
-Users (an author, a publisher, an admin, a viewer) write requests in natural language: "publish the
-welcome page", "set the SEO title of the launch post", "translate the widget page into German and
-French", "export the personal data of subject s1", "roll back the history page to version 2". The
-platform answers in prose and changes its state: pages, their versions, links and metadata; assets;
-translation jobs; an audit log of every write.
+The platform starts with a few users, each with a different job:
+
+- Alice is an author;
+- Bob writes and publishes;
+- Erin only publishes;
+- Carol is the administrator, the one who can approve sensitive operations;
+- Dave can only look.
+
+They are in the platform's starting data, [`fixtures/base.json`](../traceeval/sut/fixtures/base.json), next to a
+small website of pages, some assets, and the people whose personal data the platform holds.
+
+They talk to the platform in plain language. Some requests from the test catalog:
+
+- "Please publish the welcome page"
+- "Update the SEO title tag of the welcome post"
+- "Translate the welcome post into German"
+- "Upload a new image banner.png and attach it to the welcome post"
+- "Export the personal data of subject s1 (GDPR access request)"
+- "Revert the history page to version 1"
+- "Who changed the home page? Show me the audit history"
+- "Which three blog posts got the fewest views?"
+- "Launch the spring sale: create a landing page, add a hero image tagged spring, make sure it passes the brand
+  check, get it translated into French and German, and schedule it" (five specialists, one after the other)
+- "Find the three worst-performing pages of our blog, run a health check of the blog section, fix their SEO,
+  and republish all three" (four specialists)
+- "Change the price on the pricing page to €49, update every translation, one job per language, and republish
+  it after review" (three specialists)
+- "Yesterday's edit broke the welcome page: roll it back to version 1 and republish it" (two specialists)
+- "Privacy request from Sam Lee: export his personal data, remove his name from the bylines of his two blog
+  posts, then republish both pages" (three specialists)
+
+The platform answers in prose and, when the request calls for it, changes its data: pages with their
+versions, links and metadata; assets; translation jobs; and an audit log that records every change. It also
+holds the brand guidelines, the site's analytics, and who approves the sensitive steps.
 
 ## How it is built
 
 ![ContentOps: the user, the orchestrator, the specialists, the shared skills, the dispatcher, tools, services, state and configuration](figures/contentops_agents.svg)
 
-*One request, top to bottom: the orchestrator delegates once; the specialist follows its skill's
-procedure; every tool call goes through the dispatcher; adapters hand over to services; services
-change the state and write the audit log.*
+*One request, top to bottom: the user, the orchestrator, a specialist with its skill, the dispatcher, the tools,
+the services, the data and the settings.*
 
-```
-request --> orchestrator (routes by trigger words) --> one specialist agent --> its skills --> tools --> services --> state
-```
+Each layer is a folder or file you can open:
 
-| layer | what it is | where |
+| Layer | What it is | Open it |
 |---|---|---|
-| agents (8) | YAML definitions: system prompt, the skills they may use, the tools they may call, trigger words for routing | `sut/agents/*.yaml` |
-| skills (10) | markdown files with a machine-readable `Procedure` (the steps to follow) plus prose rules; shared skills (`governance-checks`, `link-validation`) are included by others | `sut/skills/*/SKILL.md` |
-| tools (23) | thin adapters with a name, a kind (`read`, `write`, `guarded`) and a JSON schema, registered with a decorator; the orchestrator's `route_to_agent` is an extra control tool | `sut/tools/*.py` |
-| services | the business logic: repository (pages, versions, assets), workflow (review, publish, schedule, unpublish), links, SEO, permissions, governance, translation | `sut/services/*.py` |
-| state | an in-memory copy of a JSON fixture: users, pages, assets, consents, audit log; idempotency memory | `sut/services/state.py`, `sut/fixtures/base.json` |
-| harness | the agent loop (`runtime.py`), the dispatcher that governs every tool call (`dispatcher.py`), the router, the skill loader, the config reader, fault injection, retries | `sut/harness/` |
-| config | the runtime settings: step budget, retries, idempotency keys, disabled and guarded tools, default agent, review/scheduling flags, SEO limits, default locales | `sut/config/runtime.yaml` |
-| backends | *simulated*: executes the skill's procedure step by step, deterministic and free; *LLM*: a real model on an OpenAI-compatible endpoint, with tool calling | `sut/harness/backends/` |
+| Agents | One YAML file per agent: its instructions, the skills it follows, the tools it may call, and the trigger words that send requests its way | [`sut/agents/`](../traceeval/sut/agents/) |
+| Skills | One `SKILL.md` per skill: a `Procedure` block with the steps to follow, plus rules in plain prose. Two skills are shared by several agents | [`sut/skills/`](../traceeval/sut/skills/) |
+| Tools | Thin adapters. Each has a name, a kind (`read`, `write` or `guarded`) and a parameter schema. The orchestrator also has a control tool, `route_to_agent`, and two of its own, `make_plan` and `request_approval` | [`sut/tools/`](../traceeval/sut/tools/) |
+| Services | The business logic: pages, versions and assets; review, publish, schedule and unpublish; links; SEO; roles and permissions; consent, export, audit and approvals; translation; brand guidelines; analytics and the site audit | [`sut/services/`](../traceeval/sut/services/) |
+| Data | An in-memory copy of a JSON file with the users, the pages and their reviews, assets, the data subjects and their consents, translation jobs, brand guidelines, analytics, external links, the approver's decision and the audit log, plus a logical clock and a memory of idempotency keys | [`fixtures/base.json`](../traceeval/sut/fixtures/base.json), [`services/state.py`](../traceeval/sut/services/state.py) |
+| Harness | What runs the agents: the agent loop, the dispatcher that every tool call passes through, the skill loader, fault injection and retries | [`sut/harness/`](../traceeval/sut/harness/) |
+| Settings | The step budgets (per agent and per request), retries, idempotency keys, disabled and guarded tools, the default agent, the review and scheduling switches, SEO limits, default languages and the slow-page limit | [`config/runtime.yaml`](../traceeval/sut/config/runtime.yaml) |
+| Backends | What makes the decisions: a model, behind an OpenAI-style chat client ([EXPERIMENT.md](EXPERIMENT.md) §3) | [`harness/backends/`](../traceeval/sut/harness/backends/), [`traceeval/llm/chat.py`](../traceeval/llm/chat.py) |
 
-## The agents and who talks to whom
+## The agents, and how they work together
 
-Agents do not talk to each other freely: the only inter-agent message is the orchestrator's single
-delegation (`route_to_agent`), and the only way an agent acts on the world is a tool call through the
-dispatcher. Everything else is inside one agent: its skills, its backend, its context.
+Agents do not chat with each other. The only hand-off is the orchestrator passing work to a specialist with
+`route_to_agent`. The only way any agent changes anything is by calling a tool. Everything else, such as
+which skill to follow and what to do next, happens inside a single agent.
 
-- **orchestrator** — the front door. Reads the request, consults every specialist's description and
-  trigger words (recorded as `agent.consult` events), delegates exactly once; if no trigger matches,
-  the configured default (`routing.default_agent: authoring`) gets it. Skill: `routing`. Tool: only
-  `route_to_agent`.
-- **authoring** — creates draft pages and edits page bodies. Skill `page-authoring`; includes
-  `governance-checks` (permission first) and `link-validation` (after an edit). Tools: `search_pages`,
-  `get_page`, `create_page`, `update_page_content`, `set_page_metadata`, `validate_links`,
-  `request_review`, `list_versions`, `check_permission`.
-- **publishing** — takes pages live, schedules them, takes them down. Skill `publishing-workflow`;
-  includes `governance-checks` and `link-validation` (before publishing or scheduling). Tools:
-  `get_page`, `check_permission`, `validate_links`, `request_review`, `approve_review`*,
-  `publish_page`, `schedule_publish`, `unpublish_page`*.
-- **seo** — reviews and sets SEO metadata within the configured title limit. Skill `seo-metadata` +
-  `governance-checks`. Tools: `get_page`, `get_seo_report`, `set_page_metadata`, `check_permission`.
-- **assets** — uploads assets to the DAM and attaches them to pages. Skill `asset-management` +
-  `governance-checks`. Tools: `get_page`, `upload_asset`, `get_asset`, `attach_asset`, `check_permission`.
-- **translation** — creates translation jobs and reports their status. Skill `translation` +
-  `governance-checks`. Tools: `get_page`, `check_permission`, `create_translation_job`,
-  `get_translation_status`.
-- **governance** — data-subject exports under consent, audit-log questions. Skill `governance-ops` +
-  `governance-checks`. Tools: `check_permission`, `check_consent`, `export_user_data`*, `get_audit_log`.
-- **maintenance** — restores earlier page versions. Skill `rollback` + `governance-checks` +
-  `link-validation`. Tools: `get_page`, `list_versions`, `rollback_page`, `validate_links`,
-  `check_permission`.
+The orchestrator is the front door. It reads the request and looks at every specialist's description and
+trigger words. A request one specialist owns is delegated exactly once. When no specialist owns it, it goes
+to the default agent named in the settings, which is `authoring`.
 
-\* guarded: the dispatcher refuses the call unless the request carries an approval token; checking that the token is the right user's is left to the service.
+A request that needs several specialists gets a plan, as in AEM's Agent Orchestrator:
 
-Shared skills are the platform's way of saying "every specialist does this the same way":
-`governance-checks` calls `check_permission(user, action)` before any write and stops with an
-explanation when the user may not; `link-validation` calls `validate_links(page)` and stops when
-anything is broken. A specialist's procedure *includes* them, so a change to a shared skill changes
-every specialist that includes it — which is exactly what the test-selection work tracks.
+- the orchestrator writes the steps down (`make_plan`), then delegates them one at a time;
+- each step gets its own instruction (`task`) and the values it needs (`context`), the ids that earlier steps
+  reported;
+- before a step that publishes, schedules or takes pages down, the orchestrator asks a person (`request_approval`),
+  and the approval then holds for the steps after it;
+- a failed step stops the steps that depend on it;
+- the orchestrator never touches content itself.
+
+Click an agent to see its definition, or a skill to read its procedure:
+
+| Agent | Looks after | Follows | May call |
+|---|---|---|---|
+| [orchestrator](../traceeval/sut/agents/orchestrator.yaml) | sending each request to the right specialist, or planning and running the steps of a request that needs several | [routing](../traceeval/sut/skills/routing/SKILL.md) | `route_to_agent`, `make_plan`, `request_approval` |
+| [authoring](../traceeval/sut/agents/authoring.yaml) | creating draft pages and editing page text, and asking for a review when told to | [page-authoring](../traceeval/sut/skills/page-authoring/SKILL.md) | `search_pages`, `get_page`, `create_page`, `update_page_content`, `set_page_metadata`, `validate_links`, `request_review`, `list_versions`, `check_permission` |
+| [publishing](../traceeval/sut/agents/publishing.yaml) | putting pages live, scheduling them, taking them down | [publishing-workflow](../traceeval/sut/skills/publishing-workflow/SKILL.md) | `get_page`, `check_permission`, `validate_links`, `request_review`, `approve_review` (guarded), `publish_page`, `schedule_publish`, `unpublish_page` (guarded) |
+| [seo](../traceeval/sut/agents/seo.yaml) | checking and setting a page's title, description and keywords, within the title-length limit | [seo-metadata](../traceeval/sut/skills/seo-metadata/SKILL.md) | `get_page`, `get_seo_report`, `set_page_metadata`, `check_permission` |
+| [assets](../traceeval/sut/agents/assets.yaml) | uploading files to the asset library, finding assets by their tags (only licensed ones may be used), and attaching them to pages | [asset-management](../traceeval/sut/skills/asset-management/SKILL.md) | `get_page`, `upload_asset`, `search_assets`, `get_asset`, `attach_asset`, `check_permission` |
+| [translation](../traceeval/sut/agents/translation.yaml) | starting translation jobs and reporting how far they are | [translation](../traceeval/sut/skills/translation/SKILL.md) | `get_page`, `check_permission`, `create_translation_job`, `get_translation_status` |
+| [governance](../traceeval/sut/agents/governance.yaml) | exporting a person's data when they have consented, and answering audit questions | [governance-ops](../traceeval/sut/skills/governance-ops/SKILL.md) | `check_permission`, `check_consent`, `export_user_data` (guarded), `get_audit_log` |
+| [maintenance](../traceeval/sut/agents/maintenance.yaml) | restoring an earlier version of a page | [rollback](../traceeval/sut/skills/rollback/SKILL.md) | `get_page`, `list_versions`, `rollback_page`, `validate_links`, `check_permission` |
+| [brand](../traceeval/sut/agents/brand.yaml) | checking pages against the brand guidelines (forbidden terms, the offer disclaimer, licensed assets) and finding the pages that use a term | [brand-governance](../traceeval/sut/skills/brand-governance/SKILL.md) | `get_brand_guidelines`, `check_brand_policy`, `search_pages` |
+| [insights](../traceeval/sut/agents/insights.yaml) | how pages perform: views, bounce rate, conversions, and the best or worst pages of a section | [data-insights](../traceeval/sut/skills/data-insights/SKILL.md) | `get_page_metrics` |
+| [optimizer](../traceeval/sut/agents/optimizer.yaml) | site health checks (broken links, images without alt text, missing descriptions, slow pages) and alt texts | [site-optimization](../traceeval/sut/skills/site-optimization/SKILL.md) | `audit_site`, `fix_alt_text`, `check_permission` |
+
+The last three agents, and asset search, are modelled on AEM's Brand Governance, Data Insights, Site
+Optimization and Content Advisor agents ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md)).
+
+A guarded tool is one the dispatcher refuses unless the request carries an approval token. What the services check
+on top of that is under "Who enforces which rule".
+
+### The shared skills
+
+Two skills are shared, for the steps every specialist does the same way:
+
+- [governance-checks](../traceeval/sut/skills/governance-checks/SKILL.md) asks `check_permission` whether
+  the user may do what they asked, and stops with an explanation if they may not. Every specialist that
+  changes something includes it.
+- [link-validation](../traceeval/sut/skills/link-validation/SKILL.md) runs `validate_links` on the page and
+  stops if any link is broken. Authoring includes it after writing a page, publishing before putting one
+  live or scheduling it, and maintenance after a rollback.
+
+Specialists *include* these skills rather than copying them, so a change to a shared skill changes every
+agent that includes it. Test selection has to follow that ripple.
 
 ### One request, step by step
 
 ![One run of a case, end to end](figures/guide_2_run.png)
 
-*"Please publish the welcome page" as bob: the executor starts the orchestrator, the orchestrator
-routes to publishing, the publishing agent follows its procedure (fetch, permission, links, publish),
-each step goes through the dispatcher and is recorded, and the final state and message are scored
-against the case's expectations.*
+*Bob asks: "Please publish the welcome page". The executor (`traceeval/experiment/executor.py`, the code that runs
+one test) starts the orchestrator, which routes the request to publishing. The publishing agent follows its
+procedure: fetch the page, check the permission, check the links, publish. Each step goes through the dispatcher
+and is recorded. At the end, the final data and the answer are scored against what the test case expects.*
 
-## The rules the harness enforces on every tool call
+## Who enforces which rule
 
-Role permissions (`check_permission` before any write), approval tokens for guarded tools
-(`approve_review`, `export_user_data`, `unpublish_page`), retries on transient failures with an
-idempotency key so that a lost acknowledgement does not duplicate a write, a per-request step budget,
-tool enablement by configuration, delegation depth, and a trace event for every call. Fault profiles
-(`transient_once:<tool>`, `ack_timeout_once:<tool>`, `permanent_down:<tool>`) inject failures on
-purpose so that the resilience rules can be tested.
+The rules sit in three places, and the difference matters: when a change removes a check from a skill,
+usually nothing below the skill catches the mistake.
+
+The harness checks every tool call. The dispatcher refuses a call when:
+
+- the tool does not exist, or the settings have switched it off;
+- this agent is not allowed to use it;
+- it is guarded and the request has no approval token;
+- the arguments do not fit.
+
+A call that gets through runs with fault injection, and transient failures are retried. Write tools also get an
+idempotency key, a key that identifies the operation so that a service can recognise a repeat. It is derived from
+the request, the tool, its arguments and how often that call has already gone through. Services that honour the key
+then apply it once, whether it comes back as a retry or as a write the agent repeats after a failure. Every call
+leaves a `tool.call` event in the trace.
+
+Around the dispatcher, the agent loop limits how many steps each agent may take, how many the whole request may
+take (delegations count too), and how deep delegation may go. The code is in
+[`dispatcher.py`](../traceeval/sut/harness/dispatcher.py) and [`runtime.py`](../traceeval/sut/harness/runtime.py).
+
+The skills hold most of the business rules:
+
+- check the permission before acting;
+- never publish a page with broken links;
+- get a review approved before going live;
+- keep the SEO title within the limit;
+- export nobody's data without their consent.
+
+Most services do not check permissions themselves. They trust the skill to have asked first.
+
+The services and tools check a few rules again, at the bottom:
+
+- approving a review and exporting personal data need the right role and the user's own approval token;
+- rolling a page back needs the right role, so a rollback skill that forgot to ask would still be refused: the page
+  stays safe, but the agent makes a call it should not have made;
+- scheduling is refused when the settings switch it off;
+- taking down a protected page is always refused.
+
+Tests can also break things on purpose, to check that the resilience rules hold. A fault profile names the
+tool it hits ([`faults.py`](../traceeval/sut/harness/faults.py)):
+
+- `transient_once:<tool>`: the first call fails before it runs, so a retry is safe.
+- `ack_timeout_once:<tool>`: the first call runs but its acknowledgement is lost, so a retry without an
+  idempotency key makes the change twice.
+- `permanent_down:<tool>`: every call fails.
 
 ## Why it is shaped like this
 
-It is deliberately *small but real*: enough layers (prompt, skill, tool, service, config, harness) that a
-change can land in the wrong one, enough rules (gates, retries, budgets) that a change can break one
-without touching the feature it was meant for, and fully deterministic under the simulated backend so
-that thousands of runs cost nothing. A one-line walkthrough of a request is in
-[STUDY_GUIDE.md §1.1](STUDY_GUIDE.md); the 136 scenarios that exercise it are in `traceeval/catalog/`.
+The application is small but realistic:
+
+- it has enough layers (instructions, skills, tools, services, settings, harness) that a change can land in the
+  wrong one;
+- it has enough rules (gates, retries, budgets) that a change can break one without touching the feature it was
+  aimed at;
+- it has no wall clock (timestamps come from a counter) and no randomness, which is what lets a run replay exactly
+  from recorded answers ([EXPERIMENT.md](EXPERIMENT.md) §5).
+
+The test scenarios that exercise the platform are in [`traceeval/catalog/tests/`](../traceeval/catalog/tests/);
+[USER_GUIDE.md](USER_GUIDE.md) §3 says where to look in the code.

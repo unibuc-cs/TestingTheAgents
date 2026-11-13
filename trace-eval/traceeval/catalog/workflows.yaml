@@ -1,0 +1,30 @@
+# The multi-agent workflows (docs/AEM_ALIGNMENT.md, section 3.3): one prompt, a plan, and several specialists in
+# turn, as AEM's Agent Orchestrator runs them. A test that runs a workflow end to end names it (`workflow: W1` in
+# tests/*.yaml; the loader rejects an unknown id). `agents` is the chain of specialists the plan delegates to, in
+# order; a recorded run covers the workflow when it delegates to exactly these agents, in this order (a step
+# repeated for several pages delegates to the same agent again, which is allowed). The coverage report lists the
+# workflows no test covers, declared (named by a test) and observed (run by a recorded run).
+
+- id: W1
+  name: campaign launch
+  agents: [authoring, assets, brand, translation, publishing]
+
+- id: W2
+  name: site optimization
+  agents: [insights, optimizer, seo, publishing]
+
+- id: W3
+  name: legal takedown
+  agents: [brand, publishing]
+
+- id: W4
+  name: localized price update
+  agents: [authoring, translation, publishing]
+
+- id: W5
+  name: broken release rollback
+  agents: [maintenance, publishing]
+
+- id: W6
+  name: privacy request
+  agents: [governance, authoring, publishing]

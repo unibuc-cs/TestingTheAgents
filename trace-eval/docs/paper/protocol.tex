@@ -1,0 +1,24 @@
+% Recording and replay (the figure of section 5). No numbers on the figure: $K$ is the symbol of the text.
+\begin{tikzpicture}[
+  box/.style={draw, rounded corners=2pt, align=center, font=\small, inner sep=4pt, minimum height=11mm, text width=30mm},
+  arr/.style={-{Stealth[length=2mm]}, thick},
+  lbl/.style={font=\scriptsize, fill=white, inner sep=1pt, align=center}
+]
+\node[box] (v0) {the current\\version $V_0$};
+\node[box, below=10mm of v0] (v1) {a changed copy\\$V_0 + \Delta$,\\one per change};
+\node[box, right=34mm of v0, text width=36mm] (facts) {baseline facts per test:\\dependencies $\phi_t$,\\cost $c(t)$, fail rate $f_t$};
+\node[box, right=34mm of v1, text width=36mm] (out) {recorded outcomes\\and costs,\\per test and run};
+\node[box, below=8mm of out, text width=40mm] (gt) {majority vote per test:\\$\Rev(\Delta)$, the ground truth,\\never shown to a strategy};
+\node[box, right=18mm of out, text width=52mm] (replay)
+  {\textbf{replay}, once per change, budget and seed: the strategy reads the baseline facts and $C(\Delta)$,
+   picks a test, and is answered with a recorded outcome and cost of that copy; it picks again or stops};
+\node[box, right=8mm of replay, text width=26mm] (met) {metrics against\\$\Rev(\Delta)$ and the\\tokens spent};
+\draw[arr] (v0) -- node[lbl, above] {$K$ traced runs,\\one test at a time} (facts);
+\draw[arr] (v0) -- node[lbl, left] {$+\Delta$} (v1);
+\draw[arr] (v1) -- node[lbl, above] {$K$ runs,\\many tests at once} (out);
+\draw[arr] (out) -- node[lbl, right] {majority} (gt);
+\draw[arr] (out) -- node[lbl, above] {one run\\per test} (replay);
+\draw[arr] (facts.east) -| node[lbl, above, pos=0.3] {what a strategy may read} (replay.north);
+\draw[arr] (replay) -- (met);
+\draw[arr] (gt.east) -| (met.south);
+\end{tikzpicture}

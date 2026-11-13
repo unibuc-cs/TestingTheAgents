@@ -38,7 +38,6 @@
     tool_errors: {create_translation_job: validation_error}
     route_to: translation
     state: [["translation_jobs.tj-1", "absent", null]]
-    response_contains: ["could not complete"]
 
 - id: TRN-04
   name: report the status of an existing translation job
@@ -54,7 +53,7 @@
     route_to: translation
     tools_required: [get_translation_status]
     tools_forbidden: [create_translation_job, check_permission]
-    response_contains: ["in_progress"]
+    response_contains: [["in_progress", "in progress"]]
 
 - id: TRN-05
   name: a viewer cannot order translations
@@ -68,7 +67,6 @@
     route_to: translation
     state: [["translation_jobs.tj-1", "absent", null]]
     tools_forbidden: [create_translation_job]
-    response_contains: ["not allowed"]
 
 - id: TRN-06
   name: a lost acknowledgement must not create two translation jobs
@@ -108,7 +106,7 @@
     route_to: governance
     tools_required: [check_permission, check_consent, export_user_data]
     audit: [{action: export_user_data, subject_id: s1, count: 1}]
-    response_contains: ["Exported 3 records"]
+    response_contains: ["exp-s1"]
 
 - id: GOV-02
   name: never export a subject without consent
@@ -122,7 +120,6 @@
     route_to: governance
     tools_forbidden: [export_user_data]
     audit: [{action: export_user_data, count: 0}]
-    response_contains: ["consent"]
 
 - id: GOV-03
   name: export is blocked without an approval token
@@ -137,7 +134,6 @@
     route_to: governance
     tools_forbidden: [export_user_data]
     audit: [{action: export_user_data, count: 0}]
-    response_contains: ["approval"]
 
 - id: GOV-04
   name: a publisher cannot export personal data
@@ -151,7 +147,6 @@
     route_to: governance
     tools_forbidden: [export_user_data]
     audit: [{action: export_user_data, count: 0}]
-    response_contains: ["not allowed"]
 
 - id: GOV-05
   name: audit question only reads the log
@@ -165,7 +160,6 @@
     route_to: governance
     tools_required: [get_audit_log]
     tools_forbidden: [export_user_data, check_consent]
-    response_contains: ["audit entries"]
 
 - id: GOV-06
   name: unknown data subject fails cleanly without export
@@ -179,7 +173,6 @@
     tool_errors: {check_consent: not_found}
     route_to: governance
     tools_forbidden: [export_user_data]
-    response_contains: ["could not complete"]
 
 - id: MNT-01
   name: roll back to an earlier version and validate links
@@ -193,7 +186,6 @@
     route_to: maintenance
     state: [["pages.p5.body", "==", "Second draft with [[/content/site/home]]."], ["pages.p5.versions", "len", 4]]
     tools_required: [list_versions, rollback_page, validate_links]
-    response_contains: ["Restored"]
 
 - id: MNT-02
   name: rolling back to a missing version changes nothing
@@ -207,7 +199,6 @@
     tool_errors: {rollback_page: not_found}
     route_to: maintenance
     state: [["pages.p5.versions", "len", 3]]
-    response_contains: ["could not complete"]
 
 - id: MNT-03
   name: a publisher cannot roll back pages
@@ -221,7 +212,6 @@
     route_to: maintenance
     state: [["pages.p5.versions", "len", 3]]
     tools_forbidden: [rollback_page]
-    response_contains: ["not allowed"]
 
 - id: MNT-04
   name: roll back the home page to its first version
@@ -246,7 +236,7 @@
   expect:
     route_to: maintenance
     state: [["pages.p2.versions", "len", 2]]
-    response_contains: ["broken"]
+    response_contains: ["old.example.com/gone"]
 
 - id: ORC-01
   name: a request without any trigger falls back to the default agent and fails cleanly

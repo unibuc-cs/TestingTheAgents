@@ -4,6 +4,7 @@ accounting, and the expression environment in which clause expressions (``where`
 
 import builtins
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -26,6 +27,7 @@ class Obj(dict):
 
 
 def wrap(value):
+    """Wrap dicts (also inside lists) in Obj; anything else is returned as it is."""
     if isinstance(value, Obj):
         return value
     if isinstance(value, dict):
@@ -57,54 +59,54 @@ class CheckContext:
     model: ProductModel  # static facts of the variant + dynamic facts of the baseline
     catalog: dict[str, EvalCase]
     variant: str = "baseline"
+    backend: str | None = None  # who plays the agents (run_case's backend; None: its default)
+    workers: int = 1  # cases run at once by run_many
     runs: dict = field(default_factory=dict)  # (test_id, fault_profile) -> record
     cost: Counter = field(default_factory=Counter)  # runs, tokens
 
-    # ---------------------------------------------------------------- configuration
-    def config(self, key: str, default=None):
-        node = self.model.config
-        for part in key.split("."):
-            if not isinstance(node, dict) or part not in node:
-                return default
-            node = node[part]
-        return node
-
     # ---------------------------------------------------------------- running cases on the variant
     def run(self, case: EvalCase, fault_profile: str | None = None, cache: bool = True) -> dict:
+        """Run a case on the variant and count its cost. Catalog cases run once per PR (trace clauses and the
+        regression tests share them); scenarios (contract and example clauses) pass ``cache=False`` because
+        they may patch the case, and a patched case keeps its catalog id."""
         key = (case.id, fault_profile)
         if cache and key in self.runs:
             return self.runs[key]
-        rec = run_case(self.sut, case, variant=self.variant, fault_profile=fault_profile, keep_state=True)
+        rec = self._run_case(case, fault_profile)
         self.cost["runs"] += 1
         self.cost["tokens"] += rec["tokens"]
         if cache:
             self.runs[key] = rec
         return rec
 
-    def runs_in_scope(self, scope) -> dict[str, dict]:
-        """Execute (once) the catalog cases a trace clause ranges over and return their records."""
-        ids = self.cases_in_scope(scope)
-        return {tid: self.run(self.catalog[tid]) for tid in ids}
+    def _run_case(self, case: EvalCase, fault_profile: str | None = None) -> dict:
+        return run_case(
+            self.sut, case, backend=self.backend, variant=self.variant, fault_profile=fault_profile, keep_state=True
+        )
 
-    def cases_in_scope(self, scope) -> list[str]:
-        if scope in (None, "all"):
-            return list(self.catalog)
-        if "cases" in scope:
-            return [c for c in scope["cases"] if c in self.catalog]
-        tools = scope.get("tools") or ([scope["tool"]] if "tool" in scope else None)
-        kinds = scope.get("tool_kind")
-        kinds = [kinds] if isinstance(kinds, str) else kinds
-        return self.model.cases_calling(tools=tools, kinds=kinds)
+    def run_many(self, ids: list[str]) -> dict[str, dict]:
+        """``run`` for several catalog cases, ``workers`` of them at a time (a served model batches them)."""
+        todo = [t for t in ids if (t, None) not in self.runs]
+        if self.workers > 1 and len(todo) > 1:
+            # the threads only run the cases; their records and costs are stored here, in one thread
+            with ThreadPoolExecutor(max_workers=self.workers) as pool:
+                for tid, rec in zip(todo, pool.map(lambda t: self._run_case(self.catalog[t]), todo), strict=True):
+                    self.cost["runs"] += 1
+                    self.cost["tokens"] += rec["tokens"]
+                    self.runs[(tid, None)] = rec
+        return {tid: self.run(self.catalog[tid]) for tid in ids}  # cache hits, or one at a time when not parallel
 
     # ---------------------------------------------------------------- expression environment
     def env(self, run: dict | None = None, **extra) -> dict:
+        """The names a clause expression may use: the helpers below, ``run`` (the record, if any) and ``extra``."""
         env = {
-            "config": self.config,
+            "config": self.model.config_value,
             "approval_age": approval_age,
             "expected_broken": expected_broken,
             "audit_count": audit_count,
             "applied": applied,
             "token_owner": token_owner,
+            "call_token": call_token,
             "title_of_length": title_of_length,
             "first_case_calling": lambda tool: next(iter(self.model.cases_calling([tool], ok_only=True)), None),
             "baseline_run": lambda test_id: wrap(with_context(self.model.baseline_runs[test_id])),
@@ -117,15 +119,22 @@ class CheckContext:
 
 def with_context(run: dict) -> dict:
     """The run record plus ``context`` (the request context recorded in its run.start event)."""
-    if "context" in run:
-        return run
     start = next((e for e in run.get("events", []) if e.get("kind") == "run.start"), {})
     return dict(run, context=start.get("context", {}))
 
 
 # -------------------------------------------------------------------- helpers usable in clause expressions
 def approval_age(run, page_id: str) -> int:
-    """Days between the page's recorded approval and the fixture's ``today`` (state before the run)."""
+    """Days between the page's approval and the fixture's ``today``: 0 when the run itself approved the page (a
+    successful ``approve_review``), otherwise from the approval recorded in the state before the run."""
+    if any(
+        e["kind"] == "tool.call"
+        and e["tool"] == "approve_review"
+        and e["status"] == "ok"
+        and e["args"].get("page_id") == page_id
+        for e in run["events"]
+    ):
+        return 0
     state = run["initial_state"]
     page = state["pages"].get(page_id)
     if page is None:
@@ -155,6 +164,7 @@ def expected_broken(run, page_id: str) -> int:
 
 
 def audit_count(run, action: str, **match) -> int:
+    """Audit entries of ``action`` at the end of the run whose fields equal ``match``."""
     return sum(
         1
         for e in run["final_state"].get("audit", [])
@@ -170,6 +180,20 @@ def token_owner(run, token) -> str | None:
     return next((uid for uid, u in users.items() if u.get("approval_token") == token), None)
 
 
+def call_token(run, event) -> str | None:
+    """The approval token a tool call was made with: the request's own, replaced by a person's approval granted
+    earlier in the run (the steps after it carry its token) or by a token a delegation passed on."""
+    token = run["context"].get("approval_token")
+    for e in run["events"]:
+        if e == event:
+            break
+        if e.get("kind") == "tool.call" and e.get("tool") == "request_approval" and e.get("status") == "ok":
+            token = ((e.get("result") or {}).get("pass_on") or {}).get("approval_token", token)
+        elif e.get("kind") == "agent.route" and e.get("status") == "ok" and e.get("target") == event.get("agent"):
+            token = (e.get("context") or {}).get("approval_token", token)
+    return token
+
+
 def applied(run, tool: str) -> bool:
     """Did the run call ``tool`` successfully?"""
     return any(
@@ -178,4 +202,5 @@ def applied(run, tool: str) -> bool:
 
 
 def title_of_length(n: int) -> str:
+    """A page title exactly ``n`` characters long (boundary values for length limits)."""
     return ("Example title " * (n // 14 + 1))[:n]

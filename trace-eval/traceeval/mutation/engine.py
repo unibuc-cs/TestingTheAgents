@@ -25,6 +25,7 @@ def materialize_variant(mutation: Mutation | None, workdir: Path, baseline: Path
         "category": mutation.category if mutation else "baseline",
         "description": mutation.description if mutation else "unmodified system",
         "expected_regression": mutation.expected_regression if mutation else False,
+        "members": mutation.members if mutation else [],  # a batch names the changes it bundles
     }
     (vdir / "mutation.json").write_text(json.dumps(meta, indent=1))
     return sut_dir, cs

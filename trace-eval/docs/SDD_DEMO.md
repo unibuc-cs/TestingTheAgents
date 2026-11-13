@@ -1,91 +1,115 @@
 # Spec-driven development on the testbed: a starting prototype
 
-**Question.** Can a change request be written as a spec that is formal enough for a machine to check
-(and where possible prove) that a PR implements it - in the right place, with the smallest necessary
-change - while a coding agent reads less and runs fewer checks than "read the repo, run everything"?
+This prototype asks two questions:
 
-**What this adds.** A spec layer (`traceeval/spec/`) on top of the ContentOps testbed: five change
-requests written as specs (`openspec/specs/fs-010x-*/spec.md`, clauses picked from the template catalog
-`traceeval/spec/catalog.yaml`), 25 pull requests with known verdicts (`traceeval/spec/prs.py`; every
-accepted PR is a real code change of 1–4 files), a command that produces the evidence report, and a
-command that drafts a spec from a prose request with a model. New to this? Read [SDD_GUIDE.md](SDD_GUIDE.md)
-first; the application is described in [CONTENTOPS.md](CONTENTOPS.md).
+- can a change request be written as a spec formal enough for a machine to check, and where possible prove, that a
+  PR implements it in the right place and with the smallest necessary change?
+- can a coding agent then read less and run fewer checks than it would by reading the whole repository and running
+  everything?
+
+It adds a spec layer (`traceeval/spec/`) on top of the ContentOps testbed:
+
+- five change requests written as specs (`openspec/specs/fs-010x-*/spec.md`), with clauses picked from the
+  template catalog `traceeval/spec/catalog.yaml`;
+- 25 pull requests with known verdicts (`traceeval/spec/prs.py`); every correct PR is a code change of 1–4
+  files;
+- a command that produces the evidence report;
+- a command that drafts a spec from a prose request with a model.
+
+If you are new to this, read [SDD_GUIDE.md](SDD_GUIDE.md) first. [CONTENTOPS.md](CONTENTOPS.md) describes the
+application.
 
 ```bash
 pip install -e ".[dev]"                 # adds hypothesis + z3-solver
-traceeval sdd --workdir runs/sdd        # ~30 s  ->  runs/sdd/report.md (+ evidence/*.json, one figure)
+traceeval sdd --workdir runs/sdd        # ~1 min, replays Gemma's recorded answers  ->  runs/sdd/report.md
 traceeval sdd draft --request docs/sdd/draft_example/request.md --id FS-0101 \
     --replay docs/sdd/draft_example/answer.json --out /tmp/FS-0101/spec.draft.md   # draft a spec (offline example)
 ```
 
 A copy of the report is in [`docs/sdd/report.md`](sdd/report.md).
 
-## A spec is prose intent plus clauses of five kinds
+A spec is prose intent plus clauses of five kinds (settings, contracts, trace rules, examples and placement);
+[SDD_GUIDE.md](SDD_GUIDE.md) §3 holds the catalog of templates and §5 the rungs.
 
-| kind | what it says | how it is checked | rung |
-|---|---|---|---|
-| `setting` | a typed constraint on a configuration key | schema check of the effective config, no run | L4 static |
-| `contract` | pre/post-condition of a pure function, or a property of agent behaviour quantified over data or over the product model | Hypothesis property test; for straight-line functions also a Z3 proof (`assume ∧ ¬ensures` unsat) | L2 / L5 |
-| `trace` | a temporal rule over recorded runs (`always`, `never`, `precedes`), with a completeness check against the product model | monitor over the catalog runs in scope | L3 |
-| `example` | one scenario with an expected outcome (catalog case or inline, values may be `=expressions`) | one run | L1 |
-| `placement` | where code must (not) live: `define`, `forbid_import`, `forbid_name`, `forbid_literal`, `skill_order` | AST / procedure lint, no run | L4 static |
+## The five requests, one of each kind of change
 
-Clauses are written as catalog templates plus slot values (`use: setting_in_range`, `with: {...}`); the
-loader expands them, generates ids and the one-line readings, and validates slot values against the
-product model. The catalog is `traceeval/spec/catalog.yaml` (documented in [SDD_GUIDE.md §3](SDD_GUIDE.md));
-the checker fields are in the docstrings of `traceeval/spec/checks/*.py`; the helpers usable in
-expressions in `traceeval/spec/context.py`. L0 (reviewed) is the prose `intent`. Every clause has a
-*required* rung (template default or `require:`); a clause that holds below it is reported as a gap.
-
-## The five requests, chosen for diversity
-
-| request | the accepted PR | what it demonstrates |
-|---|---|---|
-| FS-0101 approvals expire after 30 days | new feature, 4 files (config, workflow service, publish adapters, skill prose), 45 diff lines | a **proof** (L5) of the rule for all inputs; the proof catches a future-dated approval no fixture has; an off-by-one; the same logic in the wrong layer (only placement fails); a proven function that is never wired in (only the monitor and example fail); a correct but branchy implementation that the prover cannot translate — accepted *with a gap* because the clause requires L5 |
-| FS-0102 guarded operations need a *valid* token and record the approver | security fix, 2 files (permissions service, dispatcher), 13 diff lines | the spec first **exposes a weakness of the current code** (any made-up token passes); the property, the monitor and the example catch a "self-approved" variant; a lookup written inside the harness is caught only by placement |
-| FS-0103 nothing goes live without a clean link check of its current version | defence in depth, 2 files (links service, workflow service), 22 diff lines | the rule moves from a skill procedure (a prompt) into the service and is **proven**; a gate that ignores the check's version is missed by 200 random examples and found by the solver; a **temporal** rule (`precedes`) with completeness against the product model; a skill reordering is stopped by the service gate and still rejected |
-| FS-0104 SEO title limit raised to 70 | configuration only, 1 file, 2 diff lines | a property over **agent behaviour** (titles of every length); boundary examples computed from config; a hard-coded constant caught only by placement |
-| FS-0105 retried publishing writes never duplicate | bug fix, 2 files (workflow service, publish adapters), 22 diff lines | the spec, quantified over the write tools the publishing skill uses (from the product model), **finds a latent defect** in the current code; a partial fix is caught by the same quantifier |
-
-(The same FS-0105 clause with `forall: {tool: write_tools}` ranges over the whole platform and finds 6
-of 12 write tools affected; the request was scoped to the publishing workflow to keep the PR small.)
+- **FS-0101 approvals expire after 30 days**: new feature, 4 files (config, workflow service, publish adapters,
+  skill prose), 45 diff lines. It shows:
+  - a proof (L5) of the rule for all inputs, which catches a future-dated approval that no starting data (fixture)
+    has
+  - an off-by-one error
+  - the same logic in the wrong layer (placement fails, and the contract cannot find the function in the service)
+  - a proven function that is never wired in
+  - a correct but branchy implementation that the prover cannot translate, reported *with a gap* because the clause
+    requires L5
+- **FS-0102 guarded operations need a *valid* token and record the approver**: security fix, 2 files (permissions
+  service, dispatcher), 13 diff lines. It shows:
+  - the spec first finds a hole in the current code: any made-up token passes
+  - the property and an example catch a self-approved variant
+  - a lookup written inside the harness is caught only by placement
+- **FS-0103 nothing goes live without a clean link check of its current version**: defence in depth, 2 files (links
+  service, workflow service), 22 diff lines. It shows:
+  - the rule moves from a skill procedure (a prompt) into the service and is proven
+  - a gate that ignores the check's version is missed by 200 random examples and found by the solver
+  - a temporal rule (`precedes`) with completeness against the product model
+  - a skill reordering is stopped by the service gate and still rejected
+- **FS-0104 SEO title limit raised to 70**: configuration only, 1 file, 2 diff lines. It shows:
+  - a property over agent behaviour (titles of every length)
+  - boundary examples computed from config
+  - a hard-coded constant that only placement tells apart from the correct PR (with Gemma, every FS-0104 PR also
+    fails the title property; see below)
+- **FS-0105 retried publishing writes never duplicate**: bug fix, 2 files (workflow service, publish adapters), 33
+  diff lines. It shows:
+  - the spec, quantified over the write tools the publishing skill uses (from the product model:
+    `schedule_publish`, `unpublish_page`, `approve_review`), finds a bug that was already in the current code
+  - a partial fix is caught by the same quantifier
 
 ## What the report shows per PR
 
-Verdict (accepted / accepted with gaps / rejected), the failing or gapped clauses, the rung reached
-by each clause, and the cost: clause runs, change-selected regression cases (trace-eval's observed
-dependency selection: the Q12 answer), tokens, seconds. Per request it also shows the **agent brief**
-- the locate step: which files and functions a coding agent needs to read (from the product model:
-tool adapters, the services behind them, the skills calling them, the config keys), as a fraction of
-the repository - and which checks will run.
+For each PR the report gives:
 
-Headline numbers from `runs/sdd`: the brief is 10–19% of the repository (13% on average); all 25
-verdicts are as expected; every wrong PR is rejected with the clause, the counterexample or the
-misplaced code named; two rules are proven for all inputs (FS-0101, FS-0103); two specs find defects in
-the current code before any PR is written (FS-0102, FS-0105).
+- the verdict (accepted / accepted with gaps / rejected);
+- the failing or gapped clauses, and the rung each clause reached;
+- the cost: clause runs, change-selected regression cases (chosen by TRACE-Eval's observed-dependency selection),
+  tokens and seconds.
 
-## How this maps to the direction note
+For each request it also shows which checks will run and the agent brief ([SDD_GUIDE.md](SDD_GUIDE.md) §6). What it
+shows:
 
-- *Formal-enough spec, machine-checked, proven where possible*: clause kinds with one compiler each; L5
-  by solver for pure, straight-line functions; everything else property-tested, monitored or linted.
-  No single proof language (Q1): the clause file is the intermediate representation, the languages are
-  behind the checkers (Z3 today; Dafny/TLA+ could sit behind `contract` later).
-- *Up-to-date product model driving verification* (Q2): tool-extracted and recomputed per PR: files,
-  functions, tool registry, skill procedures, config, plus the recorded traces (which runs touch what).
-  Used by the brief (locate), by trace scopes (which runs to monitor), by `forall: write_tools`, and by
-  the completeness check (`must_cover`).
-- *Trace rules at run time* (Q3): the `trace` checker is the monitor; it runs over recorded runs now and
-  could run over production traces unchanged.
-- *Settings and data* (Q4): `setting` clauses are a schema; CUE/Dhall would be a drop-in replacement.
-- *Run only what a change touches* (Q12): the regression line of every evidence record is trace-eval's
-  selection on the PR's change set.
-- *Spec is not intent*: the prose is L0; the gaps (unexercised tool, uncovered path) are reported, not
-  hidden. *Model is not code*: every rung above L4 executes the real system.
+- the brief is 9–20% of the repository (12% on average);
+- all 25 verdicts are as expected, the two correct PRs that Gemma's behaviour rejects included (below): every
+  wrong PR is rejected, and the report names the clause, the counterexample or the misplaced code;
+- two rules are proven for all inputs (FS-0101, FS-0103);
+- two specs find defects in the current app before any PR is written (FS-0102, FS-0105).
+
+## With Gemma playing the agents
+
+Playing the agents with a model has three consequences.
+
+- The regression line counts only cases that pass on the current app; the eight cases Gemma gets wrong on it
+  ([EXPERIMENT.md](EXPERIMENT.md) §6) would fail under every PR and say nothing about it.
+- Two correct PRs are rejected, and the evidence says why.
+  - FS-0103 `pr_correct` makes the service refuse to publish or schedule without a fresh link check. In
+    DS-INTENTS/i02 and i05 Gemma publishes or schedules without one, so those regression cases fail.
+  - Under FS-0104 `pr_config_70`, Gemma applies an over-long title whatever the limit (as in SEO-02). The
+    property over title lengths, the boundary scenario and the monitor over the SEO runs all find such a title.
+- Several wrong PRs are also caught a second way. FS-0101 `pr_in_adapter` and `pr_unwired` let through Gemma's
+  scheduling of an unapproved page (PUB-10), which the service version refuses; the monitor catches both.
+  FS-0103 `pr_gate_ignores_version` lets through the unchecked publish and schedule of i02 and i05, and the
+  `precedes` rule catches it. The wrong FS-0104 PRs fail the title property too, as the correct one does.
+
+The accepted PRs are therefore FS-0101 `pr_correct` (and `pr_branchy`, with its gap), FS-0102 `pr_correct`
+and FS-0105 `pr_fix`. A spec checks the whole system, the model included. A correct code change can still be
+rejected when the model does not do what the skill or the spec asks, and the evidence names the run where it
+did not.
 
 ## What is not here yet
 
-The generation side (an agent that reads the brief and writes the PR, with the repair loop against the
-evidence), the LLM backend for the agent system itself (the simulated agent follows the skills), a
-real repository (this is the testbed), and a second proof backend. The next step is to run the loop:
-spec -> brief -> coding agent -> PR -> evidence, and measure first-pass acceptance, placement,
-minimality and cost against the same requests done without a spec.
+The prototype does not include:
+
+- the generation side: an agent that reads the brief and writes the PR, then repairs it against the evidence;
+- a real repository: it runs on the testbed;
+- a second proof backend.
+
+The next step is to run the loop spec $\to$ brief $\to$ coding agent $\to$ PR $\to$ evidence, and to
+measure first-pass acceptance, placement, minimality and cost against the same requests done without a spec.

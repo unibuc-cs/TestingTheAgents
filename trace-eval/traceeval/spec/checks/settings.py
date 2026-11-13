@@ -15,12 +15,13 @@ _TYPES = {"integer": int, "number": (int, float), "boolean": bool, "string": str
 
 def check(clause, ctx) -> ClauseResult:
     key = clause["key"]
-    value = ctx.config(key, default=None)
+    value = ctx.model.config_value(key)
     problems = []
     if value is None:
         problems.append(f"{key} is not set")
     else:
         want = clause.get("type")
+        # bool is a subclass of int in Python: True must not pass as an integer
         if want and (not isinstance(value, _TYPES[want]) or (want != "boolean" and isinstance(value, bool))):
             problems.append(f"{key} = {value!r} is not a {want}")
         if "min" in clause.data and isinstance(value, (int, float)) and value < clause["min"]:

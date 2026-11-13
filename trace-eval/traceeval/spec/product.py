@@ -14,7 +14,8 @@ import yaml
 
 from traceeval.tracing.codecov import function_index
 
-SOURCE_SUFFIXES = {".py", ".md", ".yaml", ".json"}
+SOURCE_SUFFIXES = {".py", ".md", ".yaml", ".json"}  # what a coding agent would read
+WRITE_KINDS = ("write", "guarded")  # tool kinds that change state
 
 
 def approx_tokens(text: str) -> int:
@@ -24,15 +25,15 @@ def approx_tokens(text: str) -> int:
 
 class ProductModel:
     def __init__(self, sut_dir: Path, baseline_runs: dict[str, dict], baseline_deps: dict[str, set[str]]):
-        self.sut_dir = Path(sut_dir)
+        sut_dir = Path(sut_dir)
         self.baseline_runs = baseline_runs  # test_id -> record (with events / states)
         self.baseline_deps = baseline_deps  # test_id -> observed components incl. code functions
         self.files = {
-            p.relative_to(self.sut_dir).as_posix(): p.read_text()
-            for p in sorted(self.sut_dir.rglob("*"))
+            p.relative_to(sut_dir).as_posix(): p.read_text()
+            for p in sorted(sut_dir.rglob("*"))
             if p.is_file() and p.suffix in SOURCE_SUFFIXES and "__pycache__" not in p.parts
         }
-        self.functions = function_index(self.sut_dir)  # relpath -> [(qualname, first, last)]
+        self.functions = function_index(sut_dir)  # relpath -> [(qualname, first, last)]
         self.config = yaml.safe_load(self.files["config/runtime.yaml"]) or {}
 
     # ---------------------------------------------------------------- static queries
@@ -55,34 +56,28 @@ class ProductModel:
     def tokens_of(self, rel_files) -> int:
         return sum(approx_tokens(self.files[f]) for f in rel_files if f in self.files)
 
-    def tools(self, sut) -> dict[str, str]:
-        """tool name -> kind, from the loaded variant's registry."""
-        return {name: spec.kind for name, spec in sut.tools.items()}
-
-    def write_tools(self, sut) -> list[str]:
-        return sorted(n for n, k in self.tools(sut).items() if k in ("write", "guarded"))
-
     def skill_write_tools(self, skill: str) -> list[str]:
         """The write/guarded tools a skill's procedure calls directly."""
         kinds = {n: k for n, (k, _, _) in self.tools_static().items()}
         calls = {s.get("call") for s in self.skill_procedure(skill) if isinstance(s, dict)}
-        return sorted(t for t in calls if kinds.get(t) in ("write", "guarded"))
+        return sorted(t for t in calls if kinds.get(t) in WRITE_KINDS)
 
-    def model_set(self, domain, catalog: dict | None = None) -> list | None:
+    def model_set(self, domain, catalog: dict) -> list | None:
         """Resolve the finite domain of a ``forall``: a literal list, ``write_tools``, ``catalog_cases`` or
         ``{skill_write_tools: <skill>}``. None when the domain is a Hypothesis strategy instead."""
         if isinstance(domain, list):
             return list(domain)
         if domain == "write_tools":
-            return self.write_tools_static()
+            return sorted(n for n, (k, _, _) in self.tools_static().items() if k in WRITE_KINDS)
         if domain == "catalog_cases":
-            return list(catalog or [])
+            return list(catalog)
         if isinstance(domain, dict) and "skill_write_tools" in domain:
             return self.skill_write_tools(domain["skill_write_tools"])
         return None
 
     def tools_static(self) -> dict[str, tuple[str, str, str]]:
-        """tool name -> (kind, adapter file, adapter function), from the ``@tool(name, kind, ...)`` decorators."""
+        """tool name -> (kind, adapter file, adapter function), from the ``@tool(name, kind, ...)`` decorators.
+        Read from the source rather than the loaded registry, so it also works without importing the variant."""
         out = {}
         for rel, text in self.files.items():
             if not (rel.startswith("tools/") and rel.endswith(".py")):
@@ -101,22 +96,18 @@ class ProductModel:
                         out[deco.args[0].value] = (deco.args[1].value, rel, node.name)
         return out
 
-    def write_tools_static(self) -> list[str]:
-        return sorted(n for n, (k, _, _) in self.tools_static().items() if k in ("write", "guarded"))
-
     def locate(self, tool_names) -> dict[str, list[str]]:
         """Where the given tools live: adapter functions, the service functions those adapters call, and
         the skills whose procedures call the tools. relpath -> [function or step names]."""
         out: dict[str, set[str]] = {}
         tools = self.tools_static()
         for name in tool_names:
-            if name not in tools:
-                continue
             _, rel, fn_name = tools[name]
             out.setdefault(rel, set()).add(fn_name)
             tree = ast.parse(self.files[rel])
+            # adapters call services as ``<module>.<function>(...)`` after ``from ..services import <module>``
             imported = {
-                a.asname or a.name: node.module
+                a.asname or a.name
                 for node in ast.walk(tree)
                 if isinstance(node, ast.ImportFrom) and node.module and "services" in node.module
                 for a in node.names
@@ -140,6 +131,7 @@ class ProductModel:
         return {k: sorted(v) for k, v in sorted(out.items())}
 
     def skill_procedure(self, skill: str) -> list[dict]:
+        """The steps of the skill's ``## Procedure`` YAML block ([] for an unknown skill or no procedure)."""
         text = self.files.get(f"skills/{skill}/SKILL.md", "")
         m = re.search(r"## Procedure\s*```yaml\n(.*?)```", text, re.S)
         return yaml.safe_load(m.group(1)) if m else []
@@ -147,7 +139,7 @@ class ProductModel:
     def status_setters(self) -> dict[str, list[str]]:
         """Service functions that assign ``page["status"]`` -> the tools whose adapters call them.
         Used to check that a rule about "going live" covers every code path that can change a status."""
-        setters: list[str] = []
+        setters: list[str] = []  # service functions containing a ``page["status"] = ...`` assignment
         for rel, text in self.files.items():
             if not rel.startswith("services/") or not rel.endswith(".py"):
                 continue
@@ -163,7 +155,7 @@ class ProductModel:
                     for n in ast.walk(node)
                 ):
                     setters.append(node.name)
-        out: dict[str, list[str]] = {}
+        out: dict[str, list[str]] = {}  # adapter -> the setters it calls (matched by attribute name)
         for rel, text in self.files.items():
             if not rel.startswith("tools/") or not rel.endswith(".py"):
                 continue

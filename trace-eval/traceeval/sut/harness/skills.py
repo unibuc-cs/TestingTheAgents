@@ -1,9 +1,26 @@
-"""Skill loading. A skill is a SKILL.md with YAML front matter, prose instructions (read by the LLM
-backend) and a machine-readable ``## Procedure`` block (executed by the simulated backend and rendered
-verbatim to the LLM). The procedure block is the canonical statement of the workflow, so a mutation of
-the procedure changes the behaviour of *both* backends."""
+"""Skill loading. A skill is a SKILL.md with YAML front matter, prose instructions and a ``## Procedure``
+block: the workflow as a YAML list of steps. The model reads the procedure as numbered plain steps
+(``render_procedure``), with included skills written out in place and settings shown with their values.
+
+The keys a step may use (each step does one of ``set``, ``say``, ``route``, ``call``, ``include``):
+
+- ``include: <skill>``: that skill's own steps, in place (``SkillLoader.expand``).
+- ``when``: a condition; the step applies only when it holds.
+- ``set``: context slots and the values they take, for later steps.
+- ``say``: the final answer, a template with ``{expr}`` placeholders; it ends the agent's work.
+- ``route``: hand the request to the specialist that owns it (the routing skill writes ``route: auto``).
+- ``call`` with ``args``: call a tool. ``id`` names its result for later steps (``result.<id>``).
+- ``require``, ``on_fail``, ``fail_message``: a condition on the call's result; when it fails the agent stops
+  and answers ``fail_message``, unless ``on_fail`` is ``continue``.
+- ``then: stop`` with ``then_message``: the call is the agent's last; it answers ``then_message``.
+- ``on_error: continue``: an error result does not stop the agent.
+
+Values in ``set`` and ``args`` are ``$slot`` (a context slot), ``=expr`` (a Python-like expression over the
+slots and earlier results) or a literal. Nothing evaluates these expressions: the model reads them, rewritten
+as plain text where that helps (``_plain``)."""
 
 import hashlib
+import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -18,15 +35,12 @@ _PROC = re.compile(r"## Procedure\s*```yaml\n(.*?)```", re.DOTALL)
 
 @dataclass
 class Skill:
-    """One parsed skill: what its front matter declares, its full markdown text and its procedure."""
+    """One parsed skill: its name and version from the front matter, its full markdown text and its procedure."""
 
     name: str
     version: str  # from the front matter, always kept as a string ("0" when it is missing)
-    description: str
-    tools: list[str]  # tools the skill says it uses; what an agent may call is set by its own definition
-    text: str  # full markdown (for the LLM backend)
+    text: str  # full markdown, front matter included; the LLM backend puts it in the prompt
     procedure: list[dict] = field(default_factory=list)  # one dict per step, include steps not yet expanded
-    path: str = ""  # the SKILL.md it was read from; empty when no path was given
 
     @property
     def digest(self) -> str:
@@ -49,14 +63,10 @@ class SkillLoader:
         self.tracer = tracer  # receives a "skill.load" event per load; None turns the recording off
         self._cache: dict[str, Skill] = {}  # skill name -> parsed Skill, so each file is read only once
 
-    def available(self) -> list[str]:
-        """Names of all skills on disk (the folders that contain a SKILL.md), sorted."""
-        return sorted(p.parent.name for p in self.skills_dir.glob("*/SKILL.md"))
-
-    def load(self, name: str, record: bool = True) -> Skill:
-        """Return the skill called ``name``, parsing its file on first use. Each call with ``record`` set
-        is reported as a ``skill.load`` event, also when the skill comes from the cache. Raises
-        FileNotFoundError for a skill that does not exist."""
+    def load(self, name: str) -> Skill:
+        """Return the skill called ``name``, parsing its file on first use. Each call is reported as a
+        ``skill.load`` event, also when the skill comes from the cache. Raises FileNotFoundError for a skill
+        that does not exist."""
         # First use: read and parse the file, then keep the result.
         if name not in self._cache:
             path = self.skills_dir / name / "SKILL.md"
@@ -65,7 +75,7 @@ class SkillLoader:
             self._cache[name] = parse_skill(path.read_text(), path=str(path))
         # Report the use; in the trace it makes this skill, at this version, a dependency of the run.
         skill = self._cache[name]
-        if record and self.tracer is not None:
+        if self.tracer is not None:
             self.tracer.event(
                 "skill.load", skill=skill.name, version=skill.version, digest=skill.digest, tokens=skill.token_estimate
             )
@@ -95,11 +105,131 @@ class SkillLoader:
         return steps
 
 
+# The paragraph above every rendered procedure: how to read the notation of the numbered steps below it.
+PROCEDURE_INTRO = (
+    "Follow these steps in order, one tool call at a time. <name> is the value `name` from the request "
+    "context, or the value an earlier step set. `fetch.path` is the field `path` in the result of the step "
+    "whose result is called `fetch`. Text in {braces} is filled in from those values. If a call returns an "
+    "error, stop and tell the user what failed."
+)
+
+# A runtime setting read inside a procedure expression: config('publishing.require_review').
+_CONFIG = re.compile(r"config\('([^']+)'\)")
+
+
+def _plain(expr, config, template: bool = False) -> str:
+    """An expression of a procedure, written for a reader: settings with their current value, context slots
+    as <name> (bare names inside a message template), ``result.x`` as ``x``, ``last.`` (the result of the
+    step's own call) dropped, and ``intent == 'x'`` as "the intent is `x`" (the agent's intents are listed
+    in its prompt). Conditions are spelled out: a slot alone as "<name> is given and true", ``not x`` as "x is false"
+    and ``len(x) > n`` as "x has more than n characters"."""
+    text = str(expr)
+
+    def setting(m):  # config('key') -> "key (value)", or just the value inside a message
+        # Read through Config.get, so the trace records that the prompt, and so the run, depends on it.
+        value = json.dumps(config.get(m.group(1)))
+        return value if template else f"{m.group(1)} ({value})"
+
+    text = _CONFIG.sub(setting, text)
+    if not template:  # a bare "If <request_review>:" reads as an order to request one
+        text = re.sub(r"^ctx\.get\('(\w+)'\)$", r"<\1> is given and true", text)
+    # Presence checks on a slot come before the general slot rewrite below, which would take the ctx.get() away.
+    text = re.sub(r"ctx\.get\('(\w+)'\) is not None", r"<\1> is given", text)
+    text = re.sub(r"ctx\.get\('(\w+)'\) is None", r"<\1> is not given", text)
+    # Any other slot reference, ctx.get('x') or ctx['x']: <x>, or the bare x inside a message template, where the
+    # braces already mark it as a value.
+    slot = (lambda m: m.group(1) or m.group(2)) if template else (lambda m: f"<{m.group(1) or m.group(2)}>")
+    text = re.sub(r"ctx(?:\.get\('(\w+)'\)|\['(\w+)'\])", slot, text)
+    text = re.sub(r"intent == '(\w+)'", r"the intent is `\1`", text)
+    # [b['link'] for b in last.broken] -> "the link of each entry in broken"
+    text = re.sub(r"\[(\w+)\['(\w+)'\] for \1 in ([\w.]+)\]", r"the \2 of each entry in \3", text)
+    text = re.sub(r"\bresult\.", "", text)
+    text = re.sub(r"\blast\.", "", text)
+    if not template:
+        # "not fetch.review_approved" -> "fetch.review_approved is false"; the look-behind leaves "is not None"
+        # alone, which the lines above already rewrote.
+        text = re.sub(r"(?<!is )\bnot ([\w.]+)", r"\1 is false", text)
+        # "len(<seo_title>) > seo.max_title_length (60)" -> "<seo_title> has more than ... characters"; the
+        # optional group keeps a setting's "(value)" that the first rewrite added.
+        text = re.sub(r"len\((<\w+>)\) > ([\w.]+(?: \([^()]*\))?)", r"\1 has more than \2 characters", text)
+    return text
+
+
+def _template(message: str, config) -> str:
+    """A message template with every ``{expression}`` written for a reader; a placeholder that is only a
+    setting becomes the setting's value."""
+
+    def placeholder(m):
+        """One ``{...}``: a placeholder that is only a setting becomes its value; any other stays in braces."""
+        if _CONFIG.fullmatch(m.group(1).strip()):
+            return _plain(m.group(1).strip(), config, template=True)
+        return "{" + _plain(m.group(1), config, template=True) + "}"
+
+    return re.sub(r"\{([^{}]+)\}", placeholder, message)
+
+
+def _value(value, config) -> str:
+    """An argument or slot value: ``$slot`` as <slot>, ``=expr`` as the expression, anything else as JSON."""
+    if isinstance(value, str) and value.startswith("$"):
+        return f"<{value[1:]}>"
+    if isinstance(value, str) and value.startswith("="):
+        return _plain(value[1:], config)
+    return json.dumps(value)
+
+
+def _answer(message: str | None, config) -> str:
+    """How a step that stops the agent tells the user: its message template, or an explanation."""
+    return f'answer: "{_template(message, config)}"' if message else "tell the user why."
+
+
+def render_procedure(steps: list[dict], config) -> str:
+    """The expanded steps of a procedure (``SkillLoader.expand``) as numbered sentences for a model: the
+    workflow, with every setting it reads shown with its value from ``config``. The step keys are listed in
+    the module docstring."""
+    lines = []
+    for step in steps:
+        if "set" in step:  # the agent notes a value for later steps
+            text = "; ".join(f"{k} = {_value(v, config)}" for k, v in step["set"].items()) + "."
+        elif "say" in step:  # the final answer
+            text = f'Answer: "{_template(step["say"], config)}" This ends your work.'
+        elif "route" in step:  # the orchestrator's hand-off
+            text = "Hand the request to the specialist that owns it, with `route_to_agent`."
+        elif "call" in step:
+            # A tool call with its arguments, then what the step attaches to it: a condition on the result, a stop
+            # after the call, and whether an error stops the agent.
+            args = ", ".join(f"{k}={_value(v, config)}" for k, v in (step.get("args") or {}).items())
+            text = f"Call `{step['call']}`" + (f" with {args}" if args else "") + "."
+            # A condition on the result that stops the agent when it fails (unless on_fail says to go on).
+            if "require" in step and not str(step.get("on_fail", "")).startswith("continue"):
+                text += f" Go on only if {_plain(step['require'], config)}; otherwise stop and "
+                text += _answer(step.get("fail_message"), config)
+            # A call after which the agent is done.
+            if str(step.get("then", "")).startswith("stop"):
+                text += " Then stop and " + _answer(step.get("then_message"), config)
+            if step.get("on_error") == "continue":
+                text += " If the call fails, go on."
+        else:
+            continue
+        # Later steps refer to a result by the step's id ("fetch.path").
+        if "id" in step and ("call" in step or "route" in step):
+            text += f" Its result is called `{step['id']}`."
+        # A guarded step: "If <condition>: call ...".
+        if "when" in step:
+            text = f"If {_plain(step['when'], config)}: {text[0].lower()}{text[1:]}"
+        lines.append(f"{len(lines) + 1}. {text}")
+    return PROCEDURE_INTRO + "\n\n" + "\n".join(lines)
+
+
+def replace_procedure(text: str, replacement: str) -> str:
+    """``text`` (a SKILL.md) with its ``## Procedure`` block replaced by ``replacement``, a markdown body."""
+    return _PROC.sub(lambda m: "## Procedure\n" + replacement.rstrip() + "\n", text, count=1)
+
+
 def parse_skill(text: str, path: str = "") -> Skill:
-    """Parse the text of a SKILL.md into a Skill. The front matter gives name, version, description and
-    tools; the ``## Procedure`` block gives the steps. Both are optional: without a name the skill is
-    named after the folder that holds the file at ``path`` (or "unknown" when there is no path), and
-    without a procedure it has no steps."""
+    """Parse the text of a SKILL.md into a Skill. The front matter gives name and version; the
+    ``## Procedure`` block gives the steps. Both are optional: without a name the skill is named after
+    the folder that holds the file at ``path`` (or "unknown" when there is no path), and without a
+    procedure it has no steps."""
     # The front matter at the top of the file, if there is one.
     m = _FRONT.match(text)
     meta = yaml.safe_load(m.group(1)) if m else {}
@@ -110,9 +240,6 @@ def parse_skill(text: str, path: str = "") -> Skill:
     return Skill(
         name=meta.get("name", Path(path).parent.name if path else "unknown"),
         version=str(meta.get("version", "0")),
-        description=meta.get("description", ""),
-        tools=list(meta.get("tools", [])),
         text=text,
         procedure=procedure or [],
-        path=path,
     )

@@ -12,7 +12,7 @@ flowchart TB
     subgraph SUT["Application under test: traceeval/sut/"]
         direction LR
         AG["agents<br/>YAML definitions"] --> SK["skills<br/>each with a Procedure"] --> RT["runtime<br/>agent loop"] --> DI["dispatcher<br/>gate, retry, faults, trace"] --> TO["tools<br/>thin adapters"] --> SV["services<br/>business logic"] --> ST["state<br/>fixture + audit"]
-        BE["backend: simulated or LLM"] -.-> RT
+        BE["backend: a model or its recorded answers"] -.-> RT
         CF["config/runtime.yaml"] -.-> DI
     end
     SEL -->|"baseline traces + change sets"| TESTBED

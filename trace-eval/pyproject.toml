@@ -9,7 +9,7 @@ description = "TRACE-Eval: change-aware, cost-bounded regression test selection 
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "Ciprian Paduraru" }]
+authors = [{ name = "University of Bucharest / ILDS" }]
 dependencies = [
     "pyyaml>=6.0",
     "numpy>=1.26",
@@ -19,8 +19,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+hf = ["torch>=2.6", "transformers>=5.5", "accelerate>=1.0"]  # the local default model (Gemma 4 E4B)
 llm = ["openai>=1.30"]
-otel = ["opentelemetry-sdk>=1.25"]
 ml = ["scikit-learn>=1.4"]
 sdd = ["hypothesis>=6.100", "z3-solver>=4.12"]
 dev = ["pytest>=8.0", "hypothesis>=6.100", "z3-solver>=4.12"]

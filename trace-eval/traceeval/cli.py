@@ -2,13 +2,26 @@
 
 traceeval catalog                         list eval cases
 traceeval mutations                       list controlled changes
-traceeval run --test PUB-01 [--backend llm]   run one case live and print the trace summary
-traceeval baseline --workdir runs/exp1 --reps 3
-traceeval mutants  --workdir runs/exp1 --reps 3 [--only id ...]
-traceeval evaluate --workdir runs/exp1 --seeds 10
-traceeval report   --workdir runs/exp1
-traceeval experiment --workdir runs/exp1   (baseline + mutants + evaluate + report)
-traceeval sdd --workdir runs/sdd [--specs FS-0101 ...] [--out docs/sdd]   spec-driven development demo
+traceeval run --test PUB-01 [--backend hf|vllm|llm|replay] [--otel trace.json]   run one case, print the record
+    hf: Gemma on the local GPU; vllm: Gemma on the GPU server (scripts/gpu_remote.sh up gemma); llm: Qwen on
+    the GPU server (scripts/gpu_remote.sh up qwen), or any OpenAI-compatible endpoint (TRACEEVAL_LLM_*);
+    replay: Gemma's recorded answers, no model
+    (TRACEEVAL_CACHE names the file of recorded answers; with hf or vllm, new answers are added to it)
+    TRACEEVAL_JUDGE=gemma|qwen picks the model that judges the cases with a rubric (default: the agents' model)
+    --otel also writes the run's trace as OpenTelemetry spans, in OTLP JSON (agents, tools, model calls, skills;
+    plan, routing, approvals and consulted agents as span events)
+traceeval baseline --workdir runs/gemma7 --reps 5
+traceeval mutants  --workdir runs/gemma7 --reps 5 [--only id ...]
+traceeval evaluate --workdir runs/gemma7 --seeds 10
+traceeval report   --workdir runs/gemma7
+traceeval experiment --workdir runs/gemma7   (baseline + mutants + evaluate + report)
+traceeval check <mutation id | changed copy of traceeval/sut> --history runs/gemma7 [--budget 0.2] [--backend vllm]
+    check one change live with the proposed method; --history is an experiment recorded with the same model;
+    prints the verdict and the change coverage
+traceeval properties draft [--max 15] [--per-test 5] [--fresh] [--replay a.json] [--save-response a.json]
+    a model (Qwen, the llm backend) drafts the catalog of properties from the requirements and tags the tests
+traceeval properties apply   write properties.yaml and the tests' tags from the reviewed draft
+traceeval sdd --workdir runs/sdd [--specs FS-0101 ...] [--out docs/sdd] [--backend replay]   spec-driven demo
 traceeval sdd draft --request request.md --id FS-0106 [--replay answer.json]   draft a spec with an LLM
 """
 
@@ -17,8 +30,15 @@ import json
 import sys
 from pathlib import Path
 
+BACKENDS = ["hf", "vllm", "llm", "replay"]
+
+# Each command imports what it needs when it runs, so that a quick one (catalog, mutations) does not load
+# pandas, coverage or the model libraries.
+
 
 def _parse_overrides(items):
+    """The ``--set key=value`` options as a dict. A value that starts like JSON (a number, list, object, quoted
+    string, true, false or null) is read as JSON; any other value is kept as text."""
     out = {}
     for item in items or []:
         key, _, value = item.partition("=")
@@ -27,51 +47,67 @@ def _parse_overrides(items):
 
 
 def cmd_catalog(args):
+    """One line per eval case: id, risk, entry agent, workflow, fault profile and name."""
     from traceeval.catalog import load_catalog
 
     for c in load_catalog():
-        print(f"{c.id:22s} {c.risk:8s} {c.agent:13s} {c.fault_profile:30s} {c.name}")
+        print(f"{c.id:22s} {c.risk:8s} {c.agent:13s} {c.workflow or '':4s} {c.fault_profile:30s} {c.name}")
 
 
 def cmd_mutations(args):
-    from traceeval.mutation import MUTATIONS
+    """One line per controlled change (id, category, regression or benign, what it does), then the batches."""
+    from traceeval.mutation.catalog import BATCHES, MUTATIONS
 
     for m in MUTATIONS:
         print(f"{m.id:40s} {m.category:9s} {'regression' if m.expected_regression else 'benign    '} {m.description}")
+    print()
+    for m in BATCHES:  # recorded on request only: traceeval mutants --only <batch>
+        label = "regression" if m.expected_regression else "benign    "
+        print(f"{m.id:40s} {m.category:9s} {label} {m.description} Members: {', '.join(m.members)}.")
 
 
 def cmd_run(args):
+    """Run one case, live or from the recorded answers, and print its record; ``--otel`` also exports its trace."""
     from traceeval.catalog import load_catalog
     from traceeval.experiment.executor import run_case
     from traceeval.experiment.sutloader import load_sut
     from traceeval.sut import SUT_ROOT
 
-    cases = {c.id: c for c in load_catalog()}
-    case = cases[args.test]
+    case = {c.id: c for c in load_catalog()}[args.test]
     sut = load_sut(Path(args.sut_dir) if args.sut_dir else SUT_ROOT)
-    settings = None
-    if args.backend == "llm":
-        from traceeval.sut.harness.backends.llm_openai import LLMSettings
+    # With --backend llm the endpoint and model are the backend's defaults (Qwen, or TRACEEVAL_LLM_*). An export
+    # needs the trace's events, which keep_state adds to the record.
+    overrides = _parse_overrides(args.set)
+    rec = run_case(sut, case, backend=args.backend, config_overrides=overrides, keep_state=bool(args.otel))
+    # The observed dependencies, covered functions, states and events are long, left out of the printout.
+    hidden = ("deps", "code_functions", "initial_state", "final_state", "events")
+    print(json.dumps({k: v for k, v in rec.items() if k not in hidden}, indent=1, default=str))
+    if args.otel:
+        from traceeval.tracing.otel import write_otlp
 
-        settings = LLMSettings()
-    rec = run_case(sut, case, backend=args.backend, config_overrides=_parse_overrides(args.set), llm_settings=settings)
-    keep = {k: v for k, v in rec.items() if k not in ("deps", "code_functions")}
-    print(json.dumps(keep, indent=1, default=str))
+        print(f"OpenTelemetry trace (OTLP JSON): {write_otlp(args.otel, rec)}", file=sys.stderr)
 
 
 def cmd_baseline(args):
+    """Record the baseline: every case ``--reps`` times on the unchanged application, with its code coverage."""
     from traceeval.experiment.runner import record_baseline
 
+    # No --workers here: the baseline records code coverage, which follows one case at a time.
     record_baseline(
         Path(args.workdir),
         reps=args.reps,
         backend=args.backend,
         config_overrides=_parse_overrides(args.set),
-        seed=args.seed,
     )
 
 
+def _workers(args) -> int:
+    """Cases run in parallel: as many as asked, or by default 32 for a served model and 1 otherwise."""
+    return args.workers or (32 if args.backend in ("vllm", "llm") else 1)
+
+
 def cmd_mutants(args):
+    """Record the variants: each controlled change (or those of ``--only``) applied to a copy, every case run on it."""
     from traceeval.experiment.runner import record_mutants
 
     record_mutants(
@@ -80,20 +116,23 @@ def cmd_mutants(args):
         reps=args.reps,
         backend=args.backend,
         config_overrides=_parse_overrides(args.set),
-        seed=args.seed,
+        workers=_workers(args),
     )
 
 
 def cmd_evaluate(args):
+    """Replay every strategy against the recording: a selection at each budget, and a ranking of the whole suite."""
     from traceeval.experiment.evaluate import DEFAULT_BUDGETS, evaluate, evaluate_prioritization
 
     budgets = tuple(args.budgets) if args.budgets else DEFAULT_BUDGETS
     df = evaluate(Path(args.workdir), strategies=args.strategies or None, budgets=budgets, seeds=args.seeds)
+    # Prioritization (APFD over each strategy's complete order) replays with a third of the seeds.
     pr = evaluate_prioritization(Path(args.workdir), strategies=args.strategies or None, seeds=max(1, args.seeds // 3))
     print(f"replay rows: {len(df)}, prioritization rows: {len(pr)} -> {Path(args.workdir) / 'results'}")
 
 
 def cmd_report(args):
+    """Write the experiment's report and figures from the results in the workdir."""
     from traceeval.experiment.report import write_report
 
     out = write_report(Path(args.workdir))
@@ -101,21 +140,64 @@ def cmd_report(args):
 
 
 def cmd_experiment(args):
+    """The whole experiment in a row: baseline, variants, evaluation, report."""
     cmd_baseline(args)
     cmd_mutants(args)
     cmd_evaluate(args)
     cmd_report(args)
 
 
+def cmd_check(args):
+    """The prototype: one change checked live with the proposed method, against a recorded experiment."""
+    from traceeval.experiment.check import check
+
+    check(args.change, Path(args.history), args.budget, args.backend)
+
+
+def cmd_coverage(args):
+    """Print what the suite covers, per dimension and component, from a recorded experiment."""
+    from traceeval.experiment.history import History
+    from traceeval.experiment.report import suite_coverage_lines
+    from traceeval.sut import SUT_ROOT
+
+    print("\n".join(suite_coverage_lines(History.load(Path(args.history)), SUT_ROOT)))
+
+
+def cmd_properties(args):
+    """Draft the catalog of properties with a model, or apply the draft once a person has reviewed it."""
+    from traceeval.catalog import extract
+
+    if args.action == "apply":
+        print(extract.apply())
+        return
+    result = extract.draft(
+        max_properties=args.max,
+        per_test=args.per_test,
+        fresh=args.fresh,
+        replay=Path(args.replay) if args.replay else None,
+        save_response=Path(args.save_response) if args.save_response else None,
+    )
+    print(f"draft: {result['draft']}\nreport: {result['report']}")
+    print(f"{len(result['properties'])} properties, {len(result['tags'])} tests tagged, {len(result['notes'])} notes")
+
+
 def cmd_sdd(args):
+    """The spec-driven development demo over the demo PRs; ``draft`` instead drafts a new spec with a model."""
     from traceeval.spec.runner import run_demo
 
     if args.action == "draft":
         return cmd_sdd_draft(args)
-    run_demo(Path(args.workdir), spec_ids=args.specs or None, out=Path(args.out) if args.out else None)
+    run_demo(
+        Path(args.workdir),
+        spec_ids=args.specs or None,
+        out=Path(args.out) if args.out else None,
+        backend=args.backend,
+        workers=_workers(args),
+    )
 
 
 def cmd_sdd_draft(args):
+    """Draft a spec from a change request with a model, and validate it against the application's names."""
     from traceeval.catalog import load_catalog
     from traceeval.spec.draft import draft
     from traceeval.spec.product import ProductModel
@@ -124,7 +206,9 @@ def cmd_sdd_draft(args):
     if not args.request:
         raise SystemExit("sdd draft needs --request <file>")
     catalog = {c.id: c for c in load_catalog()}
-    sut_dir, runs, deps = record_baseline(Path(args.workdir), catalog)
+    # The product model (tools, settings, functions, cases the draft may name) comes from a baseline recording;
+    # the default replay backend gives one without a model.
+    sut_dir, runs, deps = record_baseline(Path(args.workdir), catalog, backend=args.backend)
     out = Path(args.out) if args.out else Path("openspec/specs") / args.id.lower() / "spec.draft.md"
     result = draft(
         Path(args.request),
@@ -141,6 +225,7 @@ def cmd_sdd_draft(args):
 
 
 def main(argv=None):
+    """Parse the command line and run the command it names."""
     p = argparse.ArgumentParser(
         prog="traceeval", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -151,19 +236,21 @@ def main(argv=None):
 
     r = sub.add_parser("run")
     r.add_argument("--test", required=True)
-    r.add_argument("--backend", default="simulated", choices=["simulated", "llm"])
+    r.add_argument("--backend", default="hf", choices=BACKENDS)
     r.add_argument("--sut-dir", default=None)
     r.add_argument("--set", action="append", help="config override key=value (JSON value)")
+    r.add_argument("--otel", metavar="PATH", help="write the run's trace as OpenTelemetry spans (OTLP JSON) to PATH")
     r.set_defaults(fn=cmd_run)
 
+    # The experiment commands share one set of options, since `experiment` runs the other four in a row; each
+    # command reads only the options it needs.
     def common(sp):
-        sp.add_argument("--workdir", default="runs/exp1")
+        """The options every experiment command takes."""
+        sp.add_argument("--workdir", default="runs/experiment")
         sp.add_argument("--reps", type=int, default=3)
-        sp.add_argument("--backend", default="simulated", choices=["simulated", "llm"])
-        sp.add_argument(
-            "--set", action="append", help="config override key=value (JSON value), e.g. simulated.flakiness=0.05"
-        )
-        sp.add_argument("--seed", type=int, default=0)
+        sp.add_argument("--backend", default="hf", choices=BACKENDS)
+        sp.add_argument("--workers", type=int, default=0, help="cases in parallel (default: 32 for vllm/llm, else 1)")
+        sp.add_argument("--set", action="append", help="config override key=value (JSON value), e.g. runtime.retries=0")
         sp.add_argument("--only", nargs="*", help="mutation ids (mutants only)")
         sp.add_argument("--seeds", type=int, default=5, help="replay seeds (evaluate only)")
         sp.add_argument("--budgets", nargs="*", type=float)
@@ -180,6 +267,26 @@ def main(argv=None):
         common(sp)
         sp.set_defaults(fn=fn)
 
+    ck = sub.add_parser("check")
+    ck.add_argument("change", help="a mutation id (see traceeval mutations) or a changed copy of traceeval/sut")
+    ck.add_argument("--history", required=True, help="an experiment recorded with the same model, e.g. runs/gemma7")
+    ck.add_argument("--budget", type=float, default=0.2, help="at most this fraction of the full suite's tokens")
+    ck.add_argument("--backend", default="vllm", choices=BACKENDS, help="who plays the agents (default: vllm, Gemma)")
+    ck.set_defaults(fn=cmd_check)
+
+    cv = sub.add_parser("coverage")
+    cv.add_argument("--history", required=True, help="a recorded experiment, e.g. runs/gemma7")
+    cv.set_defaults(fn=cmd_coverage)
+
+    pp = sub.add_parser("properties")
+    pp.add_argument("action", choices=["draft", "apply"])
+    pp.add_argument("--max", type=int, default=15, help="at most this many properties in the catalog (1-20)")
+    pp.add_argument("--per-test", type=int, default=5, help="at most this many properties per test")
+    pp.add_argument("--fresh", action="store_true", help="derive the catalog anew instead of keeping properties.yaml")
+    pp.add_argument("--replay", help="saved model answers to use instead of calling the model")
+    pp.add_argument("--save-response", help="save the model's answers here, for --replay")
+    pp.set_defaults(fn=cmd_properties)
+
     sd = sub.add_parser("sdd")
     sd.add_argument("action", nargs="?", default="run", choices=["run", "draft"])
     sd.add_argument("--workdir", default="runs/sdd")
@@ -189,6 +296,8 @@ def main(argv=None):
     sd.add_argument("--id", default="FS-0106", help="draft: id of the new spec")
     sd.add_argument("--replay", help="draft: a saved model answer to use instead of calling the endpoint")
     sd.add_argument("--save-response", help="draft: save the model's answer here for later --replay")
+    sd.add_argument("--backend", default="replay", choices=BACKENDS, help="who plays the agents (default: replay)")
+    sd.add_argument("--workers", type=int, default=0, help="cases in parallel (default: 32 for vllm/llm, else 1)")
     sd.set_defaults(fn=cmd_sdd)
 
     args = p.parse_args(argv)

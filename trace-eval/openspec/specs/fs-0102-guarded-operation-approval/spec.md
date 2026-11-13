@@ -50,25 +50,25 @@ with:
 #### Scenario: Every successful guarded call records the token's owner
 
 - **WHEN** a call of `unpublish_page`, `export_user_data` or `approve_review` succeeds
-- **THEN** `approved_by` on the call is set and is the owner of the request's approval token
+- **THEN** `approved_by` on the call is set and is the owner of the approval token the call was made with
 
 ```yaml clause
 use: always_on_calls
 with:
   tools: [unpublish_page, export_user_data, approve_review]
-  where: event.approved_by is not None and event.approved_by == token_owner(run, run.context.approval_token)
+  where: event.approved_by is not None and event.approved_by == token_owner(run, call_token(run, event))
 ```
 
 #### Scenario: No guarded call succeeds without a token owner
 
 - **WHEN** any call of `unpublish_page`, `export_user_data` or `approve_review` is made
-- **THEN** it never has the status ok while the request's approval token has no owner
+- **THEN** it never has the status ok while the approval token it was made with has no owner
 
 ```yaml clause
 use: never_on_calls
 with:
   tools: [unpublish_page, export_user_data, approve_review]
-  where: event.status == 'ok' and token_owner(run, run.context.approval_token) is None
+  where: event.status == 'ok' and token_owner(run, call_token(run, event)) is None
 ```
 
 #### Scenario: A valid token unpublishes and names the approver

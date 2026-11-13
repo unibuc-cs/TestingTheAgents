@@ -22,6 +22,17 @@ def upload_asset(ctx: ToolContext, name: str, folder: str, mime: str):
     )
 
 
+@tool(
+    "search_assets",
+    "read",
+    "Search the DAM by words in an asset's name, folder, tags or description.",
+    {"query": "words to search for, e.g. 'spring hero'"},
+)
+def search_assets(ctx: ToolContext, query: str):
+    """Search the assets through the repository service; each match has its id, name, tags and licence."""
+    return repository.search_assets(ctx.state, query)
+
+
 @tool("get_asset", "read", "Fetch an asset's metadata.", {"asset_id": "asset identifier"})
 def get_asset(ctx: ToolContext, asset_id: str):
     """Return an asset's record (name, folder, MIME type, uploader) and its id, from the repository service.

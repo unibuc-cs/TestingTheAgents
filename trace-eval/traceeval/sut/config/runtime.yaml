@@ -1,15 +1,16 @@
 # Runtime configuration of the ContentOps agent platform.
 runtime:
-  max_tool_calls: 12          # hard step budget per request (all agents in the delegation chain)
-  retries: 2                  # retries on transient tool failures
-  idempotency_keys: true      # write tools are retried with an idempotency key
+  max_tool_calls: 12          # step budget of each agent (its own tool calls and delegations)
+  max_run_tool_calls: 40      # step budget of the whole request (all agents together)
+  retries: 2                 # retries on transient tool failures
+  idempotency_keys: true      # reuse the same key on write retries to prevent duplicate actions
 
 tools:
   disabled: []                # tools removed from every agent (feature flags / incidents)
   requires_approval: [approve_review, export_user_data, unpublish_page]
 
 routing:
-  default_agent: authoring    # specialist used when no trigger matches
+  default_agent: authoring    # specialist for requests that no specialist owns
 
 publishing:
   require_review: true        # pages need an approved review before publishing
@@ -22,5 +23,5 @@ seo:
 translation:
   default_locales: [de-DE, fr-FR]
 
-simulated:
-  flakiness: 0.0              # probability that the simulated agent slips on a slot (emulates LLM noise)
+optimizer:
+  max_load_ms: 3000           # a page that loads slower than this is reported as slow

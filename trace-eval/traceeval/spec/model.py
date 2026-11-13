@@ -11,7 +11,7 @@ clause is normally written against the catalog (``catalog.yaml``)::
     require: L4            # optional; the template has a default
     ```
 
-Only the heading, the owner, the purpose and the fenced clauses are read; the WHEN/THEN prose is for people.
+Only the heading, the purpose and the fenced clauses are read; the owner and the WHEN/THEN prose are for people.
 ``load_spec`` expands a clause into the fields the checker of that kind understands, generates its id
 (``<template>:<first slot value>``) and its one-line text (the template's gloss). A clause may also be
 written in expanded form (``kind: ...`` plus the checker fields), which is what the catalog produces.
@@ -41,9 +41,13 @@ RUNG_LABEL = {
 }
 RUNG_ORDER = {r: i for i, r in enumerate(RUNG_LABEL)}
 
+# Audit-log actions accepted where a tool name is expected: the audit-stream templates name actions in their
+# `actions` slot, and some actions (publish_refused, approval_used) are not tools.
+_AUDIT_ONLY_ACTIONS = {"validate_links", "publish_refused", "approval_used"}
 
-def load_catalog(path: Path | str = CATALOG_PATH) -> dict:
-    return yaml.safe_load(Path(path).read_text())
+
+def load_catalog() -> dict:
+    return yaml.safe_load(CATALOG_PATH.read_text())
 
 
 @dataclass
@@ -56,6 +60,7 @@ class Clause:
     template: str | None = None  # catalog template it was expanded from
     slots: dict = field(default_factory=dict)  # the slot values as written (for validation and rendering)
 
+    # checkers read the kind-specific fields straight off the clause: clause["key"], clause.get("scope")
     def __getitem__(self, key):
         return self.data[key]
 
@@ -69,14 +74,7 @@ class Spec:
     title: str
     intent: str
     clauses: list[Clause]
-    owner: str = ""
-    path: Path | None = None
-
-    def clause(self, cid: str) -> Clause:
-        for c in self.clauses:
-            if c.id == cid:
-                return c
-        raise KeyError(cid)
+    path: Path | None = None  # the spec.md file
 
 
 @dataclass
@@ -84,11 +82,11 @@ class ClauseResult:
     clause_id: str
     kind: str
     rung: str  # rung reached (pass) or attempted (fail)
-    status: str  # pass | fail | gap | skipped
+    status: str  # pass | fail | gap
     summary: str
     details: list[str] = field(default_factory=list)
     cost: dict = field(default_factory=dict)  # runs, examples, seconds
-    required: str = "L1"
+    required: str = "L1"  # set from the clause by runner.evaluate_pr
 
     @property
     def meets_required(self) -> bool:
@@ -120,7 +118,7 @@ def expand_clause(raw: dict, catalog: dict) -> Clause:
     if missing or unknown:
         raise ValueError(f"template {name}: missing slots {missing}, unknown slots {unknown}")
     data = _prune(_substitute(t["clause"], given))
-    first = given.get(next(iter(t["slots"])))
+    first = given.get(next(iter(t["slots"])))  # the first slot names the clause: "<template>:<value>"
     cid = raw.get("id") or f"{name}:{_short(first)}"
     text = raw.get("text") or _gloss(t["gloss"], given)
     return Clause(cid, t["kind"], text, data, raw.get("require", t.get("require", "L1")), name, given)
@@ -150,10 +148,11 @@ def _prune(node):
 
 
 def _render(value) -> str:
+    """A slot value as it reads in a gloss or in a string that embeds it."""
     if isinstance(value, list):
         return ", ".join(_render(v) for v in value)
     if isinstance(value, dict):
-        if "request" in value:
+        if "request" in value:  # an inline case reads as its request
             return repr(value["request"])
         if len(value) == 1:
             ((k, v),) = value.items()
@@ -163,6 +162,7 @@ def _render(value) -> str:
 
 
 def _short(value) -> str:
+    """The id suffix for a slot value: the first words of an inline request, the bare name of a function."""
     if isinstance(value, dict):
         words = str(value.get("request", "inline")).lower().split()[:4]
         return "-".join("".join(ch for ch in w if ch.isalnum()) for w in words)
@@ -173,7 +173,7 @@ def _short(value) -> str:
 
 
 def _gloss(gloss: str, slots: dict) -> str:
-    class Default(dict):
+    class Default(dict):  # an optional slot left out reads as "-"
         def __missing__(self, key):
             return "-"
 
@@ -182,7 +182,6 @@ def _gloss(gloss: str, slots: dict) -> str:
 
 # ---------------------------------------------------------------------------- loading
 _HEADING = re.compile(r"^# (\S+): (.+)$", re.M)
-_OWNER = re.compile(r"^\*\*Owner:\*\* *(.+)$", re.M)
 _PURPOSE = re.compile(r"^## Purpose$(.*?)(?=^## |\Z)", re.M | re.S)
 _SCENARIO = re.compile(r"^#### Scenario:.*$", re.M)
 _CLAUSE = re.compile(r"^```yaml clause$(.*?)^```$", re.M | re.S)
@@ -198,30 +197,35 @@ def _clause_blocks(text: str) -> list[dict]:
     return [yaml.safe_load(_CLAUSE.search(s).group(1)) for s in scenarios]
 
 
+def number_duplicates(clauses: list[Clause]) -> list[Clause]:
+    """Two clauses from the same template with the same first slot get the same id: the second becomes <id>#2."""
+    seen: dict[str, int] = {}
+    for c in clauses:
+        seen[c.id] = seen.get(c.id, 0) + 1
+        if seen[c.id] > 1:
+            c.id = f"{c.id}#{seen[c.id]}"
+    return clauses
+
+
 def load_spec(path: Path | str, catalog: dict | None = None) -> Spec:
+    """Load and expand one spec file. The ``**Owner:**`` line and the WHEN/THEN prose are for human readers."""
     path = Path(path)
     catalog = catalog or load_catalog()
     text = path.read_text()
-    heading, purpose, owner = _HEADING.search(text), _PURPOSE.search(text), _OWNER.search(text)
+    heading, purpose = _HEADING.search(text), _PURPOSE.search(text)
     if not heading or not purpose:
         raise ValueError(f"{path}: a spec needs a '# <id>: <title>' heading and a '## Purpose' section")
-    clauses, seen = [], {}
     try:
-        for c in _clause_blocks(text):
-            clause = expand_clause(c, catalog)
-            seen[clause.id] = seen.get(clause.id, 0) + 1
-            if seen[clause.id] > 1:
-                clause.id = f"{clause.id}#{seen[clause.id]}"
-            clauses.append(clause)
+        clauses = [expand_clause(c, catalog) for c in _clause_blocks(text)]
     except ValueError as exc:
         raise ValueError(f"{path}: {exc}") from None
-    return Spec(heading[1], heading[2], purpose[1].strip(), clauses, owner[1] if owner else "", path)
+    return Spec(heading[1], heading[2], purpose[1].strip(), number_duplicates(clauses), path)
 
 
-def load_specs(root: Path | str = SPECS_ROOT, ids: list[str] | None = None) -> list[Spec]:
+def load_specs(ids: list[str] | None = None) -> list[Spec]:
     catalog = load_catalog()
     # fs-* only: the testbed-* capabilities next to them are prose about this repository, with no clauses to check
-    specs = [load_spec(p, catalog) for p in sorted(Path(root).glob("fs-*/spec.md"))]
+    specs = [load_spec(p, catalog) for p in sorted(SPECS_ROOT.glob("fs-*/spec.md"))]
     if ids:
         specs = [s for s in specs if s.id in ids]
     return specs
@@ -240,7 +244,7 @@ def validate_spec(spec: Spec, model, catalog: dict | None = None) -> list[tuple[
         if not c.template:
             continue
         for slot, stype in catalog[c.template]["slots"].items():
-            if slot not in c.slots:
+            if slot not in c.slots:  # an optional slot left out
                 continue
             v = c.slots[slot]
             where = f"{c.id} ({slot})"
@@ -271,14 +275,13 @@ def validate_spec(spec: Spec, model, catalog: dict | None = None) -> list[tuple[
                 for d in v if isinstance(v, list) else [v]:
                     if not any(rel == d or rel.startswith(d.rstrip("/") + "/") for rel in model.files):
                         out.append(("error", f"{where}: {d} matches no file"))
-            elif stype == "expr":
+            elif stype == "expr":  # syntax only: names are resolved when the clause runs
                 try:
                     ast.parse(str(v), mode="eval")
                 except SyntaxError as exc:
                     out.append(("error", f"{where}: expression does not parse ({exc.msg})"))
-            elif stype == "inputs" and not all(t in ("int", "bool", "str") for t in dict(v).values()):
-                out.append(("error", f"{where}: input types must be int, bool or str"))
+            elif stype == "inputs" and (
+                not isinstance(v, dict) or not all(t in ("int", "bool", "str") for t in v.values())
+            ):  # a model may write the inputs as prose ("run, page_id"): an error in the draft, not a crash
+                out.append(("error", f"{where}: inputs must map each name to int, bool or str"))
     return out
-
-
-_AUDIT_ONLY_ACTIONS = {"validate_links", "publish_refused", "approval_used"}

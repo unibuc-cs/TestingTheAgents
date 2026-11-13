@@ -7,7 +7,8 @@
     observed    change-based selection on dependencies observed in baseline traces, risk x affinity / cost
     cost_aware  whole-suite ranking by risk x change-affinity x failure-history / expected tokens
 
-The proposed method lives in ``adaptive_bayes.py``; two optional baselines in ``extras.py``.
+The proposed method lives in ``adaptive_bayes.py``, two published methods reproduced as baselines in
+``reproduced.py``, and two optional baselines in ``extras.py``.
 """
 
 import math
@@ -16,20 +17,34 @@ from collections import defaultdict
 
 from .base import Strategy, affinity, line_hit, weighted_affinity
 
-STRATEGIES: dict[str, Strategy] = {}
-CORE = ["full", "random", "declared", "ir_tfidf", "observed", "cost_aware", "adaptive_bayes"]
+STRATEGIES: dict[str, Strategy] = {}  # name -> instance, filled by @register
+# the default comparison (RESEARCH_PLAN §3); a strategy not listed here runs only with --strategies all
+CORE = [
+    "full",
+    "random",
+    "declared",
+    "ir_tfidf",
+    "observed",
+    "cost_aware",
+    "casper_slices",
+    "risk_aware_ts",
+    "adaptive_bayes",
+]
 
 
 def register(cls):
+    """Class decorator: one instance per strategy, kept in STRATEGIES under its name."""
     STRATEGIES[cls.name] = cls()
     return cls
 
 
 def get_strategy(name: str) -> Strategy:
+    """The registered instance of the strategy called ``name``."""
     return STRATEGIES[name]
 
 
 def tokens(text: str) -> list[str]:
+    """Lower-cased identifier-like words of at least three characters (snake_case and kebab-case kept whole)."""
     return [w for w in re.findall(r"[a-zA-Z_][a-zA-Z0-9_\-]+", text.lower()) if len(w) > 2]
 
 
@@ -41,6 +56,8 @@ def change_text(change) -> str:
 
 @register
 class Full(Strategy):
+    """The whole suite in catalog order: the reference, not a method."""
+
     name = "full"
 
     def order(self, ctx):
@@ -49,6 +66,8 @@ class Full(Strategy):
 
 @register
 class Random(Strategy):
+    """The suite in a random order drawn from the replay seed: the baseline every method must beat."""
+
     name = "random"
     stochastic = True
 
@@ -65,12 +84,42 @@ class Declared(Strategy):
     name = "declared"
 
     def order(self, ctx):
+        """Riskiest first, then the most changed components declared, then the cheapest; the rest is left out."""
         scored = []
         for t in ctx.tests():
+            # how many changed components the author's declared dependencies name
             a = affinity(ctx.change, ctx.catalog[t].declared_components())
             if a > 0:
                 scored.append((-ctx.catalog[t].severity, -a, ctx.cost(t), t))
         return [t for *_, t in sorted(scored)]
+
+
+def tfidf_relevance(ctx) -> dict[str, float]:
+    """TF-IDF cosine similarity between the change text and each test's text (0..1). The words' weights come
+    from the test suite: a word that many tests share counts little."""
+    docs = {t: tokens(ctx.catalog[t].text()) for t in ctx.tests()}
+    # document frequency: in how many tests each word occurs
+    df = defaultdict(int)
+    for toks in docs.values():
+        for w in set(toks):
+            df[w] += 1
+    n = len(docs)
+
+    def vec(toks):  # sublinear tf x smoothed idf
+        tf = defaultdict(int)
+        for w in toks:
+            tf[w] += 1
+        return {w: (1 + math.log(c)) * math.log((n + 1) / (df.get(w, 0) + 1)) for w, c in tf.items()}
+
+    # the change as a query vector, then its cosine with every test's vector
+    q = vec(tokens(change_text(ctx.change)))
+    qn = math.sqrt(sum(v * v for v in q.values())) or 1.0
+    out = {}
+    for t, toks in docs.items():
+        d = vec(toks)
+        dn = math.sqrt(sum(v * v for v in d.values())) or 1.0
+        out[t] = sum(q[w] * d[w] for w in q if w in d) / (qn * dn)
+    return out
 
 
 @register
@@ -80,28 +129,9 @@ class IRTfidf(Strategy):
     name = "ir_tfidf"
 
     def order(self, ctx):
-        docs = {t: tokens(ctx.catalog[t].text()) for t in ctx.tests()}
-        query = tokens(change_text(ctx.change))
-        df = defaultdict(int)
-        for toks in docs.values():
-            for w in set(toks):
-                df[w] += 1
-        n = len(docs)
-
-        def vec(toks):
-            tf = defaultdict(int)
-            for w in toks:
-                tf[w] += 1
-            return {w: (1 + math.log(c)) * math.log((n + 1) / (df.get(w, 0) + 1)) for w, c in tf.items()}
-
-        q = vec(query)
-        qn = math.sqrt(sum(v * v for v in q.values())) or 1.0
-        scored = []
-        for t, toks in docs.items():
-            d = vec(toks)
-            dn = math.sqrt(sum(v * v for v in d.values())) or 1.0
-            scored.append((-sum(q[w] * d[w] for w in q if w in d) / (qn * dn), ctx.cost(t), t))
-        return [t for *_, t in sorted(scored)]
+        """Most similar first, the cheaper among equals; every test is ranked, none left out."""
+        rel = tfidf_relevance(ctx)
+        return sorted(rel, key=lambda t: (-rel[t], ctx.cost(t), t))
 
 
 @register
@@ -112,9 +142,11 @@ class Observed(Strategy):
     name = "observed"
 
     def order(self, ctx):
+        """Affinity x risk per token, highest first; a test whose traces touched nothing changed is left out."""
         scored = []
         for t in ctx.tests():
-            a = weighted_affinity(ctx.change, ctx.history.baseline[t].dep_frequency())
+            # observed affinity: the changed components the test exercised, weighted by how often (coverage)
+            a = weighted_affinity(ctx.change, ctx.history.baseline[t].dep_frequency)
             if a > 0:
                 scored.append((-(a * ctx.catalog[t].severity) / ctx.cost(t), t))
         return [t for _, t in sorted(scored)]
@@ -128,12 +160,16 @@ class CostAware(Strategy):
     name = "cost_aware"
 
     def order(self, ctx):
+        """Every test gets a score, so the ranking is the whole suite with the affected tests on top."""
         scored = []
         for t in ctx.tests():
             st = ctx.history.baseline[t]
-            a = weighted_affinity(ctx.change, st.dep_frequency())
-            if line_hit(ctx.change, set(st.dep_frequency())):
+            # ChangeAffinity: the changed components the test's observed dependencies hold, weighted by how often
+            a = weighted_affinity(ctx.change, st.dep_frequency)
+            if line_hit(ctx.change, st.deps):
                 a += 1.0  # executed a changed line: strongest static evidence
+            # 0.05 keeps unaffected tests in the ranking; 2 - pass_rate is the failure history (1 if the test
+            # always passed at baseline, up to 2)
             score = ctx.catalog[t].severity * (0.05 + a) * (2.0 - st.pass_rate) / ctx.cost(t)
             scored.append((-score, t))
         return [t for _, t in sorted(scored)]

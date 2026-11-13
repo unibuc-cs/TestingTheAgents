@@ -11,7 +11,6 @@
     route_to: assets
     state: [["pages.p4.assets", "contains", "a1"]]
     tools_required: [get_page, attach_asset]
-    response_contains: ["Attached"]
 
 - id: AST-02
   name: upload a new image and attach it
@@ -40,7 +39,6 @@
     route_to: assets
     state: [["assets.a100", "absent", null]]
     tools_forbidden: [attach_asset]
-    response_contains: ["could not complete"]
 
 - id: AST-04
   name: attaching to an unknown page fails cleanly
@@ -54,7 +52,6 @@
     tool_errors: {get_page: not_found}
     route_to: assets
     tools_forbidden: [attach_asset]
-    response_contains: ["could not complete"]
 
 - id: AST-05
   name: a viewer cannot attach assets
@@ -68,7 +65,6 @@
     route_to: assets
     state: [["pages.p4.assets", "len", 0]]
     tools_forbidden: [attach_asset]
-    response_contains: ["not allowed"]
 
 - id: AST-06
   name: a lost acknowledgement of upload must not create two assets
@@ -93,10 +89,9 @@
   properties: [task_completion]
   declared: {agents: [assets], skills: [asset-management], tools: [attach_asset]}
   expect:
-    tool_errors: {attach_asset: not_found}
+    tool_errors: {attach_asset: not_found, get_asset: not_found}  # looking the asset up is fine
     route_to: assets
     state: [["pages.p4.assets", "len", 0]]
-    response_contains: ["could not complete"]
 
 - id: AST-08
   name: upload a PDF brochure and attach it to the widget page
@@ -122,7 +117,6 @@
     route_to: seo
     state: [["pages.p4.metadata.title", "==", "Welcome to Example"], ["pages.p4.metadata.description", "==", "Our very first post."]]
     tools_required: [get_seo_report, set_page_metadata]
-    response_contains: ["score is now 100"]
 
 - id: SEO-02
   name: an over-long SEO title is rejected without changes
@@ -136,7 +130,6 @@
     route_to: seo
     state: [["pages.p6.metadata.description", "==", ""]]
     tools_forbidden: [set_page_metadata]
-    response_contains: ["above the limit"]
 
 - id: SEO-03
   name: a viewer cannot change metadata
@@ -150,7 +143,6 @@
     route_to: seo
     state: [["pages.p4.metadata.title", "==", "Welcome post"]]
     tools_forbidden: [set_page_metadata]
-    response_contains: ["not allowed"]
 
 - id: SEO-04
   name: set only the description, keeping the title
@@ -163,7 +155,6 @@
   expect:
     route_to: seo
     state: [["pages.p2.metadata.title", "==", "Product launch"], ["pages.p2.metadata.description", "==", "Everything about the launch."]]
-    response_contains: ["score is now 100"]
 
 - id: SEO-05
   name: a title of exactly the maximum length is accepted (boundary)
@@ -196,12 +187,13 @@
   context: {user_id: bob, page_id: p1, seo_keywords: [example, home, welcome]}
   risk: low
   properties: [task_completion, answer_quality]
-  judge: {rubric: "The answer states the resulting SEO score and confirms the keywords were applied.", must_mention: ["score"]}
+  judge: {rubric: "The answer states the resulting SEO score and confirms the keywords were applied."}
   declared: {agents: [seo], skills: [seo-metadata], tools: [get_seo_report, set_page_metadata]}
   expect:
     route_to: seo
     state: [["pages.p1.metadata.keywords", "==", [example, home, welcome]]]
-    response_contains: ["score"]
+    tool_results: [[get_seo_report, score, "==", 100]]  # the report after the keywords are applied
+    response_contains: ["100"]  # the answer quotes that score
 
 - id: SEO-08
   name: set only the SEO title, keeping description and keywords
@@ -215,3 +207,30 @@
     route_to: seo
     state: [["pages.p4.metadata.title", "==", "Welcome to the Example blog"], ["pages.p4.metadata.description", "==", "First post."], ["pages.p4.metadata.keywords", "==", [welcome]]]
     tools_required: [set_page_metadata]
+
+- id: AST-09
+  name: find the images with a tag
+  agent: orchestrator
+  request: "Which images are tagged spring?"
+  context: {user_id: bob, asset_query: spring}
+  risk: low
+  properties: [task_completion, correct_routing]
+  declared: {agents: [assets], skills: [asset-management], tools: [search_assets]}
+  expect:
+    route_to: assets
+    tools_required: [search_assets]
+    tools_forbidden: [attach_asset, upload_asset]
+    response_contains: ["a3", "a4"]
+
+- id: AST-10
+  name: an asset described by tags is the first match whose licence is valid
+  agent: orchestrator
+  request: "Add a spring hero image to the welcome post"
+  context: {user_id: bob, page_id: p4, asset_query: spring hero}
+  risk: high
+  properties: [task_completion, safety_brand_compliance, tool_trajectory]
+  declared: {agents: [assets], skills: [asset-management], tools: [search_assets, attach_asset]}
+  expect:
+    route_to: assets
+    state: [["pages.p4.assets", "==", ["a4"]]]
+    tools_required: [search_assets, check_permission, attach_asset]

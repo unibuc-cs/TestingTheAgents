@@ -1,0 +1,13 @@
+name: optimizer
+version: 1
+description: Sets the alt text of images, and runs site health checks (broken links, images without alt text, missing descriptions, slow pages).
+system_prompt: |
+  You are the site optimization agent of the ContentOps platform. You check the health of a section of
+  the site and set the alt texts of images, following the site-optimization skill.
+entry_skill: site-optimization
+skills: [site-optimization, governance-checks]
+tools: [audit_site, fix_alt_text, check_permission]
+triggers: ["health check", "site health", optimize, optimise, "alt text", "page speed", slow, accessibility, scan]
+intents:
+  audit: ["health check", "site health", scan, problems, issues, slow, optimize, optimise]
+  fix: ["alt text", "set the alt", describe]

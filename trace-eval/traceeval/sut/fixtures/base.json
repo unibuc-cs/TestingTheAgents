@@ -392,6 +392,289 @@
       ],
       "translations": {},
       "scheduled_at": null
+    },
+    "p12": {
+      "path": "/content/site/campaigns/winter-sale",
+      "title": "Winter sale",
+      "template": "landing",
+      "body": "Winter sale: 15% off all plans until 31 January. Terms and conditions apply.",
+      "status": "draft",
+      "metadata": {
+        "title": "Winter sale",
+        "description": "Winter sale.",
+        "keywords": [
+          "sale"
+        ]
+      },
+      "links": [],
+      "assets": [
+        "a1"
+      ],
+      "locale": "en-US",
+      "review": {
+        "status": "approved",
+        "reviewer": "carol",
+        "approved_on": "2026-10-20"
+      },
+      "versions": [
+        {
+          "v": 1,
+          "body": "Winter sale: 15% off all plans until 31 January. Terms and conditions apply."
+        }
+      ],
+      "translations": {},
+      "scheduled_at": null
+    },
+    "p13": {
+      "path": "/content/site/products/invest",
+      "title": "Investment plan",
+      "template": "article",
+      "body": "Guaranteed returns on every plan, every year.",
+      "status": "published",
+      "published_at": 3,
+      "metadata": {
+        "title": "Investment plan",
+        "description": "Our investment plan.",
+        "keywords": [
+          "invest"
+        ]
+      },
+      "links": [],
+      "assets": [],
+      "locale": "en-US",
+      "review": {
+        "status": "approved",
+        "reviewer": "carol",
+        "approved_on": "2026-10-20"
+      },
+      "versions": [
+        {
+          "v": 1,
+          "body": "Guaranteed returns on every plan, every year."
+        }
+      ],
+      "translations": {},
+      "scheduled_at": null
+    },
+    "p14": {
+      "path": "/content/site/blog/why-us",
+      "title": "Why choose us",
+      "template": "article",
+      "body": "Our customers love the guaranteed returns of our plans.",
+      "status": "published",
+      "published_at": 3,
+      "metadata": {
+        "title": "Why choose us",
+        "description": "Why customers choose us.",
+        "keywords": [
+          "why"
+        ]
+      },
+      "links": [],
+      "assets": [],
+      "locale": "en-US",
+      "review": {
+        "status": "approved",
+        "reviewer": "carol",
+        "approved_on": "2026-10-20"
+      },
+      "versions": [
+        {
+          "v": 1,
+          "body": "Our customers love the guaranteed returns of our plans."
+        }
+      ],
+      "translations": {},
+      "scheduled_at": null
+    },
+    "p15": {
+      "path": "/content/site/blog/faq-draft",
+      "title": "FAQ draft",
+      "template": "article",
+      "body": "Q: Are there guaranteed returns? A: See the investment plan.",
+      "status": "draft",
+      "metadata": {
+        "title": "FAQ draft",
+        "description": "Questions and answers.",
+        "keywords": [
+          "faq"
+        ]
+      },
+      "links": [],
+      "assets": [],
+      "locale": "en-US",
+      "review": {
+        "status": "approved",
+        "reviewer": "carol",
+        "approved_on": "2026-10-20"
+      },
+      "versions": [
+        {
+          "v": 1,
+          "body": "Q: Are there guaranteed returns? A: See the investment plan."
+        }
+      ],
+      "translations": {},
+      "scheduled_at": null
+    },
+    "p16": {
+      "path": "/content/site/blog/summer-recap",
+      "title": "Summer recap",
+      "template": "article",
+      "body": "Photos from the summer: [[/content/site/blog/summer-photos]].",
+      "status": "published",
+      "published_at": 3,
+      "metadata": {
+        "title": "Summer recap",
+        "description": "The summer in pictures.",
+        "keywords": [
+          "summer"
+        ]
+      },
+      "links": [
+        "/content/site/blog/summer-photos"
+      ],
+      "assets": [],
+      "locale": "en-US",
+      "review": {
+        "status": "approved",
+        "reviewer": "carol",
+        "approved_on": "2026-10-20"
+      },
+      "versions": [
+        {
+          "v": 1,
+          "body": "Photos from the summer: [[/content/site/blog/summer-photos]]."
+        }
+      ],
+      "translations": {},
+      "scheduled_at": null
+    },
+    "p17": {
+      "path": "/content/site/blog/team-update",
+      "title": "Team update",
+      "template": "article",
+      "body": "Meet the new team.",
+      "status": "published",
+      "published_at": 3,
+      "metadata": {
+        "title": "Team update",
+        "description": "",
+        "keywords": [
+          "team"
+        ]
+      },
+      "links": [],
+      "assets": [
+        "a5"
+      ],
+      "locale": "en-US",
+      "review": {
+        "status": "approved",
+        "reviewer": "carol",
+        "approved_on": "2026-10-20"
+      },
+      "versions": [
+        {
+          "v": 1,
+          "body": "Meet the new team."
+        }
+      ],
+      "translations": {},
+      "scheduled_at": null
+    },
+    "p18": {
+      "path": "/content/site/blog/how-we-work",
+      "title": "How we work",
+      "template": "article",
+      "body": "How we work, step by step.",
+      "status": "published",
+      "published_at": 3,
+      "metadata": {
+        "title": "How we work",
+        "description": "How we work.",
+        "keywords": [
+          "process"
+        ]
+      },
+      "links": [],
+      "assets": [],
+      "locale": "en-US",
+      "review": {
+        "status": "approved",
+        "reviewer": "carol",
+        "approved_on": "2026-10-20"
+      },
+      "versions": [
+        {
+          "v": 1,
+          "body": "How we work, step by step."
+        }
+      ],
+      "translations": {},
+      "scheduled_at": null
+    },
+    "p19": {
+      "path": "/content/site/campaigns/autumn-offer",
+      "title": "Autumn offer",
+      "template": "landing",
+      "body": "Autumn offer: 10% off for every new customer.",
+      "status": "draft",
+      "metadata": {
+        "title": "Autumn offer",
+        "description": "Autumn offer.",
+        "keywords": [
+          "offer"
+        ]
+      },
+      "links": [],
+      "assets": [],
+      "locale": "en-US",
+      "review": {
+        "status": "approved",
+        "reviewer": "carol",
+        "approved_on": "2026-10-20"
+      },
+      "versions": [
+        {
+          "v": 1,
+          "body": "Autumn offer: 10% off for every new customer."
+        }
+      ],
+      "translations": {},
+      "scheduled_at": null
+    },
+    "p20": {
+      "path": "/content/site/campaigns/spring-teaser",
+      "title": "Spring teaser",
+      "template": "landing",
+      "body": "Spring is coming.",
+      "status": "draft",
+      "metadata": {
+        "title": "Spring teaser",
+        "description": "Spring is coming.",
+        "keywords": [
+          "spring"
+        ]
+      },
+      "links": [],
+      "assets": [
+        "a3"
+      ],
+      "locale": "en-US",
+      "review": {
+        "status": "approved",
+        "reviewer": "carol",
+        "approved_on": "2026-10-20"
+      },
+      "versions": [
+        {
+          "v": 1,
+          "body": "Spring is coming."
+        }
+      ],
+      "translations": {},
+      "scheduled_at": null
     }
   },
   "assets": {
@@ -399,13 +682,59 @@
       "name": "hero.png",
       "folder": "/content/dam/site",
       "mime": "image/png",
-      "uploaded_by": "alice"
+      "uploaded_by": "alice",
+      "tags": [
+        "hero",
+        "home"
+      ],
+      "license": "licensed"
     },
     "a2": {
       "name": "brochure.pdf",
       "folder": "/content/dam/site/docs",
       "mime": "application/pdf",
-      "uploaded_by": "alice"
+      "uploaded_by": "alice",
+      "tags": [
+        "brochure"
+      ],
+      "license": "licensed",
+      "alt": "Product brochure"
+    },
+    "a3": {
+      "name": "spring-banner-2025.jpg",
+      "folder": "/content/dam/campaigns/spring",
+      "mime": "image/jpeg",
+      "uploaded_by": "alice",
+      "tags": [
+        "spring",
+        "hero",
+        "banner"
+      ],
+      "license": "expired",
+      "alt": "Tulips in a field"
+    },
+    "a4": {
+      "name": "spring-hero.jpg",
+      "folder": "/content/dam/campaigns/spring",
+      "mime": "image/jpeg",
+      "uploaded_by": "alice",
+      "tags": [
+        "spring",
+        "hero",
+        "campaign"
+      ],
+      "license": "licensed",
+      "alt": "Cherry blossoms over a city street"
+    },
+    "a5": {
+      "name": "team-photo.jpg",
+      "folder": "/content/dam/site/blog",
+      "mime": "image/jpeg",
+      "uploaded_by": "bob",
+      "tags": [
+        "team"
+      ],
+      "license": "licensed"
     }
   },
   "external_links": {
@@ -446,6 +775,74 @@
           "id": 7
         }
       ]
+    }
+  },
+  "brand": {
+    "forbidden_terms": [
+      "guaranteed returns",
+      "risk-free",
+      "best in the world"
+    ],
+    "offer_words": [
+      "sale",
+      "% off",
+      "discount",
+      "offer"
+    ],
+    "offer_disclaimer": "Terms and conditions apply."
+  },
+  "approvals": {
+    "approver": "carol",
+    "decision": "approve"
+  },
+  "analytics": {
+    "p1": {
+      "views": 12000,
+      "bounce_rate": 0.31,
+      "conversions": 240,
+      "load_ms": 900
+    },
+    "p7": {
+      "views": 40,
+      "bounce_rate": 0.82,
+      "conversions": 0,
+      "load_ms": 1100
+    },
+    "p8": {
+      "views": 5200,
+      "bounce_rate": 0.45,
+      "conversions": 12,
+      "load_ms": 1000
+    },
+    "p13": {
+      "views": 3100,
+      "bounce_rate": 0.38,
+      "conversions": 61,
+      "load_ms": 1200
+    },
+    "p14": {
+      "views": 800,
+      "bounce_rate": 0.55,
+      "conversions": 9,
+      "load_ms": 1400
+    },
+    "p16": {
+      "views": 150,
+      "bounce_rate": 0.7,
+      "conversions": 1,
+      "load_ms": 1300
+    },
+    "p17": {
+      "views": 90,
+      "bounce_rate": 0.75,
+      "conversions": 0,
+      "load_ms": 1500
+    },
+    "p18": {
+      "views": 2300,
+      "bounce_rate": 0.4,
+      "conversions": 35,
+      "load_ms": 4200
     }
   },
   "translation_jobs": {},

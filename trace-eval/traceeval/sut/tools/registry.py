@@ -1,4 +1,4 @@
-"""Tool registry: declarative tool specifications shared by the simulated and the LLM backends.
+"""Tool registry: declarative tool specifications.
 
 Each adapter module declares its tools with the ``@tool`` decorator, which files a ``ToolSpec`` in ``TOOLS``
 when the module is imported. The dispatcher runs tools from that table, and the LLM backend turns each spec
@@ -48,7 +48,6 @@ class ToolSpec:
     description: str  # what the tool does, as the model reads it in the tool schema
     fn: Callable  # the adapter; the dispatcher calls it as fn(ToolContext, **arguments)
     params: dict[str, str] = field(default_factory=dict)  # parameter name -> description shown to the model
-    module: str = ""  # short name of the module that defines the adapter, e.g. "publish_tools"
 
     def schema(self) -> dict:
         """OpenAI function-calling schema derived from the adapter signature.
@@ -105,22 +104,7 @@ def tool(name: str, kind: str, description: str, params: dict[str, str] | None =
     function itself is returned unchanged. Registering a second tool under the same name replaces the first."""
 
     def deco(fn):
-        spec = ToolSpec(
-            name=name,
-            kind=kind,
-            description=description,
-            fn=fn,
-            params=params or {},
-            # Only the last part of the module path: each loaded copy of the platform lives under a package
-            # name of its own, and the short name is the same in all of them.
-            module=fn.__module__.rsplit(".", 1)[-1],
-        )
-        TOOLS[name] = spec
+        TOOLS[name] = ToolSpec(name=name, kind=kind, description=description, fn=fn, params=params or {})
         return fn
 
     return deco
-
-
-def get_tool(name: str) -> ToolSpec | None:
-    """The registered tool called ``name``, or None when there is no such tool."""
-    return TOOLS.get(name)

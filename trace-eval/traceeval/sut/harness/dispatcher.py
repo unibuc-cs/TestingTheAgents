@@ -7,6 +7,7 @@ service code raised any other exception - a defect in the SUT, returned to the a
 the way a tool server answers with HTTP 500."""
 
 import inspect
+import json
 import time
 
 from ..services.errors import ToolError
@@ -20,7 +21,7 @@ class Dispatcher:
     Agents never call a tool function themselves: the runtime hands every tool request to ``call``,
     which decides whether the call may run at all, runs it (with fault injection and retries) and
     records what happened in the trace. Because every call passes through here, these rules hold for
-    every agent, every skill and both backends alike.
+    every agent and every skill alike.
     """
 
     def __init__(self, tools: dict, config, state, tracer, faults):
@@ -29,6 +30,18 @@ class Dispatcher:
         self.state = state  # the in-memory platform data that the tools read and change
         self.tracer = tracer  # receives one "tool.call" event per call; scorers and selectors read them
         self.faults = faults  # the test's fault profile, fired just before and just after a tool runs
+        self.request_id = None  # the request being served, set by start_request; part of every write's key
+        self._succeeded: dict[str, int] = {}  # call identity -> how often that call has succeeded in this request
+
+    def start_request(self, request_id: str):
+        """Begin serving request ``request_id``: the idempotency keys of its writes are derived from it."""
+        self.request_id = request_id
+        self._succeeded = {}
+
+    def _call_identity(self, name: str, args: dict) -> str:
+        """What a call does, within the current request: the tool and its arguments, written out in a fixed
+        order so that equal arguments always give the same text."""
+        return f"{self.request_id}|{name}|{json.dumps(args, sort_keys=True, default=str)}"
 
     def call(self, agent, name: str, args: dict, ctx: dict) -> dict:
         """Run one tool call on behalf of ``agent`` and return what the agent gets back.
@@ -37,6 +50,8 @@ class Dispatcher:
         token, ...). The answer is either the tool's own result or an ``{"error": ..., "message": ...}``
         dict: the agent always receives a dict, never an exception.
         """
+        # What the trace event at the end reports about the call: when it started, how many tries it took (0 when
+        # a gate refuses it), the write's idempotency key, and whether it ended ok, refused or crashed.
         t0 = time.perf_counter()
         spec = self.tools.get(name)
         attempts, key, status = 0, None, "ok"
@@ -68,6 +83,10 @@ class Dispatcher:
             def attempt(idem_key):
                 # One try. The fault injector may fail it before the tool runs (the call never happened)
                 # or after it ran (the change was made, but the acknowledgement was lost on the way back).
+                # The try is counted and its key kept here, so that the trace has both even when the last
+                # try fails and with_retry raises instead of returning them.
+                nonlocal attempts, key
+                attempts, key = attempts + 1, idem_key
                 self.faults.before(name)
                 tctx = ToolContext(
                     state=self.state,
@@ -81,13 +100,19 @@ class Dispatcher:
                 return result
 
             # with_retry repeats tries that failed transiently. Write tools get an idempotency key, so that a
-            # retry after a lost acknowledgement does not apply the same change a second time.
+            # retry after a lost acknowledgement does not apply the same change a second time. The key is
+            # derived from what the call does and how often that call has already succeeded in this request.
+            # So the agent making a failed call again (after a lost acknowledgement, say) repeats the same
+            # operation and gets the same key, while the same call made again after it went through is a new
+            # operation with a new key.
+            call_identity = self._call_identity(name, args)
             try:
                 out, attempts, key = with_retry(
                     attempt,
                     retries=int(self.config.get("runtime.retries") or 0),
                     is_write=spec.is_write(),
                     idempotency_enabled=bool(self.config.get("runtime.idempotency_keys")),
+                    operation=f"{call_identity}#{self._succeeded.get(call_identity, 0)}",
                 )
             except ToolError as exc:
                 # An expected refusal from the tool or a service (not found, permission denied, ...), or a
@@ -103,6 +128,9 @@ class Dispatcher:
             status = "error"
         if crashed:
             status = "crash"
+        # A write that went through: making the same call again in this request is a new operation.
+        if key is not None and status == "ok":
+            self._succeeded[call_identity] = self._succeeded.get(call_identity, 0) + 1
         # One trace event per call, whatever happened. The scorers, the selectors and the spec checks all
         # work from these events.
         self.tracer.event(
@@ -112,7 +140,8 @@ class Dispatcher:
             status=status,
             error=out.get("error"),
             message=out.get("message") if status != "ok" else None,
-            attempts=attempts,  # 0 when a gate refused the call, otherwise how many tries it took
+            result=out if status == "ok" else None,  # what the agent got back (tests may check it: tool_results)
+            attempts=attempts,  # 0 when a gate refused the call, otherwise how many tries it took, failed ones too
             idempotency_key=key,
             tool_kind=spec.kind if spec else None,
             agent=agent.name,

@@ -7,17 +7,19 @@ A history record is the unit the selectors learn from and the replay evaluator s
 
 import copy
 import json
+import os
 import time
 import traceback
-import zlib
 from pathlib import Path
 
 from traceeval.catalog import EvalCase
-from traceeval.scoring.scorers import score_case, simulated_judge
+from traceeval.scoring.scorers import judge_answer, score_case
 from traceeval.tracing import TraceRecorder
 
 
 def observed_components(trace: dict) -> set[str]:
+    """The components a run exercised, as the ids change sets use (code functions are added later from
+    coverage, see ``attach_code_functions``)."""
     deps: set[str] = set()
     for a in trace.get("agents", []):
         deps.add(f"agent:{a}")
@@ -27,14 +29,14 @@ def observed_components(trace: dict) -> set[str]:
         deps.add(f"tool:{t}")
     for k in trace.get("config_keys", []):
         deps.add(f"config:{k}")
-    for c in trace.get("consulted", []):
+    for c in trace.get("consulted", []):  # already ids: agent:<name>.<field>
         deps.add(c)
-    for f in trace.get("code_functions", []):
-        deps.add(f)
     return deps
 
 
 def _apply_patch(data: dict, patch: dict):
+    """Set each dotted key of ``patch`` in the fixture data (a case's ``fixture_patch``), in this run's copy only.
+    A path whose nodes do not exist is created, so a misspelt key adds data instead of failing."""
     for dotted, value in patch.items():
         node = data
         parts = dotted.split(".")
@@ -43,85 +45,124 @@ def _apply_patch(data: dict, patch: dict):
         node[parts[-1]] = copy.deepcopy(value)
 
 
+# Errors of the OpenAI client that mean the server did not serve the request (it was down, overloaded or out of
+# time), as opposed to a request the server rejected (a prompt too long for the model: the run's own fault).
+_SERVER_ERRORS = {"APIConnectionError", "APITimeoutError", "InternalServerError", "RateLimitError"}
+
+
+def is_infrastructure_error(exc: BaseException) -> bool:
+    """Whether the environment, not the agent or the app, broke the run: the model server or the network did not
+    answer, or a replay met a request it has no recorded answer for (``CacheMiss``). The run is then INFRA_INVALID."""
+    from traceeval.llm.cache import CacheMiss
+
+    for e in (exc, exc.__cause__):  # a client may wrap the network error it met
+        if isinstance(e, (ConnectionError, TimeoutError, CacheMiss)) or type(e).__name__ in _SERVER_ERRORS:
+            return True
+        if e is not None and type(e).__module__.split(".")[0] in ("httpx", "httpcore"):
+            return True
+    return False
+
+
+def default_backend() -> str:
+    """The backend of a run that names none: ``TRACEEVAL_BACKEND``, or "replay" (recorded answers, no model).
+    Running the test suite with ``TRACEEVAL_BACKEND=vllm`` records the answers its cassette lacks."""
+    return os.environ.get("TRACEEVAL_BACKEND", "replay")
+
+
 def run_case(
     sut,
     case: EvalCase,
     *,
-    backend: str = "simulated",
+    backend: str | None = None,
     rep: int = 0,
     variant: str = "baseline",
     config_overrides: dict | None = None,
     llm_settings=None,
     llm_client=None,
-    seed: int = 0,
-    judge_mode: str = "simulated",
     fault_profile: str | None = None,
     keep_state: bool = False,
 ) -> dict:
-    """Run one eval case once. Never raises: harness errors are recorded as HARNESS_ERROR.
+    """Run one eval case once. Never raises: a run that raised is recorded as HARNESS_ERROR, or as INFRA_INVALID
+    when the environment caused it (``is_infrastructure_error``).
 
-    ``fault_profile`` overrides the case's own profile; ``keep_state`` adds the initial fixture and the
-    final state to the record (used by the spec layer's trace monitors, too large for histories)."""
+    ``backend`` picks who plays the agents: "hf" (Gemma on the local GPU), "vllm" (Gemma on a vLLM server),
+    "replay" (Gemma's recorded answers, no model; ``traceeval/llm/cache.py``) or "llm" (an OpenAI-compatible
+    endpoint, by default Qwen on the GPU server, configured by ``llm_settings``); None means
+    ``default_backend()``. ``llm_client`` replaces the model client, e.g. with a scripted one in tests.
+    ``fault_profile`` overrides the case's own profile; ``keep_state`` adds the initial fixture, the final state
+    and the trace's events to the record (used by the spec layer's trace monitors and by the OpenTelemetry
+    export, ``tracing/otel.py``; too large for histories). A case with a
+    ``judge`` block is judged by the model ``TRACEEVAL_JUDGE`` names (``llm/chat.py::judge_client``)."""
+    backend = backend or default_backend()
     tracer = TraceRecorder(test_id=case.id, run_id=f"{variant}:{case.id}:{rep}", variant=variant, backend=backend)
+    # The classes come from the loaded copy of the app (``sut``), not from traceeval.sut: a changed copy must run
+    # its own code.
     State = sut.sub("services.state").State
     Config = sut.sub("harness.config").Config
     Runtime = sut.sub("harness.runtime").Runtime
     FaultInjector = sut.sub("harness.faults").FaultInjector
 
     t0 = time.perf_counter()
-    error = None
+    error, infra = None, False
     run = {}
     state = None
     initial = None
     try:
+        # Build the app for this one run: the starting data (patched as the case asks), the settings, the model
+        # backend, the fault injector; then run the request through the entry agent.
         state = State.from_fixture(sut.path / "fixtures" / f"{case.fixture}.json")
         if case.fixture_patch:
             _apply_patch(state.data, case.fixture_patch)
         if keep_state:
             initial = state.snapshot()
-        config = Config.load(sut.path / "config" / "runtime.yaml", tracer=tracer, overrides=config_overrides)
-        if backend == "simulated":
-            sim = sut.sub("harness.backends.simulated")
-            flakiness = float(config.data.get("simulated", {}).get("flakiness", 0.0))
-            # crc32, not hash(): str hashes are salted per process, which made runs differ between processes
-            case_key = zlib.crc32(case.id.encode()) % 10007
-            factory = sim.make_backend_factory(flakiness=flakiness, seed=seed * 7919 + rep * 104729 + case_key)
-        elif backend == "llm":
-            llm = sut.sub("harness.backends.llm_openai")
-            factory = llm.make_backend_factory(settings=llm_settings, client=llm_client)
-        else:
+        # the case's own settings, then the caller's (traceeval run --set), which win
+        overrides = {**case.config, **(config_overrides or {})}
+        config = Config.load(sut.path / "config" / "runtime.yaml", tracer=tracer, overrides=overrides)
+        if backend not in ("llm", "hf", "vllm", "replay"):
             raise ValueError(f"unknown backend {backend}")
+        llm = sut.sub("harness.backends.llm_openai")
+        if llm_client is None:
+            # Gemma (local, on the GPU server, or its recorded answers) or the llm backend's servers (Qwen by
+            # default). The client is created once per process and shared by every case and variant.
+            from traceeval.llm.chat import shared_client
+
+            llm_client = shared_client(backend)
+        if backend != "llm":  # with "llm" the backend's own settings name the model (Qwen, or TRACEEVAL_LLM_MODEL)
+            llm_settings = llm_settings or llm.LLMSettings(model=llm_client.model_id)
+        factory = llm.make_backend_factory(settings=llm_settings, client=llm_client)
         faults = FaultInjector(fault_profile if fault_profile is not None else case.fault_profile)
         runtime = Runtime(sut.path, config, state, tracer, factory, faults, sut.tools)
         run = runtime.run(case.agent, case.request, dict(case.context))
-    except Exception:  # noqa: BLE001 - every failure must become a record
-        error = traceback.format_exc(limit=6)
+    except Exception as exc:  # noqa: BLE001 - every failure must become a record
+        error, infra = traceback.format_exc(limit=6), is_infrastructure_error(exc)
     wall_ms = (time.perf_counter() - t0) * 1000
 
+    # Score the run: the deterministic checks of the case's ``expect`` against the trace, the final data and the
+    # answer. A run that raised is scored too, as HARNESS_ERROR or INFRA_INVALID.
     trace = tracer.to_dict()
     final_state = state.data if state is not None else {}
-    verdict = score_case(case, trace, final_state, run, error=error)
+    verdict = score_case(case, trace, final_state, run, error=error, infra=infra)
 
     judge_tokens = 0
     judge_result = None
-    if case.judge and verdict.passed:  # deterministic checks first; judge only if they passed
-        if judge_mode == "simulated" or backend == "simulated":
-            judge_result = simulated_judge(case, trace.get("final_message", ""))
-        else:
-            judge_result = simulated_judge(case, trace.get("final_message", ""))
-            judge_result["mode"] = "deterministic-fallback"
-        judge_tokens = judge_result["tokens"]
-        if not judge_result["ok"]:
-            verdict.passed = False
-            verdict.classification = "AGENT_FAILURE"
-            verdict.checks.append({"name": "judge", "ok": False, "detail": judge_result["rubric"]})
-        verdict.judge = judge_result
+    if case.judge and verdict.passed:  # deterministic checks first; the judge only if they passed
+        from traceeval.llm.chat import judge_client
 
+        try:
+            judge_result = judge_answer(case, trace.get("final_message", ""), *judge_client(backend))
+            judge_tokens = judge_result["tokens"]
+            if not judge_result["ok"]:
+                verdict.passed = False
+                verdict.classification = "AGENT_FAILURE"
+                verdict.checks.append({"name": "judge", "ok": False, "detail": judge_result["verdict"]})
+        except Exception as exc:  # noqa: BLE001 - a judge that cannot answer fails the run like any harness error
+            error = traceback.format_exc(limit=6)
+            verdict.passed = False
+            verdict.classification = "INFRA_INVALID" if is_infrastructure_error(exc) else "HARNESS_ERROR"
+
+    # The history record: the verdict, the cost, the shape of the run, and the observed dependencies, which the
+    # strategies read. ``deps`` holds every component as an id; the lists after it are the same facts by kind.
     agent_tokens = trace["tokens"]
-    if backend == "simulated":
-        latency_ms = 120.0 * (run.get("steps") or 0) + 0.35 * agent_tokens + (0.4 * judge_tokens)
-    else:
-        latency_ms = wall_ms
     record = {
         "test_id": case.id,
         "dataset": case.dataset,
@@ -138,7 +179,7 @@ def run_case(
         "tokens": agent_tokens + judge_tokens,
         "prompt_tokens": trace["prompt_tokens"],
         "completion_tokens": trace["completion_tokens"],
-        "latency_ms": round(latency_ms, 1),
+        "latency_ms": round(wall_ms, 1),
         "steps": run.get("steps"),
         "termination": run.get("termination"),
         "deps": sorted(observed_components(trace)),
@@ -155,16 +196,22 @@ def run_case(
         record["initial_state"] = initial
         record["final_state"] = final_state
         record["events"] = trace["events"]
+        # With the events, what an OpenTelemetry export of the run needs (tracing/otel.py::to_otlp).
+        record["run_id"] = trace["run_id"]
+        record["started_at"] = trace["started_at"]
     return record
 
 
 def attach_code_functions(record: dict, functions: set[str]):
+    """Add the code functions and lines that coverage saw in this run to the record's dependencies."""
     record["code_functions"] = sorted(functions)
     record["deps"] = sorted(set(record["deps"]) | set(functions))
     return record
 
 
 def write_jsonl(path: Path, records: list[dict]):
+    """Write the records of a recording, one JSON object per line (``history/baseline.jsonl``,
+    ``history/variants/<change>.jsonl``)."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as fh:
@@ -172,5 +219,6 @@ def write_jsonl(path: Path, records: list[dict]):
 
 
 def read_jsonl(path: Path) -> list[dict]:
+    """Read the records back; blank lines are skipped."""
     with open(path) as fh:
         return [json.loads(line) for line in fh if line.strip()]

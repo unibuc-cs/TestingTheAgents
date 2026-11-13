@@ -17,10 +17,10 @@ class AgentDef:
     system_prompt: str
     skills: list[str]  # skills loaded when the agent starts; the LLM backend puts their text in the prompt
     tools: list[str]  # the only tools this agent may call; the dispatcher refuses any other
-    entry_skill: str | None = None  # skill whose procedure the simulated backend follows, if the agent has one
+    entry_skill: str | None = None  # skill whose procedure is written out as steps in the agent's prompt
     triggers: list[str] = field(default_factory=list)  # routing keywords (orchestrator uses them)
     intents: dict[str, list[str]] = field(default_factory=dict)  # intent name -> keywords that signal it
-    is_orchestrator: bool = False  # "orchestrator: true" in the YAML; never a candidate of the keyword router
+    is_orchestrator: bool = False  # "orchestrator: true" in the YAML; it routes, and is never routed to
     raw: dict = field(default_factory=dict)  # the YAML document as loaded, kept for the digest
 
     @property
@@ -29,11 +29,6 @@ class AgentDef:
         the parsed YAML with sorted keys, so reformatting the file or editing its comments leaves it
         unchanged, while a change to any value changes it."""
         return hashlib.sha256(yaml.safe_dump(self.raw, sort_keys=True).encode()).hexdigest()[:12]
-
-    @property
-    def prompt_tokens(self) -> int:
-        """Rough size of the system prompt in tokens (about four characters per token, at least 1)."""
-        return max(1, len(self.system_prompt) // 4)
 
 
 class AgentLoader:
@@ -73,6 +68,5 @@ class AgentLoader:
         return self._cache[name]
 
     def load_all(self) -> dict[str, AgentDef]:
-        """Every agent definition keyed by file name, in alphabetical order; the keyword router breaks
-        ties in this order."""
+        """Every agent definition keyed by file name, in alphabetical order."""
         return {n: self.load(n) for n in self.available()}
