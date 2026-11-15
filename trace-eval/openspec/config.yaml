@@ -22,7 +22,8 @@ rules:
     - In an fs-* capability, clause templates and slots come only from traceeval/spec/catalog.yaml, and names (tools,
       config keys, functions, cases) from the application; do not invent templates
     - In an fs-* capability, clause order is meaningful, because repeated clause ids are numbered in document order
-    - In an fs-02* capability, do not use the model's known mistakes (KNOWN_MODEL_MISTAKES in tests/test_sut.py) as
+    - >-
+      In an fs-02* capability, do not use the model's known mistakes (KNOWN_MODEL_MISTAKES in tests/test_sut.py) as
       scenarios, and do not use inline cases: the cassette has no answers for them
     - A testbed-* capability has no clause blocks; state only what the code does and check it against the code
 
