@@ -6,9 +6,11 @@
     ir_tfidf    text similarity between the diff and each test (IR-based prioritization, REPiR-style)
     observed    change-based selection on dependencies observed in baseline traces, risk x affinity / cost
     cost_aware  whole-suite ranking by risk x change-affinity x failure-history / expected tokens
+    cheapest    whole suite, cheapest test first
+    late_divergence  replay-first only: the tests the change reaches latest first
 
-The proposed method lives in ``adaptive_bayes.py``, two published methods reproduced as baselines in
-``reproduced.py``, and two optional baselines in ``extras.py``.
+The proposed method lives in ``adaptive_bayes.py``, two methods from the literature adapted as baselines in
+``adapted.py``, and two more baselines in ``extras.py``. ``base.py`` has the two rules every run follows.
 """
 
 import math
@@ -18,18 +20,24 @@ from collections import defaultdict
 from .base import Strategy, affinity, line_hit, weighted_affinity
 
 STRATEGIES: dict[str, Strategy] = {}  # name -> instance, filled by @register
-# the default comparison (RESEARCH_PLAN §3); a strategy not listed here runs only with --strategies all
+# the default comparison; a strategy not listed here (a variant of the proposed method or of the bandit) runs only
+# when named, or with --strategies all
 CORE = [
     "full",
     "random",
     "declared",
     "ir_tfidf",
     "observed",
+    "observed_diverse",
     "cost_aware",
+    "history_ml",
     "casper_slices",
     "risk_aware_ts",
     "adaptive_bayes",
 ]
+# the comparison made replay-first (experiment/replay_first.py): the same strategies, each over the tests the change
+# reaches, and two orders that use nothing but what the replay gives, a test's cost and where it diverges
+REPLAY_FIRST = [*CORE, "cheapest", "late_divergence"]
 
 
 def register(cls):
@@ -173,3 +181,28 @@ class CostAware(Strategy):
             score = ctx.catalog[t].severity * (0.05 + a) * (2.0 - st.pass_rate) / ctx.cost(t)
             scored.append((-score, t))
         return [t for _, t in sorted(scored)]
+
+
+@register
+class Cheapest(Strategy):
+    """The suite, cheapest test first: the order that needs nothing but the costs. With replay-first a test costs
+    what is left of it after the requests that replay (``ctx.cost``)."""
+
+    name = "cheapest"
+
+    def order(self, ctx):
+        return sorted(ctx.tests(), key=lambda t: (ctx.cost(t), t))
+
+
+@register
+class LateDivergence(Strategy):
+    """Replay-first only: the tests the change reaches latest first, by the share of the test that replays before
+    its first new request (``ctx.prefix``), the cheaper first among equals. Without a replay every share is 0."""
+
+    name = "late_divergence"
+
+    def order(self, ctx):
+        def replayed_share(t):
+            return ctx.prefix.get(t, 0.0) / max(1.0, ctx.history.cost(t))
+
+        return sorted(ctx.tests(), key=lambda t: (-replayed_share(t), ctx.cost(t), t))

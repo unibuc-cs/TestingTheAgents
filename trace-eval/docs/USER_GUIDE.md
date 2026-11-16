@@ -9,13 +9,15 @@ A run of the experiment lives in `runs/<name>/` at the repository root:
 ```text
 runs/<name>/
   variants/<change>/   one changed copy of the app per change, with its diff.patch
-  history/             the recorded runs: baseline.jsonl for the original app, variants/ for the changed copies
-  results/             report.md, its figures, replay.csv
+  history/             the recorded runs: baseline.jsonl for the original app, variants/ for the changed copies;
+                       cassette.jsonl, the answers the model gave the original app;
+                       replay_first.jsonl, every copy replayed against those answers
+  results/             report.md, its figures, replay.csv, prioritization.csv, replay_first.csv
 ```
 
-`traceeval check` (`experiment/check.py`) runs the README's loop live for one change: the test runs with the model,
-and a recording (`--history`) supplies the baseline traces, the costs and the other changes' outcomes
-([EXPERIMENT.md](EXPERIMENT.md) §5).
+`traceeval check` (`experiment/check.py`) runs the README's loop live for one change: it replays the change first,
+then runs the tests that diverge with the model. A recording (`--history`) supplies the original app's answers,
+the baseline traces, the costs and the other changes' outcomes ([EXPERIMENT.md](EXPERIMENT.md) §5).
 
 ## 2. Vocabulary
 
@@ -37,9 +39,33 @@ Paths are relative to `traceeval/`.
 - **Revealing test**: a test that passes on the baseline (the original app) and fails on the changed copy, by
   majority over $K$ repetitions (`--reps`).
 - **Budget**: tokens, as a fraction of the full-suite cost.
-- **Stop reason** (`adaptive_bayes` only): `clean`, `regression` (a test that passed on the original app failed),
-  `budget`, `uninformative` (no remaining test could change the verdict) or `no_components` (an empty change set,
-  for example after a comment-only edit).
+- **Cassette**: the answers a model gave, each stored under the exact request that got it (`llm/cache.py`). A
+  recording keeps the answers of its original app in `history/cassette.jsonl`; the test suite replays
+  `tests/cassettes/gemma.jsonl`.
+- **Replay-first** (`experiment/replay_first.py`; pictured in [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §3.3): every
+  test is run on the changed copy with the model's calls answered from the recording's cassette. That takes
+  seconds and no tokens, and each test ends in one of two ways:
+  - it **replays to the end**: every request it made is one the original app made, so its outcome on the changed
+    copy is known;
+  - it **diverges**: it makes a request the original app never made. The change reaches the model there, at the
+    test's *divergence point*, and the test needs the model from there on.
+
+  A strategy then orders the diverged tests only. A test that passes on the original app and replays to a failure
+  is a regression found for no tokens, and a diverged test costs its tokens after the divergence point.
+- **The two rules of a run** (`selection/base.py`): every strategy is run the same way, so that they compare like
+  for like.
+  - A test the model already fails on the original app is not run (`ctx.runnable`): it fails on the changed copy
+    too, whatever the change.
+  - A run ends at its first failure: a test that passed on the original app now fails.
+- **Stop reason**: how a run ended.
+  - `regression`: a test failed.
+  - `exhausted`: every test of the strategy's order ran and passed. Replay-first, the order holds the diverged
+    tests only, so for a strategy that orders the whole suite this means: every test the change reaches passed.
+  - `budget`: the budget kept a test out.
+  - `adaptive_bayes` only: `clean` (it is confident nothing broke), `uninformative` (no remaining test could change
+    the verdict), `no_components` (an empty change set, for example after a comment-only edit).
+- **Verdict**: what a stop reason says about the change. `regression`; clean for `clean`, `no_components` and
+  `exhausted`; none for `budget` and `uninformative`.
 
 ## 3. Where to look in the code (in this order)
 
@@ -50,12 +76,15 @@ Paths are relative to `traceeval/`.
 | how the orchestrator plans | `sut/skills/routing/SKILL.md`, `sut/tools/control_tools.py`, `runtime.py` (`_delegate`) |
 | how a test is run and scored | `experiment/executor.py` (`run_case`), `scoring/scorers.py` |
 | how a change becomes components | `mutation/catalog.py` (data), `mutation/changeset.py` |
-| the baselines | `selection/strategies.py`; two optional ones in `selection/extras.py`, `observed_diverse` and `history_ml` (needs scikit-learn), included by `--strategies all` |
-| two published methods, reproduced | `selection/reproduced.py` (CASPER's slices, Risk-Aware Adaptive Evaluation's bandit; each docstring says what was adapted) |
+| how every strategy is run | `selection/base.py` (the two rules, in its docstring; `Strategy.run`) |
+| the baselines | `selection/strategies.py`; two more in `selection/extras.py`, `observed_diverse` and `history_ml` |
+| two methods from the literature, adapted | `selection/adapted.py` (CASPER's slices, Risk-Aware Adaptive Evaluation's bandit and its per-token variant; each docstring says what was adapted) |
 | the proposed method | `selection/adaptive_bayes.py` (its docstring explains the five steps) |
-| the metrics | `experiment/metrics.py`, `experiment/evaluate.py` |
+| the replay and the metrics | `experiment/evaluate.py`, `experiment/metrics.py` |
+| replay-first: which tests a change reaches, found without a model | `experiment/replay_first.py` (its docstring, then `replay_suite`); the two clients it uses, `Tee` and `ReplayFirstClient`, in `llm/cache.py` |
+| the report's tables | `experiment/report.py` |
 | coverage (of the suite, of a change) | `experiment/coverage.py` |
-| the prototype (one change, live) | `experiment/check.py` |
+| the prototype (one change, live) | `experiment/check.py` (its docstring: the replay, then the method over the diverged tests) |
 | a run as OpenTelemetry spans | `tracing/otel.py` (`traceeval run --otel`; [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.6) |
 
 Everything else is plumbing (loaders, tracing, report).
@@ -65,32 +94,47 @@ Everything else is plumbing (loaders, tracing, report).
 - **Section 1**: each change with its number of revealing tests, and a sanity line. VIOLATED means a regression
   with no revealing test, one the model cannot see (§6), or a benign change with one, which would mean the testbed
   is broken.
-- **Section 2**, four tables:
-  - `detected`: the share of changes where a revealing test ran and failed;
-  - the tokens actually spent: compare strategies on this column, not on the nominal budget, because the selecting
-    strategies run out of tests, the adaptive one stops early and the rest always spend the whole budget;
-  - the time spent, from each test's mean run time on the original app;
-  - detection over the critical regressions only: the changes with a revealing test that checks a safety property.
+- **Section 2**, detection within a budget. Every strategy runs under the two rules of §2, so the tables compare
+  like for like:
+  - `detected`: the share of the revealed regressions on which a revealing test ran and failed, by nominal budget;
+  - the tokens actually spent, as a mean over all changes. Compare strategies on this table, not on the nominal
+    budget: a run ends at its first failure, a selecting strategy runs out of tests, and the adaptive one stops
+    when it is confident. The figure plots the first table against this one: up and to the left is better;
+  - at a 5% and a 20% budget, each strategy's detection with a 95% interval, and its difference to the strategy
+    that detects most. The sample is the changes: the replay seeds only draw which recorded run answers a test,
+    and the choices of the strategies that draw at random. The intervals are therefore bootstrap intervals over
+    the changes (the same resamples for every strategy, so the differences are paired), and a difference whose
+    interval holds 0 is not established;
+  - the tokens and the time spent on the revealed regressions only, the time from each test's mean run time on the
+    original app;
+  - detection over the critical regressions only: the changes with a revealing test that checks a safety property;
+  - the tokens up to the first detection, over the runs that detected.
 - **Section 3**: the tokens spent on the changes no test reveals (the benign ones and the regressions the model
-  cannot see), and the adaptive method's stop reasons: `clean` is the right answer on a benign change, `regression`
-  on a regression.
+  cannot see), and the verdicts at a 5% and a 20% budget. For each strategy: the shares of its runs that end with a
+  regression verdict, with a clean one and with none (§2), on the revealed regressions and on the other changes.
+  The last column is the share of its clean verdicts given on a revealed regression: what a clean verdict from
+  that strategy is worth. "Found" there counts every run that ended at a failure, so it can exceed `detected`,
+  which asks for a failure of a revealing test: a run can end on the one failing run of a test that passes in most
+  of its runs.
 - **Section 4**: selection recall (the share of the revealing tests inside the selected subset) and the quality of
   the complete order, by APFD and $\mathrm{APFD}_c$ (`experiment/metrics.py`; the papers are in
-  [REFERENCES.md](REFERENCES.md)). Both score the whole suite run in that order with no stopping, each revealing
-  test counting as one fault, found when it runs.
-  - APFD (Rothermel et al. 2001): with $n$ tests, $m$ faults and $TF_i$ the position of the test that finds fault
-    $i$, $\mathrm{APFD} = 1 - (TF_1 + \cdots + TF_m)/(nm) + 1/(2n)$. Near 1 when the first tests find every fault,
-    near 0 when the last ones do; a random order scores about 0.5. A fault no test finds counts as found at
-    position $n + 1$.
-  - $\mathrm{APFD}_c$ (Elbaum, Malishevsky and Rothermel 2001) replaces positions by cost and weighs faults by
-    severity: with $c_j$ the cost of the $j$-th test, $s_i$ the severity of fault $i$ (the revealing test's risk
-    weight, 1 to 4), $C_i$ the cost spent before the test that finds it and $C$ the cost of the whole order,
-    $\mathrm{APFD}_c = \sum_i s_i \,(C - C_i - c_{TF_i}/2) \big/ (C \sum_i s_i)$. Tokens per test vary by a factor
-    of ten or more on this suite, so this is the one to read: an order can score well on APFD and poorly on
-    $\mathrm{APFD}_c$ by putting the expensive tests first.
-  - What to expect: `random` near 0.54 on both, `full` (catalog order) near 0.6, an order that uses the change 0.75
-    or more. The adaptive method's order is the one its model would pick if every test passed, then the rest in
-    cost-aware order.
+  [REFERENCES.md](REFERENCES.md)). Both score the tests that pass on the original app, run in that order with no
+  stopping. A change counts as one fault, found by the first of its revealing tests: a run ends there, so the
+  position of the later ones does not matter.
+  - APFD (Rothermel et al. 2001), with one fault: with $n$ tests and $TF$ the position of the first revealing
+    test, $\mathrm{APFD} = 1 - TF/n + 1/(2n)$. Near 1 when the first test of the order reveals the change, near 0
+    when the last one does. A random order scores about $1 - 1/(k + 1)$ on a change with $k$ revealing tests: 0.5
+    with one, 0.98 with 49.
+  - $\mathrm{APFD}_c$ (Elbaum, Malishevsky and Rothermel 2001) replaces positions by cost: with $C$ the cost of the
+    whole order, $C_{TF}$ the cost spent before the first revealing test and $c_{TF}$ that test's own cost,
+    $\mathrm{APFD}_c = (C - C_{TF} - c_{TF}/2)/C$. The paper also weighs faults by severity, which cancels out with
+    one fault. Tokens per test vary by a factor of ten or more on this suite, so this is the one to read: an order
+    can score well on APFD and poorly on $\mathrm{APFD}_c$ by putting the expensive tests first.
+  - What to expect: `random` near 0.76 on both (the mean over the seeds), `full` (catalog order) near 0.74, an
+    order that uses the change 0.87 or more on $\mathrm{APFD}_c$. The adaptive method's order is the one its model
+    would pick if every test passed, then the rest in cost-aware order.
+  - Selected cost: a strategy that orders the whole suite selects 0.90 of its tokens, since the tests the model
+    already fails hold the rest.
 - **Section 5**: each property's pass rate on the original app against its threshold, and per strategy the share of
   the properties a change breaks that its tests exercised.
 - **Section 6**: coverage, of the suite and of each change. For the suite, per dimension (agent, feature, skill,
@@ -101,7 +145,22 @@ Everything else is plumbing (loaders, tracing, report).
   they checked, the affected workflows they ran, the affected features they reached, and how often a run that found
   no regression tested every affected mandatory property. [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5 defines the
   dimensions and "affected"; `traceeval check` prints the same for the change it checks.
-- `replay.csv`: one row per (change, strategy, budget, seed), for slicing the results yourself.
+- **Section 7**, replay-first, for a recording that has been replayed (`traceeval replay-first`; section 1 then
+  also gives each change's diverged tests and replayed failures):
+  - what the replay settles alone, by kind of change: the changes on which no test diverges, those on which a
+    replayed test fails, and what the diverged tests cost, run whole and from their divergence point on;
+  - the replay against the recorded ground truth: the replayed outcomes that differ from the recorded majority,
+    and where the revealing tests end up. A revealing test that replays to a pass is one the replay misses;
+  - the replay against the recorded runs, one by one: how many end like the replay, and how many are the very
+    conversation the replay follows. This measures the condition replay-first rests on, a model call being a
+    function of its request, under the serving setup of the recording;
+  - the strategies run replay-first, in the tables of sections 2 and 3: compare a strategy's row there with its
+    row here. The third table gives the tokens of the same tests run whole, without the replayed part taken
+    off. Two orders appear only here: `cheapest`, by cost, and `late_divergence`, by how late the change reaches
+    the test.
+- `replay.csv`: one row per (change, strategy, budget, seed), for slicing the results yourself;
+  `prioritization.csv`: one row per (change, strategy), and per seed for an order drawn at random, for section 4;
+  `replay_first.csv`: as `replay.csv`, for section 7, with `whole_cost_fraction` beside `cost_fraction`.
 
 ## 5. How the adaptive method weighs a test
 
@@ -137,6 +196,10 @@ flowchart LR
 | tilt | the text similarity between the test and the diff (0.5 to 1.5), plus 0.5 if the test's author declared the dependency; word overlap by default, TF-IDF in `adaptive_bayes_tfidf`, none in `adaptive_bayes_notext` (RESEARCH_PLAN §5.2) | a test whose request mentions publishing gets more weight for a change to the publishing skill |
 
 A test with no known link to the changed part gets a small fixed sensitivity (`indirect`, 0.02).
+
+Replay-first (§2), the method picks among the tests that diverge. A test that replays to the end is not run, and
+its pass is not counted as evidence either: with that floor of 0.02, a hundred free passes would make any change
+look clean.
 
 ### Mandatory properties
 
@@ -235,7 +298,9 @@ A batch applies several catalog changes to one copy, as a nightly run or a pull 
 `mutation/catalog.py`, listed after the 43 by `traceeval mutations`). Its members edit disjoint files, so their
 edits compose (`tests/test_mutation_and_selection.py` checks it), and it is a regression when any member is one.
 The 43 are recorded by default, a batch on request (`traceeval mutants --only <batch>`); `traceeval check <batch>`
-checks it live and prints, after the verdict, the components it blames.
+checks it live and prints, after the verdict, the components it blames. Neither the check nor the replay lets a
+strategy learn from a batch's members, or from the batches that share one (`History.training_variants`): a model
+that has seen what each member breaks would know the answer.
 
 | batch | what it bundles | revealing tests (Gemma) |
 |---|---|---|
@@ -292,9 +357,13 @@ changes drawn at random by `scripts/batch_sweep.py`.
   `delete_block` or `append` edits. Anchors are literal text, so reformatting `sut/` breaks them and the operators
   raise. A regression must be revealed by at least one test, a benign change by none.
 - **Strategy**: in `selection/strategies.py`, subclass `Strategy` (`selection/base.py`), decorate the class with
-  `@register` and implement `order(ctx)`, a prioritized list (tests left out are not selected); adaptive strategies
-  implement `run(ctx, oracle)`. Use only `ctx.change`, `ctx.catalog`, the baseline facts in `ctx.history` and the
-  other changes' outcomes (`ctx.train_variants`). Add the name to `CORE` to include it in the default comparison.
+  `@register` and implement `order(ctx)`, a prioritized list (tests left out are not selected). The default `run`
+  executes it under the two rules of a run (§2). An adaptive strategy implements `run(ctx, oracle)` itself and
+  keeps both rules: it skips a test when `ctx.runnable(t)` is false and ends at the first failure with the stop
+  reason `regression`. Use only `ctx.change`, `ctx.catalog`, the baseline facts in `ctx.history` and the other
+  changes' outcomes (`ctx.train_variants`). Add the name to `CORE` to include it in the default comparison.
+  Replay-first needs nothing more: `ctx.runnable(t)` is also false for a test whose outcome the replay gave, and
+  `ctx.cost(t)` is what is left of a test after its divergence point.
 - **Model backends, recorded answers, the judge**: [EXPERIMENT.md](EXPERIMENT.md) §3 and §5.
 
 ## 8. Gotchas
@@ -303,5 +372,8 @@ changes drawn at random by `scripts/batch_sweep.py`.
   such a run once and otherwise stops without a verdict.
 - A change to anything a prompt is built from (a skill, an agent, a config value, a tool, a case) makes the replay
   miss (`INFRA_INVALID` with `CacheMiss`); record the missing answers again ([EXPERIMENT.md](EXPERIMENT.md) §5).
+- A recording is replayed against its own cassette, which `traceeval baseline` writes. A Gemma recording that
+  has none gets it from the test suite's recorded answers the first time; a Qwen or gpt-oss recording that has
+  none cannot be replayed, and `traceeval replay-first` says so.
 - `runs/` is git-ignored and large; to keep a run, copy its `results/` into `docs/results/`
   ([EXPERIMENT.md](EXPERIMENT.md) §5).

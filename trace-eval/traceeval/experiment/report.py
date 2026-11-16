@@ -1,9 +1,11 @@
-"""Markdown report (+ three figures) from the replay results: ground truth, detection vs. cost, waste on the
-changes no test reveals, stopping accuracy, APFD, properties, and coverage (of the suite and of each change)."""
+"""Markdown report (+ figures) from the replay results: ground truth, detection vs. cost with intervals over the
+changes, waste on the changes no test reveals, verdicts, APFD, properties, coverage (of the suite and of each
+change) and, for a recording that has been replayed (``replay_first.py``), what replay-first testing gives."""
 
 from pathlib import Path
 
 import matplotlib
+import numpy as np
 import pandas as pd
 
 matplotlib.use("Agg")
@@ -12,11 +14,14 @@ import matplotlib.pyplot as plt  # noqa: E402
 from traceeval.catalog import load_catalog, load_properties  # noqa: E402
 
 from .history import History  # noqa: E402
+from .replay_first import Replays  # noqa: E402
 
 # the strategies, in the order the tables and figures show them; a strategy not listed here is not shown
 ORDER = [
     "full",
     "random",
+    "cheapest",  # the two orders only the replay-first comparison has
+    "late_divergence",
     "declared",
     "ir_tfidf",
     "observed",
@@ -25,6 +30,7 @@ ORDER = [
     "history_ml",
     "casper_slices",
     "risk_aware_ts",
+    "risk_aware_ts_per_token",
     "adaptive_bayes",
     "adaptive_bayes_tfidf",  # the method's variants, shown when a replay included them
     "adaptive_bayes_notext",
@@ -34,19 +40,29 @@ ORDER = [
 COLOR = {
     "full": "#9e9e9e",
     "random": "#bdbdbd",
+    "cheapest": "#ff7f0e",
+    "late_divergence": "#98df8a",
     "declared": "#e6a100",
     "ir_tfidf": "#7b61ff",
     "observed": "#1f77b4",
     "observed_diverse": "#17becf",
     "cost_aware": "#2ca02c",
     "history_ml": "#d62728",
+    "casper_slices": "#e377c2",
+    "risk_aware_ts": "#bcbd22",
+    "risk_aware_ts_per_token": "#8c6d31",
     "adaptive_bayes": "#111111",
     "adaptive_bayes_tfidf": "#555555",
     "adaptive_bayes_notext": "#888888",
     "adaptive_bayes_nomandatory": "#8c564b",
 }
-# the nominal budgets in % of the full suite: the x axis of the detection figure (log scale)
-BUDGET_TICKS = [2, 5, 10, 20, 30, 50, 100]
+# tokens spent in % of the full suite: the x axis of the detection figure (log scale)
+SPENT_TICKS = [1, 2, 5, 10, 20, 50, 100]
+# the budgets at which the report gives intervals over the changes and the verdicts
+FOCUS_BUDGETS = (0.05, 0.2)
+# the stop reasons that say "no regression": the adaptive method's verdict, a change with nothing to test, and a
+# strategy that ran every test of its order without a failure
+CLEAN_STOPS = ("clean", "no_components", "exhausted")
 
 
 def _axes(ax, title, xlabel, ylabel):
@@ -59,20 +75,21 @@ def _axes(ax, title, xlabel, ylabel):
     ax.grid(axis="y", alpha=0.25)
 
 
-def fig_detection_vs_cost(df, out):
-    """Detection rate against tokens actually spent: strategies that select or stop sit to the left."""
-    # the runs on the changes some test reveals
-    reg = df[df.is_regression]
+def fig_detection_vs_cost(df, out, title="Regressions detected vs. tokens spent"):
+    """Detection of the revealed regressions against the tokens spent over all changes: up and to the left is
+    better."""
     fig, ax = plt.subplots(figsize=(7.5, 4.5))
     for name in ORDER:
-        sub = reg[reg.strategy == name]
+        sub = df[df.strategy == name]
         if sub.empty:
             continue
-        # one point per nominal budget: the mean tokens actually spent against the mean detection rate
-        g = sub.groupby("budget").agg(cost=("cost_fraction", "mean"), det=("detected", "mean"))
+        # one point per nominal budget: the mean tokens spent over every change against the detection of the
+        # changes some test reveals
+        cost = sub.groupby("budget")["cost_fraction"].mean()
+        det = sub[sub.is_regression].groupby("budget")["detected"].mean().reindex(cost.index)
         ax.plot(
-            g["cost"] * 100,
-            g["det"] * 100,
+            cost * 100,
+            det * 100,
             marker="o",
             ms=4,
             label=name,
@@ -81,13 +98,13 @@ def fig_detection_vs_cost(df, out):
         )
     _axes(
         ax,
-        "Regression detection rate vs. tokens actually spent",
-        "tokens spent (% of full suite)",
-        "changes detected (%)",
+        title,
+        "tokens spent, mean over all changes (% of full suite)",
+        "revealed regressions detected (%)",
     )
     ax.set_xscale("log")
-    ax.set_xticks(BUDGET_TICKS)
-    ax.set_xticklabels([str(b) for b in BUDGET_TICKS])
+    ax.set_xticks(SPENT_TICKS)
+    ax.set_xticklabels([str(b) for b in SPENT_TICKS])
     ax.set_ylim(0, 102)
     ax.legend(fontsize=8, ncol=3, frameon=False)
     fig.tight_layout()
@@ -173,6 +190,93 @@ def _optional_table(df, value, title, fmt="{:.2f}") -> list[str]:
     if value not in df or df[value].isna().all():
         return []
     return [title, "", _by_budget(df.dropna(subset=[value]).astype({value: float}), value, fmt), ""]
+
+
+def _detection_at(df, budget: float, draws: int = 10000) -> list[str]:
+    """At one nominal budget: each strategy's detection of the revealed regressions with a 95% bootstrap interval,
+    the tokens it spends as a mean over all changes, and its paired difference to the strategy that detects most.
+    The sample is the changes: a change's detection is first averaged over the replay seeds, then the changes are
+    resampled, the same draws for every strategy."""
+    at = df[np.isclose(df.budget, budget)]
+    reg = at[at.is_regression]
+    if reg.empty:
+        return []
+    # one row per revealed regression, one column per strategy: the share of the seeds in which it was detected
+    per_change = reg.assign(detected=reg.detected.astype(float)).pivot_table(
+        index="variant", columns="strategy", values="detected", aggfunc="mean"
+    )
+    names = [n for n in ORDER if n in per_change.columns]
+    # tokens over every change of the replay, revealed or not: what the strategy costs on a day's mix of changes
+    spent = at.groupby("strategy")["cost_fraction"].mean()
+    # the bootstrap: ``draws`` samples of the changes, with replacement, from a fixed seed so that the report is the
+    # same on every run; each row of ``idx`` is one sample, used for every strategy so that differences are paired
+    idx = np.random.default_rng(0).integers(0, len(per_change), size=(draws, len(per_change)))
+
+    def interval(values):
+        """The 2.5% and 97.5% quantiles of the mean of ``values`` (one per change) over the samples."""
+        means = values[idx].mean(1)
+        return np.quantile(means, 0.025), np.quantile(means, 0.975)
+
+    best = max(names, key=lambda n: per_change[n].mean())  # the first of ORDER among equals
+    rows = [
+        "| strategy | detected | 95% interval | tokens, all changes | difference to the best | 95% interval |",
+        "|---|---|---|---|---|---|",
+    ]
+    for n in names:
+        values = per_change[n].to_numpy()
+        low, high = interval(values)
+        cells = [n, f"{values.mean():.2f}", f"{low:.2f} to {high:.2f}", f"{spent[n]:.3f}"]
+        if n == best:
+            cells += ["best", ""]
+        else:
+            # change by change, this strategy's detection minus the best one's: an interval that holds 0 means the
+            # recording cannot tell the two apart
+            diff = values - per_change[best].to_numpy()
+            low, high = interval(diff)
+            cells += [f"{diff.mean():+.2f}", f"{low:+.2f} to {high:+.2f}"]
+        rows.append("| " + " | ".join(cells) + " |")
+    return [
+        f"At a budget of {budget:.0%}, over the {len(per_change)} revealed regressions (intervals: bootstrap over the "
+        "changes; a difference whose interval holds 0 is not established):",
+        "",
+        *rows,
+        "",
+    ]
+
+
+def _verdicts_at(df, budget: float) -> list[str]:
+    """At one nominal budget: how each strategy's runs end, as shares of its runs on the revealed regressions and
+    on the other changes. A run says "regression" when a test fails, "clean" when the adaptive method says so,
+    when the change has nothing to test or when every test of the strategy's order ran and passed; a run the
+    budget ended has no verdict. The last column is the share of the clean verdicts given on a revealed
+    regression."""
+    at = df[np.isclose(df.budget, budget)]
+
+    def shares(runs) -> list[str]:
+        """The shares of ``runs`` that end with a regression verdict, with a clean one, and with none."""
+        if runs.empty:
+            return ["", "", ""]
+        found = runs.stop_reason == "regression"
+        cleared = runs.stop_reason.isin(CLEAN_STOPS)
+        return [f"{found.mean():.2f}", f"{cleared.mean():.2f}", f"{(~found & ~cleared).mean():.2f}"]
+
+    rows = [
+        "| strategy | regressions: found | called clean | no verdict | other changes: called clean | "
+        "called regression | no verdict | clean verdicts on a regression |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for n in ORDER:
+        g = at[at.strategy == n]
+        if g.empty:
+            continue
+        # the strategy's runs on the changes some test reveals, and on the changes none does
+        found, cleared, none = shares(g[g.is_regression])
+        o_found, o_cleared, o_none = shares(g[~g.is_regression])
+        # of all its clean verdicts, the share that was given on a revealed regression: a miss called clean
+        clean = g[g.stop_reason.isin(CLEAN_STOPS)]
+        wrong = f"{clean.is_regression.mean():.2f}" if len(clean) else ""
+        rows.append(f"| {n} | {found} | {cleared} | {none} | {o_cleared} | {o_found} | {o_none} | {wrong} |")
+    return [f"Verdicts at a budget of {budget:.0%} (shares of the runs):", "", *rows, ""] if len(rows) > 2 else []
 
 
 def _properties_section(history, reg) -> list[str]:
@@ -288,6 +392,154 @@ def _coverage_section(workdir, history, df) -> list[str]:
     return out
 
 
+def _replay_first_section(workdir, history, figs, replays) -> list[str]:
+    """Section 7, for a recording that has been replayed: what the replay settles without a model, how it compares
+    with the recorded ground truth and with the recorded runs, and the strategies run replay-first."""
+    variants = [v for v in sorted(history.variants) if v in replays.rows]
+    tests, full = history.test_ids(), history.total_cost()
+    passes = {t: history.baseline_pass_rate(t) >= 0.5 for t in tests}
+    meta = history.mutation_meta
+
+    # ---- per change: how many tests diverge, what they cost, and whether a replayed test already fails
+    per_change, where = [], {"prompt": 0, "tool result": 0}
+    for v in variants:
+        diverged, prefix = replays.diverged(v), replays.prefix(v)
+        for t in diverged:
+            where[replays.rows[v][t]["diverged_in"]] += 1
+        per_change.append(
+            {
+                "kind": meta.get(v, {}).get("category", "?"),
+                "nothing diverges": not diverged,
+                "a replayed test fails": any(passes[t] for t in replays.new_failures(v)),
+                "diverged": len(diverged),
+                # the diverged tests run whole, and from their divergence point on, as shares of the suite's tokens
+                "whole": sum(history.cost(t) for t in diverged) / full,
+                "left": sum(max(0.0, history.cost(t) - prefix[t]) for t in diverged) / full,
+            }
+        )
+    frame = pd.DataFrame(per_change)
+    kinds = [
+        "| kind of change | changes | no test diverges | a replayed test fails | diverged tests, mean | "
+        "their share of the suite's tokens | after the divergence point |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for kind, g in [*frame.groupby("kind"), ("all", frame)]:
+        kinds.append(
+            f"| {kind} | {len(g)} | {int(g['nothing diverges'].sum())} | {int(g['a replayed test fails'].sum())} | "
+            f"{g.diverged.mean():.0f} of {len(tests)} | {g.whole.mean():.3f} | {g.left.mean():.3f} |"
+        )
+
+    # ---- against the ground truth: the replayed outcomes, and where the revealing tests ended up
+    replayed_pairs, differ, revealing_pairs = 0, [], {"fail": 0, "diverge": 0, "pass": 0}
+    missed, false_failures = [], []
+    for v in variants:
+        rows, revealing = replays.rows[v], history.revealing_tests(v)
+        for t, r in rows.items():
+            if r["replayed"]:
+                replayed_pairs += 1
+                if r["passed"] != (history.variant_pass_rate(v, t) >= 0.5):
+                    differ.append(f"`{t}` under `{v}`")
+        for t in revealing:
+            revealing_pairs["diverge" if not rows[t]["replayed"] else "pass" if rows[t]["passed"] else "fail"] += 1
+        # a regression is missed when every one of its revealing tests replays to a pass
+        if revealing and all(rows[t]["replayed"] and rows[t]["passed"] for t in revealing):
+            missed.append(f"`{v}`")
+        if not revealing and any(passes[t] for t in replays.new_failures(v)):
+            false_failures.append(f"`{v}`")
+    regressions = sum(bool(history.revealing_tests(v)) for v in variants)
+
+    # ---- against the recorded runs, one by one: does a run that was really made equal the replay of its test?
+    def same_as_replay(variant, stats_by_test):
+        """Over the recorded runs of the tests that replay to the end on ``variant``: how many there are, how many
+        end like the replay, and how many are the replay's conversation (same tool calls, final answer, final state
+        and token count)."""
+        runs = outcome = identical = 0
+        for t, r in replays.rows[variant].items():
+            if not r["replayed"] or t not in stats_by_test:
+                continue
+            shape = (r["passed"], r["tokens"], r["tools"], r["final_message"], r["state_digest"])
+            for x in stats_by_test[t].valid_runs:
+                runs += 1
+                outcome += x["passed"] == r["passed"]
+                identical += (x["passed"], x["tokens"], x["tools"], x["final_message"], x["state_digest"]) == shape
+        return runs, outcome, identical
+
+    base = same_as_replay("baseline", history.baseline) if "baseline" in replays.rows else (0, 0, 0)
+    copies = [same_as_replay(v, history.variants[v]) for v in variants]
+    changed = tuple(sum(c[i] for c in copies) for i in range(3))
+
+    out = [
+        "## 7. Replay-first",
+        "",
+        "Every test was run on every changed copy with the model's calls answered from the answers recorded on the "
+        "original app (`traceeval replay-first`; no model is called). A test either replays to the end, and its "
+        "outcome on the changed copy is known for no tokens, or diverges at the first request the original app never "
+        "made, and needs the model from there on.",
+        "",
+        "What the replay settles alone, by kind of change:",
+        "",
+        *kinds,
+        "",
+        f"Over the {sum(where.values())} diverged (change, test) pairs, the change first reaches the model in what an "
+        f"agent is sent up front (its prompt, skills, tools or task) on {where['prompt']}, and in a tool result on "
+        f"{where['tool result']}.",
+        "",
+        "The replay against the recorded ground truth:",
+        "",
+        f"- replayed outcomes that differ from the recorded majority: {len(differ)} of {replayed_pairs}"
+        + (f" ({', '.join(differ[:5])})" if differ else "")
+        + ";",
+        f"- the {sum(revealing_pairs.values())} revealing (change, test) pairs: {revealing_pairs['fail']} replay to "
+        f"a failure, {revealing_pairs['diverge']} diverge, {revealing_pairs['pass']} replay to a pass;",
+        f"- revealed regressions with a revealing test that fails in the replay or diverges: "
+        f"{regressions - len(missed)} of {regressions}" + (f" (missed: {', '.join(missed)})" if missed else "") + ";",
+        f"- changes no test reveals on which a replayed test fails: {len(false_failures)}"
+        + (f" ({', '.join(false_failures)})" if false_failures else "")
+        + ".",
+        "",
+        "The replay against the recorded runs, one by one, over the tests that replay to the end. A run is identical "
+        "to the replay when it has the same tool calls, final answer, final state and token count:",
+        "",
+        "| recorded runs of | runs | end like the replay | identical to the replay |",
+        "|---|---|---|---|",
+        f"| the original app | {base[0]} | {base[1]} | {base[2]} |",
+        f"| the changed copies | {changed[0]} | {changed[1]} | {changed[2]} |",
+        "",
+    ]
+
+    # ---- the strategies run replay-first, when the evaluation was made
+    path = workdir / "results" / "replay_first.csv"
+    if not path.exists():
+        return out
+    rf = pd.read_csv(path)
+    reg = rf[rf.is_regression]
+    fig_detection_vs_cost(rf, figs / "replay_first.png", "Replay-first: regressions detected vs. tokens spent")
+    out += [
+        "The strategies run replay-first: a test that replays to the end is not run, a replayed failure of a test that "
+        "passes on the original app ends the run for no tokens, and a diverged test costs its tokens after the "
+        "divergence point. A run that ends because every diverged test has run and passed is a clean verdict that "
+        "leaves no reachable test untested.",
+        "",
+        "Fraction of the revealed regressions detected, by nominal budget:",
+        "",
+        _by_budget(reg, "detected"),
+        "",
+        "Tokens spent, as a mean over all changes (fraction of the full suite):",
+        "",
+        _by_budget(rf, "cost_fraction", "{:.3f}"),
+        "",
+        "The same tests run whole, without the replayed part taken off:",
+        "",
+        _by_budget(rf, "whole_cost_fraction", "{:.3f}"),
+        "",
+        *[line for b in FOCUS_BUDGETS if np.isclose(rf.budget, b).any() for line in _detection_at(rf, b)],
+        "![replay-first: detection vs cost](figures/replay_first.png)",
+        "",
+        *[line for b in (FOCUS_BUDGETS[-1], 1.0) if np.isclose(rf.budget, b).any() for line in _verdicts_at(rf, b)],
+    ]
+    return out
+
+
 def write_report(workdir: Path) -> Path:
     """Write results/report.md and its figures from replay.csv and, when it exists, prioritization.csv (results/)."""
     workdir = Path(workdir)
@@ -305,21 +557,25 @@ def write_report(workdir: Path) -> Path:
         fig_apfdc(pr, figs / "apfdc.png")
 
     # section 1: the changes by category, with how many tests reveal each; the testbed is sane when a change is
-    # revealed exactly when its label says regression
+    # revealed exactly when its label says regression. A recording that has been replayed (replay_first.py) also
+    # says, per change, how many tests diverge and how many tests that pass on the original app replay to a failure
+    replays = Replays.load(workdir)
     meta = history.mutation_meta
     truth_rows, sane = [], True
     for v in sorted(history.variants, key=lambda v: (meta.get(v, {}).get("category", ""), v)):
         n = len(history.revealing_tests(v))
         expected = bool(meta.get(v, {}).get("expected_regression"))
         sane &= (n > 0) == expected
-        truth_rows.append(
-            f"| `{v}` | {meta.get(v, {}).get('category', '?')} | {'regression' if expected else 'benign'} | {n} |"
-        )
+        row = f"| `{v}` | {meta.get(v, {}).get('category', '?')} | {'regression' if expected else 'benign'} | {n} |"
+        if replays and v in replays.rows:
+            failures = [t for t in replays.new_failures(v) if history.baseline_pass_rate(t) >= 0.5]
+            row += f" {len(replays.diverged(v))} | {len(failures)} |"
+        truth_rows.append(row)
     summ = history.summary()
-    # how the method's runs ended, split by whether the change is a regression
-    stops = df[df.strategy == "adaptive_bayes"].groupby(["is_regression", "stop_reason"]).size().unstack(fill_value=0)
     # per strategy: the mean tokens until the first true failure, over the runs that detected one
     c2d = reg[reg.detected].groupby("strategy")["cost_to_detect_fraction"].mean().reindex(ORDER).dropna()
+    # the budgets of the interval and verdict tables that this replay has
+    focus = [b for b in FOCUS_BUDGETS if np.isclose(df.budget, b).any()]
 
     parts = [
         "# TRACE-Eval experiment report",
@@ -331,8 +587,9 @@ def write_report(workdir: Path) -> Path:
         "",
         "## 1. Ground truth — which changes are revealed by how many tests",
         "",
-        "| change | category | expected | revealing tests |",
-        "|---|---|---|---|",
+        "| change | category | expected | revealing tests |"
+        + (" diverged tests | replayed failures |" if replays else ""),
+        "|---|---|---|---|" + ("---|---|" if replays else ""),
         *truth_rows,
         "",
         "Testbed sanity (every regression revealed by at least one test, no benign change revealed): "
@@ -340,11 +597,19 @@ def write_report(workdir: Path) -> Path:
         "",
         "## 2. Detection within a budget",
         "",
-        "Fraction of regression-inducing changes detected, by nominal budget (% of full-suite tokens):",
+        "Every strategy is run the same way: a test that fails on the original app is not run, and a run ends at "
+        "its first failure.",
+        "",
+        "Fraction of the revealed regressions detected, by nominal budget (% of full-suite tokens):",
         "",
         _by_budget(reg, "detected"),
         "",
-        "Tokens actually spent on those changes (fraction of the full suite):",
+        "Tokens spent, as a mean over all changes, revealed or not (fraction of the full suite):",
+        "",
+        _by_budget(df, "cost_fraction", "{:.3f}"),
+        "",
+        *[line for b in focus for line in _detection_at(df, b)],
+        "Tokens spent on the revealed regressions only:",
         "",
         _by_budget(reg, "cost_fraction", "{:.3f}"),
         "",
@@ -366,16 +631,15 @@ def write_report(workdir: Path) -> Path:
         "",
         _table(c2d.to_frame("cost_to_first_detection"), "{:.3f}"),
         "",
-        "## 3. Changes no test reveals — wasted budget and stopping",
+        "## 3. Changes no test reveals, and verdicts",
+        "",
+        "Tokens spent on the changes no test reveals:",
         "",
         _by_budget(ben, "cost_fraction", "{:.3f}"),
         "",
         "![tokens spent on changes no test reveals](figures/benign_waste.png)",
         "",
-        "Stop reasons of `adaptive_bayes` (rows: is the change a regression?):",
-        "",
-        _table(stops, "{:d}") if not stops.empty else "(no adaptive runs)",
-        "",
+        *[line for b in focus for line in _verdicts_at(df, b)],
     ]
     # section 4, when the prioritization replay was made
     if pr is not None:
@@ -383,8 +647,9 @@ def write_report(workdir: Path) -> Path:
         parts += [
             "## 4. Prioritization and selection quality",
             "",
-            "APFD / cost-cognizant APFD of the complete order; selection recall = revealing tests inside the selected "
-            "subset; selected cost = what that subset costs:",
+            "APFD / cost-cognizant APFD of the complete order, each change one fault found by the first of its "
+            "revealing tests (an order drawn at random: the mean over the seeds); selection recall = revealing tests "
+            "inside the selected subset; selected cost = what that subset costs:",
             "",
             _table(g.reindex(ORDER).dropna(how="all"), "{:.3f}"),
             "",
@@ -393,15 +658,27 @@ def write_report(workdir: Path) -> Path:
         ]
     parts += _properties_section(history, reg)
     parts += _coverage_section(workdir, history, df)
+    if replays:
+        parts += _replay_first_section(workdir, history, figs, replays)
     parts += [
         "## How to read this",
         "",
         "`detected` counts *changes* (one failing revealing test is enough). Compare strategies at equal tokens "
-        "*spent*, not equal nominal budget: `declared`/`observed` select and run out of tests, `adaptive_bayes` stops "
-        "when it is confident, the others always spend the whole budget. A good strategy is high in section 2 and low "
-        "in section 3.",
+        "*spent*, not equal nominal budget: every run ends at its first failure, the selecting strategies also run "
+        "out of tests, and `adaptive_bayes` also stops when it is confident. A good strategy is high in the first "
+        "table of section 2 and low in the second. The sample is the changes: the seeds only draw which recorded "
+        "run answers a test and the choices of the strategies that draw at random, so an interval is over the "
+        "changes. A clean verdict is worth what the last column of the verdict tables says.",
         "",
     ]
+    if replays:
+        parts += [
+            "Section 7 reads like section 2, with the replay in front: compare a strategy's row there with its row "
+            "here. Replay-first, a strategy that orders the whole suite gives a clean verdict once every diverged "
+            "test has run and passed; that verdict holds as far as the replay agrees with the recording, which the "
+            "first lines of the section measure.",
+            "",
+        ]
     out = res / "report.md"
     out.write_text("\n".join(parts), encoding="utf-8", newline="\n")
     return out

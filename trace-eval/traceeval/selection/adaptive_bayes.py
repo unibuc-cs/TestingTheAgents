@@ -17,12 +17,14 @@ In plain words
      the TF-IDF similarity of the ``ir_tfidf`` strategy, or not at all (the variants registered at the end).
   3. We run the test with the best expected information per token, update the probabilities with the
      outcome, and repeat; each test runs at most once.  A test that already fails on the original app (a
-     mistake of the model) tells nothing either way.  After a test passes, tests that behave exactly like it
-     (same agents, tools, fault profile, dataset) count for much less.
-  4. We stop with "regression" as soon as a test that passed on the original app fails: the models decode
-     greedily, so that failure shows a changed behaviour (it is what the ground truth calls revealing).  We
-     stop with "clean" when P(something is broken) drops below eps_clean, and otherwise when the budget is
-     spent or no test could change the verdict.
+     mistake of the model) tells nothing either way, and is not run (``ctx.runnable``); with replay-first,
+     neither is a test whose outcome on the changed copy the replay already gave.  After a test passes, tests
+     that behave exactly like it (same agents, tools, fault profile, dataset) count for much less.
+  4. We stop with "regression" as soon as a test that passed on the original app fails, as every strategy
+     does (``base.py``): the models decode greedily, so that failure shows a changed behaviour (it is what
+     the ground truth calls revealing).  What only this method does is stop with "clean", when P(something
+     is broken) drops below eps_clean; otherwise it stops when every test that can be run has passed
+     ("exhausted"), when the budget is spent, or when no test could change the verdict.
   5. A run that found no regression does not end before every mandatory property the change may affect (the
      catalog of properties, ``experiment/coverage.py``) has a test, the cheapest that checks it, while the budget
      allows (``cover_mandatory``; switched off in the ablation ``adaptive_bayes_nomandatory``).
@@ -354,16 +356,22 @@ class AdaptiveBayes(Strategy):
         # the posterior over the hypotheses, starting from the prior of step 1
         post = m["prior"]
         ran = np.zeros(len(tests), dtype=bool)  # each test runs at most once: a rerun would give the same answer
+        # the tests that can be run at all (``base.py``): they pass on the original app and, with replay-first, their
+        # outcome on the changed copy is not already known
+        able = np.array([ctx.runnable(t) for t in tests])
         remaining = ctx.budget
         # step 3: pick the test with the best information per token, run it, update; step 4 decides when to stop
         while True:
             if stopping and 1.0 - post[0] < self.eps_clean:  # hypothesis 0 = nothing broken
                 log.stop_reason = "clean"
                 break
+            if stopping and not (able & ~ran).any():  # every test that can be run has run, and passed
+                log.stop_reason = "exhausted"
+                break
             # best information per token, weighted by risk; tests that cannot or need not run are ruled out
             gain = self.info_gain(post, p_fail)
             score = gain * risk / cost
-            score[ran | (cost > remaining) | (gain <= 1e-9)] = -1.0
+            score[ran | ~able | (cost > remaining) | (gain <= 1e-9)] = -1.0
             i = int(np.argmax(score))
             if score[i] <= 0:
                 log.stop_reason = "budget" if remaining < cost.min() else "uninformative"
@@ -409,8 +417,12 @@ class AdaptiveBayes(Strategy):
         from traceeval.experiment.coverage import affected_properties
 
         tests, cost, props = m["tests"], m["cost"], load_properties()
-        # the properties the tests run so far already check
+        # the properties the tests run so far already check; with replay-first, so do the tests whose outcome the
+        # replay gave (they passed: a replayed failure of a test that passes on the original app ends the check
+        # before any test runs)
         checked = {p for i in np.flatnonzero(ran) for p in ctx.catalog[tests[i]].properties}
+        known = [t for i, t in enumerate(tests) if t in ctx.replayed and fails_anyway[i] < 0.5]
+        checked |= {p for t in known for p in ctx.catalog[t].properties}
         # the properties the change may affect, from the components it touched and the tests that exercise them
         affected = affected_properties(ctx.change, ctx.history, ctx.catalog, props)
         # each mandatory one still unchecked gets the cheapest unrun test that checks it and passes on the original app
@@ -421,6 +433,7 @@ class AdaptiveBayes(Strategy):
                 if not ran[i]
                 and cost[i] <= remaining
                 and fails_anyway[i] < 0.5
+                and ctx.runnable(tests[i])
                 and pid in ctx.catalog[tests[i]].properties
             ]
             if pid in checked or not options:

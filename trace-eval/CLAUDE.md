@@ -14,7 +14,9 @@ ruff check traceeval tests          # rules and line length come from pyproject.
 ruff format traceeval tests         # see "Gotchas" before formatting sut/
 traceeval experiment --backend vllm --workdir runs/gemma7 --reps 5   # full experiment, Gemma on the GPU server, about two hours
 traceeval experiment --backend llm --workdir runs/qwen7 --reps 5     # the same with Qwen (scripts/gpu_remote.sh up qwen)
-traceeval check skill_routing_drop_approval --history runs/gemma7   # the prototype: one change, live
+traceeval replay-first --workdir runs/gemma7                        # every changed copy on the original app's answers, no model
+traceeval evaluate --workdir runs/gemma7 && traceeval report --workdir runs/gemma7   # the strategies, then the report
+traceeval check skill_routing_drop_approval --history runs/gemma7   # the prototype: one change, replayed then live
 traceeval coverage --history runs/gemma7                            # coverage of the suite, per dimension and component
 traceeval run --test PUB-01 --backend replay --otel trace.json   # one case; its trace as OpenTelemetry spans
 traceeval sdd --workdir runs/sdd                                 # spec-driven development demo, replayed
@@ -36,17 +38,26 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
 - `traceeval/tracing/` — trace recorder, coverage contexts, OpenTelemetry export (`otel.py`).
 - `traceeval/scoring/` — deterministic scorers, and the model judge for cases with a rubric (`TRACEEVAL_JUDGE`).
 - `traceeval/mutation/` — controlled changes (patch operators), change-set extraction.
-- `traceeval/selection/` — `strategies.py` baselines, `adaptive_bayes.py` the proposed method (two text variants
-  and one ablation without its mandatory-coverage rule), `reproduced.py` two published methods (CASPER, Risk-Aware
-  Adaptive Evaluation) as baselines, `extras.py` optional baselines.
+- `traceeval/selection/` — `base.py` the interface and the two rules every run follows, `strategies.py` baselines
+  (and the two orders only the replay-first comparison runs),
+  `adaptive_bayes.py` the proposed method (two text variants and one ablation without its mandatory-coverage rule),
+  `adapted.py` two methods from the literature adapted as baselines (CASPER, Risk-Aware Adaptive Evaluation),
+  `extras.py` two more baselines.
 - `traceeval/experiment/` — SUT loader, executor, history, runner, replay evaluator, metrics, coverage, report;
-  `check.py`, the prototype (one change checked live).
-- `traceeval/llm/` — Gemma's client (`chat.py`: prompt, engines, parsing, which model judges) and the answer cache.
+  `replay_first.py`, which tests a change reaches, found by replaying the original app's recorded answers;
+  `check.py`, the prototype (one change: the replay, then the method live over the tests that diverge).
+- `traceeval/llm/` — Gemma's client (`chat.py`: prompt, engines, parsing, which model judges) and the answer cache
+  (`cache.py`, with the two clients of replay-first: `Tee` keeps a baseline's answers, `ReplayFirstClient` replays
+  them).
 - `traceeval/spec/` — spec-driven development layer: clause catalog (`catalog.yaml`) and model, one checker per
   clause kind (`checks/`), product model, demo PRs, runner, report, drafting with a model (`draft.py`).
   Specs live in `traceeval/specs/FS-*.yaml` as catalog templates + slots (see `docs/SDD_GUIDE.md`).
 - `tests/` — pytest; `runs/` — experiment outputs (git-ignored); `docs/` — guide, plan, related work, references,
   results, and the paper draft (`docs/paper/`, LaTeX).
+- `scripts/` — `gpu_remote.sh` (the model servers), `batch_sweep.py`, and `analysis/`: offline checks of the
+  results and probes of the measurement chain, listed in `scripts/analysis/README.md`.
+- `TODO.md` — the plan the work follows (replay-first); read it before changing strategies, the evaluator or the
+  paper.
 
 ## Conventions
 
@@ -56,7 +67,15 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
   `agent:<name>.<field>`, `config:<key>`, `fixture:<name>`; property sources may also cite `spec:<id>`); do not
   invent parallel schemes.
 - Strategies may use only baseline history, change sets and *other* variants' outcomes (`ctx.train_variants`; a
-  variant is a copy of the app with one change applied); never the variant under evaluation.
+  variant is a copy of the app with one change applied); never the variant under evaluation, nor, for a batch, its
+  members (`History.training_variants`).
+- Every strategy's run follows the same two rules (`selection/base.py`): a test that fails on the original app is
+  not run, and the run ends at the first failure. A strategy with its own `run` keeps both.
+- Replay-first reaches a strategy through the same two calls: `ctx.runnable(t)` is also false for a test whose
+  outcome the replay gave, and `ctx.cost(t)` is what is left of a test after its divergence point. A strategy
+  tests `ctx.runnable` and scores with `ctx.cost`; it never reads the replay itself.
+- A recording's cassette (`history/cassette.jsonl`) holds the answers of its original app and nothing else: only
+  `traceeval baseline` writes it, and a request it lacks means that the change reaches the model.
 - Change sets hold code only: comments, docstrings, blank lines and formatting add no component and no diff
   line (`mutation/changeset.py`), so no strategy and no probability may depend on them.
 - Mutation operators assert their anchors; a new mutation labelled a regression must be revealed by ≥ 1 test under
@@ -100,5 +119,9 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
   answers nothing asks for any more, delete the file first and record everything again.
 - `runs/*/history/*.jsonl` include line-level coverage and are large; do not commit them. For the same reason a
   history recorded before a code change no longer fits `traceeval check` (lines move): record a new one.
+- A Gemma recording made before cassettes were kept gets its cassette from `tests/cassettes/gemma.jsonl` the first
+  time it is replayed, which works while that file still holds the answers of the recording's app. Qwen's and
+  gpt-oss's recordings have no such source: `traceeval replay-first` refuses them until their baseline is
+  recorded again.
 - Record experiments on Python 3.12: on 3.15 coverage.py uses its sys.monitoring core, which does not support the
   per-test dynamic contexts (warning `no-sysmon-context`), so observed code dependencies may be incomplete.

@@ -46,21 +46,22 @@ of the paper (`docs/paper/`) cites the same works from `docs/paper/refs.bib`.
   Failure history as the main signal at scale.
 - Machalica, M., Samylkin, A., Porth, M., Chandra, S. *Predictive test selection.* ICSE-SEIP 2019, pp. 91–100.
   doi:10.1109/ICSE-SEIP.2019.00018. arXiv 1810.05286.
-  A learned model over change and test features; the optional `history_ml` baseline.
+  A learned model over change and test features; the `history_ml` baseline.
 - Pan, R., Ghaleb, T. A., Briand, L. C. *LTM: scalable and black-box similarity-based test suite minimization
   based on language models.* IEEE Transactions on Software Engineering 50(11), 2024. arXiv 2304.01397.
-  Diversity-based ordering; the optional `observed_diverse` baseline.
+  Diversity-based ordering; the `observed_diverse` baseline.
 
-## The two published methods reproduced as baselines
+## The two methods adapted as baselines
 
 - Muse, B. A., Briand, L., Lu, Y., Gallaba, K. *CASPER: change-aware slice prioritization for efficient regression
   testing of LLM-based systems.* arXiv 2608.00378, August 2026. https://arxiv.org/abs/2608.00378
-  Reproduced as `casper_slices` (`selection/reproduced.py`): slices from behavioural signals of the baseline logs,
-  representatives of every slice run on the changed system, slices ranked by the drift of their outcomes.
+  Adapted as `casper_slices` (`selection/adapted.py`): slices from behavioural signals of the baseline logs,
+  representatives of every slice run on the changed system, slices ranked by how much a failure model's prediction
+  rose on the representatives' signals.
 - Maji, P., Chowdhury, S. G. *Risk-aware adaptive evaluation: finding high-impact failures under limited budgets.*
   arXiv 2609.38914, September 2026; NeurIPS 2026 workshop on the evaluation of interactive agents.
   https://arxiv.org/abs/2609.38914
-  Reproduced as `risk_aware_ts`: contextual Thompson sampling over the tests, with a test's risk as its impact.
+  Adapted as `risk_aware_ts`: contextual Thompson sampling over the tests, with a test's risk as its impact.
 
 ## Ingredients of the methods
 
@@ -72,7 +73,7 @@ of the paper (`docs/paper/`) cites the same works from `docs/paper/refs.bib`.
   sampling.* NeurIPS 2011.
   Thompson sampling, the policy of the risk-aware bandit.
 - Lloyd, S. P. *Least squares quantization in PCM.* IEEE Transactions on Information Theory 28(2): 129–137, 1982.
-  The k-means iteration that cuts the suite into slices in the reproduction of CASPER.
+  The k-means iteration that cuts the suite into slices in the adaptation of CASPER.
 - DeMillo, R. A., Lipton, R. J., Sayward, F. G. *Hints on test data selection: help for the practicing
   programmer.* IEEE Computer 11(4): 34–41, 1978. Jia, Y., Harman, M. *An analysis and survey of the development
   of mutation testing.* IEEE Transactions on Software Engineering 37(5): 649–678, 2011.

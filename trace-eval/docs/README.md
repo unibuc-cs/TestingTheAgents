@@ -13,6 +13,7 @@
 | spec-driven development: what a spec is, how a pull request is judged against it, the assurance rungs                                                    | [SDD_GUIDE.md](SDD_GUIDE.md), then [SDD_DEMO.md](SDD_DEMO.md) for the results and [sdd/report.md](sdd/report.md) for the full report |
 | read the code of the spec-driven development layer, with diagrams, in two to three hours                                                                 | [STUDY_GUIDE.md](STUDY_GUIDE.md) |
 | the literature, the references and the paper                                                                                                             | [related_work.md](related_work.md), [REFERENCES.md](REFERENCES.md), `paper/main.tex` (build with `latexmk -pdf main`) |
+| the plan the work follows, and the offline checks of the results behind it                                                                               | [TODO.md](../TODO.md), [scripts/analysis/README.md](../scripts/analysis/README.md) |
 
 ## Reading order
 
@@ -33,8 +34,9 @@ flowchart TD
 
 ## What else is in this folder
 
-- `results/`: one folder per recording (`gemma7`, `qwen7`, `gptoss7`), each with the report and its three figures,
-  and the follow-up experiments:
+- `results/`: one folder per recording (`gemma7`, `qwen7`, `gptoss7`), each with the report and its figures
+  (Gemma's has the replay-first section, [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7), and the follow-up
+  experiments:
   - `gemma7/live_vs_replay.md`: the live check against the replay, change by change;
   - `gemma7/false_alarm_one_at_a_time.md`: the change behind the one live false alarm, recorded one test at a time;
   - `gemma7/noise_floor.md`: the empty change recorded fifteen times, against the number of runs;

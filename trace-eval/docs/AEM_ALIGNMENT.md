@@ -41,8 +41,8 @@ Agent Orchestrator deck and Adobe's public documentation:
 | coverage over the requirements' dimensions, declared, observed and required | yes: suite coverage per dimension and change coverage per strategy in the report and in `traceeval check`; the method tests every mandatory property a change may affect (§3.5) | none |
 | per-test metadata (agents, skills, tools, workflow, risk, cost, history) | yes (declared + observed + history; a workflow test names its workflow) | none |
 | trace assertions | yes: final state, required and forbidden tools, attempts, audit, step limit, termination, agent order and tool order (`agents_in_order`, `tools_in_order`) | none |
-| budgets and early stopping | yes (`adaptive_bayes`, `traceeval check`) | none |
-| a day's changes checked at once, with the culprit named | yes: batches of changes, three by hand and twenty drawn at random ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.6); the live check prints the components the method blames, a member that is a regression on its own on every regression batch | none |
+| budgets and early stopping | yes: a change is replayed first, which settles the tests it cannot reach (`traceeval replay-first`; [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7); the method then stops within a budget (`adaptive_bayes`, `traceeval check`) | none |
+| a day's changes checked at once, with the culprit named | yes: batches of changes, three by hand and twenty drawn at random ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.6); the check prints the components the method blames, which belong to a member that is a regression on its own in all but one replayed run | none |
 | OpenTelemetry | yes: `traceeval run --otel` exports a run as OTLP JSON spans, with the plan, the routing decisions and the approvals as span events (§3.6) | pushing to a collector, if wanted |
 | environment failures kept apart | yes: such a run is `INFRA_INVALID` and left out of pass rates, the ground truth and the replays ([USER_GUIDE.md](USER_GUIDE.md) §8) | none |
 | agents like AEM's | yes: authoring, publishing, assets (with asset search), SEO, translation, governance, maintenance, and brand governance, data insights, site optimization | none |
@@ -261,12 +261,14 @@ before stopping"), so `traceeval check` prints it after its verdict:
 - the share of the refusals in the changed code they reached, for a change to a function that can refuse a tool
   call. `traceeval check` names the ones no executed test reached.
 
-`traceeval check` also prints what its tests invoked, out of what the application has ("invoked: 2 of 11 agents, 2
-of 13 skills, 4 of 32 tools, 4 of 19 features").
+`traceeval check` replays the change before it runs any test with the model ([RESEARCH_PLAN.md](RESEARCH_PLAN.md)
+§3.3), so its coverage counts every test whose outcome on the changed app is known, replayed or run. It also prints
+what those tests invoked, out of what the application has ("invoked: 8 of 11 agents, 10 of 13 skills, 22 of 32
+tools, 16 of 19 features").
 
 On Gemma's recording, at a budget of 20% of the suite's tokens, the tests the adaptive method runs reach 89% of the
-affected features: it stops once it is confident. The trace-based strategy (`observed`) reaches all of them, for
-five times the tokens.
+affected features and those of the trace-based strategy (`observed`) 91%. No strategy reaches all of them: a run
+ends at its first failure, and the adaptive method also stops once it is confident.
 
 The replay also measures it against the ground truth: the properties of the revealing tests (`property_coverage`,
 report section 5).

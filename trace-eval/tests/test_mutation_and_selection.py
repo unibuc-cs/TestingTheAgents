@@ -8,6 +8,7 @@ import pytest
 import yaml
 
 from traceeval.catalog import load_catalog, load_features, load_properties
+from traceeval.catalog.loader import EvalCase
 from traceeval.experiment.check import check
 from traceeval.experiment.coverage import (
     _crosses,
@@ -22,14 +23,19 @@ from traceeval.experiment.coverage import (
     tests_per_component as per_component,
 )
 from traceeval.experiment.evaluate import evaluate, make_oracle
+from traceeval.experiment.executor import read_jsonl, write_jsonl
 from traceeval.experiment.history import History
-from traceeval.experiment.metrics import apfd, apfdc
+from traceeval.experiment.history import TestStats as RunStats  # not under a name pytest would collect
+from traceeval.experiment.metrics import apfd, apfdc, evaluate_log
+from traceeval.experiment.replay_first import Replays, cassette_path, replay_first
+from traceeval.experiment.report import write_report
 from traceeval.experiment.runner import record_baseline, record_mutants
 from traceeval.experiment.sutloader import copy_sut
 from traceeval.mutation import MUTATIONS, get_mutation, materialize_variant
 from traceeval.mutation.changeset import ChangedComponent, ChangeSet, _flatten, _python_components, _yaml_code_lines
-from traceeval.selection import SelectionContext, get_strategy
-from traceeval.selection.reproduced import fit_logistic, kmeans
+from traceeval.selection import CORE, SelectionContext, Strategy, get_strategy
+from traceeval.selection.adapted import fit_logistic, kmeans, run_signals, sigmoid
+from traceeval.selection.base import ExecutionLog
 from traceeval.sut import SUT_ROOT
 
 COMMENT_ONLY = {"benign_code_comment_docstring", "benign_config_comments_reordered"}
@@ -137,7 +143,7 @@ def test_a_change_affects_the_features_and_the_refusals_it_touches():
     assert {p.code for p in hit} == {"approval_required", "not_found"}
 
 
-def test_reproduced_baselines_helpers():
+def test_adapted_baselines_helpers():
     # k-means starts deterministically and finds the three obvious groups
     X = np.array([[0, 0], [0, 1], [10, 10], [10, 11], [20, 20]], dtype=float)
     labels, _ = kmeans(X, 3)
@@ -149,15 +155,90 @@ def test_reproduced_baselines_helpers():
     p = 1 / (1 + np.exp(-(Xl @ w)))
     assert (p[:3] < 0.5).all() and (p[3:] > 0.5).all()
     assert np.allclose(fit_logistic(Xl, y, w=w), w)
+    # a penalty that silences the feature leaves a free intercept at the share of ones, and at a half once the two
+    # classes are weighed alike
+    rare = np.array([0, 0, 0, 0, 0, 1], dtype=float)
+    w = fit_logistic(Xl, rare, l2=1e9, iters=50, free_intercept=True)
+    assert abs(w[1]) < 1e-3 and sigmoid(w[0]) == pytest.approx(1 / 6, abs=1e-3)
+    balance = np.where(rare > 0, 3.0, 0.6)
+    w = fit_logistic(Xl, rare, l2=1e9, iters=50, sample_weight=balance, free_intercept=True)
+    assert sigmoid(w[0]) == pytest.approx(0.5, abs=1e-3)
+    # the signals of a run: its shape, read from a history record
+    run = {"steps": 3, "tools": ["get_page", "get_page", "publish_page"], "agents": ["orchestrator", "publishing"]}
+    turns, calls, distinct, top_share, *_ = run_signals({**run, "tokens": 100, "completion_tokens": 10})
+    assert (turns, calls, distinct) == (3, 3, 2) and top_share == pytest.approx(2 / 3)
 
 
 def test_apfd_metrics():
     order = ["a", "b", "c", "d"]
     assert apfd(order, {"a"}) == pytest.approx(1 - 1 / 4 + 1 / 8)
     assert apfd(order, {"d"}) == pytest.approx(1 - 4 / 4 + 1 / 8)
-    cost = {t: 1.0 for t in order}
-    sev = {t: 1.0 for t in order}
-    assert apfdc(order, {"a"}, cost, sev) > apfdc(order, {"d"}, cost, sev)
+    # a change is one fault, found by the first of its revealing tests: a second one further down adds nothing
+    assert apfd(order, {"b", "d"}) == apfd(order, {"b"})
+    assert apfd(order, {"z"}) == pytest.approx(1 - 5 / 4 + 1 / 8)  # never found
+    cost = {"a": 1.0, "b": 3.0, "c": 1.0, "d": 5.0}
+    assert apfdc(order, {"a"}, cost) > apfdc(order, {"d"}, cost)
+    assert apfdc(order, {"b", "d"}, cost) == pytest.approx((10 - 1 - 1.5) / 10)  # the cost left when b finds it
+    assert apfdc(order, {"z"}, cost) == 0.0
+
+
+def _tiny_recording():
+    """Four tests and one changed copy, built by hand: ``red`` fails on the original app, ``b`` fails on the changed
+    copy in every run, and ``c`` in one run of three."""
+
+    def run(test, passed):
+        outcome = "PASS" if passed else "AGENT_FAILURE"
+        return {"test_id": test, "passed": passed, "classification": outcome, "tokens": 100, "latency_ms": 1.0}
+
+    def stats(test, *outcomes):
+        s = RunStats(test)
+        for passed in outcomes:
+            s.add(run(test, passed))
+        return s
+
+    h = History()
+    h.baseline = {t: stats(t, t != "red") for t in ("red", "a", "b", "c")}
+    h.variants["v"] = {"red": stats("red", False), "b": stats("b", False), "c": stats("c", True, True, False)}
+    catalog = {t: EvalCase(id=t, name=t, agent="orchestrator", request=t) for t in h.baseline}
+    return h, catalog
+
+
+def test_every_run_leaves_out_the_red_tests_and_ends_at_the_first_failure():
+    h, catalog = _tiny_recording()
+
+    class InOrder(Strategy):
+        name = "in_order"
+
+        def order(self, ctx):
+            return ["red", "a", "b", "c"]
+
+    def run(variant, budget):
+        ctx = SelectionContext(ChangeSet("v"), catalog, h, budget, random.Random(0))
+        return InOrder().run(ctx, make_oracle(h, variant, random.Random(0)))
+
+    log = run("v", 1000)  # red is never run; b fails and the run ends there, c unrun
+    assert log.executed == ["a", "b"] and log.stop_reason == "regression"
+    row = evaluate_log(log, "v", h, catalog, 1000)
+    assert row["detected"] and not row["false_alarm"] and row["stop_correct"] and row["cost"] == 200
+    log = run("unchanged", 1000)  # a copy nothing was recorded on behaves like the original app: every test passes
+    assert log.executed == ["a", "b", "c"] and log.stop_reason == "exhausted"
+    log = run("unchanged", 200)  # the budget keeps c out: no verdict
+    assert log.executed == ["a", "b"] and log.stop_reason == "budget"
+    # a failure of a test that passes by majority on the changed copy is a false alarm; a red test's failure is not
+    one_off = ExecutionLog("x", steps=[("c", False, 100.0)], stop_reason="regression")
+    row = evaluate_log(one_off, "v", h, catalog, 1000)
+    assert row["false_alarm"] and not row["detected"]
+    assert not evaluate_log(ExecutionLog("x", steps=[("red", False, 100.0)]), "v", h, catalog, 1000)["false_alarm"]
+
+
+def test_training_leaves_out_the_changes_a_batch_shares():
+    h = History()
+    h.variants = {v: {} for v in ("a", "b", "c", "batch_ab", "batch_bc")}
+    h.mutation_meta = {"batch_ab": {"members": ["a", "b"]}, "batch_bc": {"members": ["b", "c"]}, "a": {"members": []}}
+    assert h.training_variants("a") == ["b", "c", "batch_bc"]  # not the batch a is a member of
+    assert h.training_variants("batch_ab") == ["c"]  # not its members, nor the batch that shares one
+    assert h.training_variants("unrecorded_batch", members=["c"]) == ["a", "b", "batch_ab"]
+    assert {"history_ml", "observed_diverse"} <= set(CORE)
 
 
 @pytest.mark.slow
@@ -169,7 +250,9 @@ def test_small_end_to_end_experiment(tmp_path, capsys):
     assert h.revealing_tests("skill_publish_drop_link_validation")
     assert not h.revealing_tests("benign_skill_prose_reflow")
     catalog = {c.id: c for c in load_catalog()}
-    for name in ("declared", "observed", "cost_aware", "ir_tfidf", "casper_slices", "risk_aware_ts", "adaptive_bayes"):
+    red = {t for t in h.baseline if h.baseline_pass_rate(t) < 0.5}
+    # every strategy that uses the change or the traces, and the bandit's variant, which the default comparison omits
+    for name in [s for s in CORE if s not in ("full", "random")] + ["risk_aware_ts_per_token"]:
         ctx = SelectionContext(
             h.changesets["skill_publish_drop_link_validation"],
             catalog,
@@ -178,11 +261,14 @@ def test_small_end_to_end_experiment(tmp_path, capsys):
             random.Random(0),
             train_variants=["benign_skill_prose_reflow"],
         )
-        log = get_strategy(name).run(ctx, make_oracle(h, "skill_publish_drop_link_validation", random.Random(0)))
-        assert any(not ok for _, ok, _ in log.steps), name
+        oracle = make_oracle(h, "skill_publish_drop_link_validation", random.Random(0))
+        log = get_strategy(name).run(ctx, oracle)
         assert len(set(log.executed)) == len(log.executed), name  # no test runs twice
-        if name == "adaptive_bayes":  # a test that passed on the original app and now fails ends the run
-            assert not log.steps[-1][1] and log.stop_reason == "regression"
+        assert not red & set(log.executed), name  # nor a test the model fails on the original app
+        # a test that passed on the original app and now fails ends the run, whatever the strategy
+        assert [ok for _, ok, _ in log.steps].count(False) == 1 and not log.steps[-1][1], name
+        assert log.stop_reason == "regression", name
+        assert set(oracle.records) == set(log.executed), name  # the runs it was answered with, for their signals
     df = evaluate(work, strategies=["observed", "adaptive_bayes"], budgets=(0.2, 1.0), seeds=1)
     assert set(df.strategy) == {"observed", "adaptive_bayes"}
     # coverage: the suite by dimension, and each run's change coverage (no ground truth needed)
@@ -216,11 +302,42 @@ def test_small_end_to_end_experiment(tmp_path, capsys):
     # step 5: with the whole suite affordable, a run without a regression tests every affected mandatory property
     full = df[(df.variant == "benign_skill_prose_reflow") & (df.strategy == "adaptive_bayes") & (df.budget == 1.0)]
     assert (full.stop_reason != "regression").all() and full.mandatory_covered.all()
-    # the prototype: the same change checked live (here on recorded answers), from this history
+    # replay-first: the baseline kept the model's answers as the recording's cassette, and every copy of the app
+    # is replayed against it, without a model
+    assert cassette_path(work).exists()
+    replay_first(work, workers=1)
+    replays = Replays.load(work)
+    assert replays.replayed("baseline") == frozenset(h.baseline)  # the original app replays to the end
+    for variant in ("skill_publish_drop_link_validation", "benign_skill_prose_reflow"):
+        diverged = set(replays.diverged(variant))
+        assert 0 < len(diverged) < len(h.baseline)  # the publishing skill reaches some of the tests only
+        # a revealing test never replays to a pass: it diverges, or it fails in the replay
+        assert h.revealing_tests(variant) <= diverged | set(replays.new_failures(variant))
+    rf = evaluate(work, strategies=["ir_tfidf", "adaptive_bayes"], budgets=(1.0,), seeds=1, replay_first=True)
+    assert rf[rf.variant == "skill_publish_drop_link_validation"].detected.all()
+    # with no budget to stop it, an order of the whole suite runs every test the benign change reaches and no other:
+    # a clean verdict with nothing left untested, paid from each test's divergence point on
+    clean = rf[(rf.variant == "benign_skill_prose_reflow") & (rf.strategy == "ir_tfidf")].iloc[0]
+    reached = [t for t in replays.diverged("benign_skill_prose_reflow") if t not in red]
+    assert clean.stop_reason == "exhausted" and clean.tests_run == len(reached)
+    assert 0 < clean.cost_fraction < clean.whole_cost_fraction < 1
+    report = write_report(work).read_text(encoding="utf-8")
+    assert "## 7. Replay-first" in report and (work / "results" / "figures" / "replay_first.png").exists()
+    # the prototype: the same change checked live (here on recorded answers), from this history: replay first,
+    # then the method over the tests that diverge
     log = check("skill_publish_drop_link_validation", work, 0.3, "replay")
     assert log.stop_reason == "regression" and log.p_broken > 0.9
+    assert not set(log.executed) & replays.replayed("skill_publish_drop_link_validation")
     out = capsys.readouterr().out
-    assert "coverage: " in out and "invoked: " in out
+    assert "replay: " in out and "coverage: " in out and "invoked: " in out
+    # a replayed failure of a test that passes on the original app ends a run before any test runs (here one is
+    # written into the replay by hand: neither change of this recording has one)
+    rows = read_jsonl(work / "history" / "replay_first.jsonl")
+    ok = (r for r in rows if r["variant"] == "benign_skill_prose_reflow" and r["replayed"] and r["test_id"] not in red)
+    next(ok)["passed"] = False
+    write_jsonl(work / "history" / "replay_first.jsonl", rows)
+    one = evaluate(work, ["ir_tfidf"], (1.0,), 1, ["benign_skill_prose_reflow"], replay_first=True).iloc[0]
+    assert one.stop_reason == "regression" and one.cost_fraction == 0 and one.tests_run == 0 and one.false_alarm
 
 
 def test_batches_compose_changes_that_edit_disjoint_files(tmp_path):

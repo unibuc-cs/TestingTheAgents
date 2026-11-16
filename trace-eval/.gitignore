@@ -6,6 +6,7 @@ __pycache__/
 runs/
 dist/
 .venv/
+.env
 
 # LaTeX build files of the paper draft (docs/paper); main.tex, refs.bib, the figure and the PDF are kept
 docs/paper/*.aux

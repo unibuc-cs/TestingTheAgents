@@ -6,6 +6,14 @@ A strategy receives a ``SelectionContext`` (change set, catalog, baseline histor
 - drives execution itself through an oracle (``run``), choosing the next test from the outcomes so far
   and deciding when to stop (adaptive strategies).
 
+Every run follows the same two rules, so that strategies are compared like for like:
+- a test the model already fails on the original app is not run (``ctx.runnable``): it cannot reveal a change;
+- the run ends at the first failure, with the stop reason "regression": a test that passed on the original app
+  now fails.
+With replay-first (``experiment/replay_first.py``) ``ctx.runnable`` also leaves out the tests that replay to the
+end on the changed copy: their outcome is known before any test runs, so a strategy orders the others only, and a
+test costs what is left of it after the requests that replay (``ctx.cost``).
+
 Strategies see the outcomes of the variant under evaluation only through the oracle (those of the other
 variants, ``train_variants``, they may learn from), and never see mutation labels."""
 
@@ -32,14 +40,26 @@ class SelectionContext:
     rng: object  # random.Random of this replay seed (used by stochastic strategies)
     train_variants: list[str] = field(default_factory=list)  # variants usable for learning (never the one under test)
     options: dict = field(default_factory=dict)  # "seed" and the evaluator's "order_cache"; strategies' scratch space
+    # Replay-first (experiment/replay_first.py), empty otherwise. ``replayed``: the tests whose outcome on the
+    # changed copy is already known, because every request they make there is one the original app made.
+    # ``prefix``: for the other tests, the tokens of the requests that replay before the change reaches the model.
+    replayed: frozenset = frozenset()
+    prefix: dict[str, float] = field(default_factory=dict)
 
     def tests(self) -> list[str]:
         """The suite: the recorded tests that the catalog still has, in the order of the recording."""
         return [t for t in self.history.test_ids() if t in self.catalog]
 
     def cost(self, t: str) -> float:
-        """Expected cost in tokens, the test's mean over its baseline runs; at least 1, as scores divide by it."""
-        return max(1.0, self.history.cost(t))
+        """Expected cost in tokens, the test's mean over its baseline runs; at least 1, as scores divide by it. With
+        replay-first, the part of the test that replays costs nothing and is taken off."""
+        return max(1.0, self.history.cost(t) - self.prefix.get(t, 0.0))
+
+    def runnable(self, t: str) -> bool:
+        """Whether running ``t`` can tell anything: it passes on the original app, and the replay has not already
+        given its outcome on the changed copy. A test the model already fails on the original app fails on the
+        changed copy too, whatever the change, so no strategy runs it."""
+        return t not in self.replayed and self.history.baseline_pass_rate(t) >= 0.5
 
 
 @dataclass
@@ -49,7 +69,8 @@ class ExecutionLog:
 
     strategy: str
     steps: list[tuple[str, bool, float]] = field(default_factory=list)  # (test_id, passed, cost)
-    # budget | exhausted (no test left that fits) | clean | regression | uninformative | no_components
+    # regression (a test failed: the run ends there) | exhausted (every test of its order ran and passed) |
+    # budget (the budget kept a test out) | clean | uninformative | no_components (the adaptive method's own)
     stop_reason: str = "budget"
     p_broken: float | None = None  # the adaptive method's final P(the change broke something)
     # the adaptive method's final P(this component is broken), per changed component, most likely first: for a
@@ -144,18 +165,26 @@ class Strategy:
         return list(cache[key])
 
     def run(self, ctx: SelectionContext, oracle: Oracle) -> ExecutionLog:
-        """Default: greedy execution of ``order`` within the budget (skip tests that do not fit)."""
+        """Default: the order run greedily within the budget, under the two rules of the module docstring. A test
+        that does not fit the remaining budget is skipped, not the end of the run."""
         log = ExecutionLog(self.name)
-        remaining = ctx.budget
-        for t in self.cached_order(ctx):
-            est = ctx.cost(t)
-            # a test that does not fit the remaining budget is skipped, not the end of the run
-            if est > remaining:
+        # rule 1: the tests the model already fails on the original app are left out of the order
+        order = [t for t in self.cached_order(ctx) if ctx.runnable(t)]
+        remaining, kept_out = ctx.budget, False  # kept_out: the budget, not the order, left a test unrun
+        for i, t in enumerate(order):
+            if ctx.cost(t) > remaining:
+                kept_out = True
                 continue
             passed, cost = oracle(t)
             log.steps.append((t, passed, cost))
             remaining -= cost
-            if remaining <= 0:
+            # rule 2: the first failure ends the run
+            if not passed:
+                log.stop_reason = "regression"
+                return log
+            if remaining <= 0:  # the budget is spent: tests further down the order stay unrun
+                kept_out = kept_out or i < len(order) - 1
                 break
-        log.stop_reason = "exhausted" if remaining > 0 else "budget"
+        # no test failed: either the whole order ran, or the budget cut it short and the run has no verdict
+        log.stop_reason = "budget" if kept_out else "exhausted"
         return log

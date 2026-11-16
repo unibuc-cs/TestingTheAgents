@@ -14,11 +14,17 @@ A server that makes up the ids of the tool calls (vLLM's chat API, which serves 
 in the next start's answers, and the app sends them back in later prompts. With ``canonical_ids`` the key
 replaces every tool-call id by its order of appearance in the conversation, so the recorded answers are found
 again whatever the ids; the answers keep the ids the server gave.
+
+Two more clients serve replay-first testing (``experiment/replay_first.py``). ``Tee`` stands in front of the model
+while the original app is recorded and keeps every answer, which becomes the recording's own cassette.
+``ReplayFirstClient`` answers from that cassette on a changed copy of the app, counts what it could answer, and
+passes the requests the original app never made on to the model, or reports them when there is none.
 """
 
 import hashlib
 import json
 import threading
+from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -96,6 +102,91 @@ class CachedClient:
                 with open(self.path, "a", encoding="utf-8") as fh:
                     fh.write(json.dumps({"key": key, "answer": answer}, ensure_ascii=False) + "\n")
         return _to_response(answer)
+
+
+class Tee:
+    """In front of the model while the original app is recorded: every answer passes through unchanged and is
+    kept, so that the recording gets a cassette of its own (``write``). Unlike ``CachedClient`` it never answers
+    in the model's place: with several repetitions the same request reaches the model several times, and the
+    answers are counted. Calls may come from several threads at once."""
+
+    def __init__(self, inner, canonical_ids: bool = False):
+        self.inner = inner  # the client that answers: a model, or recorded answers when a recording is replayed
+        self.model_id = inner.model_id
+        self.canonical_ids = canonical_ids
+        self._lock = threading.Lock()
+        # request key -> each different answer it got (as JSON text) with how many times, in order of appearance
+        self.seen: dict[str, Counter] = {}
+        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self.create))
+
+    def create(self, **request):
+        """One model call, answered by ``inner``; the answer is noted under the request's key."""
+        resp = self.inner.chat.completions.create(**request)
+        text = json.dumps(_to_record(resp), sort_keys=True, ensure_ascii=False)
+        with self._lock:
+            self.seen.setdefault(request_key(request, self.canonical_ids), Counter())[text] += 1
+        return resp
+
+    def write(self, path: str | Path) -> Path:
+        """Write the cassette: one line per request, in ``CachedClient``'s format. When the repetitions answered a
+        request in more than one way, the answer kept is the one given most often, the first seen among equals.
+        The path those answers lead to was recorded too, since the run that gave an answer went on from it.
+        ``asked`` and ``distinct`` say how often the request came and how many different answers it got."""
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            for key, answers in self.seen.items():
+                kept = max(answers, key=answers.get)  # the first of the most frequent: a Counter keeps its order
+                entry = {
+                    "key": key,
+                    "answer": json.loads(kept),
+                    "asked": sum(answers.values()),
+                    "distinct": len(answers),
+                }
+                fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        return path
+
+
+class ReplayFirstClient(CachedClient):
+    """The answers recorded on the original app (a recording's cassette), in front of a changed copy of the app.
+
+    A request the original app also made is answered from the cassette, for no tokens. Any other request is where
+    the change reaches the model: with ``live`` set it goes to that client, and without it the call raises
+    ``CacheMiss``, which ends the run. Nothing is ever added to the cassette. The counters describe the test in
+    progress (``begin`` resets them), so the tests must run one at a time."""
+
+    def __init__(self, path: str | Path, model_id: str, canonical_ids: bool = False, live=None):
+        super().__init__(None, path, model_id, canonical_ids)
+        self.live = live  # the model asked for what the cassette lacks; None: replay only
+        self.begin()
+
+    def begin(self):
+        """Before each test: forget what the one before did."""
+        self.requests = 0  # requests answered from the cassette before the first one it lacks
+        self.tokens = 0  # the tokens of those requests: the part of the test that needs no model
+        self.missed = 0  # requests the cassette lacks; 0 means the test replays to the end
+        self.served_tokens = 0  # the tokens of every request the cassette answered, also after a missed one
+        self.diverged_in = None  # how the change reached the model first: "prompt" or "tool result"
+
+    def create(self, **request):
+        """One model call: from the cassette if the original app made the same request, else from ``live``."""
+        answer = self.answers.get(request_key(request, self.canonical_ids))
+        if answer is not None:
+            used = answer["prompt_tokens"] + answer["completion_tokens"]
+            self.served_tokens += used
+            if not self.missed:  # still on the path the original app took
+                self.requests += 1
+                self.tokens += used
+            return _to_response(answer)
+        if not self.missed:
+            # A conversation opens with the system prompt and the request. If that first request is already
+            # unknown, what the agent is sent up front changed (its prompt, skills, tools or task); later on,
+            # every earlier answer was replayed, so only a tool result can differ.
+            self.diverged_in = "prompt" if len(request.get("messages") or []) <= 2 else "tool result"
+        self.missed += 1
+        if self.live is None:
+            raise CacheMiss("a request the original app never made: the change reaches the model here")
+        return self.live.chat.completions.create(**request)
 
 
 def _to_record(resp) -> dict:

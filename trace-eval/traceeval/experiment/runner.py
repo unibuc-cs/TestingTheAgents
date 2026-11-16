@@ -15,10 +15,13 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from traceeval.catalog import load_catalog
+from traceeval.llm.cache import Tee
+from traceeval.llm.chat import shared_client
 from traceeval.mutation import MUTATIONS, get_mutation, materialize_variant
 from traceeval.tracing.codecov import CoverageSession
 
 from .executor import attach_code_functions, default_backend, run_case, write_jsonl
+from .replay_first import cassette_path, in_front
 from .sutloader import load_sut
 
 
@@ -79,23 +82,29 @@ def record_baseline(
     config_overrides: dict | None = None,
 ) -> list[dict]:
     """Run the whole suite ``reps`` times on the original app with code coverage: history/baseline.jsonl, the
-    recording every strategy reads (observed dependencies, costs, pass rates)."""
+    recording every strategy reads (observed dependencies, costs, pass rates). Every answer the model gives on the
+    way is kept as the recording's cassette, history/cassette.jsonl, which replay-first testing answers from
+    (``replay_first.py``)."""
     workdir = Path(workdir)
+    backend = backend or default_backend()
     cases = load_catalog()
     # an unchanged copy under variants/baseline, loaded the same way as every changed copy; its change set is empty
     sut_dir, _ = materialize_variant(None, workdir / "variants")
     sut = load_sut(sut_dir)
     t0 = time.time()
-    records = run_suite(
-        sut,
-        cases,
-        reps=reps,
-        variant="baseline",
-        backend=backend,
-        config_overrides=config_overrides,
-        with_coverage=True,
-    )
+    # the tee stands in front of the model for the agents and the judge, and keeps what each request was answered
+    with in_front(backend, Tee(shared_client(backend), canonical_ids=(backend == "llm"))) as tee:
+        records = run_suite(
+            sut,
+            cases,
+            reps=reps,
+            variant="baseline",
+            backend=backend,
+            config_overrides=config_overrides,
+            with_coverage=True,
+        )
     write_jsonl(workdir / "history" / "baseline.jsonl", records)
+    tee.write(cassette_path(workdir))
     passed = sum(r["passed"] for r in records)
     _log(f"[baseline] {len(cases)} cases x {reps} reps: {passed}/{len(records)} passed in {time.time() - t0:.1f}s")
     sut.unload()

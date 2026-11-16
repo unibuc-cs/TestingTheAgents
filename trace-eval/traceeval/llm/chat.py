@@ -233,41 +233,61 @@ _SHARED_LOCK = threading.Lock()
 CASSETTE = Path(__file__).resolve().parents[2] / "tests" / "cassettes" / "gemma.jsonl"
 
 
-def shared_client(engine: str):
-    """The process-wide client of ``engine``, created on first use. "hf" or "vllm" runs the model named by
-    ``TRACEEVAL_HF_MODEL`` (Gemma 4 E4B by default) and "replay" only answers from its recorded answers. "llm"
-    reaches the servers in ``TRACEEVAL_LLM_BASE_URL`` (Qwen on the GPU server by default), with the model name
-    ``TRACEEVAL_LLM_MODEL`` and the key ``TRACEEVAL_LLM_API_KEY``.
+def model_name(engine: str) -> str:
+    """The model the requests of ``engine`` name: ``TRACEEVAL_LLM_MODEL`` for "llm" (Qwen by default), and
+    ``TRACEEVAL_HF_MODEL`` for "hf", "vllm" and "replay" (Gemma 4 E4B by default)."""
+    if engine == "llm":
+        return os.environ.get("TRACEEVAL_LLM_MODEL", QWEN_MODEL)
+    return os.environ.get("TRACEEVAL_HF_MODEL", DEFAULT_MODEL)
+
+
+def new_client(engine: str):
+    """A client of ``engine``. "hf" or "vllm" runs Gemma and "replay" only answers from its recorded answers. "llm"
+    reaches the servers in ``TRACEEVAL_LLM_BASE_URL`` (Qwen on the GPU server by default), with the key
+    ``TRACEEVAL_LLM_API_KEY``. ``model_name`` says which model each engine names.
 
     When ``TRACEEVAL_CACHE`` names a file, the model's answers go through that cache (``cache.py``): a request it
     has recorded is answered from it, and any other is asked of the model and recorded. "replay" reads that file,
     or the test suite's cassette when the variable is not set, and builds Gemma's prompts. "llm" is cached under
     keys that number the tool calls instead of carrying the ids its servers make up, since those ids go back into
     later prompts; a run whose every answer is recorded needs no server."""
+    model_id = model_name(engine)
+    cache = os.environ.get("TRACEEVAL_CACHE")
+    if engine == "llm":
+        # Qwen or gpt-oss through vLLM's own chat API: the server builds the prompt and parses the answer
+        # itself; the cache in front of it keys on canonical tool-call ids (cache.py).
+        client = Servers(
+            os.environ.get("TRACEEVAL_LLM_BASE_URL", QWEN_URL),
+            model_id,
+            os.environ.get("TRACEEVAL_LLM_API_KEY", "EMPTY"),
+        )
+        return CachedClient(client, cache, model_id, canonical_ids=True) if cache else client
+    if engine == "replay":
+        # The recorded answers alone: no model behind them, a request they lack is a CacheMiss.
+        return CachedClient(None, cache or CASSETTE, model_id)
+    # Gemma, in-process or served; the cache in front of it records what the model answers.
+    client = {"hf": HFChatClient, "vllm": VLLMChatClient}[engine](model_id)
+    return CachedClient(client, cache, model_id) if cache else client
+
+
+def shared_client(engine: str):
+    """The process-wide client of ``engine`` (``new_client``), created on first use: every case and every changed
+    copy of the app a process runs share it, and so does the judge."""
     with _SHARED_LOCK:  # the threads of a run may ask at the same moment; the model must load only once
         if engine not in _SHARED:
-            model_id = os.environ.get("TRACEEVAL_HF_MODEL", DEFAULT_MODEL)
-            cache = os.environ.get("TRACEEVAL_CACHE")
-            if engine == "llm":
-                # Qwen or gpt-oss through vLLM's own chat API: the server builds the prompt and parses the answer
-                # itself; the cache in front of it keys on canonical tool-call ids (cache.py).
-                client = Servers(
-                    os.environ.get("TRACEEVAL_LLM_BASE_URL", QWEN_URL),
-                    os.environ.get("TRACEEVAL_LLM_MODEL", QWEN_MODEL),
-                    os.environ.get("TRACEEVAL_LLM_API_KEY", "EMPTY"),
-                )
-                if cache:
-                    client = CachedClient(client, cache, client.model_id, canonical_ids=True)
-            elif engine == "replay":
-                # The recorded answers alone: no model behind them, a request they lack is a CacheMiss.
-                client = CachedClient(None, cache or CASSETTE, model_id)
-            else:
-                # Gemma, in-process or served; the cache in front of it records what the model answers.
-                client = {"hf": HFChatClient, "vllm": VLLMChatClient}[engine](model_id)
-                if cache:
-                    client = CachedClient(client, cache, model_id)
-            _SHARED[engine] = client
+            _SHARED[engine] = new_client(engine)
         return _SHARED[engine]
+
+
+def set_shared_client(engine: str, client):
+    """Make ``client`` the process-wide client of ``engine`` and return the one it replaces (None when there was
+    none; passing None back forgets the engine's client). Replay-first testing puts its own clients in front of
+    the model this way (``cache.py``), so that the agents' calls and the judge's both go through them."""
+    with _SHARED_LOCK:
+        previous = _SHARED.pop(engine, None)
+        if client is not None:
+            _SHARED[engine] = client
+        return previous
 
 
 def judge_client(backend: str):

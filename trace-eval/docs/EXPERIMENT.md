@@ -303,15 +303,23 @@ model, GPU, port and any vLLM flags it needs, and add its name to `PRESETS`.
 traceeval experiment --backend vllm --workdir runs/gemma7 --reps 5
 ```
 
-This runs four steps, which can also run one at a time with the same options:
+This runs five steps, which can also run one at a time with the same options:
 
 - **`baseline`** runs every test on the original app, one test at a time, because it records code coverage
-  per test and coverage can follow only one test at a time in a process.
+  per test and coverage can follow only one test at a time in a process. It also keeps every answer the model
+  gives, as the recording's cassette (`history/cassette.jsonl`).
 - **`mutants`** makes a changed copy of the app for each change (in `runs/gemma7/variants/`) and runs every test on
   it, 32 tests at a time by default (`--workers`), since the vLLM server handles many requests at once. With the
   local `hf` engine the default is 1. `--only <ids>` records some changes only, which is how a batch of changes is
   recorded ([USER_GUIDE.md](USER_GUIDE.md) §6).
-- **`evaluate`** replays the strategies on the recordings; it makes no model calls.
+- **`replay-first`** runs every test on the original app and on every changed copy with the model's calls answered
+  from that cassette. It calls no model and takes a few seconds per copy, several copies at a time. It writes
+  `history/replay_first.jsonl`: which tests replay to the end, with their outcome, and which diverge
+  ([USER_GUIDE.md](USER_GUIDE.md) §2).
+- **`evaluate`** replays the strategies on the recordings, each under the two rules of a run
+  ([USER_GUIDE.md](USER_GUIDE.md) §2); it makes no model calls. `--strategies` names the strategies (the default
+  eleven, or `all` to add the named variants) and `--seeds` the number of replay seeds (5). When the recording
+  has been replayed, the strategies are evaluated a second time, replay-first.
 - **`report`** writes `runs/gemma7/results/report.md`. Its first section is the sanity check: every
   regression must be revealed by at least one test, and no benign change by any.
 
@@ -341,20 +349,29 @@ traceeval run --test WF3-01 --backend replay --otel runs/otel/wf3-01.json
 
 ### Checking one change live (the prototype)
 
-`traceeval check` is what a developer would run before merging: the proposed method on one change, with the model
-running the chosen tests live instead of a recording answering for them
-([`traceeval/experiment/check.py`](../traceeval/experiment/check.py)).
+`traceeval check` is what a developer would run before merging one change
+([`traceeval/experiment/check.py`](../traceeval/experiment/check.py)). It has two phases:
+
+1. the replay: every test runs on the changed app with the model's calls answered from the recording's cassette,
+   in a few seconds and without a model. A test that passes on the original app and replays to a failure is a
+   regression, and the check ends there;
+2. the proposed method over the tests that diverge, each run live behind the same cassette, so that only the
+   requests from its divergence point on reach the model.
 
 ```bash
 traceeval check skill_routing_drop_approval --history runs/gemma7 --budget 0.2    # a change from the catalog
 traceeval check my-sut-copy --history runs/qwen7 --backend llm                    # a changed copy of traceeval/sut
 ```
 
-It runs the loop of [USER_GUIDE.md](USER_GUIDE.md) §5 live and prints each test as it runs, then:
+It prints how many tests replay and how many diverge, then each test of the loop of
+[USER_GUIDE.md](USER_GUIDE.md) §5 as it runs, then:
 
-- the verdict: `REGRESSION`, `no regression`, `no regression found within the budget`,
-  `no failure within the budget`, or `nothing to test` for a change that touches no code;
-- the tokens and seconds spent;
+- the verdict:
+  - `REGRESSION`, with the tests that failed, in the replay or live;
+  - `no regression`, when no test diverges, when every test the change reaches ran and passed, or when the
+    method is confident; in the last case it says how many of the tests the change reaches were not run;
+  - `no failure within the budget`;
+- the tokens the model was asked for, and the seconds;
 - the method's probability that the change broke something;
 - the change coverage ([USER_GUIDE.md](USER_GUIDE.md) §4) and what the tests left out: the affected properties left
   unchecked (marked when mandatory), the workflows not run, the features not reached and the refusals not reached;
@@ -363,16 +380,19 @@ It runs the loop of [USER_GUIDE.md](USER_GUIDE.md) §5 live and prints each test
   most likely first.
 
 `--history` is a recording made with the same model (the README); `traceeval experiment --reps 1` is enough for it.
-A changed copy of the app is compared with `traceeval/sut`, so copy that folder before editing it.
+A changed copy of the app is compared with `traceeval/sut`, so copy that folder before editing it. A change that
+leaves the change set empty and still makes tests diverge (a re-wrapped prompt, say) gives the method nothing to
+reason about; the diverged tests then run cheapest first. A recording without a cassette (Qwen's and gpt-oss's)
+replays nothing: every test diverges, and the check is the method alone.
 
-Run live on all 43 changes with Gemma, one check at a time, the check gives the replay's verdict on 42, with the
-same tests and tokens to within a few hundred. The exception is a false alarm on a benign change: a one-off of the
-model (section 3) on a test whose outcome hangs on one decision, which five more recordings of the change do not
-repeat; the live check reads one run where the replay reads the majority of five
+The method alone, without the replay phase, was run live on all 43 changes with Gemma, one check at a time. It
+gave the verdict of the evaluator's replay of the recorded runs on 42, with the same tests and tokens to within a
+few hundred. The exception is a false alarm on a benign change: a one-off of the model (section 3) on a test
+whose outcome hangs on one decision, which five more recordings of the change do not repeat; the live check
+reads one run where the evaluator reads the majority of five
 ([results/gemma7/live_vs_replay.md](results/gemma7/live_vs_replay.md),
-[results/gemma7/false_alarm_one_at_a_time.md](results/gemma7/false_alarm_one_at_a_time.md)). The 43 checks took 21
-minutes of model time: six tests and 1.9% of the suite's tokens per check at the median. On twenty batches of
-changes drawn at random the live verdict is the replay's on 19 ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.6).
+[results/gemma7/false_alarm_one_at_a_time.md](results/gemma7/false_alarm_one_at_a_time.md)). Those 43 checks took
+21 minutes of model time: six tests and 1.9% of the suite's tokens per check at the median.
 
 ### Recorded answers: running without a model
 
@@ -382,11 +402,15 @@ randomness, so a run that starts from recorded answers sends the same prompts ag
 
 - **`--backend replay`** answers only from recorded answers, with no model and no GPU. The test suite and
   `traceeval sdd` do this by default, from `tests/cassettes/gemma.jsonl`.
+- **A recording's own cassette**, `history/cassette.jsonl`, holds the answers its original app got and nothing
+  else. `traceeval baseline` writes it, and `traceeval replay-first` and `traceeval check` answer from it: a
+  request it lacks is one the original app never made. A Gemma recording without one gets it from the recorded
+  answers above, the first time it is replayed.
 - **`TRACEEVAL_CACHE=<file>`** with `--backend hf`, `vllm` or `llm` answers what the file has, asks the model for
   the rest and adds those answers to the file. Running the same experiment again then costs nothing.
 - With the `llm` backend the key numbers the tool calls instead of carrying the ids the server makes up (they go
   back into later prompts), and a run whose every answer is recorded never reaches the server.
-  `tests/cassettes/qwen.jsonl` and `tests/cassettes/gptoss.jsonl` hold the three checks of [DEMO.md](DEMO.md) §4,
+  `tests/cassettes/qwen.jsonl` and `tests/cassettes/gptoss.jsonl` hold the checks of [DEMO.md](DEMO.md) §4,
   recorded against `runs/qwen7` and `runs/gptoss7`. A replay must send the same request as the recording, so
   gpt-oss's needs its model name and length limit (`TRACEEVAL_LLM_MODEL`, `TRACEEVAL_LLM_MAX_TOKENS`) as below.
 - When the app changes a prompt through a skill, an agent definition, a config value or a tool result,
@@ -400,10 +424,10 @@ scripts/gpu_remote.sh up gemma
 TRACEEVAL_BACKEND=vllm pytest -q            # records into tests/cassettes/gemma.jsonl what the tests lack
 TRACEEVAL_CACHE=tests/cassettes/gemma.jsonl traceeval sdd --backend vllm --workers 32   # the SDD demo, faster
 scripts/gpu_remote.sh down
-# the demo's checks with Qwen and with gpt-oss, from their cassettes: no server
-TRACEEVAL_CACHE=tests/cassettes/qwen.jsonl traceeval check batch_nightly --history runs/qwen7 --backend llm
+# the demo's checks of one change with Qwen and with gpt-oss, from their cassettes: no server
+TRACEEVAL_CACHE=tests/cassettes/qwen.jsonl traceeval check skill_routing_drop_approval --history runs/qwen7 --backend llm
 TRACEEVAL_CACHE=tests/cassettes/gptoss.jsonl TRACEEVAL_LLM_MODEL=openai/gpt-oss-120b TRACEEVAL_LLM_MAX_TOKENS=4096 \
-  traceeval check batch_nightly --history runs/gptoss7 --backend llm
+  traceeval check skill_routing_drop_approval --history runs/gptoss7 --backend llm
 ```
 
 ## 6. What the models get wrong, and how the prompts and checks allow for it

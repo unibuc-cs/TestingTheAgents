@@ -136,6 +136,20 @@ class History:
         st = self.variants.get(variant, {}).get(test_id)
         return st.pass_rate if st and st.valid_runs else self.baseline_pass_rate(test_id)
 
+    def training_variants(self, variant: str, members: list[str] | None = None) -> list[str]:
+        """The recorded changes a strategy may learn from when ``variant`` is under test: every other one, except
+        those that share a change with it. A batch is not checked by a model that has seen what each of its members
+        breaks: its members are left out, and so are the batches that hold one of them; for a single change, the
+        batches it is a member of. ``members`` names the changes a batch bundles when it is not in the recording."""
+
+        def changes(v: str) -> set[str]:
+            """The catalog changes a recorded variant applies: its members for a batch, itself otherwise."""
+            return set(self.mutation_meta.get(v, {}).get("members") or [v])
+
+        # the changes under test, then every other variant that applies none of them
+        mine = set(members or []) | changes(variant)
+        return [v for v in self.variants if v != variant and not changes(v) & mine]
+
     def revealing_tests(self, variant: str, threshold: float = 0.5) -> set[str]:
         """Tests whose majority outcome flips from pass (baseline) to fail (variant) = ground truth."""
         out = set()

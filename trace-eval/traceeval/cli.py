@@ -12,12 +12,15 @@ traceeval run --test PUB-01 [--backend hf|vllm|llm|replay] [--otel trace.json]  
     plan, routing, approvals and consulted agents as span events)
 traceeval baseline --workdir runs/gemma7 --reps 5
 traceeval mutants  --workdir runs/gemma7 --reps 5 [--only id ...]
+traceeval replay-first --workdir runs/gemma7
+    every test on every changed copy, answered from the answers recorded on the original app: which tests
+    replay to the end (their outcome is known) and which diverge (they need the model); no model is called
 traceeval evaluate --workdir runs/gemma7 --seeds 10
 traceeval report   --workdir runs/gemma7
-traceeval experiment --workdir runs/gemma7   (baseline + mutants + evaluate + report)
+traceeval experiment --workdir runs/gemma7   (baseline + mutants + replay-first + evaluate + report)
 traceeval check <mutation id | changed copy of traceeval/sut> --history runs/gemma7 [--budget 0.2] [--backend vllm]
-    check one change live with the proposed method; --history is an experiment recorded with the same model;
-    prints the verdict and the change coverage
+    check one change live: replay first, then the proposed method over the tests that diverge; --history is an
+    experiment recorded with the same model; prints the verdict and the change coverage
 traceeval properties draft [--max 15] [--per-test 5] [--fresh] [--replay a.json] [--save-response a.json]
     a model (Qwen, the llm backend) drafts the catalog of properties from the requirements and tags the tests
 traceeval properties apply   write properties.yaml and the tests' tags from the reviewed draft
@@ -27,6 +30,7 @@ traceeval sdd draft --request request.md --id FS-0106 [--replay answer.json]   d
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -120,15 +124,37 @@ def cmd_mutants(args):
     )
 
 
-def cmd_evaluate(args):
-    """Replay every strategy against the recording: a selection at each budget, and a ranking of the whole suite."""
-    from traceeval.experiment.evaluate import DEFAULT_BUDGETS, evaluate, evaluate_prioritization
+def cmd_replay_first(args):
+    """Replay the original app and every changed copy against the recording's cassette; no model is called."""
+    from traceeval.experiment.replay_first import Replays, replay_first
 
+    workdir = Path(args.workdir)
+    # replays are CPU work, one process per copy: four at a time unless --workers says otherwise, and never more
+    # than the machine has cores (inside `experiment`, --workers is the model server's concurrency)
+    out = replay_first(workdir, workers=min(args.workers or 4, os.cpu_count() or 4))
+    replays = Replays.load(workdir)
+    for variant in replays.rows:
+        tests = len(replays.rows[variant])
+        diverged, failures = len(replays.diverged(variant)), len(replays.new_failures(variant))
+        print(f"{variant:42s} replayed {tests - diverged:3d}  diverged {diverged:3d}  new failures replayed {failures}")
+    print(f"replays written: {out}")
+
+
+def cmd_evaluate(args):
+    """Replay every strategy against the recording: a selection at each budget, and a ranking of the whole suite.
+    When the recording has been replayed (``replay-first``), the selection is evaluated replay-first as well."""
+    from traceeval.experiment.evaluate import DEFAULT_BUDGETS, evaluate, evaluate_prioritization
+    from traceeval.experiment.replay_first import Replays
+
+    workdir, strategies = Path(args.workdir), args.strategies or None
     budgets = tuple(args.budgets) if args.budgets else DEFAULT_BUDGETS
-    df = evaluate(Path(args.workdir), strategies=args.strategies or None, budgets=budgets, seeds=args.seeds)
-    # Prioritization (APFD over each strategy's complete order) replays with a third of the seeds.
-    pr = evaluate_prioritization(Path(args.workdir), strategies=args.strategies or None, seeds=max(1, args.seeds // 3))
-    print(f"replay rows: {len(df)}, prioritization rows: {len(pr)} -> {Path(args.workdir) / 'results'}")
+    df = evaluate(workdir, strategies=strategies, budgets=budgets, seeds=args.seeds)
+    # Prioritization: APFD over each strategy's complete order, with the same seeds for the orders drawn at random.
+    pr = evaluate_prioritization(workdir, strategies=strategies, seeds=args.seeds)
+    print(f"replay rows: {len(df)}, prioritization rows: {len(pr)} -> {workdir / 'results'}")
+    if Replays.load(workdir) is not None:
+        rf = evaluate(workdir, strategies=strategies, budgets=budgets, seeds=args.seeds, replay_first=True)
+        print(f"replay-first rows: {len(rf)}")
 
 
 def cmd_report(args):
@@ -140,15 +166,17 @@ def cmd_report(args):
 
 
 def cmd_experiment(args):
-    """The whole experiment in a row: baseline, variants, evaluation, report."""
+    """The whole experiment in a row: baseline, variants, their replay, evaluation, report."""
     cmd_baseline(args)
     cmd_mutants(args)
+    cmd_replay_first(args)
     cmd_evaluate(args)
     cmd_report(args)
 
 
 def cmd_check(args):
-    """The prototype: one change checked live with the proposed method, against a recorded experiment."""
+    """The prototype: one change checked live, replay first and then the proposed method, against a recorded
+    experiment."""
     from traceeval.experiment.check import check
 
     check(args.change, Path(args.history), args.budget, args.backend)
@@ -242,14 +270,15 @@ def main(argv=None):
     r.add_argument("--otel", metavar="PATH", help="write the run's trace as OpenTelemetry spans (OTLP JSON) to PATH")
     r.set_defaults(fn=cmd_run)
 
-    # The experiment commands share one set of options, since `experiment` runs the other four in a row; each
+    # The experiment commands share one set of options, since `experiment` runs the other five in a row; each
     # command reads only the options it needs.
     def common(sp):
         """The options every experiment command takes."""
         sp.add_argument("--workdir", default="runs/experiment")
         sp.add_argument("--reps", type=int, default=3)
         sp.add_argument("--backend", default="hf", choices=BACKENDS)
-        sp.add_argument("--workers", type=int, default=0, help="cases in parallel (default: 32 for vllm/llm, else 1)")
+        workers = "cases in parallel (default: 32 for vllm/llm, else 1); replay-first: copies in parallel (default: 4)"
+        sp.add_argument("--workers", type=int, default=0, help=workers)
         sp.add_argument("--set", action="append", help="config override key=value (JSON value), e.g. runtime.retries=0")
         sp.add_argument("--only", nargs="*", help="mutation ids (mutants only)")
         sp.add_argument("--seeds", type=int, default=5, help="replay seeds (evaluate only)")
@@ -259,6 +288,7 @@ def main(argv=None):
     for name, fn in (
         ("baseline", cmd_baseline),
         ("mutants", cmd_mutants),
+        ("replay-first", cmd_replay_first),
         ("evaluate", cmd_evaluate),
         ("report", cmd_report),
         ("experiment", cmd_experiment),
