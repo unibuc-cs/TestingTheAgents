@@ -1,8 +1,9 @@
 # Related work and positioning
 
-Work related to TRACE-Eval, grouped by topic, from a survey of arXiv, ACM, IEEE and GitHub in October 2026. Each
-entry says what the work does and how it relates to this project. Entries marked *not yet read* were found by
-search, but their full text has not been checked; they should be read before they are cited.
+Work related to TRACE-Eval, grouped by topic, from surveys of arXiv, ACM, IEEE and GitHub in October and November
+2026. Each entry says what the work does and how it relates to this project. Entries marked *not yet read* were
+found by search, but their full text has not been checked; they should be read before they are cited. The entries
+of §8, on replaying recorded answers, were read at their sources unless marked *metadata only*.
 
 ## 1. Test selection / prioritization for LLM applications and agents
 
@@ -11,13 +12,15 @@ search, but their full text has not been checked; they should be read before the
   partitions a regression suite into slices that are semantically coherent in a feature space of behavioural
   signals and consistent in performance (mostly pass or mostly fail). The signals are 10 domain-specific features
   mined from agent execution logs on the baseline V0, such as file-level recall, trajectory entropy deviation,
-  plan compliance and test failure rate. After a change, it runs only representative instances of each slice on
-  V1, extracts the signals again, scores the impact of the change with a failure-prediction model trained on V0,
-  and ranks slices by the aggregated change in predicted impact. It is evaluated on LLM-agent issue resolution,
-  under model changes and prompt changes, across budget levels, against GMM/HDBSCAN (slicing) and random (ranking)
-  baselines. It is adapted as the `casper_slices` strategy (`traceeval/selection/adapted.py`): slices from
-  behavioural signals of the baseline traces, two representatives per slice, the slices ranked by how much a
-  failure model's prediction rose on the representatives' signals. CASPER is not diff-aware: it does not map what
+  plan compliance and test failure rate; the slices are found by a multi-objective search (NSGA-II). After a
+  change, it runs only representative instances of each slice on V1, extracts the signals again, and scores the
+  impact of the change with a failure-prediction model trained on V0. Slices are ranked by a predicted category
+  first (regression, improvement, unchanged), then by predicted impact inside the category. It is evaluated on
+  LLM-agent issue resolution, under model changes and prompt changes, across budget levels, against GMM/HDBSCAN
+  (slicing) and random (ranking) baselines. It is adapted as the `casper_slices` strategy
+  (`traceeval/selection/adapted.py`): slices from behavioural signals of the baseline traces, two representatives
+  per slice, the slices ranked by how much a failure model's prediction rose on the representatives' signals.
+  CASPER is not diff-aware: it does not map what
   changed in a skill, prompt or harness to tests. It also reports no APFD-style metric, has no ground truth from
   mutations or injected faults, covers a single application domain and has no stopping rule. Its strength is the
   case this testbed does not cover: a change with no diff to map, such as a model upgrade, where only the logs of
@@ -65,9 +68,9 @@ search, but their full text has not been checked; they should be read before the
   IRT and item selection by Fisher information, using up to 90% fewer items. Its sequential selection by
   information gain is a template for budget-aware stopping.
 - **Efficient Benchmarking of AI Agents.** Ndzomga, arXiv 2603.23749, 2026. Keeps the tasks of mid-range difficulty
-  (pass rate in [0.3, 0.7]) on Terminal-Bench 2.0 and the HAL benchmarks, which removes 44–70% of the tasks with
-  rank fidelity $\rho \approx 0.91$. It is the strongest existing baseline for cheap subsets of agent evals, but it
-  optimizes the ranking of models and not the detection of regressions after a change.
+  (pass rate in [0.3, 0.7]) on Terminal-Bench 2.0 and the HAL benchmarks, which removes 44% to 70% of the tasks
+  with rank fidelity $\rho \approx 0.91$. It is the strongest existing baseline for cheap subsets of agent evals,
+  but it optimizes the ranking of models and not the detection of regressions after a change.
 - **Risk-Aware Adaptive Evaluation.** Maji & Chowdhury (Georgia Tech), arXiv 2609.38914, Sep 2026. Contextual
   Thompson sampling over $\tau$-bench airline scenarios with impact weights. With 6% of the corpus it recovers 86%
   of the impact-weighted failure discovery of an oracle. It competes directly with our allocation of runs, although
@@ -82,12 +85,29 @@ search, but their full text has not been checked; they should be read before the
 
 ## 3. Mutation testing / fault injection for LLM apps, prompts, agents
 
-We found no paper that defines mutation operators for prompts, skills or harness code as a regression ground
-truth. Searches for prompt mutation testing return LLM-assisted mutation testing of code (MuTAP, arXiv
+Mutation operators on agent artefacts now exist in three works, none of which uses them to compare test
+selection:
+
+- **Mutation Testing for Multi-Agent Workflows.** Kahani, Bagherzadeh, arXiv 2611.09895, 2026 (no venue yet).
+  Fourteen operators in four families (delegation, allowed tool, restriction, agent or instruction) on a workflow
+  manifest; 1,084 mutants of ten workflows, three live runs per test with a majority. To bound cost, a mutant runs
+  only on the tests structurally incident to its changed element: a static selection per change. Their earlier
+  preprint, "Testing agentic workflows with structural coverage criteria" (arXiv 2605.26521), defines coverage
+  over a typed coordination graph and is not mutation testing.
+- **AgentAssay.** Bhardwaj, arXiv 2603.02601, 2026 (a technical report, not peer reviewed). Three-valued verdicts
+  from sequential tests, behavioural fingerprints, and twelve mutation operators (prompt, tool, model, context).
+  Its "trace-first offline analysis" checks coverage and contracts on stored traces; detecting a regression
+  still needs new runs. It overlaps the sequential test this project plans for repeated runs.
+- **Chronicle** (§8) evaluates its replayed regression tests on 192 mutants.
+- **AdaT²** (Lin, Yu, Xu, Zhang, Briand, Muñoz, arXiv 2610.10141, 2026) is test generation, not mutation testing:
+  boundary tests for conversational agents from policy statements and transformation instructions chosen by a
+  bandit. Mutation appears in its evaluation only, as 16 seeded "policy flip" faults.
+
+Searches for prompt mutation testing otherwise return LLM-assisted mutation testing of code (MuTAP, arXiv
 2308.16557; LLMorpheus, arXiv 2404.09952). SABER (Cuadron et al., arXiv 2512.07850, ICLR 2026) is not mutation
 testing either: its "mutating steps" are actions that modify the environment. It shows that deviations in such
-steps cut the odds of success by up to 92–96% on $\tau$-bench, and it releases $\tau$-Bench Verified, with cleaned
-annotations, which is usable as a SUT.
+steps cut the odds of success by up to 92% to 96% on $\tau$-bench, and it releases $\tau$-Bench Verified, with
+cleaned annotations, which is usable as a SUT.
 
 Fault-injection work that can generate a ground truth or serve as a contrast:
 
@@ -130,6 +150,25 @@ Fault-injection work that can generate a ground truth or serve as a contrast:
   models", IEEE TSE 50(11), 2024 (arXiv 2304.01397).
 - Elbaum, Rothermel, Penix, "Techniques for improving regression testing in CI development environments",
   FSE 2014.
+- Gligoric, Eloussi, Marinov, "Practical regression test selection with dynamic file dependencies" (Ekstazi),
+  ISSTA 2015. Records the files each test class uses, with checksums, and re-runs a class only when one changed.
+  The same idea as replay-first, dependencies observed at run time and compared by content, at file granularity;
+  in an agent app most tests read the same prompt and skill files, so file checksums select nearly everything.
+- Bazel's test result caching (`--cache_test_results`, user manual): a test is re-run only if it or a declared
+  dependency changed. A digest of declared inputs decides, with nothing run; its hermeticity assumption plays the
+  role of replay-first's condition on the model.
+- Wang, Lian, Marinov, Xu, "Test selection for unified regression testing" (uRTS), ICSE 2023. One selection
+  algorithm for code changes, configuration changes and both, built on Ekstazi and Ctest. The closest classic
+  precedent for selection across code and non-code artefacts; it instruments each kind of artefact, where a
+  replay sees any artefact through its effect on a request.
+- Mirarab, Tahvildari, "A prioritization approach for software test cases based on Bayesian networks", FASE
+  2007. A probabilistic order from source changes, fault-proneness and coverage: a precedent for the adaptive
+  method's kind of model.
+- Gonzalez-Sanchez, Abreu, Gross, van Gemund, "Spectrum-based sequential diagnosis" (SEQUOIA), AAAI 2011. Picks
+  the next test to reduce the entropy over Bayesian fault candidates: the precedent for choosing a test by
+  expected information gain. Its goal is locating a fault after failures, which matters here for the blame in a
+  batch. Abreu, Zoeteweij, van Gemund, "Spectrum-based multiple fault localization" (Barinel), ASE 2009, gives
+  the posterior over faulty components, with components that fail only sometimes.
 
 ## 5. Agent benchmarks with executable environments and deterministic verification
 
@@ -159,16 +198,35 @@ Fault-injection work that can generate a ground truth or serve as a contrast:
   limit theorem, clustered standard errors, paired comparisons and power analysis. It supports the paired
   per-test comparison of V0 and V1 behind our majority-vote ground truth.
 - **On Randomness in Agentic Evals.** Bjarnason, Silva, Monperrus (KTH), arXiv 2602.07150, 2026. Single-run pass@1
-  varies by 2.2–6.0 pp, and the standard deviation stays above 1.5 pp even at temperature 0.
+  varies by 2.2 to 6.0 pp, and the standard deviation stays above 1.5 pp even at temperature 0.
 - **When Agents Disagree With Themselves.** Mehta, arXiv 2602.11619, 2026. Uses behavioural consistency as a
   signal of uncertainty.
 - **FAQ** (§2), for anytime-valid confidence intervals.
+- **Understanding and Mitigating Numerical Sources of Nondeterminism in LLM Inference.** Yuan et al., NeurIPS
+  2025, arXiv 2506.09501. Under greedy decoding, the batch size, the number of GPUs or the GPU type change the
+  output, through non-associative floating-point arithmetic at limited precision. It explains why about 2% of the
+  requests of a recording are answered otherwise when sent again, and why the condition of replay-first has to be
+  measured per serving setup. Measured here (`RESEARCH_PLAN.md` §5.7): the batch and the server's prefix cache
+  account for all of it, and with neither every request gets its recorded answer again, across a restart too.
+- **Non-Determinism of "Deterministic" LLM Settings.** Atil et al., arXiv 2408.04667 (Eval4NLP 2025). Identical
+  output strings are rarer than identical parsed answers: the same gap between answers and outcomes as in the
+  recording.
+- **Defeating Nondeterminism in LLM Inference.** He, 2025 (blog). A thousand completions of one prompt at
+  temperature 0 gave 80 distinct outputs; batch-invariant kernels gave one, at 1.6 to 2.1 times the time. vLLM's
+  documentation says the same of its default mode; neither model of this testbed can be served batch-invariant.
+- **The Replay Gap.** Gonuguntla, arXiv 2608.08239, 2026. Replaying a logged trajectory with another model's
+  outputs substituted is open-loop: most later actions change. Replay-first is not open-loop: it stops trusting
+  the recording at the first request the recording lacks.
+- **Conformal Risk Control** (Angelopoulos, Bates, Fisch, Lei, Schuster, ICLR 2024) and **Learn then Test**
+  (Angelopoulos, Bates, Candès, Jordan, Lei, Annals of Applied Statistics, 2025). A threshold calibrated on
+  held-out data controls the expected value of a loss. Both fit a stop threshold over the diverged tests, and
+  both assume the calibration changes are exchangeable with the next one.
 - *Not yet read:* arXiv 2511.10661 (§2) and arXiv 2608.22659.
 
 ## 7. Observability standards
 
 - **OpenTelemetry GenAI semantic conventions** (`semantic-conventions-genai`, `gen-ai-agent-spans.md`). Define the
-  operations `create_agent`, `invoke_agent`, `execute_tool`, … and the attributes `gen_ai.operation.name`,
+  operations `create_agent`, `invoke_agent`, `execute_tool` and others, and the attributes `gen_ai.operation.name`,
   `gen_ai.provider.name`, `gen_ai.agent.{name,id,version}`, `gen_ai.request.model`,
   `gen_ai.usage.{input,output}_tokens`, `gen_ai.tool.name` and `error.type`. Their status is Development, not
   stable. The attribute `gen_ai.agent.version` is a natural hook for identifying a change.
@@ -176,41 +234,120 @@ Fault-injection work that can generate a ground truth or serve as a contrast:
 - Research that uses traces: llmmas-otel (OpenTelemetry), AgentChaosBench (Langfuse) and **TRAIL** (Deshpande et
   al., Patronus, arXiv 2505.08638). None of them uses traces to select tests.
 
+## 8. Replaying recorded answers
+
+Replay-first (RESEARCH_PLAN §3.3) re-runs every test on the changed app with the model's calls answered from the
+answers recorded on the original app. The mechanism has precedents, in classic testing and for LLM agents.
+
+Classic precedents:
+
+- **Automatic Test Factoring for Java.** Saff, Artzi, Perkins, Ernst, ASE 2005. The closest. It records the calls
+  between the code under test and an expensive environment during a system test and replays them from a
+  transcript. The factored test passes, fails, or throws a `ReplayException` when the sequence of calls or their
+  arguments differ from the recording; the full system must then be run. These are replay-first's three
+  outcomes, with the model as the environment. It differs in what follows: the fallback re-runs the whole test,
+  the exception is a nuisance and not a signal, and nothing selects or orders the tests that threw.
+- **Transparent Mutable Replay** (Dora). Viennot, Nair, Nieh, ASPLOS 2013. Replays a recording on a modified
+  program and lets the session go live where the two diverge: the precedent for reusing the prefix of a run.
+- **Efficient Patch-Based Auditing for Web Application Vulnerabilities** (POIROT). Kim, Chandra, Zeldovich, OSDI
+  2012. Re-executes logged requests on patched code with their recorded I/O; a query the log has no result for
+  flags the request. The divergence criterion, used for auditing. Its "memoized re-execution" reuses
+  intermediate results across requests and is not a cache of test results.
+- **Intrusion Recovery Using Selective Re-execution** (Retro). Kim, Wang, Zeldovich, Kaashoek, OSDI 2010. Skips
+  re-executing an action whose inputs are equivalent to those of the original execution.
+- Record/replay tests in industry: recorded traffic replayed before submit, re-recorded when a request no longer
+  matches ("Larger testing", *Software Engineering at Google*, ch. 14); recorded event histories replayed against
+  changed workflow code (Temporal's replay tests).
+- *Metadata only:* capture and replay for unit tests (Orso and Kennedy, WODA 2005; Joshi and Orso, ICSM 2007;
+  Elbaum, Chin, Dwyer, Jorde, IEEE TSE 2009); Mokhov, Mitchell, Peyton Jones, "Build systems à la carte", ICFP
+  2018, under which replay-first reads as a build with dynamic dependencies and early cutoff.
+
+For LLM applications and agents:
+
+- **Chronicle: Cut-Point Replay for Regression Testing of LLM Agents.** Chawla, Koul, arXiv 2609.20625, 2026. The
+  closest published work. It records each crossing of a developer-annotated boundary (model call, tool call,
+  routing decision) and replays it, the k-th crossing getting the k-th recorded envelope; the developer chooses
+  which crossings come from the record and which run live with new code. It matches by position, not by the
+  content of the request, so it cannot tell that a change reached the model; a count mismatch raises and the
+  fixture is re-recorded. It selects no tests, and its benchmark uses simulated model boundaries.
+- **An "inference replay" design** in an open-source agent project (a design document, 2026). Recorded answers
+  are served to later eval runs that send the same request, and a run pays for inference only from its first
+  request that matches no recording. This is exact-match replay with reuse of the prefix. Every case still runs:
+  there is no selection, order or stop.
+- **Exact-match caches in evaluation frameworks** (promptfoo, Inspect AI, DSPy, a recording proxy in another
+  open-source project). With such a cache on, re-running the whole suite after a change pays only for the changed
+  requests. That is the baseline replay-first has to beat: on this testbed it costs at most 21% of the suite's
+  tokens per change (RESEARCH_PLAN §5.7). None of them returns "replayed" or "diverged" per test, or orders or
+  stops over the diverged tests.
+- **Cassette tooling** (VCR.py, LangChain's and LangSmith's test caches, session recording in agent tools).
+  A request the cassette lacks is a failure to fix or a reason to re-record. VCR.py does not match the request
+  body by default, so a stock cassette answers a changed prompt with the old response.
+- **AgentCheck** (Mazumder, Lia, arXiv 2607.11098, 2026) replays tool responses and goes live after the agent
+  diverges, to hold everything but an injected fault fixed; model calls stay live. **agrepl** (Mudasiru, arXiv
+  2607.16200, 2026) replays all external interactions for debugging.
+- Selection for agent benchmarks that does not read the change: trajectory-aware subset selection (Ayyad et al.,
+  arXiv 2609.24928, 2026) and a study of an evolving agent in production (She, Lin, arXiv 2609.21267, 2026), which
+  states that changes to an agent do not directly identify the affected benchmark questions.
+
+What we found no source for, and what replay-first therefore adds:
+
+- the replay read as a classification of the whole suite, before any model call, into tests whose outcome is
+  known and tests the change reaches;
+- selection, ordering and stopping applied to the reached tests only, compared with test-selection baselines on
+  seeded and generated changes;
+- the condition measured at three levels (request, run, outcome), with an empty change as the reference.
+
 ## Gap analysis
 
-1. **No work maps a diff to the tests it impacts.** CASPER is change-aware only through the drift in behaviour
-   after a change, and GBV-PD needs gradients. No work maps a concrete edit (skill file, prompt, tool schema,
-   harness code, config) to the tests whose traces touched the changed component, which would be the agent
-   analogue of coverage-based or IR-based RTS. Trace spans (`execute_tool`, skill loads, config reads) are an
-   untapped proxy for coverage.
-2. **Cost is measured in tokens and time, not in tests.** The cost of agent tests varies by a factor of 10–100.
+1. **Little work maps a change to the tests it impacts.** CASPER is change-aware only through the drift in
+   behaviour after a change, and GBV-PD needs gradients. Kahani and Bagherzadeh run a mutant on the tests
+   structurally incident to its changed element, a static rule on a workflow manifest. No work maps a concrete
+   edit (skill file, prompt, tool schema, harness code, config) to the tests whose traces touched the changed
+   component, or to the tests whose requests to the model it changes (§8).
+2. **Cost is measured in tokens and time, not in tests.** The cost of agent tests varies by a factor of 10 to 100.
    Cost-cognizant $\mathrm{APFD}_c$ with token or latency costs, and budget-aware stopping, have not been applied
    to agent evals.
 3. **Selection that accounts for nondeterminism.** Allocating runs and tests jointly under a budget, with
    anytime-valid stopping, is an open problem. Risk-Aware Adaptive Evaluation allocates runs with a bandit but
    ignores the change.
-4. **No mutation-based ground truth.** Existing injectors perturb the runtime (LLM responses, tool latency). None
-   mutates the artifacts under change (skills, prompts, harness, config) to seed regressions and measure a
-   selector's detection rate. This is the testbed's main methodological addition; the contribution itself is the
-   method (RESEARCH_PLAN §1). It is also the testbed's main credibility risk: reviewers will ask whether mutants
-   resemble real regressions, so the mutants should be paired with real version histories.
+4. **Mutation-based ground truth exists, but not for test selection.** Injectors perturb the runtime (LLM
+   responses, tool latency); three works mutate agent artefacts (§3), to measure the adequacy of a test suite.
+   None seeds regressions to measure a selector's detection rate. Reviewers will ask whether mutants resemble
+   real regressions, so the hand-written and the generated changes should be paired with real version histories.
 5. **Evaluation on several systems.** CASPER covers one domain. $\tau^2$-bench, AppWorld, SkillsBench,
    Terminal-Bench and AgentDojo offer deterministic verifiers for validation across domains.
 
 ## Closest competitors (ranked)
 
-1. **CASPER** (2608.00378). The same problem in the same community. We differ in diff-awareness, the cost model,
+1. **Test factoring** (ASE 2005) and **Chronicle** (2609.20625). The replay mechanism, in classic testing and
+   for agents. We differ in using the replay to select tests over a suite, in matching by the content of the
+   request, in what runs after a divergence, and in measuring the condition (§8).
+2. **An exact-match cache in front of the model.** Not a paper: what evaluation frameworks already do. It is the
+   cost baseline for replay-first.
+3. **CASPER** (2608.00378). The same problem in the same community. We differ in diff-awareness, the cost model,
    stopping, the mutation-based ground truth and evaluation on several systems. Adapted as
    `casper_slices`.
-2. **Risk-Aware Adaptive Evaluation** (2609.38914). Adaptive allocation under a budget on $\tau$-bench; adapted
+4. **Risk-Aware Adaptive Evaluation** (2609.38914). Adaptive allocation under a budget on $\tau$-bench; adapted
    as `risk_aware_ts`.
-3. **Efficient Benchmarking of AI Agents** (2603.23749). A baseline that keeps tasks of mid-range difficulty.
-4. **GBV-PD** (2606.28037). Reviewers will ask why it does not apply here: the LLMs are black boxes.
-5. **ATLAS / tinyBenchmarks.** Baselines for adaptive selection with IRT.
-6. **SESS** (2601.03493). Submodular selection of evaluation subsets.
-7. **AgentChaos / llmmas-otel.** Fault injection with OpenTelemetry tracing. We mutate the artifacts under change,
-   while they inject faults at run time.
-8. **On Randomness in Agentic Evals** (2602.07150). A statistical framing of budgets spread over several runs.
+5. **Kahani and Bagherzadeh** (2611.09895). Mutation operators on agent workflows, with a static selection of
+   tests per mutant.
+6. **Efficient Benchmarking of AI Agents** (2603.23749). A baseline that keeps tasks of mid-range difficulty.
+7. **GBV-PD** (2606.28037). Reviewers will ask why it does not apply here: the LLMs are black boxes.
+8. **ATLAS / tinyBenchmarks.** Baselines for adaptive selection with IRT.
+9. **SESS** (2601.03493). Submodular selection of evaluation subsets.
+10. **AgentChaos / llmmas-otel.** Fault injection with OpenTelemetry tracing. We mutate the artifacts under
+    change, while they inject faults at run time.
+11. **On Randomness in Agentic Evals** (2602.07150). A statistical framing of budgets spread over several runs.
+
+What the paper should not claim:
+
+- that it is the first to replay recorded model answers on a changed agent, or the first to pay for a test only
+  after its divergence;
+- that the replay is an exact oracle: it is exact relative to the recorded answers, for one model and one
+  serving setup;
+- the token saving alone as the contribution: the cache baseline has most of it;
+- "replay" without saying which: open-loop replay, a bandit's offline replay and experience replay are other
+  things.
 
 ## Venues and framing
 
@@ -265,3 +402,25 @@ Full bibliographic entries for the works the project builds on, with what each i
 41. Machalica et al. Predictive Test Selection. ICSE-SEIP 2019. https://arxiv.org/abs/1810.05286
 42. Pan, Ghaleb, Briand. LTM. IEEE TSE 2024. https://arxiv.org/abs/2304.01397
 43. Pan et al. TCS/TCP using ML: an SLR. arXiv 2106.13891. https://arxiv.org/abs/2106.13891
+44. Saff, Artzi, Perkins, Ernst. Automatic Test Factoring for Java. ASE 2005. https://homes.cs.washington.edu/~mernst/pubs/test-factoring-ase2005.pdf
+45. Viennot, Nair, Nieh. Transparent Mutable Replay for Multicore Debugging and Patch Validation. ASPLOS 2013. https://www.cs.columbia.edu/~nieh/pubs/asplos2013_dora.pdf
+46. Kim, Chandra, Zeldovich. Efficient Patch-Based Auditing for Web Application Vulnerabilities. OSDI 2012. https://www.usenix.org/conference/osdi12/technical-sessions/presentation/kim
+47. Kim, Wang, Zeldovich, Kaashoek. Intrusion Recovery Using Selective Re-execution. OSDI 2010. https://www.usenix.org/events/osdi10/tech/full_papers/Kim.pdf
+48. Chawla, Koul. Chronicle: Cut-Point Replay for Regression Testing of LLM Agents. arXiv 2609.20625. https://arxiv.org/abs/2609.20625
+49. Gligoric, Eloussi, Marinov. Practical Regression Test Selection with Dynamic File Dependencies. ISSTA 2015. https://users.ece.utexas.edu/~gligoric/papers/GligoricETAL15Ekstazi.pdf
+50. Wang, Lian, Marinov, Xu. Test Selection for Unified Regression Testing. ICSE 2023. https://doi.org/10.1109/ICSE48619.2023.00145
+51. Mirarab, Tahvildari. A Prioritization Approach for Software Test Cases Based on Bayesian Networks. FASE 2007. https://doi.org/10.1007/978-3-540-71289-3_22
+52. Gonzalez-Sanchez, Abreu, Gross, van Gemund. Spectrum-Based Sequential Diagnosis. AAAI 2011. https://doi.org/10.1609/aaai.v25i1.7844
+53. Abreu, Zoeteweij, van Gemund. Spectrum-Based Multiple Fault Localization. ASE 2009. https://doi.org/10.1109/ASE.2009.25
+54. Kahani, Bagherzadeh. Mutation Testing for Multi-Agent Workflows. arXiv 2611.09895. https://arxiv.org/abs/2611.09895
+55. Bhardwaj. AgentAssay. arXiv 2603.02601. https://arxiv.org/abs/2603.02601
+56. Lin, Yu, Xu, Zhang, Briand, Muñoz. AdaT². arXiv 2610.10141. https://arxiv.org/abs/2610.10141
+57. Yuan et al. Understanding and Mitigating Numerical Sources of Nondeterminism in LLM Inference. NeurIPS 2025. https://arxiv.org/abs/2506.09501
+58. Atil et al. Non-Determinism of "Deterministic" LLM Settings. arXiv 2408.04667. https://arxiv.org/abs/2408.04667
+59. He. Defeating Nondeterminism in LLM Inference. 2025. https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/
+60. Gonuguntla. The Replay Gap. arXiv 2608.08239. https://arxiv.org/abs/2608.08239
+61. Angelopoulos, Bates, Fisch, Lei, Schuster. Conformal Risk Control. ICLR 2024. https://arxiv.org/abs/2208.02814
+62. Angelopoulos, Bates, Candès, Jordan, Lei. Learn then Test. Annals of Applied Statistics, 2025. https://arxiv.org/abs/2110.01052
+63. Mazumder, Lia. AgentCheck. arXiv 2607.11098. https://arxiv.org/abs/2607.11098
+64. Ayyad, Wang, Shin, Zou, Adams. Trajectory-Aware Benchmark Subset Selection. arXiv 2609.24928. https://arxiv.org/abs/2609.24928
+65. She, Lin. Efficient Benchmarking in Production. arXiv 2609.21267. https://arxiv.org/abs/2609.21267

@@ -11,7 +11,7 @@ It adds a spec layer (`traceeval/spec/`) on top of the ContentOps testbed:
 
 - five change requests written as specs (`traceeval/specs/FS-010x.yaml`), with clauses picked from the
   template catalog `traceeval/spec/catalog.yaml`;
-- 25 pull requests with known verdicts (`traceeval/spec/prs.py`); every correct PR is a code change of 1–4
+- 25 pull requests with known verdicts (`traceeval/spec/prs.py`); every correct PR is a code change of 1 to 4
   files;
 - a command that produces the evidence report;
 - a command that drafts a spec from a prose request with a model.
@@ -76,7 +76,7 @@ For each PR the report gives:
 For each request it also shows which checks will run and the agent brief ([SDD_GUIDE.md](SDD_GUIDE.md) §6). What it
 shows:
 
-- the brief is 9–20% of the repository (12% on average);
+- the brief is 9% to 20% of the repository (12% on average);
 - all 25 verdicts are as expected, the two correct PRs that Gemma's behaviour rejects included (below): every
   wrong PR is rejected, and the report names the clause, the counterexample or the misplaced code;
 - two rules are proven for all inputs (FS-0101, FS-0103);

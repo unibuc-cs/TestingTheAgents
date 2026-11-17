@@ -26,7 +26,6 @@ answers otherwise than the cassette does.
 import hashlib
 import json
 import threading
-from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -110,23 +109,27 @@ class Tee:
     """In front of the model while the original app is recorded: every answer passes through unchanged and is
     kept, so that the recording gets a cassette of its own (``write``). Unlike ``CachedClient`` it never answers
     in the model's place: with several repetitions the same request reaches the model several times, and the
-    answers are counted. Calls may come from several threads at once."""
+    answers are counted. Two answers are the same when they say the same (``_said``: the text and the tool calls),
+    whatever ids the server made up for the calls. Calls may come from several threads at once."""
 
     def __init__(self, inner, canonical_ids: bool = False):
         self.inner = inner  # the client that answers: a model, or recorded answers when a recording is replayed
         self.model_id = inner.model_id
         self.canonical_ids = canonical_ids
         self._lock = threading.Lock()
-        # request key -> each different answer it got (as JSON text) with how many times, in order of appearance
-        self.seen: dict[str, Counter] = {}
+        # request key -> what each different answer says -> [the first answer that said it, how many times], in
+        # order of appearance
+        self.seen: dict[str, dict[str, list]] = {}
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=self.create))
 
     def create(self, **request):
         """One model call, answered by ``inner``; the answer is noted under the request's key."""
         resp = self.inner.chat.completions.create(**request)
-        text = json.dumps(_to_record(resp), sort_keys=True, ensure_ascii=False)
+        record = _to_record(resp)
+        said = json.dumps(_said(record), ensure_ascii=False)
         with self._lock:
-            self.seen.setdefault(request_key(request, self.canonical_ids), Counter())[text] += 1
+            answers = self.seen.setdefault(request_key(request, self.canonical_ids), {})
+            answers.setdefault(said, [record, 0])[1] += 1
         return resp
 
     def write(self, path: str | Path) -> Path:
@@ -138,11 +141,12 @@ class Tee:
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", encoding="utf-8") as fh:
             for key, answers in self.seen.items():
-                kept = max(answers, key=answers.get)  # the first of the most frequent: a Counter keeps its order
+                # the first of the most frequent: a dict keeps its order, and max returns the first of equals
+                kept, _ = max(answers.values(), key=lambda answer: answer[1])
                 entry = {
                     "key": key,
-                    "answer": json.loads(kept),
-                    "asked": sum(answers.values()),
+                    "answer": kept,
+                    "asked": sum(times for _, times in answers.values()),
                     "distinct": len(answers),
                 }
                 fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -200,9 +204,11 @@ class Compare:
     The counts are per run and per thread (``begin`` before a run, ``counts`` after it, both in the thread that
     makes the run), so the runs of a suite may reach the server together:
 
-        requests   the model calls the run made
-        known      those the original app made too: the cassette has the request
-        differ     of those, the ones the model now answers otherwise (another text, or other tool calls)
+        requests       the model calls the run made
+        known          those the original app made too: the cassette has the request
+        known_tokens   the tokens of those calls: what answering them from the cassette would have saved, before
+                       the point where the run diverges and after it
+        differ         of the known ones, those the model now answers otherwise (another text, or other tool calls)
     """
 
     def __init__(self, inner, path: str | Path, canonical_ids: bool = False):
@@ -215,7 +221,7 @@ class Compare:
 
     def begin(self):
         """Before each run, in its thread: start its counts."""
-        self._run.counts = {"requests": 0, "known": 0, "differ": 0}
+        self._run.counts = {"requests": 0, "known": 0, "known_tokens": 0, "differ": 0}
 
     def counts(self) -> dict:
         """After a run, in its thread: what it counted."""
@@ -230,6 +236,7 @@ class Compare:
             recorded = self.answers.get(request_key(request, self.canonical_ids))
             if recorded is not None:
                 counts["known"] += 1
+                counts["known_tokens"] += resp.usage.prompt_tokens + resp.usage.completion_tokens
                 counts["differ"] += _said(recorded) != _said(_to_record(resp))
         return resp
 

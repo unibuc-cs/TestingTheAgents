@@ -13,13 +13,16 @@ script in [`scripts/analysis/`](scripts/analysis/README.md)):
 - what replays exactly is the outcome of a test, not every model call: about 2% of the requests are answered
   otherwise when they are sent again, and no outcome moves (the report, section 7);
 - replay, then the diverged tests in any order, stopped at the first failure, finds 98% to 100% of the revealed
-  regressions for 9% to 10% of the suite's tokens, with no wrong clean verdict (the report, section 7);
+  regressions for 9% to 10% of the suite's tokens, with no wrong clean verdict (the report, section 7); charged
+  for its new requests only, 5% to 7%, where the whole suite through a cache costs 13.5%
+  (`docs/results/gemma8/second_recording.md`);
+- the same holds on 342 generated changes the strategies never learned from (`docs/results/gemma8_gen/`);
 - without the replay, and with every strategy run under the same two rules, `adaptive_bayes` leads only below
   about 4% of the suite, by a margin the 28 regressions do not establish (the report, section 2), and its
   calibration from history adds nothing measurable (`method_ablations.py`);
 - 27% of its clean verdicts are then given on revealed regressions (the report, section 3); replay-first, 6%.
 
-Order of work: sections 1 to 3 are done; 4 needs recordings; 5 is the method; 6 follows the results.
+Order of work: sections 1 to 3 are done; 4 and 5 are done for Gemma, with what is open marked; 6 is the paper.
 
 ## 1. Fair tables (replay only): done
 
@@ -95,6 +98,9 @@ What the model is sent:
 - [ ] Open: an edited default on a `def` line and an edited continuation line of a statement have no test that
       executed the line, so the change links by function only (`probe_changeset.py`, edits 8 and 9). None of the
       43 changes is one.
+- [x] The cassette counts two answers as one when they say the same, whatever ids the server made up for the
+      tool calls (`llm/cache.py::Tee`): with the `llm` backend every answer with a tool call used to count as
+      another one, so the answer kept was the first seen, not the one given most often.
 
 The app and the tests:
 
@@ -103,32 +109,70 @@ The app and the tests:
       writable by a delegation; a badly typed argument refused instead of a crash (`probe_harness.py`).
 - [x] A positive condition for the 22 cases that passed when the agent did nothing (`tools_required` or the new
       `tools_attempted`; `probe_oracles.py`).
+- [ ] Open: a run has no limit on model calls. A change that makes an agent ask again after every answer never
+      ends (`g_condnot_llm_openai_9`, the one generated change that is not recorded). A limit changes the app,
+      so it goes with the next recording.
 
 ## 4. More evidence (GPU)
 
-- [x] A generator of changes (`mutation/generator.py`): 598 on the current app, in thirteen kinds, without
-      labels. All of them replayed for no tokens (`docs/RESEARCH_PLAN.md` §5.8): 97 settled as clean, 36 as
-      regressions, 465 left for the model.
-- [ ] The generated changes recorded for the tests they reach only (`runs/gemma8_gen`, five repetitions), and the
-      strategies evaluated on the half held out of what they learn from (`traceeval evaluate --held-out`). The
-      recording's manifest holds a digest of `traceeval/selection`: leave that folder as it is until the results
-      are in.
-- [ ] The batches and the second recording again on the current app: those of `docs/results/gemma7/` were recorded
-      before the fixes of section 3.
+- [x] A generator of changes (`mutation/generator.py`): 692 on the current app, in sixteen kinds, without
+      labels. All of them replayed for no tokens (`docs/RESEARCH_PLAN.md` §5.8): 98 settled as clean, 36 as
+      regressions, 558 left for the model.
+- [x] The generated changes recorded for the tests they reach only (`runs/gemma8_gen`, five repetitions, 114,230
+      runs): 691 of the 692, of which a test reveals 316. The strategies evaluated on the half held out of what
+      they learn from (`traceeval evaluate --held-out`, `docs/results/gemma8_gen/report.md`): the picture of the
+      43 holds, and `adaptive_bayes`'s lead at a 5% budget without the replay is established there
+      (`docs/RESEARCH_PLAN.md` §5.8). The recording's manifest holds the digest of `traceeval/selection` as it
+      was when the first of these changes was recorded.
+- [x] A second recording on the current app, under another start of the server (`runs/gemma8_restart`,
+      `docs/results/gemma8/second_recording.md`): the empty change flips no test, 2 of 1,442 labels on the reached
+      tests move, 29 regressions instead of 28.
+- [x] What a reached test costs when the cassette answers every request it knows, counted while a copy is
+      recorded (`cassette.known_tokens`): about a third less than the tokens after the divergence point.
+      `runs/gemma8` and `runs/gemma8_gen` were recorded before the count and keep the bound.
+- [ ] The batches again on the current app: those of `docs/results/gemma7/` were recorded before the fixes of
+      section 3.
 - [ ] Model updates as changes without a diff: the three baselines already give six (`model_updates.py`).
-- [ ] A second model with its own cassette, baseline and changed copies recorded the same way. Indicative today:
-      with the unstable tests left out, Qwen and gpt-oss show the same ranking (`other_models_stable_tests.py`).
-      Qwen's and gpt-oss's recordings predate the cassette and cannot be replayed: their baselines are to be
-      recorded again, the changed copies one test at a time.
+- [ ] A second model with its own cassette, baseline and changed copies recorded the same way: Qwen's is being
+      made (`runs/qwen8`, the 43 changes for the tests they reach, one test at a time). Its baseline and its
+      empty change are in: 865 of 900 runs pass, the empty change flips no test, and 20 of its 5,580 requests are
+      answered otherwise (0.4%). gpt-oss's baseline is still to be recorded again.
 - [x] The condition of replay-first on Gemma's serving setup (`runs/gemma8`; `docs/RESEARCH_PLAN.md` §5.7): the
       empty change flips no test, every recorded run of a pair that replays ends like the replay, and about 2%
-      of the requests sent again are answered otherwise, one test at a time and in batches alike.
+      of the requests sent again are answered otherwise.
+- [x] Where the requests answered otherwise come from (`docs/RESEARCH_PLAN.md` §5.7): many tests at a time
+      makes a test's runs differ from each other, and the server's prefix cache makes an answer depend on what
+      the server was sent before. With neither (`runs/gemma8_exact`: `--workers 1`, and
+      `--no-enable-prefix-caching` through `TRACEEVAL_VLLM_ARGS`), no request of 11,010 is answered otherwise,
+      under the baseline's start of the server and under another.
+- [ ] The 43 changes recorded under that setup (`runs/gemma8_exact`), then replayed and evaluated like
+      `runs/gemma8`: the condition on changed copies, and the costs when the replay is exact.
+- [ ] The same setup for the other models: whether Qwen (0.4% of its requests answered otherwise one test at a
+      time, with the cache on) and gpt-oss (outcomes that change with a restart) repeat exactly without the
+      prefix cache.
 - [x] A cassette built from the baseline's own five repetitions, the answer given most often: the one outcome
       the replay got wrong on `runs/gemma7` (WF3-01, whose runs take two paths) is right on `runs/gemma8`.
 - [ ] The same condition for a second model and its serving setup (with its recording, above).
-- [ ] `traceeval check` live with its replay phase: the 43 changes, and the demo's batch check for the three
-      models, whose cassettes (`tests/cassettes/`) lack the tests the check now picks.
-- [ ] A second application not built here (tau2-bench, as planned).
+- [x] `traceeval check` live with its replay phase on the 43 changes (`docs/results/gemma8/live_checks.md`): the
+      evaluator's verdict on 41; one false alarm from a single run of a test whose runs disagree, and one check
+      that fits more tests in its budget than the evaluator charges it for.
+- [ ] The demo's batch check for the three models, whose cassettes (`tests/cassettes/`) lack the tests the check
+      now picks.
+- [ ] A second application not built here: tau2-bench's airline domain (50 tasks, MIT licence). Scoped from its
+      source; nothing of it has been run:
+      - every model call passes through one function (`tau2.utils.llm_utils._generate_once`), where a recording
+        and replaying client goes; the endpoint and the model are set per role, so the local model can play both
+        the agent and the user;
+      - the policy and the 14 tool schemas are in every agent request. An edit to the policy or to a tool's
+        description makes all 50 tasks diverge at their first call; only a change to what a tool does reaches
+        some of the tasks, so the replay prunes for that kind alone;
+      - its evaluator builds the expected database with the tools of the copy under test, so a changed tool can
+        hide itself: the expected state has to come from the original tools;
+      - an outcome without a model judge needs its substring check of the answer (`--communicate-scorer
+        substring`), which is not the default;
+      - 24 of the 50 tasks pass when the agent changes nothing, and how many an open model passes is not known;
+      - to check before recording: the ids the server makes up for tool calls (number them, as the `llm` backend
+        does), and a report that prefix caching on the server breaks repeatability on these tasks.
 - [ ] Real changes beside the generated ones (skill revision histories).
 - [ ] The live checks of the 23 batches again: those of `docs/results/gemma7/batches.md` and `batch_sweep.md` were
       run with each batch's members among the changes the check learned from, which `traceeval check` now holds
@@ -136,34 +180,68 @@ The app and the tests:
 
 ## 5. The method: stopping on the diverged tests
 
-- [ ] A "clean" verdict with a bounded miss rate, before every diverged test has run: the stop threshold
-      calibrated on past changes with known outcomes (conformal risk control or Learn-then-Test), the miss rate
-      reported against the target. The case that pays is the change that reaches most tests and breaks none: a
-      sound clean verdict costs 20% of the suite on the changes no test reveals, about 80% on an edit to a prompt
-      every request reads.
-- [ ] Repetitions after the divergence point for models whose answers vary: a sequential test of "this test's
-      pass rate dropped" against the noise floor of the empty change.
-- [ ] Which order of the diverged tests finds a regression soonest. Today: on a revealed regression `history_ml`
-      spends 1.3% of the suite and `ir_tfidf` 1.7%, a random order 4.2%; cost and divergence depth add nothing.
-- [ ] Replayed outcomes as evidence in `adaptive_bayes`: today a replayed pass is left out of its posterior,
-      because the floor on every test's sensitivity would let a hundred free passes call any change clean.
+- [x] A "clean" verdict with a bounded miss rate, before every diverged test has run: a stop threshold set on
+      past changes by split conformal prediction, measured on the generated changes
+      (`scripts/analysis/stop_with_guarantee.py`; `docs/RESEARCH_PLAN.md` §3.4 and §5.9):
+      - the miss rate is at its target on average, for every rule; a learned score makes a clean verdict cost
+        7.8% of the suite at a 10% target instead of 20.1%;
+      - with one threshold the misses pile up in one group of changes (with the learned score, 87% of the
+        regressions among edits to the text the model reads); a threshold per group brings each group to its
+        target, and a clean verdict then costs 17.5% at a 10% target;
+      - on changes unlike those the threshold was set on (a kind never seen, the hand-written changes) the
+        learned scores miss their target, and `adaptive_bayes`'s probability with a threshold per group keeps it:
+        none of 25 regressions missed at a 5% and a 10% target, three at 20%, for 34%, 15% and 10% of the suite
+        instead of 37%;
+      - a threshold that holds for nine sets of past regressions in ten, not only on average, is over its target
+        in at most three of twenty splits instead of up to half of them, and stops later (11.1% instead of 7.8%
+        with the learned score at a 10% target).
+- [x] The same inside the testbed: `traceeval check --miss-rate` (`traceeval/experiment/stopping.py`), the
+      threshold of the change's group set on half of the recording's changes, in place of `adaptive_bayes`'s
+      constant; a group with too few recorded regressions has no threshold, and every reached test runs. Live on
+      the 43 changes at a 10% target: all 28 regressions found, no false alarm, 2.8% of the suite per check
+      (`docs/results/gemma8_gen/live_checks_miss_rate.md`).
+- [x] Enough recorded regressions among edits to the text the model reads (a skill's prose, an agent's prompt, a
+      tool's description). Such edits reach the most tests and seldom break one: with 6 regressions among the
+      first 63 of them the group had no threshold under a 20% target, and a clean verdict took every reached
+      test. Three more kinds of such edit (a sentence of an agent's prompt deleted, an agent's description cut
+      short, a parameter's description emptied: 94 changes, 20 regressions) give the group its threshold at a
+      10% target.
+- [x] Tried and not kept: the threshold set on the evidence the passing tests have given (the method's odds that
+      something broke, over its odds before any test) instead of on its probability. Per group it changes
+      nothing on the generated changes and is worse on the hand-written ones (one of 25 missed at a 10% target
+      for 28% of the suite, against none for 15%). With one threshold it still misses 21% of the regressions
+      among edits to text.
+- [x] A failure confirmed by running the test again, two failures of three (`traceeval check --confirm`,
+      `scripts/analysis/confirm_failures.py`): regression verdicts on changes no test reveals go from 6% to 8%
+      of the runs to under 2% on `runs/gemma8_restart`, for a point and a half of the suite's tokens.
+- [ ] For models whose answers vary more (Qwen in batches, gpt-oss): a sequential test of "this test's pass rate
+      dropped" against the noise floor of the empty change.
+- [x] Which order of the diverged tests finds a regression soonest: on a revealed regression `history_ml` spends
+      0.9% of the suite and `ir_tfidf` 1.4%, a random order 2.6% (the 43); on the held-out generated changes
+      `adaptive_bayes` 2.6%, `ir_tfidf` 3.5%, a random order 4.7%. Cost and divergence depth add nothing.
+- [x] Replayed outcomes as evidence in `adaptive_bayes`: teaching it on the tests each past change reaches,
+      instead of every test whose traces touch the change, makes its clean verdicts more expensive (§5.9). A
+      replayed pass stays out of its posterior: the floor on every test's sensitivity would let a hundred free
+      passes call any change clean.
 
 ## 6. The paper and the documents
 
-- [ ] `docs/paper/main.tex` still has the tables of the comparison before section 1 and calls the two adapted
-      methods reproduced. `README.md` and `docs/RESEARCH_PLAN.md` have the new numbers and still present
-      `adaptive_bayes` as the contribution. Rewrite the three around replay-first once section 2 has numbers.
-- [ ] A related-work section. Verify each at its source before citing: test-result caching as selection (Ekstazi,
-      Bazel; Poirot's memoized re-execution), diagnostic test prioritization (Sequoia, Barinel; Mirarab and
-      Tahvildari), selection for non-code changes (uRTS), mutation testing of agent workflows (Kahani and
-      Bagherzadeh; AgentAssay; AdaT2), batch-dependent greedy decoding (Yuan et al.), stopping with guarantees.
-- [ ] Secondary numbers to correct: Qwen's flips one test at a time (1, not 0); "five or six tests flip" (four to
-      six); gpt-oss's "thirteen tests" (not reproducible); "the same tokens to within a few hundred" (two checks
-      differ by more); "never before every mandatory property has had a test" (while the budget allows); "nobody
-      declares the shared skill" (five tests declare `link-validation`); "each property has its sources" (3 of 15).
-- [ ] Threats to add: constants set on the evaluated changes, the changes kept or relabelled after measuring, the
-      declared metadata incomplete by design, 8 of the 29 regressions revealed by a single test each.
-- [ ] Venue format (the draft is 25 pages with 24 tables); the feature list of section 1 out.
+- [x] `docs/paper/main.tex`, `README.md` and `docs/RESEARCH_PLAN.md` rewritten around replay-first: the
+      mechanism and its condition, ordering and stopping over the reached tests, five questions answered from the
+      recordings, the cache as the baseline; the strategies' algorithms in an appendix, the two published methods
+      called adapted.
+- [x] The related work verified at its sources (`docs/related_work.md` §8, with the corrections to §3 and to the
+      gap analysis): the replay mechanism is test factoring's (ASE 2005), Chronicle replays model answers into
+      changed agent code, and an exact-match cache already pays only for changed requests.
+- [x] The paper's related work written from it (its section 1.3 and table): what is not new is said first, and
+      every cost is given against the whole suite re-run through an exact-match cache.
+- [x] The secondary numbers corrected or gone, and the threats added: constants set on the hand-written changes,
+      changes kept or relabelled after measuring, declared metadata incomplete by design, regressions that rest
+      on one test, the bound of the stopping rule being marginal.
+- [ ] The paper waits for two results: Qwen's recording (the rows of recording Q in its tables 13 and 16) and the
+      prefix-cache experiment (its RQ2).
+- [ ] Venue format: the draft is 31 pages with 25 tables, 24 pages before the references and the appendix. What
+      to cut depends on the venue.
 - [ ] The Adobe Team's agreement to being named; an anonymous version for a double-blind venue.
 
 ## 7. With the Adobe Team
@@ -180,8 +258,6 @@ The app and the tests:
 - [ ] A `LICENSE` file (`pyproject.toml` says MIT) and a CI job for `pytest` and `ruff`.
 - [ ] The GPU server's address and login out of `docs/EXPERIMENT.md` and `scripts/gpu_remote.sh`.
 - [ ] `CLAUDE.md` says every demo PR's verdict is checked by `tests/test_sdd.py`; 14 of 25 are.
-- [ ] The `ml` extra of `pyproject.toml` (scikit-learn) is no longer imported: `history_ml` fits its model with
-      numpy. Drop it, with the install lines of `CLAUDE.md`.
 
 ## Parked: the spec-driven development layer
 

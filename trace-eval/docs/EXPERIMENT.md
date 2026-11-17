@@ -143,12 +143,22 @@ Each vLLM server listens only on the GPU server's own localhost, so nobody on th
 PC gets in through one SSH tunnel per model, which uses the same key you log in with.
 
 Runs are repeatable, with one caveat. Decoding is greedy (temperature 0), so the same prompt gives the same answer;
-on vLLM nearly rather than bit-exactly, because the batch a request lands in changes the floating-point arithmetic
-slightly, which once in a while flips a token and with it the rest of the run. How much that matters depends on the
-model. A change that alters nothing, recorded again and again against the baseline, measures it
-([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4 has the numbers):
+on vLLM nearly rather than bit-exactly. Two settings of the server enter the arithmetic, and once in a while flip a
+token and with it the rest of the run ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7):
 
-- Gemma: the runs agree, one test at a time and in batches;
+| setting | what it does to an answer | how to take it out |
+|---|---|---|
+| the batch a request lands in | a test's runs differ from each other | one test at a time: `--workers 1` |
+| the server's prefix cache | the answer depends on what the server was sent before | `TRACEEVAL_VLLM_ARGS="--no-enable-prefix-caching" scripts/gpu_remote.sh up gemma` |
+
+With both taken out, Gemma answers every request the same way again, also after a restart of the server
+(`runs/gemma8_exact`): no request of 11,010 is answered otherwise. A pass of the suite then takes six minutes
+instead of half a minute.
+
+How much the default setting matters depends on the model. A change that alters nothing, recorded again and again
+against the baseline, measures it ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4 has the numbers):
+
+- Gemma: the outcomes agree, one test at a time and in batches;
 - Qwen: they agree one test at a time, not in batches;
 - gpt-oss: they agree in neither, and change with a restart of the server.
 
@@ -284,6 +294,7 @@ All settings are optional and are read from environment variables:
 | `TRACEEVAL_LLM_MAX_TOKENS` | `700` | the most tokens `--backend llm` lets the model write per answer; gpt-oss-120b needs 4096 |
 | `TRACEEVAL_JUDGE` | the agents' model | `gemma` or `qwen`: the model that judges the cases with a rubric |
 | `TRACEEVAL_VLLM_ENV` | none | extra settings for the vLLM server, for example `VLLM_BATCH_INVARIANT=1`, which makes answers independent of batching; neither Qwen3.8 nor Gemma 4 can be served in it ([results/gemma7/batch_invariant.md](results/gemma7/batch_invariant.md)) |
+| `TRACEEVAL_VLLM_ARGS` | none | extra flags for `vllm serve`, placed after the script's own so that they win: `--no-enable-prefix-caching` serves without the prefix cache |
 
 To add another model, add a preset to the `case` statement in `preset()` at the top of the script, with the
 model, GPU, port and any vLLM flags it needs, and add its name to `PRESETS`.
@@ -311,7 +322,8 @@ This runs five steps, which can also run one at a time with the same options:
 - **`baseline`** runs every test on the original app, one test at a time, because it records code coverage
   per test and coverage can follow only one test at a time in a process. It also writes:
   - the recording's cassette (`history/cassette.jsonl`): every answer the model gives; when the repetitions
-    answer a request in more than one way, the answer given most often;
+    answer a request in more than one way, the answer given most often. Two answers are the same when they say
+    the same: the text and the tool calls, whatever ids the server made up for the calls;
   - the manifest (`history/manifest.json`): the model, its server's version, the commit, digests of the app and of
     the catalog, and how the runs were made.
 - **`mutants`** runs every test 32 at a time by default (`--workers`), since the vLLM server handles many requests
@@ -321,7 +333,7 @@ This runs five steps, which can also run one at a time with the same options:
   - Then a changed copy for each change (in `runs/gemma8/variants/`), made from the recording's own copy of the
     original app, not from `traceeval/sut` as it is that day.
   - Every answer is compared with the cassette's answer to the same request, and each run's record keeps the
-    counts (`cassette`: requests, those the original app made too, those answered otherwise).
+    counts (`cassette`: requests, those the original app made too with their tokens, those answered otherwise).
   - `--only <ids>` records some changes only (`unchanged` is the empty change), which is how a batch of changes
     is recorded ([USER_GUIDE.md](USER_GUIDE.md) §6).
 - **`replay-first`** runs every test on the original app and on every changed copy with the model's calls answered
@@ -354,6 +366,9 @@ traceeval report --workdir runs/gemma8_gen
 - `--jobs` shares the changes out among processes; the rows are the same as with one.
 - The manifest of such a recording keeps a digest of `traceeval/selection`: a strategy evaluated on these
   changes with the same digest was not tuned on them.
+- A change can make a run that never ends: one generated change has an agent ask the model again after every
+  answer, and the app has no limit on model calls. The recorder prints a line per run; when none comes for a long
+  while, stop it and take the recording up again with `--resume --only <the remaining ids>`, that change left out.
 
 `--reps 1` is good for a first look. For a ground truth you'll rely on, `--reps 3` is enough for Gemma (section 7);
 the recording the results come from used 5. The majority vote over the repetitions absorbs the one-off differences
@@ -393,7 +408,39 @@ traceeval run --test WF3-01 --backend replay --otel runs/otel/wf3-01.json
 ```bash
 traceeval check skill_routing_drop_approval --history runs/gemma8 --budget 0.2    # a change from the catalog
 traceeval check my-sut-copy --history runs/qwen8 --backend llm                    # a changed copy of traceeval/sut
+traceeval check benign_orchestrator_prompt_wording --history runs/gemma8 --confirm   # a failure is run again first
+traceeval check skill_seo_drop_length_guard --history runs/gemma8_gen --miss-rate 0.1   # "clean" at a miss rate
 ```
+
+`--confirm` is for the test whose runs disagree: one failing run of a long test can be the minority of its runs.
+A test that fails is run again, and a third time when the second run passes; two failures of three end the check,
+and a failure that does not repeat counts as a pass. On the recordings it takes the false regression verdicts
+from 6% to 8% of the runs to under 2% ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.9).
+
+`--miss-rate` says how often a regression may be called clean. Without it the method stops when its probability
+that something broke is under a constant, which promises nothing. With it the threshold comes from the
+recording's own changes ([`traceeval/experiment/stopping.py`](../traceeval/experiment/stopping.py),
+[RESEARCH_PLAN.md](RESEARCH_PLAN.md) §3.4):
+
+```mermaid
+flowchart LR
+    R["the recording's<br/>other changes"] --> A["one half: what the<br/>method learns from"]
+    R --> B["the other half: its regressions<br/>of the change's group"]
+    B --> T["threshold for<br/>the miss rate"]
+    A --> M["the method over the<br/>tests the change reaches"]
+    T --> M
+    M --> V["regression, or clean<br/>at that miss rate"]
+```
+
+- The check prints what the threshold rests on: the group of the change (a skill's steps, text the model reads,
+  an agent's tools and skills, the configuration, the starting data, code) and the recorded regressions of that
+  group.
+- A group needs enough recorded regressions for a threshold: 9 for a miss rate of 10%. With fewer, the check says
+  so, and a clean verdict then takes every test the change reaches, as far as `--budget` allows.
+- It needs a recording with many changes of each group. `runs/gemma8_gen` has 691: enough for every group at a
+  miss rate of 10%, and for four of the six at 5%.
+- The values are worked out at the first check, in under a minute, and kept in the recording's
+  `history/stop_values.json` until the recording, the strategies or `stopping.py` change.
 
 It prints how many tests replay and how many diverge, then each test of the loop of
 [USER_GUIDE.md](USER_GUIDE.md) §5 as it runs, then:
@@ -401,7 +448,8 @@ It prints how many tests replay and how many diverge, then each test of the loop
 - the verdict:
   - `REGRESSION`, with the tests that failed, in the replay or live;
   - `no regression`, when no test diverges, when every test the change reaches ran and passed, or when the
-    method is confident; in the last case it says how many of the tests the change reaches were not run;
+    method is confident (with `--miss-rate`: `stopped at a miss rate of at most 10%`); in the last case it says
+    how many of the tests the change reaches were not run;
   - `no failure within the budget`;
 - the tokens the model was asked for, and the seconds;
 - the method's probability that the change broke something;
@@ -418,14 +466,22 @@ request and code by line number. A changed copy of the app is compared with `tra
 before editing it. Should a change leave the change set empty and still make tests diverge, the method has
 nothing to reason about, and the diverged tests run cheapest first.
 
-On `runs/gemma7`, the method alone, without the replay phase, was run live on all 43 changes, one check at a
-time. It gave the verdict of the evaluator's replay of the recorded runs on 42, with the same tests and tokens to
-within a few hundred. The exception is a false alarm on a benign change: a one-off of the model (section 3) on a test
-whose outcome hangs on one decision, which five more recordings of the change do not repeat; the live check
-reads one run where the evaluator reads the majority of five
-([results/gemma7/live_vs_replay.md](results/gemma7/live_vs_replay.md),
-[results/gemma7/false_alarm_one_at_a_time.md](results/gemma7/false_alarm_one_at_a_time.md)). Those 43 checks took
-21 minutes of model time: six tests and 1.9% of the suite's tokens per check at the median.
+On `runs/gemma8`, the check was run live on all 43 changes, one check at a time, with Gemma started anew on
+other GPUs than the recording's ([results/gemma8/live_checks.md](results/gemma8/live_checks.md)):
+
+- it gave the evaluator's verdict on 41, after as many tests; eight checks called no model;
+- one false alarm, on a benign change: a workflow test failed its one live run, and passes five runs of five in
+  the recording. The live check reads one run where the evaluator reads the majority of five. The same test
+  gave the same false alarm on the earlier app, and five more recordings of the change did not repeat it
+  ([results/gemma7/false_alarm_one_at_a_time.md](results/gemma7/false_alarm_one_at_a_time.md));
+- one check ended clean where the evaluator's budget ends the run: live, a test costs the requests the cassette
+  lacks, which is less than the evaluator charges it;
+- the 43 checks took 16 minutes, under four of them model time: one test and 0.4% of the suite's tokens per check
+  at the median, four tests and 1.6% on average.
+
+The same 43 checks with `--miss-rate 0.1 --confirm`, no budget and `runs/gemma8_gen` as the history find all 28
+regressions and raise no false alarm, for 2.8% of the suite's tokens per check
+([results/gemma8_gen/live_checks_miss_rate.md](results/gemma8_gen/live_checks_miss_rate.md)).
 
 ### Recorded answers: running without a model
 
@@ -514,12 +570,16 @@ changes have no revealing test (section 7).
 
 ## 7. The recordings
 
-One recording of the current app, with 180 tests, 43 changes, the empty change, five repetitions and the model
-judge:
+The recordings of the current app, with 180 tests, 43 changes, the empty change, five repetitions and the model
+judge. The first is the recording of record; the others start from its baseline and cassette:
 
 | recording | model | where | time |
 |---|---|---|---|
 | `runs/gemma8`, report in `docs/results/gemma8/` | Gemma | fmi0's GPU0 | about two hours: 30 minutes for the baseline, one test at a time, and under two minutes per changed copy, 32 tests at a time (`--workers`); then a minute for the replay and six for the evaluation |
+| `runs/gemma8_restart`, written up in `docs/results/gemma8/second_recording.md` | Gemma, started anew | two cluster GPUs | 33 minutes: the empty change, and the 43 changes for the tests each reaches (`--reached-only`), from `runs/gemma8`'s baseline and cassette |
+| `runs/gemma8_pc0_w32`, `_pc0_w1`, `_pc1_w32`, `_pc1_w1` ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7) | Gemma, started anew with its prefix cache off (`pc0`) and on (`pc1`) | fmi0's GPU0 | two to three minutes 32 tests at a time (`w32`), 30 minutes one at a time (`w1`): the empty change only, from `runs/gemma8`'s baseline and cassette |
+| `runs/gemma8_exact`, `runs/gemma8_exact_restart` ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7) | Gemma without its prefix cache, two starts | fmi0's GPU0 | 33 minutes for the baseline and 30 for each empty change, one test at a time: a baseline and cassette of its own, the empty change under the same start, and under another from a copy of that baseline |
+| `runs/gemma8_gen`, report in `docs/results/gemma8_gen/` | Gemma, started anew | fmi0's GPU0 | a little over six hours: 691 of the 692 generated changes for the tests each reaches, 114,230 runs, from `runs/gemma8`'s baseline and cassette; then half an hour for the held-out evaluation on ten processes |
 
 On the original app 172 of 180 tests pass, 28 of the 34 regressions are revealed and no benign change is, so the
 report's sanity line says VIOLATED for the six changes below. They stay in the set:
@@ -533,7 +593,9 @@ report's sanity line says VIOLATED for the six changes below. They stay in the s
 
 The ground truth holds up: the empty change flips none of the 180 tests, the five runs of a (change, test) pair
 disagree on four pairs only, and no replayed outcome differs from the recorded one
-([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.1 and §5.7).
+([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.1 and §5.7). Recorded again under another start of the server, the empty
+change still flips none, and 2 of the 1,442 labels on the tests the changes reach differ: `runs/gemma8_restart`
+counts 29 revealed regressions, with `skill_routing_drop_brand_gate` among them.
 
 The recordings below are of the app as it was before the harness and test fixes of [TODO.md](../TODO.md) §3.
 `traceeval check` refuses them, and what they measured stands as measured on that version:
@@ -568,6 +630,7 @@ them agree with themselves, so the results are Gemma's.
 | [`traceeval/sut/harness/skills.py`](../traceeval/sut/harness/skills.py) | skills, and `render_procedure`, which writes a procedure as plain steps |
 | [`traceeval/experiment/runner.py`](../traceeval/experiment/runner.py) | runs the suite on the original app, under the empty change and on each change, sequentially or in parallel |
 | [`traceeval/experiment/manifest.py`](../traceeval/experiment/manifest.py) | what a recording was made from and with, and what differs from the files of today (`drift`) |
+| [`traceeval/experiment/check.py`](../traceeval/experiment/check.py), [`stopping.py`](../traceeval/experiment/stopping.py) | one change checked live: the replay, then the method over the tests that diverge; the threshold of its clean verdict for a miss rate |
 | [`traceeval/cli.py`](../traceeval/cli.py) | the `traceeval` command |
 
 For the rest of the repository (strategies, report, SDD), see [USER_GUIDE.md](USER_GUIDE.md) and

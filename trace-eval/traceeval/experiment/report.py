@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 from traceeval.catalog import load_catalog, load_properties  # noqa: E402
 from traceeval.mutation.generator import kind_of as kind_of_generated  # noqa: E402
 
+from .evaluate import new_tokens  # noqa: E402
 from .generated import Generated  # noqa: E402
 from .history import History  # noqa: E402
 from .manifest import load_manifest  # noqa: E402
@@ -477,7 +478,7 @@ def _replay_first_section(workdir, history, figs, replays) -> list[str]:
     tests = history.test_ids()
     passes = {t: history.baseline_pass_rate(t) >= 0.5 for t in tests}
     # ---- per change: how many tests diverge, what they cost, and whether a replayed test already fails
-    _, kinds, where = _settled_by_replay(history, replays, {v: _kind(history, v) for v in variants})
+    per_change, kinds, where = _settled_by_replay(history, replays, {v: _kind(history, v) for v in variants})
 
     # ---- against the ground truth: the replayed outcomes, and where the revealing tests ended up
     replayed_pairs, differ, revealing_pairs = 0, [], {"fail": 0, "diverge": 0, "pass": 0}
@@ -613,16 +614,58 @@ def _replay_first_section(workdir, history, figs, replays) -> list[str]:
         "",
         _by_budget(rf, "cost_fraction", "{:.3f}"),
         "",
+        _through_a_cache(history, replays, per_change),
+        "",
         "The same tests run whole, without the replayed part taken off:",
         "",
         _by_budget(rf, "whole_cost_fraction", "{:.3f}"),
         "",
+        *_new_requests_only(rf),
         *[line for b in FOCUS_BUDGETS if np.isclose(rf.budget, b).any() for line in _detection_at(rf, b)],
         "![replay-first: detection vs cost](figures/replay_first.png)",
         "",
         *[line for b in (FOCUS_BUDGETS[-1], 1.0) if np.isclose(rf.budget, b).any() for line in _verdicts_at(rf, b)],
     ]
     return out
+
+
+def _through_a_cache(history, replays, per_change) -> str:
+    """The baseline that needs no method, in one paragraph: the whole suite run again with a cache of the original
+    app's answers in front of the model. It pays every diverged test, with none left out and no stop at a failure:
+    at most the tokens after the divergence points (``per_change.left``, known from the replay alone), and exactly
+    the requests the original app never made when the recording counted them (``evaluate.new_tokens``)."""
+    full = history.total_cost()
+    upper = f"{per_change.left.mean():.3f} of the suite's tokens per change (median {per_change.left.median():.3f})"
+    text = (
+        "For comparison, a cache of the original app's answers in front of the model, with the whole suite run again "
+        f"and no stop at a failure, pays every diverged test from its divergence point on: {upper}"
+    )
+    # per change, the new requests of its diverged tests: each test's mean over its recorded runs
+    exact = []
+    for v in per_change.change:
+        runs = [history.variants[v][t].valid_runs for t in replays.diverged(v) if t in history.variants[v]]
+        exact.append(sum(new_tokens(r) / len(r) for r in runs if r) / full)
+    found = "It finds every revealed regression."
+    if np.isnan(exact).any():  # a recording made before those tokens were counted
+        return f"{text}, less the requests after that point that the cache also knows. {found}"
+    return (
+        f"{text} at most. After that point a run still sends requests the original app made; with those answered "
+        f"from the cache too, it pays {np.mean(exact):.3f} (median {np.median(exact):.3f}). {found}"
+    )
+
+
+def _new_requests_only(rf) -> list[str]:
+    """The strategies' tokens when a diverged test is charged for its new requests only, for an evaluation of a
+    recording that counted them (``evaluate.new_tokens``); nothing otherwise."""
+    if "new_cost_fraction" not in rf or rf.new_cost_fraction.isna().any():
+        return []
+    return [
+        "The same tests charged for their new requests only. After its divergence point a run still sends requests "
+        "the original app made, and a check answers those from the cassette too (`traceeval check`):",
+        "",
+        _by_budget(rf, "new_cost_fraction", "{:.3f}"),
+        "",
+    ]
 
 
 def _answers(stats_by_test: dict) -> tuple[int, int, int]:
@@ -638,6 +681,11 @@ def _answered_twice(workdir) -> tuple[int, int]:
     ``llm/cache.py::Tee``): how many there are, and how many got more than one answer. Zeros without a cassette."""
     path = cassette_path(workdir)
     if not path.exists():
+        return 0, 0
+    # The ``llm`` backend's server makes up an id for every tool call, so the same answer comes under other ids.
+    # A cassette written before answers were told apart by what they say counted those as different: no count.
+    made = load_manifest(workdir).get("baseline", {})
+    if made.get("backend") == "llm" and "answers" not in made:
         return 0, 0
     with open(path, encoding="utf-8") as fh:
         entries = [json.loads(line) for line in fh if line.strip()]

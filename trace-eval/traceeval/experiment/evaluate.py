@@ -10,7 +10,9 @@ draw at random: they are not a sample, the changes are.
 
 The same evaluation is made a second time replay-first (``replay_first.py``), when the recording has been
 replayed: a test that replays to the end on the changed copy is not run, a replayed failure ends the run before
-any test runs, and a diverged test is charged the tokens after its divergence point."""
+any test runs, and a diverged test is charged the tokens after its divergence point. That is an upper bound: after
+that point a run still sends requests the original app made, which a check answers from the cassette too. When the
+recording counted their tokens, ``new_cost_fraction`` gives the same tests charged for the new requests only."""
 
 import random
 from concurrent.futures import ProcessPoolExecutor
@@ -64,6 +66,17 @@ def make_oracle(history: History, variant: str, rng: random.Random, prefix: dict
 
     oracle.records = {}
     return oracle
+
+
+def new_tokens(runs) -> float:
+    """Over some recorded runs of a changed copy: the tokens of the requests the original app never made, which is
+    what a run costs when every request the cassette knows is answered from it, those after the divergence point
+    included (``traceeval check`` runs so). ``Compare`` counts the known requests' tokens while a copy is
+    recorded; NaN when one of the runs was recorded without that count."""
+    known = [(r.get("cassette") or {}).get("known_tokens") for r in runs]
+    if any(k is None for k in known):
+        return float("nan")
+    return float(sum(max(0.0, r["tokens"] - k) for r, k in zip(runs, known, strict=True)))
 
 
 def _load(workdir: Path) -> History:
@@ -150,8 +163,11 @@ def _rows(job: tuple) -> list[dict]:
                         }
                     )
                     if replays:
-                        # what the same tests cost run whole, without the replayed part taken off
-                        row["whole_cost_fraction"] = sum(r["tokens"] for r in oracle.records.values()) / full
+                        # what the same tests cost run whole, without the replayed part taken off; and what they
+                        # cost when the cassette also answers the requests it knows after the divergence point
+                        drawn = list(oracle.records.values())
+                        row["whole_cost_fraction"] = sum(r["tokens"] for r in drawn) / full
+                        row["new_cost_fraction"] = new_tokens(drawn) / full
                         if found:  # nothing ran: the failures were read off the replay
                             row["tests_run"], row["time_fraction"] = 0, 0.0
                     rows.append(row)

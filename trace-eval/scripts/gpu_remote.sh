@@ -24,6 +24,8 @@
 #   TRACEEVAL_HF_MODEL   the gemma preset's model (the vllm backend reads the same variable)
 #   TRACEEVAL_VLLM_ENV   extra settings for the server, e.g. "VLLM_BATCH_INVARIANT=1" (greedy answers that do not
 #                        depend on how requests are batched together)
+#   TRACEEVAL_VLLM_ARGS  extra flags for 'vllm serve', after the script's own, so that they win over them:
+#                        "--no-enable-prefix-caching" serves without the prefix cache
 #
 # TRACEEVAL_SITE=hpc runs the same commands on the SLURM cluster (login ciprian.paduraru@hpc-ctrl01.acc-ub.local).
 # 'up' submits a job for 2 GPUs (at most 8 hours, SLURM's limit) whose server listens on the GPU node's localhost,
@@ -95,7 +97,8 @@ server_alive() {
 SERVE_ENV="VLLM_USE_FLASHINFER_SAMPLER=0 VLLM_USE_DEEP_GEMM=0 ${TRACEEVAL_VLLM_ENV:-}"
 serve_cmd() {
   echo ".venv/bin/vllm serve $MODEL --host 127.0.0.1 --port $PORT --data-parallel-size $COPIES --tensor-parallel-size $TP \
-    --max-model-len 32768 --max-num-seqs 128 --enable-prefix-caching --gpu-memory-utilization 0.85 --seed 0 $EXTRA"
+    --max-model-len 32768 --max-num-seqs 128 --enable-prefix-caching --gpu-memory-utilization 0.85 --seed 0 $EXTRA \
+    ${TRACEEVAL_VLLM_ARGS:-}"
 }
 
 # On hpc: submit the job that serves the model. It stops at once on a GPU that is already in use (SLURM does not

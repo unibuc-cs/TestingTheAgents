@@ -21,6 +21,14 @@ one is a regression: the recording does (some test reveals it, or none).
     comment    a comment added at the top of a module                          (meant to break nothing)
     fixture    a value of the starting data replaced by another value the      fixtures/base.json
                same key has elsewhere in the data
+    promptdel  a sentence of an agent's system prompt deleted                  agents/*.yaml
+    agentdesc  an agent's description cut to its first three words
+    paramdesc  the description of a tool's parameter emptied                   tools/*.py
+
+The last three, with ``tooldesc``, ``ruledel`` and ``rewrap``, are edits to text the model reads. Such an edit
+reaches every test whose requests carry the text, and seldom breaks one. A clean verdict on it is therefore the
+most expensive kind (``experiment/stopping.py``), and these three kinds are there so that a stop threshold has
+enough regressions of this kind to be set on.
 
 An id reads ``g_<kind>_<where>_<n>``. Every edit names the line it starts at and the text it expects there
 (``operators.replace_lines``), so a change generated from one version of the app cannot be applied to another:
@@ -58,8 +66,10 @@ def _change(name: str, category: str, description: str, *edits: tuple) -> Mutati
 
 
 def kind_of(mutation_id: str) -> str:
-    """The kind of a generated change, from its id."""
-    return mutation_id.split("_")[1]
+    """The kind of a generated change, from its id (``g_<kind>_...``). Any other id gives its second word, or the
+    whole of it: ``split`` is also given the hand-written changes of a recording (``experiment/stopping.py``)."""
+    words = mutation_id.split("_")
+    return words[1] if len(words) > 1 else mutation_id
 
 
 # ---------------------------------------------------------------------------- skills
@@ -317,7 +327,57 @@ def _fixture_changes(root: Path) -> Iterator[Mutation]:
         yield Mutation(f"g_fixture_{key}_{counts[key]}", FIXTURE, what, None, [edit])
 
 
+# ---------------------------------------------------------------------------- text the model reads
+def _text_changes(root: Path) -> Iterator[Mutation]:
+    """More edits to what the model is told, beside the tools' descriptions and the skills' prose above: an
+    agent's description cut short, each sentence of its system prompt deleted, each parameter's description of a
+    tool emptied."""
+    for path in sorted((root / "agents").glob("*.yaml")):
+        agent, rel = path.stem, path.relative_to(root).as_posix()
+        lines = _read(root, rel)
+
+        # ---- the description (one line), cut to its first three words like a tool's
+        for i, line in enumerate(lines):
+            described = re.match(r"^description: (.+)\n$", line)
+            if described and len(described.group(1).split()) > 3:
+                short = " ".join(described.group(1).split()[:3]).rstrip(",;:") + "."
+                what = f"The description of the {agent} agent cut to its first three words."
+                yield _change(f"agentdesc_{agent}_1", PROMPT, what, (rel, i + 1, line, f"description: {short}\n"))
+
+        # ---- the system prompt, a block of lines indented by two spaces: one sentence taken out at a time
+        head = next((i for i, line in enumerate(lines) if line.startswith("system_prompt: |")), None)
+        if head is None:
+            continue
+        end = next((i for i in range(head + 1, len(lines)) if not lines[i].startswith("  ")), len(lines))
+        block = "".join(lines[head + 1 : end])
+        # the prompt without its indent, cut where a sentence ends and another starts: the sentences at the even
+        # places, the white space between two of them (a line break, at times) at the odd ones
+        parts = re.split(r"(?<=[.!?])(\s+)(?=[A-Z`])", "".join(line[2:] for line in lines[head + 1 : end]))
+        sentences = parts[0::2]
+        for k in range(len(sentences) if len(sentences) > 1 else 0):
+            # the sentence goes with the white space after it; the last one with the white space before it, and
+            # the prompt keeps its final line break. Every other line break stays where it is.
+            kept = parts[: 2 * k] + parts[2 * k + 2 :] if k + 1 < len(sentences) else [*parts[: 2 * k - 1], "\n"]
+            left = "".join(f"  {line}" for line in "".join(kept).splitlines(keepends=True))
+            what = f"A sentence deleted from the {agent} agent's system prompt ({sentences[k].split(chr(10))[0][:50]})."
+            yield _change(f"promptdel_{agent}_{k + 1}", PROMPT, what, (rel, head + 2, block, left))
+
+    # ---- what the model is told about each parameter of a tool (the decorator's fourth argument), emptied
+    for rel, _, name, deco in _tool_decorators(root):
+        hints = deco.args[3] if len(deco.args) > 3 else None
+        if not isinstance(hints, ast.Dict):
+            continue
+        lines = _read(root, rel)
+        for k, (key, hint) in enumerate(zip(hints.keys, hints.values, strict=True), 1):
+            if isinstance(hint, ast.Constant) and isinstance(hint.value, str) and hint.value:
+                edited = list(lines)
+                _splice(edited, hint, '""')
+                what = f"The description of the `{key.value}` parameter of the `{name}` tool emptied."
+                yield _change(f"paramdesc_{name}_{k}", PROMPT, what, _edit(rel, lines, hint, hint, edited))
+
+
 # ---------------------------------------------------------------------------- the whole set
+# New kinds go at the end: the order of the changes generated so far, and so of a recording's files, stays.
 MAKERS = (
     _skill_changes,
     _agent_changes,
@@ -326,6 +386,7 @@ MAKERS = (
     _condition_changes,
     _comment_changes,
     _fixture_changes,
+    _text_changes,
 )
 
 

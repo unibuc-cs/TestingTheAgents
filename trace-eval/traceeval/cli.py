@@ -10,25 +10,27 @@ traceeval run --test PUB-01 [--backend hf|vllm|llm|replay] [--otel trace.json]  
     TRACEEVAL_JUDGE=gemma|qwen picks the model that judges the cases with a rubric (default: the agents' model)
     --otel also writes the run's trace as OpenTelemetry spans, in OTLP JSON (agents, tools, model calls, skills;
     plan, routing, approvals and consulted agents as span events)
-traceeval baseline --workdir runs/gemma7 --reps 5
+traceeval baseline --workdir runs/gemma8 --reps 5
     the original app with coverage, one case at a time; also its answers (the cassette) and the manifest
-traceeval mutants  --workdir runs/gemma7 --reps 5 [--only id ...]
+traceeval mutants  --workdir runs/gemma8 --reps 5 [--only id ...]
     the empty change ("unchanged": the original app run as the changed copies are), then every changed copy
 traceeval mutants  --workdir runs/gemma8_gen --reps 5 --generated [N] --reached-only [--resume]
     the generated changes (all, or N of each kind), each for the tests it reaches only: the copy is replayed
     first, the tests that diverge are run, and the others get the replay's outcome; no copy is kept
-traceeval replay-first --workdir runs/gemma7 [--generated [N]]
+traceeval replay-first --workdir runs/gemma8 [--generated [N]]
     every test on every changed copy, answered from the answers recorded on the original app: which tests
     replay to the end (their outcome is known) and which diverge (they need the model); no model is called.
     --generated replays the generated changes instead, none of which needs to be recorded for it
-traceeval evaluate --workdir runs/gemma7 --seeds 10 [--held-out]
+traceeval evaluate --workdir runs/gemma8 --seeds 10 [--held-out]
     the strategies on the recording, and again replay-first; --held-out, for generated changes: learn from one
     fixed half of them and evaluate on the other
-traceeval report   --workdir runs/gemma7
-traceeval experiment --workdir runs/gemma7   (baseline + mutants + replay-first + evaluate + report)
-traceeval check <mutation id | changed copy of traceeval/sut> --history runs/gemma7 [--budget 0.2] [--backend vllm]
+traceeval report   --workdir runs/gemma8
+traceeval experiment --workdir runs/gemma8   (baseline + mutants + replay-first + evaluate + report)
+traceeval check <mutation id | changed copy of traceeval/sut> --history runs/gemma8 [--budget 0.2] [--backend vllm]
     check one change live: replay first, then the proposed method over the tests that diverge; --history is an
-    experiment recorded with the same model; prints the verdict and the change coverage
+    experiment recorded with the same model; prints the verdict and the change coverage; --confirm runs a test
+    that fails again before its failure counts; --miss-rate 0.1 sets the threshold of the clean verdict on the
+    history's changes, so that at most one regression in ten is called clean
 traceeval properties draft [--max 15] [--per-test 5] [--fresh] [--replay a.json] [--save-response a.json]
     a model (Qwen, the llm backend) drafts the catalog of properties from the requirements and tags the tests
 traceeval properties apply   write properties.yaml and the tests' tags from the reviewed draft
@@ -246,7 +248,7 @@ def cmd_check(args):
     experiment."""
     from traceeval.experiment.check import check
 
-    check(args.change, Path(args.history), args.budget, args.backend)
+    check(args.change, Path(args.history), args.budget, args.backend, args.confirm, args.miss_rate)
 
 
 def cmd_coverage(args):
@@ -377,13 +379,23 @@ def main(argv=None):
 
     ck = sub.add_parser("check")
     ck.add_argument("change", help="a mutation id (see traceeval mutations) or a changed copy of traceeval/sut")
-    ck.add_argument("--history", required=True, help="an experiment recorded with the same model, e.g. runs/gemma7")
+    ck.add_argument("--history", required=True, help="an experiment recorded with the same model, e.g. runs/gemma8")
     ck.add_argument("--budget", type=float, default=0.2, help="at most this fraction of the full suite's tokens")
     ck.add_argument("--backend", default="vllm", choices=BACKENDS, help="who plays the agents (default: vllm, Gemma)")
+    ck.add_argument(
+        "--confirm",
+        action="store_true",
+        help="run a test that fails again, and a third time if it then passes: two failures of three count",
+    )
+    ck.add_argument(
+        "--miss-rate",
+        type=float,
+        help="set the clean verdict's threshold on the history's changes, for this miss rate at most (e.g. 0.1)",
+    )
     ck.set_defaults(fn=cmd_check)
 
     cv = sub.add_parser("coverage")
-    cv.add_argument("--history", required=True, help="a recorded experiment, e.g. runs/gemma7")
+    cv.add_argument("--history", required=True, help="a recorded experiment, e.g. runs/gemma8")
     cv.set_defaults(fn=cmd_coverage)
 
     pp = sub.add_parser("properties")

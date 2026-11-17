@@ -12,11 +12,16 @@ python scripts/analysis/<script>.py [recording]
 ## Replay-first
 
 Replay-first itself is part of the testbed: `traceeval replay-first`, the report's section 7, and
-`docs/RESEARCH_PLAN.md` §5.7. One script goes beyond it:
+`docs/RESEARCH_PLAN.md` §5.7. These scripts go beyond it:
 
 | script | what it shows | on `runs/gemma8` |
 |---|---|---|
 | `prompt_only_edits.py` | edits that reach the model only through its prompt: tests the traces link against tests whose requests diverge | 46, 153, 46 and 46 linked, the very tests that diverge; each of the four has a component |
+| `two_recordings.py <recording> <the same changes recorded again>` | the empty change, the labels, the revealing tests and the requests answered otherwise, side by side | against `runs/gemma8_restart`: no test flips under either empty change; 2 of 1,442 labels differ; 28 and 29 regressions |
+| `answered_otherwise.py <recording> ...` | the empty change of each recording: the requests answered otherwise than the cassette, and whether a test has them in every run or in some | with the cassette of `runs/gemma8`: 1.9% to 3.9% of the requests under four settings of the server, the tests' runs one and the same when they run one at a time; in `runs/gemma8_exact` (no prefix cache, one test at a time) none of 5,505, under two starts of the server |
+| `live_checks.py <recording> <folder of check logs>` | `traceeval check` run live on every change, against the evaluator's runs of the method: verdict, tests and tokens per change | with `runs/live_check8`: the same verdict on 41 of 43, after as many tests; 1.6% of the suite per check live, 2.1% as the evaluator charges. With the logs of checks made with `--miss-rate 0.1 --confirm` and a budget of 1.0 as the third argument: all 28 regressions found, no false alarm, 2.8% per check |
+| `stop_with_guarantee.py [recording [second recording]]` | a clean verdict before every reached test has run, with a threshold set on past changes for a target miss rate: six rules, one threshold, one per group of changes or one that holds for nine sets of past regressions in ten, measured within the changes, with one kind left out, and on a second recording's changes | on `runs/gemma8_gen` and `runs/gemma8`: every rule at its target on average; a clean verdict for 7.8% of the suite instead of 20.1% at a 10% target with one threshold, which misses 87% of the regressions among edits to text; `adaptive_bayes` with a threshold per group misses none of 25 hand-written regressions at 5% and 10% (`docs/RESEARCH_PLAN.md` §5.9) |
+| `confirm_failures.py [recording ...]` | a failure confirmed by running the test again before it ends a run: false regression verdicts, regressions called clean and tokens, under three rules | on `runs/gemma8_restart`: regression verdicts on changes no test reveals from 6% to 8% of the runs to under 2%, for a point and a half of the suite's tokens; on `runs/gemma8` from under 2% to none |
 
 ## The comparison in the report
 

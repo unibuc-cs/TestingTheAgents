@@ -8,7 +8,7 @@ systems. Read `README.md` (5 minutes), then `docs/USER_GUIDE.md` only when you n
 
 ```
 uv venv --python 3.12 .venv         # the project venv (git-ignored); use .venv/Scripts/python on Windows
-pip install -e ".[dev,ml]"          # or: uv pip install --python .venv -e ".[dev,ml]" ruff
+pip install -e ".[dev]"             # or: uv pip install --python .venv -e ".[dev]" ruff
 pytest -q                           # ~90 s; must stay green; replays Gemma's recorded answers (tests/cassettes/)
 ruff check traceeval tests          # rules and line length come from pyproject.toml
 ruff format traceeval tests         # see "Gotchas" before formatting sut/
@@ -20,6 +20,7 @@ traceeval replay-first --workdir runs/gemma8_gen --generated        # every gene
 traceeval mutants --workdir runs/gemma8_gen --reps 5 --generated --reached-only --backend vllm   # record them, only the tests each reaches
 traceeval evaluate --workdir runs/gemma8 && traceeval report --workdir runs/gemma8   # the strategies, then the report
 traceeval check skill_routing_drop_approval --history runs/gemma8   # the prototype: one change, replayed then live
+traceeval check <change> --history runs/gemma8_gen --miss-rate 0.1 --confirm   # clean at a miss rate; a failure run again
 traceeval coverage --history runs/gemma8                            # coverage of the suite, per dimension and component
 traceeval run --test PUB-01 --backend replay --otel trace.json   # one case; its trace as OpenTelemetry spans
 traceeval sdd --workdir runs/sdd                                 # spec-driven development demo, replayed
@@ -28,6 +29,7 @@ TRACEEVAL_BACKEND=vllm pytest -q    # record the answers the cassette lacks (Gem
 traceeval sdd draft --request r.md --id FS-0106 [--replay a.json]  # draft a spec with a model
 scripts/gpu_remote.sh up [gemma|qwen|gptoss] | status | down   # models on the GPU server; see docs/EXPERIMENT.md
 TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM cluster (2 GPUs, port + 10)
+TRACEEVAL_VLLM_ARGS="--no-enable-prefix-caching" scripts/gpu_remote.sh up gemma   # with --workers 1: every answer repeats
 # several servers in one run: TRACEEVAL_VLLM_URL / TRACEEVAL_LLM_BASE_URL take comma-separated URLs
 ```
 
@@ -51,7 +53,9 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
   `replay_first.py`, which tests a change reaches, found by replaying the original app's recorded answers;
   `manifest.py`, what a recording was made from and with, and what differs from today's files (`drift`);
   `generated.py`, the generated changes of a recording replayed for free;
-  `check.py`, the prototype (one change: the replay, then the method live over the tests that diverge).
+  `check.py`, the prototype (one change: the replay, then the method live over the tests that diverge);
+  `stopping.py`, the threshold at which a check says clean for a target miss rate, set per group of changes on
+  the recording's own changes (`traceeval check --miss-rate`).
 - `traceeval/llm/` — Gemma's client (`chat.py`: prompt, engines, parsing, which model judges) and the answer cache
   (`cache.py`, with the three clients of replay-first: `Tee` keeps a baseline's answers, `ReplayFirstClient`
   replays them, `Compare` counts the requests a changed copy's recording gets answered otherwise).
@@ -79,10 +83,15 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
   variant is a copy of the app with one change applied); never the variant under evaluation, nor, for a batch, its
   members (`History.training_variants`).
 - Every strategy's run follows the same two rules (`selection/base.py`): a test that fails on the original app is
-  not run, and the run ends at the first failure. A strategy with its own `run` keeps both.
+  not run, and the run ends at the first failure. A strategy with its own `run` keeps both. A failure can first
+  be confirmed by running the test again, which is the oracle's business and not a strategy's
+  (`traceeval check --confirm`, `scripts/analysis/confirm_failures.py`).
 - Replay-first reaches a strategy through the same two calls: `ctx.runnable(t)` is also false for a test whose
   outcome the replay gave, and `ctx.cost(t)` is what is left of a test after its divergence point. A strategy
   tests `ctx.runnable` and scores with `ctx.cost`; it never reads the replay itself.
+- A clean verdict's threshold for a miss rate is set per group of changes, and `experiment/stopping.py::group_of`
+  is the one place that says which group a change is in: a skill's steps, text the model reads, an agent's tools
+  and skills, the configuration, the starting data, code.
 - A recording's cassette (`history/cassette.jsonl`) holds the answers of its original app and nothing else: only
   `traceeval baseline` writes it, and a request it lacks means that the change reaches the model.
 - A recording's changed copies are made from its own copy of the original app (`variants/baseline/sut`), and its

@@ -35,7 +35,7 @@ from traceeval.tracing.codecov import CoverageSession
 
 from .executor import attach_code_functions, default_backend, run_case, write_jsonl
 from .history import UNCHANGED
-from .manifest import baseline_copy, selection_digest, write_manifest
+from .manifest import baseline_copy, load_manifest, selection_digest, write_manifest
 from .replay_first import Replays, add_replay, cassette_client, cassette_path, in_front, recording_engine, replay_suite
 from .sutloader import load_sut
 
@@ -113,7 +113,9 @@ def record_baseline(
     # an unchanged copy under variants/baseline, loaded the same way as every changed copy; its change set is empty
     sut_dir, _ = materialize_variant(None, workdir / "variants")
     sut = load_sut(sut_dir)
-    write_manifest(workdir, "baseline", backend=backend, reps=reps, workers=1, config=config_overrides or {})
+    # ``answers``: how the cassette tells two answers to one request apart (``Tee``), for the report's count of them
+    how = dict(backend=backend, reps=reps, workers=1, config=config_overrides or {}, answers="by what they say")
+    write_manifest(workdir, "baseline", **how)
     t0 = time.time()
     # the tee stands in front of the model for the agents and the judge, and keeps what each request was answered
     with in_front(backend, Tee(shared_client(backend), canonical_ids=(backend == "llm"))) as tee:
@@ -173,8 +175,11 @@ def record_mutants(
     cassette = cassette_path(workdir)
     compare = Compare(shared_client(backend), cassette, canonical_ids=(backend == "llm")) if cassette.exists() else None
     how = dict(backend=backend, reps=reps, workers=workers, config=config_overrides or {}, reached_only=reached_only)
-    # with a digest of the strategies' code as it is now: evidence, later, that no constant was set on these runs
-    write_manifest(workdir, "changes", **how, selection=selection_digest())
+    # With a digest of the strategies' code: evidence, later, that no constant was set on these runs. A recording
+    # taken up again (``resume``) keeps the digest of its first call: the code as it was before any of its changes
+    # had been recorded.
+    first = load_manifest(workdir).get("changes", {}).get("selection") if resume else None
+    write_manifest(workdir, "changes", **how, selection=first or selection_digest())
     engine = recording_engine(workdir)  # whose requests the cassette is keyed by: what a replay runs as
 
     def replayed(sut, variant: str) -> list[dict]:

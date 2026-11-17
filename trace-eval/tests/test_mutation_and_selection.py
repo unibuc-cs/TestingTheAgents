@@ -1,6 +1,7 @@
 """Tests for mutations, change-set extraction, metrics and strategies (small end-to-end run)."""
 
 import ast
+import math
 import random
 
 import numpy as np
@@ -31,6 +32,7 @@ from traceeval.experiment.metrics import apfd, apfdc, evaluate_log
 from traceeval.experiment.replay_first import Replays, cassette_path, replay_first
 from traceeval.experiment.report import write_report
 from traceeval.experiment.runner import record_baseline, record_mutants
+from traceeval.experiment.stopping import group_of, threshold
 from traceeval.experiment.sutloader import copy_sut
 from traceeval.mutation import MUTATIONS, compute_changeset, get_mutation, materialize_variant
 from traceeval.mutation.changeset import ChangedComponent, ChangeSet, _flatten, _python_components, _yaml_code_lines
@@ -333,6 +335,25 @@ def test_training_leaves_out_the_changes_a_batch_shares():
     assert {"history_ml", "observed_diverse"} <= set(CORE)
 
 
+def test_a_stop_threshold_is_a_low_value_of_the_past_regressions():
+    values = [i / 100 for i in range(1, 66)]  # 65 past regressions, the value of each at its first revealing test
+    # on average over the sets of past regressions: the k-th smallest, k = floor(alpha (n + 1)); none when k = 0
+    assert [threshold(values, alpha) for alpha in (0.01, 0.05, 0.1, 0.2)] == [-math.inf, 0.03, 0.06, 0.13]
+    # for nine such sets in ten: a lower one
+    assert [threshold(values, alpha, 0.9) for alpha in (0.05, 0.1, 0.2)] == [0.01, 0.04, 0.09]
+    assert threshold([], 0.5) == -math.inf and threshold([0.3, 0.4, 0.5], 0.5) == 0.4
+
+    def group(*kinds):
+        return group_of(ChangeSet("x", components=[ChangedComponent(f"{k}:x", k, "f", "") for k in kinds]))
+
+    # the group of a change, from the kinds of its components: a skill's steps come first, and the text the
+    # model reads (prose, a prompt, a tool's description) is apart from the rest
+    assert group("skill", "skill-prose", "agent") == "a skill's steps" and group("code", "line") == "code"
+    assert group("skill-prose", "agent") == group("code", "tool", "tool-schema") == "text the model reads"
+    assert group("agent", "config") == "an agent's tools and skills" and group("config") == "the configuration"
+    assert group("fixture") == "the starting data" and group() == "code"
+
+
 @pytest.mark.slow
 def test_small_end_to_end_experiment(tmp_path, capsys):
     work = tmp_path / "exp"
@@ -348,6 +369,9 @@ def test_small_end_to_end_experiment(tmp_path, capsys):
     assert h.unchanged_flips() == [] and not any(h.missing(v) for v in changes)
     asked = [r["cassette"] for stats in h.unchanged.values() for r in stats.runs]
     assert all(c["requests"] == c["known"] > 0 and c["differ"] == 0 for c in asked)
+    # so a cache of the baseline's answers would have paid for none of a run's tokens, the judge's included
+    runs = [r for stats in h.unchanged.values() for r in stats.runs]
+    assert all(r["cassette"]["known_tokens"] == r["tokens"] > 0 for r in runs)
     # the manifest says what the recording was made from and with, and nothing has moved since
     manifest = load_manifest(work)
     assert manifest["app"] == tree_digest(SUT_ROOT) and manifest["model"] and manifest["catalog"]
@@ -430,8 +454,12 @@ def test_small_end_to_end_experiment(tmp_path, capsys):
     reached = [t for t in replays.diverged("benign_skill_prose_reflow") if t not in red]
     assert clean.stop_reason == "exhausted" and clean.tests_run == len(reached)
     assert 0 < clean.cost_fraction < clean.whole_cost_fraction < 1
+    # charged for the requests the original app never made only, the same tests cost no more: after its divergence
+    # point a run may still send requests the cassette knows
+    assert 0 < clean.new_cost_fraction <= clean.cost_fraction
     report = write_report(work).read_text(encoding="utf-8")
     assert "## 7. Replay-first" in report and (work / "results" / "figures" / "replay_first.png").exists()
+    assert "from the cache too" in report and "charged for their new requests only" in report
     assert "- The empty change" in report and "request by request" in report
     # the prototype: the same change checked live (here on recorded answers), from this history: replay first,
     # then the method over the tests that diverge
@@ -439,7 +467,19 @@ def test_small_end_to_end_experiment(tmp_path, capsys):
     assert log.stop_reason == "regression" and log.p_broken > 0.9
     assert not set(log.executed) & replays.replayed("skill_publish_drop_link_validation")
     out = capsys.readouterr().out
-    assert "replay: " in out and "coverage: " in out and "invoked: " in out
+    assert "replay: " in out and "coverage: " in out and "invoked: " in out and "(again)" not in out
+    # with ``confirm`` the test that fails is run again before its failure counts; on recorded answers it fails
+    # again, so the verdict and the tests are the same, and the second run is paid for
+    twice = check("skill_publish_drop_link_validation", work, 0.3, "replay", confirm=True)
+    assert (twice.stop_reason, twice.executed) == ("regression", log.executed) and twice.cost > log.cost
+    assert capsys.readouterr().out.count("(again)") == 1
+    # with a target miss rate the clean threshold is set on the recording's other changes. One other change is
+    # too few to set any: the check says so and runs every test the benign change reaches
+    sure = check("benign_skill_prose_reflow", work, 1.0, "replay", miss_rate=0.2)
+    assert sure.stop_reason == "exhausted" and set(sure.executed) == set(reached)
+    assert len(sure.trace) == len(sure.steps) and sure.trace == sorted(sure.trace, reverse=True)
+    out = capsys.readouterr().out
+    assert "no threshold for a miss rate of 20%" in out and "every test the change reaches ran and passed" in out
     # a replayed failure of a test that passes on the original app ends a run before any test runs (here one is
     # written into the replay by hand: neither change of this recording has one)
     rows = read_jsonl(work / "history" / "replay_first.jsonl")
@@ -472,7 +512,8 @@ def test_generated_changes_apply_and_leave_an_app_that_loads(tmp_path):
     changes = generate()
     kinds = {kind_of(m.id) for m in changes}
     skills, others = "stepdel stepswap whennot guarddel ruledel rewrap", "tooldrop setting argswap tooldesc condnot"
-    assert kinds == {*skills.split(), *others.split(), "comment", "fixture"}
+    text = "promptdel agentdesc paramdesc"  # more edits to text the model reads
+    assert kinds == {*skills.split(), *others.split(), *text.split(), "comment", "fixture"}
     assert len(changes) > 300 and max(len(m.id) for m in changes) <= 40
     assert all(m.expected_regression is None for m in changes)  # no label: the recording decides
     assert get_mutation(changes[0].id).id == changes[0].id
@@ -508,6 +549,7 @@ def test_generated_changes_apply_and_leave_an_app_that_loads(tmp_path):
                 assert not ids, m.id  # a comment is no change
             else:
                 expected = {"fixture": "fixture:", "setting": "config:", "tooldrop": "agent:", "tooldesc": "tool:"}
+                expected |= {"promptdel": "agent:", "agentdesc": "agent:", "paramdesc": "tool:"}
                 prefix = expected.get(kind_of(m.id), "skill:" if m.category in ("skill", "benign") else "code:")
                 assert any(i.startswith(prefix) for i in ids), (m.id, ids)
         for rel, text in saved.items():

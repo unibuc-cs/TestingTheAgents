@@ -127,10 +127,10 @@ What the check prints:
 ```text
 skill_routing_drop_approval: changed skill:routing#prose
 replay: 27 of 180 tests replay to the end, for no tokens, in 2 s; 153 diverge and need the model
-  DS-ROUTING/r41         pass                                       3,935 tokens
+  DS-ROUTING/r41         pass                                       3,923 tokens
   WF3-03                 FAIL required:request_approval,response~not approved,tool_error:unpublish_page  14,708 tokens
 REGRESSION: WF3-03 failed
-2 tests run with the model, 18,643 tokens (1% of the suite), ...; P(something broke) = 1.00
+2 tests run with the model, 18,631 tokens (1% of the suite), ...; P(something broke) = 1.00
 blamed: skill:routing#prose 0.63
 coverage: 100% of the changed components exercised, 33% of the 15 affected properties checked, 17% of the 6 affected workflows run, 100% of the 3 affected features reached
 ... then what the tests invoked, the properties left unchecked and the workflows not run
@@ -291,13 +291,18 @@ cases:
   it, selects among the tests that diverge, orders them and decides when to stop. The traces are OpenTelemetry,
   and the catalog of properties maps onto the metrics of DeepEval, the evaluation library the Adobe Team uses.
 - *Can recorded answers stand in for the model?* As far as a model call is a function of its request. Under
-  Gemma as served here, 31,506 of the 31,510 recorded runs of the tests that replay to the end finish like their
-  replay ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7). Under a serving setup where answers vary with the batch
+  Gemma as served here, all 31,490 recorded runs of the tests that replay to the end finish like their replay
+  ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7). Under a serving setup where answers vary with the batch
   (Qwen's, gpt-oss's), that has to be measured first.
-- *Does the offline evaluation predict the live run?* Yes: the method alone, run live on all 43 changes, gave the
-  evaluator's verdict on 42, with the same tests and tokens. The exception is a live false alarm on a benign
-  change, a one-off of the model that five more recordings of the change do not repeat
-  ([EXPERIMENT.md](EXPERIMENT.md) §5); the live check reads one run where the evaluator reads five.
+- *Does the offline evaluation predict the live run?* Yes: the check, run live on all 43 changes, gave the
+  evaluator's verdict on 41, after as many tests. One exception is a live false alarm on a benign change, on a
+  test that passes its five recorded runs: the live check reads one run where the evaluator reads five. The other
+  is a check that fits more tests in its budget than the evaluator allows it ([EXPERIMENT.md](EXPERIMENT.md) §5).
+- *How sure is "no regression"?* By default the method stops on its own probability, which promises nothing.
+  With `--miss-rate 0.1` the stop threshold is set on recorded changes that edit the same kind of thing, so that
+  at most one regression in ten is called clean, and the check says what the threshold rests on. Run that way on
+  the 43 changes, it found all 28 regressions with no false alarm, for 2.8% of the suite's tokens per check
+  ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.9).
 - *What is next?* Re-planning after a failed step is built on a branch and recorded with three models. It waits for
   one decision: whether a single publication with a broken link is repaired or refused
   ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4.1). Then tau2-bench, a public agent benchmark, as a second application.

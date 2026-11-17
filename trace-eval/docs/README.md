@@ -35,9 +35,19 @@ flowchart TD
 ## What else is in this folder
 
 - `results/`: one folder per recording, each with the report and its figures. `gemma8` is the recording of the
-  current app, with the replay-first section ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7). `gemma7`, `qwen7` and
-  `gptoss7` are of the app before the fixes of [TODO.md](../TODO.md) §3, with their follow-up experiments:
-  - `gemma7/live_vs_replay.md`: the live check against the replay, change by change;
+  current app, with the replay-first section ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7), and beside its report:
+  - `gemma8/second_recording.md`: its changed copies recorded again under another start of the server, and what
+    a reached test costs when the cassette answers every request it knows;
+  - `gemma8/live_checks.md`: `traceeval check` live on each of the 43 changes, against the evaluator.
+
+  `gemma8_gen` is the recording of the changes generated from the app ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.8),
+  evaluated on the half the strategies did not learn from, and beside its report:
+  - `gemma8_gen/stopping.md`: the full tables of the stopping rule with a bounded miss rate (§5.9);
+  - `gemma8_gen/live_checks_miss_rate.md`: `traceeval check --miss-rate` live on each of the 43 changes.
+
+  `gemma7`, `qwen7` and `gptoss7` are of the app before the fixes of [TODO.md](../TODO.md) §3, with their
+  follow-up experiments:
+  - `gemma7/live_vs_replay.md`: the method run live, without the replay phase, against the evaluator;
   - `gemma7/false_alarm_one_at_a_time.md`: the change behind the one live false alarm, recorded one test at a time;
   - `gemma7/noise_floor.md`: the empty change recorded fifteen times, against the number of runs;
   - `gemma7/batch_invariant.md`: why Gemma 4 cannot be served in vLLM's batch-invariant mode;

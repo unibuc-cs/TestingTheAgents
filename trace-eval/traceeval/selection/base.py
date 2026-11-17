@@ -77,6 +77,9 @@ class ExecutionLog:
     # budget (the budget kept a test out) | clean | uninformative | no_components (the adaptive method's own)
     stop_reason: str = "budget"
     p_broken: float | None = None  # the adaptive method's final P(the change broke something)
+    # ... and the same probability before each test it ran, in order: what its clean verdict compares with a
+    # threshold, and what a threshold is set on (``experiment/stopping.py``)
+    trace: list[float] = field(default_factory=list)
     # the adaptive method's final P(this component is broken), per changed component, most likely first: for a
     # batch of changes, which of them the outcomes point at
     blame: list[tuple[str, float]] = field(default_factory=list)

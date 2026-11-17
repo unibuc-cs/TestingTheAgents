@@ -53,7 +53,8 @@ def catalog_digest() -> str:
 
 def selection_digest() -> str:
     """A fingerprint of the strategies' code (``traceeval/selection``), constants included. A recording of changed
-    copies keeps it: a strategy evaluated on those copies with the same digest was not tuned on them."""
+    copies keeps it, as it was when the first of them was recorded: a strategy evaluated on those copies with the
+    same digest was not tuned on them."""
     return tree_digest(Path(__file__).resolve().parents[1] / "selection", suffixes={".py"})
 
 

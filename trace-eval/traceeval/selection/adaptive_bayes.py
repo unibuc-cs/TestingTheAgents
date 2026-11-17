@@ -24,7 +24,10 @@ In plain words
      does (``base.py``): the models decode greedily, so that failure shows a changed behaviour (it is what
      the ground truth calls revealing).  What only this method does is stop with "clean", when P(something
      is broken) drops below eps_clean; otherwise it stops when every test that can be run has passed
-     ("exhausted"), when the budget is spent, or when no test could change the verdict.
+     ("exhausted"), when the budget is spent, or when no test could change the verdict.  eps_clean is a constant
+     by default.  A check can set it instead on the recorded changes, for a miss rate it chooses
+     (``experiment/stopping.py``); the tests that can no longer move the probability then run too
+     (``exhaustive``), so that "exhausted" means every test the change reaches has run.
   5. A run that found no regression does not end before every mandatory property the change may affect (the
      catalog of properties, ``experiment/coverage.py``) has a test, the cheapest that checks it, while the budget
      allows (``cover_mandatory``; switched off in the ablation ``adaptive_bayes_nomandatory``).
@@ -101,6 +104,7 @@ class AdaptiveBayes(Strategy):
         prior_strength=2.0,
         text="overlap",
         cover_mandatory=True,
+        exhaustive=False,
     ):
         """The settings, each explained beside its field with the step of the module docstring it enters."""
         self.eps_clean = eps_clean  # "clean" below this P(something is broken) (step 4)
@@ -111,6 +115,10 @@ class AdaptiveBayes(Strategy):
         self.prior_strength = prior_strength  # padding of a test's record (step 2): a short record moves little
         self.text = text  # how a test's text is compared with the change (step 2): "overlap", "tfidf" or "none"
         self.cover_mandatory = cover_mandatory  # test every mandatory property the change may affect (step 5)
+        # go on through the tests that can no longer move the probability, cheapest first, instead of ending
+        # "uninformative" (step 4): with a threshold set on recorded changes, a run that is not stopped by it
+        # must end with every runnable test run
+        self.exhaustive = exhaustive
 
     # ------------------------------------------------------------------ step 1: hypotheses
     def components(self, ctx):
@@ -343,9 +351,10 @@ class AdaptiveBayes(Strategy):
         return np.maximum(gain, 0.0)
 
     # ------------------------------------------------------------------ steps 3 to 5: run and stop
-    def run(self, ctx: SelectionContext, oracle, stopping: bool = True) -> ExecutionLog:
+    def run(self, ctx: SelectionContext, oracle, stopping: bool = True, exhaustive: bool | None = None) -> ExecutionLog:
         """Run tests one by one through ``oracle``. ``stopping=False`` (used by ``order``) disables the early
-        stops."""
+        stops; ``exhaustive`` overrides the strategy's own setting for this run (``trajectory``)."""
+        exhaustive = self.exhaustive if exhaustive is None else exhaustive
         log = ExecutionLog(self.name)
         m = self.model(ctx)
         tests, hyps, cost, risk, fails_anyway = m["tests"], m["hyps"], m["cost"], m["risk"], m["fails_anyway"]
@@ -376,9 +385,15 @@ class AdaptiveBayes(Strategy):
             score[ran | ~able | (cost > remaining) | (gain <= 1e-9)] = -1.0
             i = int(np.argmax(score))
             if score[i] <= 0:
-                log.stop_reason = "budget" if remaining < cost.min() else "uninformative"
-                break
+                # no test left that could move the probabilities; with ``exhaustive`` the cheapest of those that
+                # can still be run goes next
+                left = np.flatnonzero(able & ~ran & (cost <= remaining)) if exhaustive else []
+                if not len(left):
+                    log.stop_reason = "budget" if remaining < cost.min() else "uninformative"
+                    break
+                i = int(left[np.argmin(cost[left])])
             # run it on the changed copy (the oracle: a replay of the recording, or the live app in traceeval check)
+            log.trace.append(float(1.0 - post[0]))  # what the clean verdict was compared with before this test
             passed, spent = oracle(tests[i])
             ran[i] = True
             remaining -= spent
@@ -441,6 +456,7 @@ class AdaptiveBayes(Strategy):
             if pid in checked or not options:
                 continue
             i = min(options, key=lambda j: cost[j])
+            log.trace.append(float(1.0 - post[0]))
             passed, spent = oracle(tests[i])
             ran[i] = True
             remaining -= spent
@@ -462,6 +478,15 @@ class AdaptiveBayes(Strategy):
         executed = self.run(unlimited, lambda t: (True, ctx.cost(t)), stopping=False).executed
         seen = set(executed)
         return executed + [t for t in CostAware().order(ctx) if t not in seen]
+
+    def trajectory(self, ctx) -> list[tuple[str, float]]:
+        """Every runnable test in the order the method runs them while each one passes, with the probability that
+        something is broken before it runs. A regression is called clean by a threshold above the value at its
+        first revealing test, which is what a threshold is set on (``experiment/stopping.py``). The tests that can
+        no longer move the probability come last, cheapest first."""
+        unlimited = replace(ctx, budget=float("inf"))
+        log = self.run(unlimited, lambda t: (True, ctx.cost(t)), stopping=False, exhaustive=True)
+        return list(zip(log.executed, log.trace, strict=True))
 
 
 # The same method with another text measure (step 2) or without step 5, registered under their own names so that

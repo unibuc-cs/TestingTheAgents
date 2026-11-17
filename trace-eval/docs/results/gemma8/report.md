@@ -568,6 +568,8 @@ Tokens spent, as a mean over all changes (fraction of the full suite):
 | risk_aware_ts | 0.010 | 0.021 | 0.032 | 0.048 | 0.062 | 0.081 | 0.100 |
 | adaptive_bayes | 0.008 | 0.014 | 0.018 | 0.021 | 0.021 | 0.021 | 0.021 |
 
+For comparison, a cache of the original app's answers in front of the model, with the whole suite run again and no stop at a failure, pays every diverged test from its divergence point on: 0.207 of the suite's tokens per change (median 0.083), less the requests after that point that the cache also knows. It finds every revealed regression.
+
 The same tests run whole, without the replayed part taken off:
 
 | strategy | 2% | 5% | 10% | 20% | 30% | 50% | 100% |

@@ -68,7 +68,9 @@ Paths are relative to `traceeval/`.
     test's *divergence point*, and the test needs the model from there on.
 
   A strategy then orders the diverged tests only. A test that passes on the original app and replays to a failure
-  is a regression found for no tokens, and a diverged test costs its tokens after the divergence point.
+  is a regression found for no tokens, and a diverged test costs its tokens after the divergence point. It costs
+  less when the requests it still shares with the original app after that point are answered from the cassette
+  too, as `traceeval check` does; a recording counts those tokens, and the report gives both.
 - **The two rules of a run** (`selection/base.py`): every strategy is run the same way, so that they compare like
   for like.
   - A test the model already fails on the original app is not run (`ctx.runnable`): it fails on the changed copy
@@ -104,6 +106,7 @@ Paths are relative to `traceeval/`.
 | the report's tables | `experiment/report.py` |
 | coverage (of the suite, of a change) | `experiment/coverage.py` |
 | the prototype (one change, live) | `experiment/check.py` (its docstring: the replay, then the method over the diverged tests) |
+| the threshold of a clean verdict, for a miss rate | `experiment/stopping.py` (§5, "When the method says clean") |
 | a run as OpenTelemetry spans | `tracing/otel.py` (`traceeval run --otel`; [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.6) |
 
 Everything else is plumbing (loaders, tracing, report).
@@ -179,14 +182,24 @@ Everything else is plumbing (loaders, tracing, report).
     of the requests that were sent more than once, how many got another answer, in the baseline's own
     repetitions, under the empty change and on the changed copies;
   - the strategies run replay-first, in the tables of sections 2 and 3: compare a strategy's row there with its
-    row here. The third table gives the tokens of the same tests run whole, without the replayed part taken
-    off. Two orders appear only here: `cheapest`, by cost, and `late_divergence`, by how late the change reaches
-    the test.
+    row here. Two orders appear only here: `cheapest`, by cost, and `late_divergence`, by how late the change
+    reaches the test. The tokens come three ways:
+
+    | table | a diverged test is charged |
+    |---|---|
+    | tokens spent | its tokens after the divergence point: what the replay alone tells, an upper bound |
+    | run whole | all its tokens, the replayed part included |
+    | new requests only | the requests the original app never made, wherever they come in the run |
+
+    The last one needs a recording that counted those tokens (`Compare`, in each run's `cassette` field).
+  - beside them, the baseline that needs no method: the whole suite run again through a cache of the original
+    app's answers, which pays every diverged test and stops nowhere.
 - **Section 8**, for a recording whose generated changes were replayed (`traceeval replay-first --generated`):
   by kind of generated change (§6), what the replay settles without a model and what is left for it.
 - `replay.csv`: one row per (change, strategy, budget, seed), for slicing the results yourself;
   `prioritization.csv`: one row per (change, strategy), and per seed for an order drawn at random, for section 4;
-  `replay_first.csv`: as `replay.csv`, for section 7, with `whole_cost_fraction` beside `cost_fraction`.
+  `replay_first.csv`: as `replay.csv`, for section 7, with `whole_cost_fraction` and `new_cost_fraction` beside
+  `cost_fraction` (the three ways above).
 
 ## 5. How the adaptive method weighs a test
 
@@ -226,6 +239,32 @@ A test with no known link to the changed part gets a small fixed sensitivity (`i
 Replay-first (§2), the method picks among the tests that diverge. A test that replays to the end is not run, and
 its pass is not counted as evidence either: with that floor of 0.02, a hundred free passes would make any change
 look clean.
+
+### When the method says "clean"
+
+The method stops with a clean verdict when its probability that something broke falls under a threshold.
+
+| threshold | where it comes from | what it promises |
+|---|---|---|
+| the constant `eps_clean` (0.05) | `selection/adaptive_bayes.py` | nothing: the probability is a model's, and it can be sure and wrong |
+| `traceeval check --miss-rate 0.1` | the recording's own changes (`experiment/stopping.py`) | a regression like the recorded ones is called clean one time in ten at most |
+
+How the second one is set, for a change under check:
+
+1. The recorded changes are split in two fixed halves (`generator.split`: the generated ones kind by kind), and the
+   method learns from one half. The 43 hand-written changes alone are too few for a threshold, so the recording
+   to use is the one with the generated changes.
+2. For each regression of the other half, the method's own order is followed while every test passes, up to the
+   first test that reveals the change (`AdaptiveBayes.trajectory`). The probability the method has reached there
+   is that regression's value. A threshold above it would have called that regression clean.
+3. The values are kept per group of changes (`stopping.py::group_of`: what the change edits). The threshold for a
+   change is a low value of its own group: the $k$-th smallest of $n$, with $k = \lfloor 0.1 (n+1) \rfloor$.
+4. A group with fewer than nine recorded regressions has $k = 0$. It has no threshold, and every reached test
+   runs.
+
+With such a threshold the method also keeps going when no test is informative any more: the cheapest reached test
+runs next (`exhaustive`), so that a low threshold can still be reached. RESEARCH_PLAN §5.9 has the measurements,
+group by group.
 
 ### Mandatory properties
 
@@ -341,7 +380,7 @@ changes drawn at random by `scripts/batch_sweep.py`.
 ### Generated changes
 
 The 43 were written by hand, each to make a point, and each has a label. `mutation/generator.py` makes changes
-mechanically instead, one per place an edit of its kind applies to: 598 on the current app. Nobody labels them;
+mechanically instead, one per place an edit of its kind applies to: 692 on the current app. Nobody labels them;
 the recording says which a test reveals. `traceeval mutations --generated` lists them (ids `g_<kind>_<where>_<n>`).
 
 | kind | the edit | how many |
@@ -352,10 +391,16 @@ the recording says which a test reveals. `traceeval mutations --generated` lists
 | `tooldrop` | a tool removed from an agent | 50 |
 | `setting` | a setting at another value: a switch flipped, a number at 0, one less and one more, a list without one item, a tool switched off, another default agent | 65 |
 | `argswap` | two arguments of the same type swapped in a call of a tool adapter | 12 |
-| `tooldesc` | a tool's description cut to its first three words | 32 |
+| `tooldesc`, `paramdesc` | a tool's description cut to its first three words; the description of one of its parameters emptied | 32, 53 |
+| `promptdel`, `agentdesc` | a sentence of an agent's system prompt deleted; an agent's description cut to its first three words | 30, 11 |
 | `condnot` | the condition of an `if` negated, in the services, the tools and the harness | 120 |
 | `fixture` | a value of the starting data replaced by another the same key has elsewhere | 85 |
 | `rewrap`, `comment` | meant to break nothing: two lines of a skill's prose joined; a comment at the top of a module | 13, 32 |
+
+Six kinds edit text the model reads (`ruledel`, `rewrap`, `tooldesc`, `paramdesc`, `promptdel`, `agentdesc`). Such
+an edit reaches every test whose requests carry the text, and seldom breaks one, so a clean verdict on it is the
+most expensive kind. The last three kinds are there so that a stop threshold has enough regressions of this group
+to be set on (§5).
 
 Two commands use them, on a recording that has a baseline:
 

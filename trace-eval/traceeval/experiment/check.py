@@ -9,7 +9,15 @@ The check has two phases.
 2. The adaptive method (``selection/adaptive_bayes.py``) picks among the diverged tests, one at a time. Each runs
    at once with the real model, behind the same recorded answers, so only the requests from its divergence on are
    paid for, and its outcome decides what runs next. The check stops at the first failure, when every diverged
-   test has passed, when the method is confident nothing broke, or when the budget is spent.
+   test has passed, when the method is confident nothing broke, or when the budget is spent. One failing run of
+   a long test can be the minority of its runs, so a failure can first be confirmed (``confirm``): the test is
+   run again, and a third time when the second run passes; two failures of three count.
+
+"Confident" is a threshold on the method's probability that something broke. By default it is the method's
+constant. With a target miss rate (``miss_rate``) it is set on the history's own changes, per group of changes, so
+that a regression is called clean at most that often (``stopping.py``); the method then learns from the half of
+the recorded changes the threshold was not set on, and goes on through every test the change reaches unless the
+threshold stops it.
 
 What is known beforehand comes from a recorded experiment (``--history``): the answers of the original app (its
 cassette), each test's cost and the code it exercises there, and how earlier changes of each kind showed up in the
@@ -31,6 +39,7 @@ from traceeval.catalog import load_catalog, load_properties
 from traceeval.llm.chat import new_client
 from traceeval.mutation import compute_changeset, get_mutation, materialize_variant
 from traceeval.selection import SelectionContext, get_strategy
+from traceeval.selection.adaptive_bayes import AdaptiveBayes
 from traceeval.selection.base import ExecutionLog
 from traceeval.sut import SUT_ROOT
 
@@ -49,13 +58,23 @@ from .executor import run_case
 from .history import History
 from .manifest import drift
 from .replay_first import cassette_client, cassette_path, in_front, recording_engine, replay_suite, write_cassette
+from .stopping import clean_threshold
 from .sutloader import load_sut
 
 
-def check(change: str, history_dir: Path, budget: float, backend: str):
+def check(
+    change: str,
+    history_dir: Path,
+    budget: float,
+    backend: str,
+    confirm: bool = False,
+    miss_rate: float | None = None,
+):
     """Check ``change``, a mutation id or the folder of a changed copy of ``traceeval/sut``, spending at most
     ``budget`` (a fraction of the full suite's tokens) on the model. Prints the replay's result and each test as
-    it runs, then the verdict and the change coverage; returns the execution log."""
+    it runs, then the verdict and the change coverage; returns the execution log. With ``confirm`` a test that
+    fails is run again before its failure ends the check. With ``miss_rate`` the clean verdict's threshold is set
+    on the history's changes, for that miss rate at most."""
     # The change is compared with traceeval/sut as it is now, and what is known beforehand was recorded on the app
     # as it was. If the two differ, even by a comment, the recorded line numbers and answers no longer fit: refuse.
     if "app" in (differs := drift(history_dir)):
@@ -101,7 +120,7 @@ def check(change: str, history_dir: Path, budget: float, backend: str):
         # ---- phase 2, the diverged tests, live: the recorded answers stay in front of the model
         seconds = [0.0]  # wall time of the tests run so far
 
-        def oracle(test_id: str) -> tuple[bool, float]:
+        def run_once(test_id: str, again: bool = False) -> tuple[bool, float]:
             """Run the test now, on the changed app, with the real model behind the recorded answers. A run the
             environment broke (the model server did not answer) is tried once more; if it breaks again, the check
             stops rather than read the failure as the change's. The cost is the tokens the model was asked for."""
@@ -117,34 +136,57 @@ def check(change: str, history_dir: Path, budget: float, backend: str):
             spent = max(0.0, float(rec["tokens"] - client.served_tokens))  # without what the cassette answered
             outcome = "pass" if rec["passed"] else f"FAIL {','.join(rec['failed_checks']) or rec['classification']}"
             whole = f" ({rec['tokens']:,} with its replayed part)" if client.served_tokens else ""
-            print(f"  {test_id:22s} {outcome:40s} {spent:>7,.0f} tokens{whole}", flush=True)
+            label = f"{test_id} (again)" if again else test_id
+            print(f"  {label:22s} {outcome:40s} {spent:>7,.0f} tokens{whole}", flush=True)
             return rec["passed"], spent
+
+        def oracle(test_id: str) -> tuple[bool, float]:
+            """What the method is told about a test: the outcome of one run. With ``confirm`` a failure is not
+            taken at its word: the test is run again, and a third time when the second run passes. Two failures
+            of three are a failure; one that does not repeat counts as a pass. Every run made is paid for."""
+            passed, spent = run_once(test_id)
+            if passed or not confirm:
+                return passed, spent
+            passed, more = run_once(test_id, again=True)
+            spent += more
+            if passed:  # one failure and one pass: a third run decides
+                passed, more = run_once(test_id, again=True)
+                spent += more
+            return passed, spent
 
         if found:
             log = ExecutionLog("replay", steps=[(t, False, 0.0) for t in found], stop_reason="regression")
         elif not diverged:
             log = ExecutionLog("replay", stop_reason="exhausted")
         else:
+            # never learn from the change itself, nor from the members of a batch
+            learn = history.training_variants(cs.variant, members)
+            # The method reasons about the components of the change set. A change that reaches the model without
+            # leaving one (a re-wrapped prompt, say) gives it nothing to reason about: the diverged tests then run
+            # cheapest first.
+            method = get_strategy("adaptive_bayes" if cs.components else "cheapest")
+            if not cs.components:
+                print("the change set is empty, yet tests diverge: they run cheapest first")
+            elif miss_rate is not None:
+                # The clean threshold set on the recorded changes instead of the method's constant. The method
+                # then learns from the half of them the threshold was not set on, and runs every reached test
+                # unless the threshold stops it.
+                tau, learn, basis = clean_threshold(history_dir, history, catalog, cs, miss_rate, learn)
+                print(basis)
+                method = AdaptiveBayes(eps_clean=tau, exhaustive=True)
             ctx = SelectionContext(
                 change=cs,
                 catalog=catalog,
                 history=history,
                 budget=budget * history.total_cost(),
                 rng=random.Random(0),
-                # never learn from the change itself, nor from the members of a batch
-                train_variants=history.training_variants(cs.variant, members),
+                train_variants=learn,
                 replayed=replayed,
                 prefix={t: float(replay[t]["tokens"]) for t in diverged},
             )
-            # The method reasons about the components of the change set. A change that reaches the model without
-            # leaving one (a re-wrapped prompt, say) gives it nothing to reason about: the diverged tests then run
-            # cheapest first.
-            strategy = "adaptive_bayes" if cs.components else "cheapest"
-            if not cs.components:
-                print("the change set is empty, yet tests diverge: they run cheapest first")
             client.live = new_client(backend)
             with in_front(backend, client):
-                log = get_strategy(strategy).run(ctx, oracle)
+                log = method.run(ctx, oracle)
         sut.unload()
 
     failed = sorted({t for t, ok, _ in log.steps if not ok})
@@ -159,6 +201,8 @@ def check(change: str, history_dir: Path, budget: float, backend: str):
         verdict = f"REGRESSION: {', '.join(failed)} failed"
     elif log.stop_reason == "exhausted":
         verdict = "no regression: every test the change reaches ran and passed"
+    elif log.stop_reason == "clean" and miss_rate is not None:
+        verdict = f"no regression: stopped at a miss rate of at most {miss_rate:.0%}{left}"
     elif log.stop_reason == "clean":
         verdict = f"no regression: the method is confident nothing broke{left}"
     else:

@@ -115,6 +115,36 @@ def test_tee_keeps_the_answer_given_most_often(tmp_path):
     assert json.loads(tee.write(path).read_text(encoding="utf-8"))["answer"]["content"] == "x"
 
 
+def test_tee_counts_answers_by_what_they_say_not_by_the_ids_a_server_makes_up(tmp_path):
+    class Server:
+        """Answers with one tool call under a new id every time: ``list_pages`` first, ``get_page`` afterwards."""
+
+        model_id = "m"
+
+        def __init__(self):
+            self.calls = 0
+            self.chat = SimpleNamespace(completions=SimpleNamespace(create=self.create))
+
+        def create(self, **request):
+            self.calls += 1
+            name = "list_pages" if self.calls == 1 else "get_page"
+            call = SimpleNamespace(
+                id=f"chatcmpl-tool-{self.calls}", function=SimpleNamespace(name=name, arguments="{}")
+            )
+            usage = SimpleNamespace(prompt_tokens=10, completion_tokens=5)
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=None, tool_calls=[call]))], usage=usage
+            )
+
+    tee = Tee(Server(), canonical_ids=True)
+    for _ in range(3):
+        tee.chat.completions.create(model="m", messages=[{"role": "user", "content": "hi"}], tools=[])
+    entry = json.loads(tee.write(tmp_path / "cassette.jsonl").read_text(encoding="utf-8"))
+    # three answers under three ids say two things; the one said twice is kept, as it first came
+    assert (entry["asked"], entry["distinct"]) == (3, 2)
+    assert [(c["id"], c["name"]) for c in entry["answer"]["tool_calls"]] == [("chatcmpl-tool-2", "get_page")]
+
+
 def test_compare_counts_the_requests_the_model_answers_otherwise(tmp_path):
     tee = Tee(_Scripted(["one", "two"]))
     _ask(tee, "sys", "q"), _ask(tee, "sys", "q", "one", "result")
@@ -124,9 +154,10 @@ def test_compare_counts_the_requests_the_model_answers_otherwise(tmp_path):
     compare.begin()
     answers = [_ask(compare, "sys", "q"), _ask(compare, "sys", "q", "one", "result"), _ask(compare, "sys", "new")]
     assert answers == ["one", "TWO", "three"]  # every answer is the model's own: nothing comes from the cassette
-    assert compare.counts() == {"requests": 3, "known": 2, "differ": 1}
+    # two of the three requests are the original app's, ten tokens each: what a cache would have answered
+    assert compare.counts() == {"requests": 3, "known": 2, "known_tokens": 20, "differ": 1}
     compare.begin()  # the next run starts from zero
-    assert compare.counts() == {"requests": 0, "known": 0, "differ": 0}
+    assert compare.counts() == {"requests": 0, "known": 0, "known_tokens": 0, "differ": 0}
 
 
 def test_replay_first_client_counts_what_replays_and_names_the_divergence(tmp_path):

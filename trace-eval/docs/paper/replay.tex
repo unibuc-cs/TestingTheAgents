@@ -1,0 +1,24 @@
+% Replay first, from the recorded answers to a verdict (Figure 1 of main.tex). No numbers on the figure: it shows
+% the mechanism, not a result. Grey: no model is called. Every line of a box is broken by hand and shorter than
+% the box, so that nothing is hyphenated.
+\begin{tikzpicture}[
+  node distance=6mm and 9mm,
+  box/.style={draw, rounded corners=2pt, align=center, font=\small, inner sep=4pt, minimum height=13mm, text width=40mm},
+  free/.style={box, fill=black!8},
+  stop/.style={box, fill=black!3},
+  arr/.style={-{Stealth[length=2mm]}, thick}
+]
+\node[free] (rep) {every test is run on\\the changed version,\\the model's calls\\answered from the\\answers recorded on\\the current version};
+\node[free, above right=1mm and 12mm of rep] (end) {every request was\\made before: the test\\\emph{replays to the end};\\its outcome is known};
+\node[box, below right=1mm and 12mm of rep] (div) {a request the record\\lacks: the test\\\emph{diverges}; the change\\reaches the model here};
+\node[stop, right=of end] (reg0) {a test that used to\\pass fails:\\\textsc{regression}, before\\any model call};
+\node[box, right=of div] (run) {the reached tests, in\\a strategy's order,\\each run behind the\\recorded answers};
+\node[stop, right=of run] (reg) {a failure, confirmed\\by a repetition:\\\textsc{regression}};
+\node[stop, below=of reg] (cl) {every reached test\\passed, or too little\\reason is left to go\\on: \textsc{clean}};
+\draw[arr] (rep.east) -- ++(5mm,0) |- (end.west);
+\draw[arr] (rep.east) -- ++(5mm,0) |- (div.west);
+\draw[arr] (end) -- (reg0);
+\draw[arr] (div) -- (run);
+\draw[arr] (run) -- (reg);
+\draw[arr] (run.south) |- (cl.west);
+\end{tikzpicture}
