@@ -11,14 +11,15 @@ the server is down. What comes after the demo is in [AEM_ALIGNMENT.md](AEM_ALIGN
 scripts/gpu_remote.sh status            # GPU0 of the GPU server (fmi0) free? then:
 scripts/gpu_remote.sh up gemma          # a few minutes; "ready" at the end
 pytest -q                               # green (the known model mistakes are expected failures inside the tests)
-ls runs/gemma7/history runs/gemma7/variants   # the recording and the changed copies the live check needs
-ls runs/qwen7/history runs/gptoss7/history    # the same for the Qwen and gpt-oss checks of section 4
+ls runs/gemma8/history runs/gemma8/variants   # the recording and the changed copies the live check needs
 ```
+
+The recording must be of the app as it is now: the check refuses any other ([USER_GUIDE.md](USER_GUIDE.md) §8).
 
 Open these in the editor: `docs/CONTENTOPS.md` (the figure), `traceeval/catalog/tests/publishing.yaml` (PUB-01),
 `traceeval/catalog/tests/workflows.yaml` (WF3-01), `traceeval/catalog/properties.yaml`,
 `traceeval/catalog/features.yaml`,
-`docs/results/gemma7/report.md` and its figures, and `docs/sdd/report.md`.
+`docs/results/gemma8/report.md` and its figures, and `docs/sdd/report.md`.
 
 ## The terms used below
 
@@ -102,8 +103,8 @@ prove that the state changed.
 ```bash
 traceeval mutations                                        # the 43 controlled changes, with their category
 # the orchestrator no longer asks a person before publishing:
-cat runs/gemma7/variants/skill_routing_drop_approval/diff.patch
-traceeval check skill_routing_drop_approval --history runs/gemma7 --budget 0.2     # live
+cat runs/gemma8/variants/skill_routing_drop_approval/diff.patch
+traceeval check skill_routing_drop_approval --history runs/gemma8 --budget 0.2     # live
 ```
 
 The change removes one rule from the orchestrator's routing skill: ask a person before a step that publishes,
@@ -147,7 +148,7 @@ percent of the suite's tokens.
 Then a change that breaks nothing:
 
 ```bash
-traceeval check benign_skill_prose_reflow --history runs/gemma7 --budget 0.2     # live
+traceeval check benign_skill_prose_reflow --history runs/gemma8 --budget 0.2     # live
 ```
 
 ```text
@@ -156,17 +157,17 @@ replay: 134 of 180 tests replay to the end, for no tokens, in 3 s; 46 diverge an
   PUB-08                 pass                                       6,184 tokens (10,256 with its replayed part)
   PUB-01                 pass                                      10,512 tokens (14,556 with its replayed part)
   PUB-02                 pass                                      10,610 tokens (14,688 with its replayed part)
-  WF4-01                 pass                                      10,697 tokens (56,427 with its replayed part)
-  WF3-01                 pass                                      18,340 tokens (29,354 with its replayed part)
+  WF4-01                 pass                                      10,697 tokens (55,968 with its replayed part)
+  WF3-01                 pass                                      15,635 tokens (29,231 with its replayed part)
 no regression: the method is confident nothing broke (36 tests the change reaches were not run)
-5 tests run with the model, 56,343 tokens (3% of the suite), ...; P(something broke) = 0.05
+5 tests run with the model, 53,638 tokens (3% of the suite), ...; P(something broke) = 0.05
 ```
 
 Points to make:
 
 - Only the 46 tests in which the publishing agent runs can be affected, and the replay finds them without a model.
 - Each of the five tests is paid from its divergence point on: the multi-agent workflow WF4-01 costs 10,697 tokens
-  instead of 56,427, because everything before the publishing step is replayed.
+  instead of 55,968, because everything before the publishing step is replayed.
 - The verdict says what it rests on: the method's confidence, with 36 reachable tests not run. Running those as
   well would give a verdict that leaves nothing untested, for 27% of the suite's tokens in all, more than this
   check's budget.
@@ -184,7 +185,7 @@ regressions and two harmless edits (`traceeval mutations` lists its members); th
 and names the member it blames. This one needs the server: the tests it picks are not in the cassette.
 
 ```bash
-traceeval check batch_nightly --history runs/gemma7 --budget 0.2     # live
+traceeval check batch_nightly --history runs/gemma8 --budget 0.2     # live
 ```
 
 ```text
@@ -198,48 +199,45 @@ batches, including the nine harmless edits that break a test together, and the t
 changes drawn at random, on which the size makes no difference and the blame falls on a member that is a regression
 on its own in all but one run.
 
-The two single-change checks with Qwen and with gpt-oss are in cassettes of their own, so they replay without a
-server (`--backend llm` with `TRACEEVAL_CACHE`; [EXPERIMENT.md](EXPERIMENT.md) §5). They are a two-minute answer to
-"what about a bigger model?". Those two recordings keep no answers of their original app, so nothing replays and
-the check is the method alone:
+"What about a bigger model?" The same two checks were run with Qwen and with gpt-oss, each against its own
+recording and without a replay phase, since those recordings keep no answers of their original app:
 
-```bash
-TRACEEVAL_CACHE=tests/cassettes/qwen.jsonl traceeval check benign_skill_prose_reflow --history runs/qwen7 --budget 0.2 --backend llm
-TRACEEVAL_CACHE=tests/cassettes/gptoss.jsonl TRACEEVAL_LLM_MODEL=openai/gpt-oss-120b TRACEEVAL_LLM_MAX_TOKENS=4096 \
-  traceeval check benign_skill_prose_reflow --history runs/gptoss7 --budget 0.2 --backend llm
-```
+| check | Qwen | gpt-oss |
+|---|---|---|
+| the routing skill without its approval rule | regression: WF3-03, after 2 tests, 1% of the suite | regression: WF3-03, after 3 tests, 2% |
+| the publishing skill's prose reflowed (harmless) | clean after 7 tests, 3% | a false alarm: PUB-22 fails after 6 tests; its runs disagree under gpt-oss ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4) |
 
-| check | Gemma | Qwen | gpt-oss |
-|---|---|---|---|
-| the routing skill without its approval rule | regression: WF3-03, after 2 tests, 1% of the suite | regression: WF3-03, after 2 tests, 1% | regression: WF3-03, after 3 tests, 2% |
-| the publishing skill's prose reflowed (harmless) | 134 tests replay; clean after 5 of the other 46, 3% | clean after 7 tests, 3% | a false alarm: PUB-22 fails after 6 tests; its runs disagree under gpt-oss ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4) |
-
-Each model runs the tests its own recording ranks first; the verdicts agree except on the harmless change under
-gpt-oss, where a single live run of an unstable test is a false alarm that the recording's majority would absorb.
+Each model runs the tests its own recording ranks first; the verdicts agree with Gemma's except on the harmless
+change under gpt-oss, where a single live run of an unstable test is a false alarm that the recording's majority
+would absorb. These two recordings (`runs/qwen7`, `runs/gptoss7`) are of the app as it was before the harness
+fixes of [TODO.md](../TODO.md) §3, so `traceeval check` now refuses them; a recording of the current app with
+each model is TODO §4.
 
 ## 5. The evidence over all changes (4 minutes)
 
-Open `docs/results/gemma7/report.md`, every strategy evaluated on every change from the recording of the current
+Open `docs/results/gemma8/report.md`, every strategy evaluated on every change from the recording of the current
 app ([USER_GUIDE.md](USER_GUIDE.md) §4 says how to read it):
 
-- Section 1, the ground truth: 29 of the 34 regressions are revealed and no benign change fails a test; the five
-  Gemma cannot see are in [EXPERIMENT.md](EXPERIMENT.md) §7.
+- Section 1, the ground truth: 28 of the 34 regressions are revealed and no benign change fails a test; the six
+  no test reveals under Gemma are in [EXPERIMENT.md](EXPERIMENT.md) §7. Under the header, the empty change:
+  the original app run as the changed copies are flips no test.
 - Section 2 and `figures/detection_vs_cost.png`: detection against the tokens actually spent, every strategy run
   under the same two rules ([USER_GUIDE.md](USER_GUIDE.md) §2). At a 20% budget, hand-written dependencies find
-  62% of the regressions, traces 85%, TF-IDF 93% and the adaptive method 78%, for 3.3%, 8.4%, 9.9% and 5.1% of
+  61% of the regressions, traces 86%, TF-IDF 93% and the adaptive method 81%, for 3.8%, 8.6%, 10% and 5.1% of
   the suite's tokens. The adaptive method is the line at the top left of the figure, up to about 4% of the
-  tokens; it catches 84% of the changes that break a safety property.
+  tokens; it catches 89% of the changes that break a safety property.
 - Section 3: the tokens spent on the changes no test reveals, and the verdict each strategy's runs end with. The
-  adaptive method never calls one of those changes a regression; a third of its clean verdicts are given on a
+  adaptive method never calls one of those changes a regression; 27% of its clean verdicts are given on a
   regression some test reveals.
 - Section 5: the catalog of properties, with each property's pass rate against its threshold.
 - Section 6: the coverage of [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5. Point at the `not covered` column (the
-  tests reach 15 of the 31 places where a tool refuses) and at one declared-against-invoked gap.
-  `traceeval coverage --history runs/gemma7` prints the same in the terminal.
+  tests reach 15 of the 32 places where a tool refuses) and at one declared-against-invoked gap.
+  `traceeval coverage --history runs/gemma8` prints the same in the terminal.
 - Section 7 and `figures/replay_first.png`: the same strategies with the replay in front. Eight of the 43 changes
-  need no model at all, the replayed outcome differs from the recorded one on 1 of 6,302 (change, test) pairs,
-  and with no budget any order of the diverged tests finds every regression for 7% to 10% of the suite's tokens.
-  Put the two figures side by side: every line moves up and to the left.
+  need no model at all, the replayed outcome is the recorded one on all 6,298 (change, test) pairs that replay,
+  and with no budget an order of the diverged tests finds 98% to 100% of the regressions for 9% to 10% of the
+  suite's tokens. Put the two figures side by side: every line moves up and to the left. Then the table of the
+  condition: about 2% of the model's calls are answered otherwise when made again, and no outcome moves.
 
 Mention the finding of [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.3: the mandatory rule is what catches the publishing
 skill without its link check. Its §5.1 goes through the results by research question, §5.7 has replay-first, and

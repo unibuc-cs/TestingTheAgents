@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from traceeval.llm.cache import CachedClient, CacheMiss, ReplayFirstClient, Tee, request_key
+from traceeval.llm.cache import CachedClient, CacheMiss, Compare, ReplayFirstClient, Tee, request_key
 
 
 class _Server:
@@ -113,6 +113,20 @@ def test_tee_keeps_the_answer_given_most_often(tmp_path):
     tee = Tee(_Scripted(["x", "y"]))
     _ask(tee, "sys", "q"), _ask(tee, "sys", "q")
     assert json.loads(tee.write(path).read_text(encoding="utf-8"))["answer"]["content"] == "x"
+
+
+def test_compare_counts_the_requests_the_model_answers_otherwise(tmp_path):
+    tee = Tee(_Scripted(["one", "two"]))
+    _ask(tee, "sys", "q"), _ask(tee, "sys", "q", "one", "result")
+    path = tee.write(tmp_path / "cassette.jsonl")
+    # the model answers the first request as recorded, the second otherwise, and gets one the cassette lacks
+    compare = Compare(_Scripted(["one", "TWO", "three"]), path)
+    compare.begin()
+    answers = [_ask(compare, "sys", "q"), _ask(compare, "sys", "q", "one", "result"), _ask(compare, "sys", "new")]
+    assert answers == ["one", "TWO", "three"]  # every answer is the model's own: nothing comes from the cassette
+    assert compare.counts() == {"requests": 3, "known": 2, "differ": 1}
+    compare.begin()  # the next run starts from zero
+    assert compare.counts() == {"requests": 0, "known": 0, "differ": 0}
 
 
 def test_replay_first_client_counts_what_replays_and_names_the_divergence(tmp_path):

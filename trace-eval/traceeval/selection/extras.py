@@ -73,7 +73,7 @@ def _features(ctx, t, change):
         kinds["skill"],
         kinds["skill-prose"],
         kinds["agent"],
-        kinds["agent-prompt"],
+        kinds["agent-prompt"] + kinds["tool-schema"],  # text the model reads: an agent's prompt, a tool's schema
         kinds["config"],
         # cost, risk and the shape of the test, then the size of the change
         math.log(ctx.cost(t)),

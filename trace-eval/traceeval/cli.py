@@ -1,7 +1,7 @@
 """Command-line interface.
 
 traceeval catalog                         list eval cases
-traceeval mutations                       list controlled changes
+traceeval mutations [--generated]         list controlled changes, or those generated from the app (no labels)
 traceeval run --test PUB-01 [--backend hf|vllm|llm|replay] [--otel trace.json]   run one case, print the record
     hf: Gemma on the local GPU; vllm: Gemma on the GPU server (scripts/gpu_remote.sh up gemma); llm: Qwen on
     the GPU server (scripts/gpu_remote.sh up qwen), or any OpenAI-compatible endpoint (TRACEEVAL_LLM_*);
@@ -11,11 +11,19 @@ traceeval run --test PUB-01 [--backend hf|vllm|llm|replay] [--otel trace.json]  
     --otel also writes the run's trace as OpenTelemetry spans, in OTLP JSON (agents, tools, model calls, skills;
     plan, routing, approvals and consulted agents as span events)
 traceeval baseline --workdir runs/gemma7 --reps 5
+    the original app with coverage, one case at a time; also its answers (the cassette) and the manifest
 traceeval mutants  --workdir runs/gemma7 --reps 5 [--only id ...]
-traceeval replay-first --workdir runs/gemma7
+    the empty change ("unchanged": the original app run as the changed copies are), then every changed copy
+traceeval mutants  --workdir runs/gemma8_gen --reps 5 --generated [N] --reached-only [--resume]
+    the generated changes (all, or N of each kind), each for the tests it reaches only: the copy is replayed
+    first, the tests that diverge are run, and the others get the replay's outcome; no copy is kept
+traceeval replay-first --workdir runs/gemma7 [--generated [N]]
     every test on every changed copy, answered from the answers recorded on the original app: which tests
-    replay to the end (their outcome is known) and which diverge (they need the model); no model is called
-traceeval evaluate --workdir runs/gemma7 --seeds 10
+    replay to the end (their outcome is known) and which diverge (they need the model); no model is called.
+    --generated replays the generated changes instead, none of which needs to be recorded for it
+traceeval evaluate --workdir runs/gemma7 --seeds 10 [--held-out]
+    the strategies on the recording, and again replay-first; --held-out, for generated changes: learn from one
+    fixed half of them and evaluate on the other
 traceeval report   --workdir runs/gemma7
 traceeval experiment --workdir runs/gemma7   (baseline + mutants + replay-first + evaluate + report)
 traceeval check <mutation id | changed copy of traceeval/sut> --history runs/gemma7 [--budget 0.2] [--backend vllm]
@@ -59,9 +67,21 @@ def cmd_catalog(args):
 
 
 def cmd_mutations(args):
-    """One line per controlled change (id, category, regression or benign, what it does), then the batches."""
+    """One line per controlled change (id, category, regression or benign, what it does), then the batches. With
+    ``--generated``: the changes made mechanically from the app (``mutation/generator.py``), which have no label."""
     from traceeval.mutation.catalog import BATCHES, MUTATIONS
 
+    if args.generated:
+        from collections import Counter
+
+        from traceeval.mutation.generator import generate, kind_of
+
+        changes = generate()
+        for m in changes:
+            print(f"{m.id:40s} {m.category:8s} {m.description}")
+        kinds = Counter(kind_of(m.id) for m in changes)
+        print(f"\n{len(changes)} generated changes: " + ", ".join(f"{n} {kind}" for kind, n in kinds.most_common()))
+        return
     for m in MUTATIONS:
         print(f"{m.id:40s} {m.category:9s} {'regression' if m.expected_regression else 'benign    '} {m.description}")
     print()
@@ -110,17 +130,39 @@ def _workers(args) -> int:
     return args.workers or (32 if args.backend in ("vllm", "llm") else 1)
 
 
+def _warn_drift(workdir: Path):
+    """Say on stderr what differs between a recording and the files of today (``experiment/manifest.py``): the app
+    it was recorded on, or the catalog its tests were read from. The commands that only read a recording go on."""
+    from traceeval.experiment.manifest import drift
+
+    for sentence in drift(workdir).values():
+        print(f"warning: {sentence}", file=sys.stderr)
+
+
 def cmd_mutants(args):
-    """Record the variants: each controlled change (or those of ``--only``) applied to a copy, every case run on it."""
+    """Record the empty change and the variants (or those of ``--only``): each controlled change applied to a copy
+    of the recording's original app, every case run on it."""
     from traceeval.experiment.runner import record_mutants
 
+    workdir = Path(args.workdir)
+    _warn_drift(workdir)
+    ids = args.only or None
+    if args.generated is not None:
+        # the generated changes of the recording's own app: all of them, or so many of each kind
+        from traceeval.experiment.manifest import baseline_copy
+        from traceeval.mutation.generator import generated, sample
+
+        changes = list(generated(baseline_copy(workdir)).values())
+        ids = [m.id for m in (sample(changes, args.generated) if args.generated else changes)]
     record_mutants(
-        Path(args.workdir),
-        mutation_ids=args.only or None,
+        workdir,
+        mutation_ids=ids,
         reps=args.reps,
         backend=args.backend,
         config_overrides=_parse_overrides(args.set),
         workers=_workers(args),
+        reached_only=args.reached_only,
+        resume=args.resume,
     )
 
 
@@ -129,9 +171,21 @@ def cmd_replay_first(args):
     from traceeval.experiment.replay_first import Replays, replay_first
 
     workdir = Path(args.workdir)
+    _warn_drift(workdir)
     # replays are CPU work, one process per copy: four at a time unless --workers says otherwise, and never more
     # than the machine has cores (inside `experiment`, --workers is the model server's concurrency)
-    out = replay_first(workdir, workers=min(args.workers or 4, os.cpu_count() or 4))
+    workers = min(args.workers or 4, os.cpu_count() or 4)
+    if args.generated is not None:
+        # the generated changes instead of the recorded copies: each from a temporary copy, none recorded
+        from traceeval.experiment.generated import replay_generated
+        from traceeval.experiment.history import History
+        from traceeval.experiment.report import _generated_section
+
+        out = replay_generated(workdir, workers=workers, per_kind=args.generated or None)
+        print("\n".join(_generated_section(workdir, History.load(workdir))))
+        print(f"replays written: {out}")
+        return
+    out = replay_first(workdir, workers=workers)
     replays = Replays.load(workdir)
     for variant in replays.rows:
         tests = len(replays.rows[variant])
@@ -147,13 +201,26 @@ def cmd_evaluate(args):
     from traceeval.experiment.replay_first import Replays
 
     workdir, strategies = Path(args.workdir), args.strategies or None
+    _warn_drift(workdir)
     budgets = tuple(args.budgets) if args.budgets else DEFAULT_BUDGETS
-    df = evaluate(workdir, strategies=strategies, budgets=budgets, seeds=args.seeds)
+    which = {}  # the changes to evaluate and those to learn from; empty: all, each learning from the others
+    if args.held_out:
+        # The generated changes in two fixed halves (the same whichever of them are recorded): the strategies that
+        # learn do so from one, and every strategy is evaluated on the other.
+        from traceeval.experiment.manifest import baseline_copy
+        from traceeval.mutation.generator import generated, split
+
+        recorded = {path.stem for path in (workdir / "history" / "variants").glob("*.jsonl")}
+        learn, held_out = split(list(generated(baseline_copy(workdir))))
+        which = {"train": [v for v in learn if v in recorded], "variants": [v for v in held_out if v in recorded]}
+        print(f"held out: {len(which['variants'])} generated changes; learning from the other {len(which['train'])}")
+    which["jobs"] = args.jobs
+    df = evaluate(workdir, strategies=strategies, budgets=budgets, seeds=args.seeds, **which)
     # Prioritization: APFD over each strategy's complete order, with the same seeds for the orders drawn at random.
-    pr = evaluate_prioritization(workdir, strategies=strategies, seeds=args.seeds)
+    pr = evaluate_prioritization(workdir, strategies, args.seeds, which.get("variants"), which.get("train"))
     print(f"replay rows: {len(df)}, prioritization rows: {len(pr)} -> {workdir / 'results'}")
     if Replays.load(workdir) is not None:
-        rf = evaluate(workdir, strategies=strategies, budgets=budgets, seeds=args.seeds, replay_first=True)
+        rf = evaluate(workdir, strategies=strategies, budgets=budgets, seeds=args.seeds, replay_first=True, **which)
         print(f"replay-first rows: {len(rf)}")
 
 
@@ -260,7 +327,9 @@ def main(argv=None):
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("catalog").set_defaults(fn=cmd_catalog)
-    sub.add_parser("mutations").set_defaults(fn=cmd_mutations)
+    mu = sub.add_parser("mutations")
+    mu.add_argument("--generated", action="store_true", help="list the changes generated from the app instead")
+    mu.set_defaults(fn=cmd_mutations)
 
     r = sub.add_parser("run")
     r.add_argument("--test", required=True)
@@ -281,6 +350,15 @@ def main(argv=None):
         sp.add_argument("--workers", type=int, default=0, help=workers)
         sp.add_argument("--set", action="append", help="config override key=value (JSON value), e.g. runtime.retries=0")
         sp.add_argument("--only", nargs="*", help="mutation ids (mutants only)")
+        generated = "the generated changes, all or N of each kind (mutants: record them; replay-first: replay them)"
+        sp.add_argument("--generated", nargs="?", const=0, type=int, default=None, metavar="N", help=generated)
+        reached = "mutants: replay each copy first and run only the tests that diverge; the copy is not kept"
+        sp.add_argument("--reached-only", action="store_true", help=reached)
+        sp.add_argument("--resume", action="store_true", help="mutants: leave out the changes already recorded")
+        held = "evaluate: learn from one half of the generated changes and evaluate on the other, held out"
+        sp.add_argument("--held-out", action="store_true", help=held)
+        jobs = "evaluate: processes to share the changes among; each loads the recording (default 1)"
+        sp.add_argument("--jobs", type=int, default=1, help=jobs)
         sp.add_argument("--seeds", type=int, default=5, help="replay seeds (evaluate only)")
         sp.add_argument("--budgets", nargs="*", type=float)
         sp.add_argument("--strategies", nargs="*", help="strategy names, or 'all' (default: the core set)")

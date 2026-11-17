@@ -2,6 +2,7 @@
 changes, waste on the changes no test reveals, verdicts, APFD, properties, coverage (of the suite and of each
 change) and, for a recording that has been replayed (``replay_first.py``), what replay-first testing gives."""
 
+import json
 from pathlib import Path
 
 import matplotlib
@@ -12,9 +13,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 from traceeval.catalog import load_catalog, load_properties  # noqa: E402
+from traceeval.mutation.generator import kind_of as kind_of_generated  # noqa: E402
 
+from .generated import Generated  # noqa: E402
 from .history import History  # noqa: E402
-from .replay_first import Replays  # noqa: E402
+from .manifest import load_manifest  # noqa: E402
+from .replay_first import Replays, cassette_path  # noqa: E402
 
 # the strategies, in the order the tables and figures show them; a strategy not listed here is not shown
 ORDER = [
@@ -60,6 +64,8 @@ COLOR = {
 SPENT_TICKS = [1, 2, 5, 10, 20, 50, 100]
 # the budgets at which the report gives intervals over the changes and the verdicts
 FOCUS_BUDGETS = (0.05, 0.2)
+# above this many changes, section 1 has one row per kind of change instead of one per change
+MANY_CHANGES = 60
 # the stop reasons that say "no regression": the adaptive method's verdict, a change with nothing to test, and a
 # strategy that ran every test of its order without a failure
 CLEAN_STOPS = ("clean", "no_components", "exhausted")
@@ -392,25 +398,30 @@ def _coverage_section(workdir, history, df) -> list[str]:
     return out
 
 
-def _replay_first_section(workdir, history, figs, replays) -> list[str]:
-    """Section 7, for a recording that has been replayed: what the replay settles without a model, how it compares
-    with the recorded ground truth and with the recorded runs, and the strategies run replay-first."""
-    variants = [v for v in sorted(history.variants) if v in replays.rows]
+def _kind(history, variant: str) -> str:
+    """The kind a change is tabled under: the generator's kind for a generated change (step deleted, setting, ...),
+    the catalog's category for a hand-written one (code, skill, config, ...)."""
+    if variant.startswith("g_"):
+        return kind_of_generated(variant)
+    return history.mutation_meta.get(variant, {}).get("category", "?")
+
+
+def _settled_by_replay(history, replays, kind_of: dict[str, str]) -> tuple[pd.DataFrame, list[str], dict[str, int]]:
+    """What a replay settles without a model, for the changes ``kind_of`` names (change -> its kind): one row per
+    change, the table by kind that sections 7 and 8 show, and where the diverged tests first reach the model."""
     tests, full = history.test_ids(), history.total_cost()
     passes = {t: history.baseline_pass_rate(t) >= 0.5 for t in tests}
-    meta = history.mutation_meta
-
-    # ---- per change: how many tests diverge, what they cost, and whether a replayed test already fails
     per_change, where = [], {"prompt": 0, "tool result": 0}
-    for v in variants:
+    for v, kind in kind_of.items():
         diverged, prefix = replays.diverged(v), replays.prefix(v)
         for t in diverged:
             where[replays.rows[v][t]["diverged_in"]] += 1
         per_change.append(
             {
-                "kind": meta.get(v, {}).get("category", "?"),
+                "change": v,
+                "kind": kind,
                 "nothing diverges": not diverged,
-                "a replayed test fails": any(passes[t] for t in replays.new_failures(v)),
+                "a replayed test fails": any(passes.get(t) for t in replays.new_failures(v)),
                 "diverged": len(diverged),
                 # the diverged tests run whole, and from their divergence point on, as shares of the suite's tokens
                 "whole": sum(history.cost(t) for t in diverged) / full,
@@ -418,16 +429,55 @@ def _replay_first_section(workdir, history, figs, replays) -> list[str]:
             }
         )
     frame = pd.DataFrame(per_change)
-    kinds = [
+    table = [
         "| kind of change | changes | no test diverges | a replayed test fails | diverged tests, mean | "
         "their share of the suite's tokens | after the divergence point |",
         "|---|---|---|---|---|---|---|",
     ]
     for kind, g in [*frame.groupby("kind"), ("all", frame)]:
-        kinds.append(
+        table.append(
             f"| {kind} | {len(g)} | {int(g['nothing diverges'].sum())} | {int(g['a replayed test fails'].sum())} | "
             f"{g.diverged.mean():.0f} of {len(tests)} | {g.whole.mean():.3f} | {g.left.mean():.3f} |"
         )
+    return frame, table, where
+
+
+def _generated_section(workdir, history) -> list[str]:
+    """Section 8, for a recording whose generated changes have been replayed (``generated.py``): what the replay
+    alone says about several hundred changes nobody labelled, for no tokens."""
+    made = Generated.load(workdir)
+    if made is None:
+        return []
+    frame, table, _ = _settled_by_replay(history, made.replays, {c: line["kind"] for c, line in made.changes.items()})
+    clean = frame[frame["nothing diverges"] & ~frame["a replayed test fails"]]
+    found = frame[frame["a replayed test fails"]]
+    rest = frame[~frame["nothing diverges"] & ~frame["a replayed test fails"]]
+    return [
+        "## 8. Generated changes, replayed",
+        "",
+        f"The {len(frame)} changes that `mutation/generator.py` makes mechanically from the app (one per place an "
+        "edit of its kind applies to), each applied to a copy of the original app and replayed against the "
+        "recording's cassette (`traceeval replay-first --generated`). No model is called, and no change has a label.",
+        "",
+        *table,
+        "",
+        f"- settled as clean, no test diverges and none fails: {len(clean)} of {len(frame)};",
+        f"- settled as a regression, a test that passes on the original app replays to a failure: {len(found)};",
+        f"- left for the model: {len(rest)}, whose diverged tests cost {rest.left.mean():.1%} of the suite's tokens "
+        f"after their divergence points on average (median {rest.left.median():.1%}), and {rest.whole.mean():.1%} "
+        "run whole.",
+        "",
+    ]
+
+
+def _replay_first_section(workdir, history, figs, replays) -> list[str]:
+    """Section 7, for a recording that has been replayed: what the replay settles without a model, how it compares
+    with the recorded ground truth and with the recorded runs, and the strategies run replay-first."""
+    variants = [v for v in sorted(history.variants) if v in replays.rows]
+    tests = history.test_ids()
+    passes = {t: history.baseline_pass_rate(t) >= 0.5 for t in tests}
+    # ---- per change: how many tests diverge, what they cost, and whether a replayed test already fails
+    _, kinds, where = _settled_by_replay(history, replays, {v: _kind(history, v) for v in variants})
 
     # ---- against the ground truth: the replayed outcomes, and where the revealing tests ended up
     replayed_pairs, differ, revealing_pairs = 0, [], {"fail": 0, "diverge": 0, "pass": 0}
@@ -459,14 +509,46 @@ def _replay_first_section(workdir, history, figs, replays) -> list[str]:
                 continue
             shape = (r["passed"], r["tokens"], r["tools"], r["final_message"], r["state_digest"])
             for x in stats_by_test[t].valid_runs:
+                if x.get("stand_in"):  # no run was made: the replay itself stands in (History.load)
+                    continue
                 runs += 1
                 outcome += x["passed"] == r["passed"]
                 identical += (x["passed"], x["tokens"], x["tools"], x["final_message"], x["state_digest"]) == shape
         return runs, outcome, identical
 
     base = same_as_replay("baseline", history.baseline) if "baseline" in replays.rows else (0, 0, 0)
+    # the empty change is the original app too, run as the changed copies are: the same replay is its reference
+    empty = same_as_replay("baseline", history.unchanged) if "baseline" in replays.rows else (0, 0, 0)
     copies = [same_as_replay(v, history.variants[v]) for v in variants]
     changed = tuple(sum(c[i] for c in copies) for i in range(3))
+    run_rows = [f"| the original app | {base[0]} | {base[1]} | {base[2]} |"]
+    if empty[0]:
+        run_rows.append(f"| the original app, run as the changed copies are | {empty[0]} | {empty[1]} | {empty[2]} |")
+    run_rows.append(f"| the changed copies | {changed[0]} | {changed[1]} | {changed[2]} |")
+    # a recording of the tests each change reaches only (``runner.record_mutants(reached_only=True)``)
+    lean = any(run.get("stand_in") for v in variants for stats in history.variants[v].values() for run in stats.runs)
+
+    # ---- request by request: is a model call a function of its request? Three measures, each over the requests
+    # that were sent more than once: by the baseline's own repetitions, by the empty change and by the changed copies
+    # (the latter two against the answer the cassette keeps, the one the baseline's repetitions gave most often).
+    again, twice = _answered_twice(workdir)
+    asked = [_answers(history.variants[v]) for v in variants]
+    otherwise = "answered otherwise than the cassette"
+    rows = [
+        ("the baseline's repetitions, one test at a time", again, twice, "got more than one answer"),
+        ("the empty change", *_answers(history.unchanged)[1:], otherwise),
+        ("the changed copies", sum(a[1] for a in asked), sum(a[2] for a in asked), otherwise),
+    ]
+    condition = [f"| {who} | {n} | {k} ({k / n:.2%}) {what} |" for who, n, k, what in rows if n]
+    if condition:
+        condition = [
+            "The condition itself, a model call being a function of its request, request by request:",
+            "",
+            "| requests of | sent before | of which |",
+            "|---|---|---|",
+            *condition,
+            "",
+        ]
 
     out = [
         "## 7. Replay-first",
@@ -486,7 +568,10 @@ def _replay_first_section(workdir, history, figs, replays) -> list[str]:
         "",
         "The replay against the recorded ground truth:",
         "",
-        f"- replayed outcomes that differ from the recorded majority: {len(differ)} of {replayed_pairs}"
+        # a copy recorded for the tests it reaches only has no run of a replayed test to compare the replay with
+        "- the tests that replay to the end were not run on these copies: the replay's outcome is the one on record;"
+        if lean
+        else f"- replayed outcomes that differ from the recorded majority: {len(differ)} of {replayed_pairs}"
         + (f" ({', '.join(differ[:5])})" if differ else "")
         + ";",
         f"- the {sum(revealing_pairs.values())} revealing (change, test) pairs: {revealing_pairs['fail']} replay to "
@@ -502,9 +587,9 @@ def _replay_first_section(workdir, history, figs, replays) -> list[str]:
         "",
         "| recorded runs of | runs | end like the replay | identical to the replay |",
         "|---|---|---|---|",
-        f"| the original app | {base[0]} | {base[1]} | {base[2]} |",
-        f"| the changed copies | {changed[0]} | {changed[1]} | {changed[2]} |",
+        *run_rows,
         "",
+        *condition,
     ]
 
     # ---- the strategies run replay-first, when the evaluation was made
@@ -540,6 +625,58 @@ def _replay_first_section(workdir, history, figs, replays) -> list[str]:
     return out
 
 
+def _answers(stats_by_test: dict) -> tuple[int, int, int]:
+    """Over the recorded runs of one copy of the app: the requests they sent the model, those the original app had
+    sent too, and those of the latter the model answered otherwise (``llm/cache.py::Compare``). Zeros for a
+    recording made without the comparison."""
+    counts = [r.get("cassette") or {} for st in stats_by_test.values() for r in st.runs]
+    return tuple(sum(c.get(k, 0) for c in counts) for k in ("requests", "known", "differ"))
+
+
+def _answered_twice(workdir) -> tuple[int, int]:
+    """Over the requests the baseline's repetitions sent more than once (a recording's cassette keeps the counts,
+    ``llm/cache.py::Tee``): how many there are, and how many got more than one answer. Zeros without a cassette."""
+    path = cassette_path(workdir)
+    if not path.exists():
+        return 0, 0
+    with open(path, encoding="utf-8") as fh:
+        entries = [json.loads(line) for line in fh if line.strip()]
+    again = [e for e in entries if e.get("asked", 1) > 1]
+    return len(again), sum(e["distinct"] > 1 for e in again)
+
+
+def _recording_lines(workdir, history) -> list[str]:
+    """Under the report's header: how the recording was made (its manifest), what the empty change shows, and the
+    pairs it has no valid run of. A recording made before these were kept has none of the lines."""
+    out = []
+    m = load_manifest(workdir)
+    if m:
+        base, changes = m.get("baseline", {}), m.get("changes", {})
+        copies = f"; the changed copies {changes.get('reps')} times, {changes.get('workers')} cases at a time"
+        out.append(
+            f"- Recorded with `{m.get('model')}` (judge: {m.get('judge')}) at commit `{m.get('commit')}`"
+            + (", with uncommitted edits" if m.get("dirty") else "")
+            + f"; the original app {base.get('reps')} times, one case at a time"
+            + (copies if changes else "")
+            + "."
+        )
+    if history.unchanged:
+        flips = history.unchanged_flips()
+        requests, known, differ = _answers(history.unchanged)
+        asked = f"; of its {requests} requests, {known} are the baseline's, {differ} of them answered otherwise"
+        out.append(
+            "- The empty change (the original app, run as the changed copies are): "
+            f"{len(flips)} of {len(history.unchanged)} tests end otherwise than in the baseline"
+            + (f" ({', '.join(f'`{t}`' for t in flips[:8])})" if flips else "")
+            + (asked if requests else "")
+            + "."
+        )
+    missing = history.summary()["missing_pairs"]
+    if missing:
+        out.append(f"- (change, test) pairs with no valid run, left out as missing: {missing}.")
+    return [*out, ""] if out else []
+
+
 def write_report(workdir: Path) -> Path:
     """Write results/report.md and its figures from replay.csv and, when it exists, prioritization.csv (results/)."""
     workdir = Path(workdir)
@@ -561,17 +698,55 @@ def write_report(workdir: Path) -> Path:
     # says, per change, how many tests diverge and how many tests that pass on the original app replay to a failure
     replays = Replays.load(workdir)
     meta = history.mutation_meta
-    truth_rows, sane = [], True
+    truth_rows, sane, labelled = [], True, 0
+    by_kind: dict[str, list[int]] = {}  # kind -> the number of revealing tests of each of its changes
     for v in sorted(history.variants, key=lambda v: (meta.get(v, {}).get("category", ""), v)):
         n = len(history.revealing_tests(v))
-        expected = bool(meta.get(v, {}).get("expected_regression"))
-        sane &= (n > 0) == expected
-        row = f"| `{v}` | {meta.get(v, {}).get('category', '?')} | {'regression' if expected else 'benign'} | {n} |"
+        by_kind.setdefault(_kind(history, v), []).append(n)
+        # a hand-written change is labelled a regression or benign; a generated one has no label, and no part
+        # in the sanity check
+        expected = meta.get(v, {}).get("expected_regression")
+        if expected is not None:
+            labelled += 1
+            sane &= (n > 0) == expected
+        label = {True: "regression", False: "benign", None: "no label"}[expected]
+        row = f"| `{v}` | {meta.get(v, {}).get('category', '?')} | {label} | {n} |"
         if replays and v in replays.rows:
             failures = [t for t in replays.new_failures(v) if history.baseline_pass_rate(t) >= 0.5]
             row += f" {len(replays.diverged(v))} | {len(failures)} |"
         truth_rows.append(row)
+    truth_head = [
+        "| change | category | expected | revealing tests |"
+        + (" diverged tests | replayed failures |" if replays else ""),
+        "|---|---|---|---|" + ("---|---|" if replays else ""),
+    ]
+    if len(truth_rows) > MANY_CHANGES:
+        # several hundred changes: one row per kind instead of one per change (replay.csv has them all)
+        truth_head = [
+            "| kind of change | changes | revealed by a test | revealing tests of those, median |",
+            "|---|---|---|---|",
+        ]
+        truth_rows = [
+            f"| {kind} | {len(ns)} | {sum(n > 0 for n in ns)} | {np.median([n for n in ns if n] or [0]):.0f} |"
+            for kind, ns in sorted(by_kind.items())
+        ]
+        every = [n for ns in by_kind.values() for n in ns]
+        truth_rows.append(
+            f"| all | {len(every)} | {sum(n > 0 for n in every)} | {np.median([n for n in every if n] or [0]):.0f} |"
+        )
+    if labelled:
+        sanity = (
+            "Testbed sanity (every change labelled a regression revealed by at least one test, none labelled benign "
+            f"revealed): **{'OK' if sane else 'VIOLATED'}**."
+        )
+    else:
+        revealed = sum(bool(history.revealing_tests(v)) for v in history.variants)
+        sanity = f"None of these changes has a label: {revealed} of {len(history.variants)} are revealed by a test."
     summ = history.summary()
+    # an evaluation may cover some of the recorded changes only: the half held out of what the strategies learn from
+    evaluated = (
+        "" if df.variant.nunique() == summ["variants"] else f" ({df.variant.nunique()} evaluated, the rest learnt from)"
+    )
     # per strategy: the mean tokens until the first true failure, over the runs that detected one
     c2d = reg[reg.detected].groupby("strategy")["cost_to_detect_fraction"].mean().reindex(ORDER).dropna()
     # the budgets of the interval and verdict tables that this replay has
@@ -580,20 +755,18 @@ def write_report(workdir: Path) -> Path:
     parts = [
         "# TRACE-Eval experiment report",
         "",
-        f"`{workdir.as_posix()}` · {summ['tests']} tests · {summ['variants']} changes · {summ['baseline_reps']} "
-        f"baseline repetitions · full suite = {summ['total_tokens_full_suite']:,} tokens · "
+        f"`{workdir.as_posix()}` · {summ['tests']} tests · {summ['variants']} changes{evaluated} · "
+        f"{summ['baseline_reps']} baseline repetitions · full suite = {summ['total_tokens_full_suite']:,} tokens · "
         f"tests failing on the original app: {len(summ['failing_tests'])} · "
         f"runs the environment broke, left out: {summ['infra_invalid_runs']}",
         "",
+        *_recording_lines(workdir, history),
         "## 1. Ground truth — which changes are revealed by how many tests",
         "",
-        "| change | category | expected | revealing tests |"
-        + (" diverged tests | replayed failures |" if replays else ""),
-        "|---|---|---|---|" + ("---|---|" if replays else ""),
+        *truth_head,
         *truth_rows,
         "",
-        "Testbed sanity (every regression revealed by at least one test, no benign change revealed): "
-        f"**{'OK' if sane else 'VIOLATED'}**.",
+        sanity,
         "",
         "## 2. Detection within a budget",
         "",
@@ -660,6 +833,7 @@ def write_report(workdir: Path) -> Path:
     parts += _coverage_section(workdir, history, df)
     if replays:
         parts += _replay_first_section(workdir, history, figs, replays)
+    parts += _generated_section(workdir, history)
     parts += [
         "## How to read this",
         "",

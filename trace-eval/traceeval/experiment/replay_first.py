@@ -101,7 +101,28 @@ def replay_suite(sut, cases, client: ReplayFirstClient, engine: str, variant: st
                 "state_digest": rec["state_digest"] if replayed else None,
             }
         )
+        if replayed:
+            # A recording that runs only the tests a change reaches has no run of this one: the recorder writes
+            # this row as the test's record on the copy (``runner.record_mutants``), so it carries what a strategy
+            # may read of a run it has just made.
+            keep = ("classification", "steps", "agents", "skills", "config_keys", "completion_tokens")
+            rows[-1].update({k: rec[k] for k in keep})
     return rows
+
+
+def replay_path(workdir: Path) -> Path:
+    """Where a recording keeps the replay of its copies: one line per (copy, test)."""
+    return Path(workdir) / "history" / "replay_first.jsonl"
+
+
+def add_replay(workdir: Path, rows: list[dict]) -> None:
+    """Append the rows of one replayed copy to the recording's replay file. The recorder does it for a copy it
+    then throws away (``runner.record_mutants(reached_only=True)``). A copy replayed twice has its rows twice, and
+    the later ones are the ones read (``Replays``)."""
+    path = replay_path(workdir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a") as fh:
+        fh.writelines(json.dumps(row, default=str) + "\n" for row in rows)
 
 
 def _replay_copy(job: tuple[str, str, str, list[str]]) -> list[dict]:
@@ -159,8 +180,12 @@ def replay_first(workdir: Path, workers: int = 4) -> Path:
             copies = list(pool.map(_replay_copy, jobs))
     else:
         copies = [_replay_copy(job) for job in jobs]
-    out = workdir / "history" / "replay_first.jsonl"
-    write_jsonl(out, [row for rows in copies for row in rows])
+    out = replay_path(workdir)
+    # A copy that was recorded for the tests it reaches only is no longer there to replay: the rows it was given
+    # when it was recorded (``add_replay``) are kept.
+    earlier = read_jsonl(out) if out.exists() else []
+    kept = [row for row in earlier if row["variant"] in recorded and row["variant"] not in variants]
+    write_jsonl(out, kept + [row for rows in copies for row in rows])
     return out
 
 
@@ -177,7 +202,7 @@ class Replays:
     @classmethod
     def load(cls, workdir: Path) -> "Replays | None":
         """The replays of a recording, or None when ``traceeval replay-first`` has not been run on it."""
-        path = Path(workdir) / "history" / "replay_first.jsonl"
+        path = replay_path(workdir)
         return cls(read_jsonl(path)) if path.exists() else None
 
     def replayed(self, variant: str) -> frozenset:

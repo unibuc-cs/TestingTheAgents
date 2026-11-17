@@ -4,6 +4,7 @@ name, so that several variants can coexist in one process and code mutations tak
 import importlib
 import importlib.util
 import itertools
+import pkgutil
 import shutil
 import stat
 import sys
@@ -57,8 +58,9 @@ def load_sut(path: Path | str) -> LoadedSUT:
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
     spec.loader.exec_module(module)
-    # eagerly import the parts the runtime needs (also registers the tools)
-    importlib.import_module(f"{name}.tools")
-    importlib.import_module(f"{name}.harness.runtime")
-    importlib.import_module(f"{name}.harness.backends.llm_openai")
+    # Import every module of the copy now (importing the tools also registers them). A module left for the first
+    # test that needs it would run its top level inside that test's coverage context, and that one test would
+    # seem to depend on every import and constant of the file.
+    for info in pkgutil.walk_packages([str(path)], prefix=f"{name}."):
+        importlib.import_module(info.name)
     return LoadedSUT(name, path)

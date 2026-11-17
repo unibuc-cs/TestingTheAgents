@@ -14,7 +14,8 @@ The check has two phases.
 What is known beforehand comes from a recorded experiment (``--history``): the answers of the original app (its
 cassette), each test's cost and the code it exercises there, and how earlier changes of each kind showed up in the
 tests. Record it with the same model and the same version of the app (``traceeval experiment``), since code is
-matched by line number and answers by the exact request.
+matched by line number and answers by the exact request: the check refuses a history whose copy of the app is not
+``traceeval/sut`` as it is now (``manifest.py::drift``).
 
 After the verdict it prints the change coverage (``coverage.change_coverage``) of the tests whose outcome is now
 known, replayed or run: the share of the changed components they exercised, the share of the properties the change
@@ -46,6 +47,7 @@ from .coverage import (
 )
 from .executor import run_case
 from .history import History
+from .manifest import drift
 from .replay_first import cassette_client, cassette_path, in_front, recording_engine, replay_suite, write_cassette
 from .sutloader import load_sut
 
@@ -54,6 +56,10 @@ def check(change: str, history_dir: Path, budget: float, backend: str):
     """Check ``change``, a mutation id or the folder of a changed copy of ``traceeval/sut``, spending at most
     ``budget`` (a fraction of the full suite's tokens) on the model. Prints the replay's result and each test as
     it runs, then the verdict and the change coverage; returns the execution log."""
+    # The change is compared with traceeval/sut as it is now, and what is known beforehand was recorded on the app
+    # as it was. If the two differ, even by a comment, the recorded line numbers and answers no longer fit: refuse.
+    if "app" in (differs := drift(history_dir)):
+        raise SystemExit(f"{differs['app']}. Record the history again: traceeval experiment --workdir <new folder>")
     history = History.load(history_dir)
     catalog = {c.id: c for c in load_catalog()}
     cases = [catalog[t] for t in history.test_ids() if t in catalog]

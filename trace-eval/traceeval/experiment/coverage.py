@@ -89,7 +89,7 @@ def tools_called(history, tests) -> set[str]:
     """The tools (``tool:<name>``) the tests' baseline runs called. A delegation is recorded as a route, not as a
     tool call, so a run with a route counts as calling ``route_to_agent``."""
     deps = set().union(*(history.deps(t) for t in tests)) if tests else set()
-    out = {d for d in deps if d.startswith("tool:")}
+    out = {d for d in deps if d.startswith("tool:") and "#" not in d}  # tool:x#schema: offered, not called
     if any(r.get("routes") for t in tests for r in history.baseline[t].runs):
         out.add("tool:route_to_agent")
     return out

@@ -3,7 +3,7 @@ temporary copy of the app: the change set, how many tests the traced dependencie
 make a request the original app never made when replayed against the recording's cassette
 (``traceeval/experiment/replay_first.py``; run ``traceeval replay-first`` on the recording first).
 
-    python scripts/analysis/prompt_only_edits.py [recording]       # default runs/gemma7
+    python scripts/analysis/prompt_only_edits.py [recording]       # default runs/gemma8
 """
 
 import shutil

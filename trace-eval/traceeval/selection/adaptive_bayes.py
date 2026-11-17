@@ -47,6 +47,7 @@ PRIOR = {
     "config": 0.45,
     "agent": 0.45,
     "agent-prompt": 0.15,
+    "tool-schema": 0.15,  # what the model is told about a tool: text it reads, like an agent's prompt
     "skill-prose": 0.12,
     "fixture": 0.3,
     "other": 0.3,
@@ -60,6 +61,7 @@ DEFAULT_REVEAL = {
     "agent": 0.30,
     "config": 0.12,
     "agent-prompt": 0.05,
+    "tool-schema": 0.05,
     "skill-prose": 0.05,
     "fixture": 0.3,
     "other": 0.2,

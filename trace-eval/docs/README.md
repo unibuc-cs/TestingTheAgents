@@ -9,7 +9,7 @@
 | work in the repository: the vocabulary, how to read a report, how the method weighs a test, the controlled changes, how to add a test, a change or a strategy | [USER_GUIDE.md](USER_GUIDE.md) |
 | record with a model: a local GPU server, the commands, recording and replay, what the recordings show, what the models get wrong                         | [EXPERIMENT.md](EXPERIMENT.md) |
 | give or follow the demo for the Adobe Team, command by command                                                                                             | [DEMO.md](DEMO.md) |
-| the full results of a recording: tables and figures                                                                                                      | [results/gemma7/report.md](results/gemma7/report.md), the results the README quotes; [results/qwen7/](results/qwen7/report.md) and [results/gptoss7/](results/gptoss7/report.md), the other two models |
+| the full results of a recording: tables and figures                                                                                                      | [results/gemma8/report.md](results/gemma8/report.md), the results the README quotes; [results/qwen7/](results/qwen7/report.md) and [results/gptoss7/](results/gptoss7/report.md), the other two models |
 | spec-driven development: what a spec is, how a pull request is judged against it, the assurance rungs                                                    | [SDD_GUIDE.md](SDD_GUIDE.md), then [SDD_DEMO.md](SDD_DEMO.md) for the results and [sdd/report.md](sdd/report.md) for the full report |
 | read the code of the spec-driven development layer, with diagrams, in two to three hours                                                                 | [STUDY_GUIDE.md](STUDY_GUIDE.md) |
 | the literature, the references and the paper                                                                                                             | [related_work.md](related_work.md), [REFERENCES.md](REFERENCES.md), `paper/main.tex` (build with `latexmk -pdf main`) |
@@ -34,9 +34,9 @@ flowchart TD
 
 ## What else is in this folder
 
-- `results/`: one folder per recording (`gemma7`, `qwen7`, `gptoss7`), each with the report and its figures
-  (Gemma's has the replay-first section, [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7), and the follow-up
-  experiments:
+- `results/`: one folder per recording, each with the report and its figures. `gemma8` is the recording of the
+  current app, with the replay-first section ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7). `gemma7`, `qwen7` and
+  `gptoss7` are of the app before the fixes of [TODO.md](../TODO.md) §3, with their follow-up experiments:
   - `gemma7/live_vs_replay.md`: the live check against the replay, change by change;
   - `gemma7/false_alarm_one_at_a_time.md`: the change behind the one live false alarm, recorded one test at a time;
   - `gemma7/noise_floor.md`: the empty change recorded fifteen times, against the number of runs;

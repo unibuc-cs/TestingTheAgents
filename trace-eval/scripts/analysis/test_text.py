@@ -3,7 +3,7 @@ the hand-declared dependency block, which shares words with the component ids of
 adaptive method are replayed with the declared block taken out of the text, and with the name and request alone, in
 this process only.
 
-    python scripts/analysis/test_text.py [recording]               # default runs/gemma7
+    python scripts/analysis/test_text.py [recording]               # default runs/gemma8
 """
 
 import json

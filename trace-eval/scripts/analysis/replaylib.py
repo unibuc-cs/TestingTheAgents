@@ -20,7 +20,7 @@ from traceeval.selection.adaptive_bayes import DEFAULT_REVEAL, AdaptiveBayes
 BUDGETS = (0.02, 0.05, 0.1, 0.2, 0.5, 1.0)
 
 
-def recording(default: str = "runs/gemma7") -> str:
+def recording(default: str = "runs/gemma8") -> str:
     """The recording a script works on: its first argument, or ``default``."""
     return sys.argv[1] if len(sys.argv) > 1 else default
 

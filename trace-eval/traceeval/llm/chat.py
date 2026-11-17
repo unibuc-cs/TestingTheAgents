@@ -25,9 +25,21 @@ from types import SimpleNamespace
 from .cache import CachedClient
 
 DEFAULT_MODEL = "google/gemma-4-E4B-it"
+# Gemma as ``scripts/gpu_remote.sh up gemma`` serves it (GPU0, port 18100); the vllm backend's default endpoint.
+GEMMA_URL = "http://127.0.0.1:18100/v1"
 # Qwen as ``scripts/gpu_remote.sh up qwen`` serves it (GPU1, port 18101); the llm backend's default endpoint.
 QWEN_MODEL = "Qwen/Qwen3.8-27B-FP8"
 QWEN_URL = "http://127.0.0.1:18101/v1"
+
+
+def server_urls(engine: str) -> list[str]:
+    """The addresses of the servers behind ``engine``: those ``TRACEEVAL_VLLM_URL`` lists for "vllm" and
+    ``TRACEEVAL_LLM_BASE_URL`` for "llm", or the tunnel ``scripts/gpu_remote.sh up`` opens; none for an engine
+    that asks no server ("hf", "replay")."""
+    if engine not in ("vllm", "llm"):
+        return []
+    name, default = {"vllm": ("TRACEEVAL_VLLM_URL", GEMMA_URL), "llm": ("TRACEEVAL_LLM_BASE_URL", QWEN_URL)}[engine]
+    return [u.strip() for u in os.environ.get(name, default).split(",") if u.strip()]
 
 
 def to_template_messages(messages: list[dict]) -> list[dict]:
@@ -207,7 +219,7 @@ class VLLMChatClient(GemmaChat):
     def __init__(self, model_id: str):
         """The tokenizer loads locally (``GemmaChat``); the weights are the server's, reached through ``Servers``."""
         super().__init__(model_id)
-        self.client = Servers(os.environ.get("TRACEEVAL_VLLM_URL", "http://127.0.0.1:18100/v1"), model_id)
+        self.client = Servers(",".join(server_urls("vllm")), model_id)
 
     def _generate(self, ids, temperature, max_tokens):
         # The prompt goes to the plain completions endpoint as token ids, so the server sees exactly the prompt
@@ -256,11 +268,7 @@ def new_client(engine: str):
     if engine == "llm":
         # Qwen or gpt-oss through vLLM's own chat API: the server builds the prompt and parses the answer
         # itself; the cache in front of it keys on canonical tool-call ids (cache.py).
-        client = Servers(
-            os.environ.get("TRACEEVAL_LLM_BASE_URL", QWEN_URL),
-            model_id,
-            os.environ.get("TRACEEVAL_LLM_API_KEY", "EMPTY"),
-        )
+        client = Servers(",".join(server_urls("llm")), model_id, os.environ.get("TRACEEVAL_LLM_API_KEY", "EMPTY"))
         return CachedClient(client, cache, model_id, canonical_ids=True) if cache else client
     if engine == "replay":
         # The recorded answers alone: no model behind them, a request they lack is a CacheMiss.
@@ -291,7 +299,7 @@ def set_shared_client(engine: str, client):
 
 
 def judge_client(backend: str):
-    """The model that judges answers, as (client, model name to send).
+    """The model that judges answers, as (client, model name to send, token limit of its answer).
 
     ``TRACEEVAL_JUDGE`` picks it, "gemma" or "qwen"; by default it is the model that plays the agents (Qwen
     with the llm backend, Gemma with the others). Gemma judges through the engine that plays the agents (its
@@ -304,4 +312,6 @@ def judge_client(backend: str):
     # (so that a replay finds its verdicts in the cassette); when Qwen plays them, Gemma's vLLM server is used.
     engine = "llm" if name == "qwen" else (backend if backend in ("hf", "vllm", "replay") else "vllm")
     client = shared_client(engine)
-    return client, client.model_id
+    # Gemma answers in a few words; a model of the llm backend may reason first, so it gets that backend's room
+    limit = int(os.environ.get("TRACEEVAL_LLM_MAX_TOKENS", "700")) if engine == "llm" else 80
+    return client, client.model_id, limit

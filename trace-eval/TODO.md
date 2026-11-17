@@ -5,20 +5,21 @@ model answers recorded on the original app. A test that replays to the end has a
 test that diverges (it makes a request the original app never made) is where the change reaches the model, and only
 those tests need the model. `adaptive_bayes` stays as one of the orders compared on the diverged tests.
 
-**Why**, on `runs/gemma7` (each line names what reproduces it: the report, `docs/results/gemma7/report.md`, or a
+**Why**, on `runs/gemma8` (each line names what reproduces it: the report, `docs/results/gemma8/report.md`, or a
 script in [`scripts/analysis/`](scripts/analysis/README.md)):
 
-- replay costs seconds of CPU and agrees with the recording on all but one of about 6,300 outcomes (the report,
-  section 7);
-- replay, then the diverged tests in any order, stopped at the first failure, finds every revealed regression
-  for 7% to 10% of the suite's tokens, with no wrong clean verdict (the report, section 7);
+- replay costs seconds of CPU and agrees with the recording on all of about 6,300 outcomes (the report, section
+  7);
+- what replays exactly is the outcome of a test, not every model call: about 2% of the requests are answered
+  otherwise when they are sent again, and no outcome moves (the report, section 7);
+- replay, then the diverged tests in any order, stopped at the first failure, finds 98% to 100% of the revealed
+  regressions for 9% to 10% of the suite's tokens, with no wrong clean verdict (the report, section 7);
 - without the replay, and with every strategy run under the same two rules, `adaptive_bayes` leads only below
-  about 4% of the suite, by a margin the 29 regressions do not establish (the report, section 2), and its
+  about 4% of the suite, by a margin the 28 regressions do not establish (the report, section 2), and its
   calibration from history adds nothing measurable (`method_ablations.py`);
-- a third of its clean verdicts are then given on revealed regressions (the report, section 3); replay-first, 12%.
+- 27% of its clean verdicts are then given on revealed regressions (the report, section 3); replay-first, 6%.
 
-Order of work: sections 1 and 2 are done; the first half of 3 needs no GPU, the second lands with the next
-recording; 4 needs recordings; 5 is the method; 6 follows the results.
+Order of work: sections 1 to 3 are done; 4 needs recordings; 5 is the method; 6 follows the results.
 
 ## 1. Fair tables (replay only): done
 
@@ -64,52 +65,67 @@ The numbers and their reading are in `docs/RESEARCH_PLAN.md` §3.3 and §5.7.
       Per model and serving setup it needs recordings: section 4.
 - [x] The diverged share of the suite per kind of change in the report.
 
-## 3. Recording and measurement fixes
+## 3. Recording and measurement fixes: done
 
-Each has a probe in `scripts/analysis/probes/` that shows it today.
+Each has a probe in `scripts/analysis/probes/` that shows the state of today, and a test. The recording made
+after them is `runs/gemma8`.
 
-Without a GPU (nothing the model is sent changes, so the recorded answers still fit):
+The recording:
 
-- [ ] A manifest per recording (model and revision, server version and flags, workers, repetitions, commit, digest
-      of the app tree and of the catalog), checked on load; change sets computed against the recording's own
-      baseline copy (`probe_drift.py`).
-- [ ] Line ids that survive a comment-only edit, or a refusal when the tree and the recording differ.
-- [ ] Change sets from what the model is sent: a skill's re-wrapped prose, a reordered argument list and a quoted
-      front-matter value change the prompt and give an empty change set (`probe_changeset.py`). Replay-first
-      already sees these changes (the tests diverge); the change set is what the strategies order by.
-- [ ] A pair with no valid run counted as missing rather than as unchanged (`probe_reps.py`).
-- [ ] The recording protocol, as options of `traceeval experiment`: the baseline's outcomes recorded under the
-      changed copies' concurrency, and an empty change in every recording.
-- [ ] The judge's verdict parsed strictly, an unparseable one counted as an invalid run (`probe_harness.py`).
+- [x] A manifest per recording (`history/manifest.json`, `experiment/manifest.py`): the model, the judge, the
+      server's version, the commit, digests of the app and of the catalog, how each part was run. The changed
+      copies are made from the recording's own copy of the original app.
+- [x] `traceeval check` refuses a recording whose app is not `traceeval/sut` as it is now, a comment included;
+      the commands that only read a recording say what differs (`probe_drift.py`).
+- [x] The empty change in every recording (`history/unchanged.jsonl`): the original app run as the changed copies
+      are. A test that fails under it reveals no change.
+- [x] Every answer the changed copies get compared with the cassette's answer to the same request
+      (`llm/cache.py::Compare`); the report gives the counts.
+- [x] A pair with no valid run is missing: not run, not revealing, counted in the report.
+- [x] The judge: the verdict is the first word of its answer, no verdict is an invalid run, and its token limit
+      is that of the model that judges (`probe_harness.py`, `probe_models.py`).
 
-With the next recording (each changes a request or an outcome, so the test suite's cassette and the recordings
-have to be made again; prepare them together and record once):
+What the model is sent:
 
-- [ ] `_route_only` kept out of the prompt (`harness/backends/llm_openai.py`).
-- [ ] The judge's token limit, to fit a reasoning model (`probe_models.py`).
-- [ ] A positive condition for the 23 cases that pass when the agent does nothing (`probe_oracles.py`).
-- [ ] Delegation through the dispatcher; `user_id` and `approval_token` not writable by the model
-      (`probe_harness.py`).
-- [ ] Dependencies from what the model is sent: the schemas of the tools an agent is offered, the fixture, a new
-      agent file; every module imported before coverage starts (`probe_changeset.py`, `probe_cov.py`).
+- [x] Change sets: a skill's front matter and prose as text, its procedure as the steps in their order, a tool's
+      description and parameters (`tool:<name>#schema`), the agents an orchestrator lists
+      (`agent:<name>.specialists`) (`probe_changeset.py`).
+- [x] Dependencies: the tools each agent is offered, the fixture; every module imported before coverage starts,
+      and a package's `__init__` touching every test that ran code of the package (`probe_cov.py`).
+- [ ] Open: an edited default on a `def` line and an edited continuation line of a statement have no test that
+      executed the line, so the change links by function only (`probe_changeset.py`, edits 8 and 9). None of the
+      43 changes is one.
+
+The app and the tests:
+
+- [x] `_route_only` kept out of the prompt (`harness/backends/llm_openai.py`).
+- [x] Delegation through the dispatcher's gates; the user, the approval token and the harness's switches not
+      writable by a delegation; a badly typed argument refused instead of a crash (`probe_harness.py`).
+- [x] A positive condition for the 22 cases that passed when the agent did nothing (`tools_required` or the new
+      `tools_attempted`; `probe_oracles.py`).
 
 ## 4. More evidence (GPU)
 
-- [ ] A generator of changes: a procedure step deleted, swapped or with its condition negated; an argument swapped
-      in an adapter; a setting at a boundary value; a tool removed from an agent; a rule deleted from a skill's
-      prose; a tool description or a fixture edited; benign rewordings. A few hundred changes, the constants of
-      every strategy frozen before they are recorded, and a held-out split.
+- [x] A generator of changes (`mutation/generator.py`): 598 on the current app, in thirteen kinds, without
+      labels. All of them replayed for no tokens (`docs/RESEARCH_PLAN.md` §5.8): 97 settled as clean, 36 as
+      regressions, 465 left for the model.
+- [ ] The generated changes recorded for the tests they reach only (`runs/gemma8_gen`, five repetitions), and the
+      strategies evaluated on the half held out of what they learn from (`traceeval evaluate --held-out`). The
+      recording's manifest holds a digest of `traceeval/selection`: leave that folder as it is until the results
+      are in.
+- [ ] The batches and the second recording again on the current app: those of `docs/results/gemma7/` were recorded
+      before the fixes of section 3.
 - [ ] Model updates as changes without a diff: the three baselines already give six (`model_updates.py`).
 - [ ] A second model with its own cassette, baseline and changed copies recorded the same way. Indicative today:
       with the unstable tests left out, Qwen and gpt-oss show the same ranking (`other_models_stable_tests.py`).
       Qwen's and gpt-oss's recordings predate the cassette and cannot be replayed: their baselines are to be
       recorded again, the changed copies one test at a time.
-- [ ] The condition of replay-first per model and serving setup: the empty change recorded behind a cassette,
-      one test at a time and in batches, counting the requests whose live answer differs from the recorded one
-      (a tee on the changed copies, as `record_baseline` has on the original app).
-- [ ] A cassette built from Gemma's own five baseline repetitions (a new baseline recording): the reference
-      is then the answer given most often, and WF3-01, whose runs take two paths, shows whether that settles
-      the one outcome the replay gets wrong.
+- [x] The condition of replay-first on Gemma's serving setup (`runs/gemma8`; `docs/RESEARCH_PLAN.md` §5.7): the
+      empty change flips no test, every recorded run of a pair that replays ends like the replay, and about 2%
+      of the requests sent again are answered otherwise, one test at a time and in batches alike.
+- [x] A cassette built from the baseline's own five repetitions, the answer given most often: the one outcome
+      the replay got wrong on `runs/gemma7` (WF3-01, whose runs take two paths) is right on `runs/gemma8`.
+- [ ] The same condition for a second model and its serving setup (with its recording, above).
 - [ ] `traceeval check` live with its replay phase: the 43 changes, and the demo's batch check for the three
       models, whose cassettes (`tests/cassettes/`) lack the tests the check now picks.
 - [ ] A second application not built here (tau2-bench, as planned).
@@ -163,7 +179,6 @@ have to be made again; prepare them together and record once):
 
 - [ ] A `LICENSE` file (`pyproject.toml` says MIT) and a CI job for `pytest` and `ruff`.
 - [ ] The GPU server's address and login out of `docs/EXPERIMENT.md` and `scripts/gpu_remote.sh`.
-- [ ] Commit the `.gitignore` line for `.env`.
 - [ ] `CLAUDE.md` says every demo PR's verdict is checked by `tests/test_sdd.py`; 14 of 25 are.
 - [ ] The `ml` extra of `pyproject.toml` (scikit-learn) is no longer imported: `history_ml` fits its model with
       numpy. Drop it, with the install lines of `CLAUDE.md`.

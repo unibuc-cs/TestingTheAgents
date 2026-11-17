@@ -57,15 +57,9 @@ class Dispatcher:
         attempts, key, status = 0, None, "ok"
         crashed = False
         # The gates are checked in order. The first one that refuses the call answers for it, and the
-        # tool itself never runs. First: a tool the platform does not know at all (an LLM can invent one).
-        if spec is None:
-            out = {"error": "unknown_tool", "message": f"tool '{name}' does not exist"}
-        # A real tool, but switched off for the whole platform by a feature flag in the configuration.
-        elif name in (self.config.get("tools.disabled") or []):
-            out = {"error": "tool_disabled", "message": f"tool '{name}' is disabled by configuration"}
-        # A real tool, but not one that this agent's definition allows it to use.
-        elif name not in agent.tools:
-            out = {"error": "tool_not_available", "message": f"agent '{agent.name}' cannot use '{name}'"}
+        # tool itself never runs. First the three that say whether this agent may make the call at all.
+        if (refusal := self.gate(agent, name)) is not None:
+            out = refusal
         # Guarded tools (approving a review, exporting personal data, taking a page down) need an approval
         # token in the request. Only its presence is checked here; services that care compare it with the
         # token of the user who is supposed to approve.
@@ -119,9 +113,14 @@ class Dispatcher:
                 # transient failure that was still failing after the last retry.
                 out, status = exc.to_dict(), "error"
             except Exception as exc:  # noqa: BLE001 - any other exception is a defect in tool or service code
-                # Any other exception is a bug in the tool or service code. The agent still gets an error
-                # result, like the HTTP 500 a real tool server would send, and the trace records a crash.
-                out, crashed = {"error": "tool_crash", "message": f"{type(exc).__name__}: {exc}"}, True
+                # Any other exception is a bug in the tool or service code, unless the agent sent a value of the
+                # wrong type (a word where the schema asks for a number): that is the agent's mistake, refused
+                # like a call that does not fit the signature. For a bug the agent still gets an error result,
+                # like the HTTP 500 a real tool server would send, and the trace records a crash.
+                if (bad_type := _type_error(spec, args)) is not None:
+                    out = {"error": "invalid_arguments", "message": bad_type}
+                else:
+                    out, crashed = {"error": "tool_crash", "message": f"{type(exc).__name__}: {exc}"}, True
         # The status written to the trace: a refusal by a gate or by the tool is "error", and a crash wins
         # over that.
         if "error" in out:
@@ -149,6 +148,20 @@ class Dispatcher:
         )
         return out
 
+    def gate(self, agent, name: str) -> dict | None:
+        """Why ``agent`` may not call ``name`` at all, as the error the agent gets back, or None when it may. The
+        runtime asks the same before a delegation, the one call it carries out itself."""
+        # A tool the platform does not know at all (an LLM can invent one).
+        if name not in self.tools:
+            return {"error": "unknown_tool", "message": f"tool '{name}' does not exist"}
+        # A real tool, but switched off for the whole platform by a feature flag in the configuration.
+        if name in (self.config.get("tools.disabled") or []):
+            return {"error": "tool_disabled", "message": f"tool '{name}' is disabled by configuration"}
+        # A real tool, but not one that this agent's definition allows it to use.
+        if name not in agent.tools:
+            return {"error": "tool_not_available", "message": f"agent '{agent.name}' cannot use '{name}'"}
+        return None
+
     def _needs_approval(self, spec, name: str) -> bool:
         """True for a guarded tool that the configuration lists under ``tools.requires_approval``."""
         gated = self.config.get("tools.requires_approval") or []
@@ -164,4 +177,29 @@ def _argument_error(spec, args: dict) -> str | None:
         inspect.signature(spec.fn).bind(None, **args)
     except TypeError as exc:
         return str(exc)
+    return None
+
+
+# The Python types a value of each annotated type may have; a whole number is also a fine float, and True is not a
+# number.
+_ACCEPTED = {str: (str,), int: (int,), float: (int, float), bool: (bool,), list: (list,), dict: (dict,)}
+
+
+def _type_error(spec, args: dict) -> str | None:
+    """The first argument whose value is not of the type the tool's schema gives the model, as a message for the
+    agent, or None. Asked only after a tool raised: an adapter is free to accept more than its schema says."""
+    params = inspect.signature(spec.fn).parameters
+    for name, value in args.items():
+        annotation = params[name].annotation
+        # ``str | None`` and ``list[str]`` are read as the schema reads them (tools/registry.py): the first type
+        # that is not None, and a list whatever its items
+        options = getattr(annotation, "__args__", None) or (annotation,)
+        if getattr(annotation, "__origin__", None) is list:
+            options = (list,)
+        if value is None and (type(None) in options or params[name].default is None):
+            continue
+        expected = next((getattr(o, "__origin__", None) or o for o in options if o is not type(None)), None)
+        accepted = _ACCEPTED.get(expected)
+        if accepted and (not isinstance(value, accepted) or (isinstance(value, bool) and bool not in accepted)):
+            return f"argument '{name}' must be of type {expected.__name__}, not {type(value).__name__}"
     return None

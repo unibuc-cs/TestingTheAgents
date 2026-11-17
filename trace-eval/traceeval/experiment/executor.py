@@ -19,7 +19,7 @@ from traceeval.tracing import TraceRecorder
 
 def observed_components(trace: dict) -> set[str]:
     """The components a run exercised, as the ids change sets use (code functions are added later from
-    coverage, see ``attach_code_functions``)."""
+    coverage, see ``attach_code_functions``; the fixture by ``run_case``, which knows the case)."""
     deps: set[str] = set()
     for a in trace.get("agents", []):
         deps.add(f"agent:{a}")
@@ -27,6 +27,9 @@ def observed_components(trace: dict) -> set[str]:
         deps.add(f"skill:{s}")
     for t in trace.get("tools", []):
         deps.add(f"tool:{t}")
+    # a tool an agent was offered: the model read its description and parameters, called or not
+    for t in trace.get("tools_offered", []):
+        deps.add(f"tool:{t}#schema")
     for k in trace.get("config_keys", []):
         deps.add(f"config:{k}")
     for c in trace.get("consulted", []):  # already ids: agent:<name>.<field>
@@ -151,7 +154,14 @@ def run_case(
         try:
             judge_result = judge_answer(case, trace.get("final_message", ""), *judge_client(backend))
             judge_tokens = judge_result["tokens"]
-            if not judge_result["ok"]:
+            if judge_result["ok"] is None:
+                # the judge gave no verdict: its failure, not the agent's, so the run is left out like one the
+                # environment broke
+                verdict.passed = False
+                verdict.classification = "INFRA_INVALID"
+                detail = f"no verdict: {judge_result['verdict'][:80]!r}"
+                verdict.checks.append({"name": "judge", "ok": False, "detail": detail})
+            elif not judge_result["ok"]:
                 verdict.passed = False
                 verdict.classification = "AGENT_FAILURE"
                 verdict.checks.append({"name": "judge", "ok": False, "detail": judge_result["verdict"]})
@@ -182,7 +192,8 @@ def run_case(
         "latency_ms": round(wall_ms, 1),
         "steps": run.get("steps"),
         "termination": run.get("termination"),
-        "deps": sorted(observed_components(trace)),
+        # the starting data is a dependency of every run, whatever part of it the tools then read
+        "deps": sorted(observed_components(trace) | {f"fixture:{case.fixture}"}),
         "agents": trace["agents"],
         "routes": trace["routes"],
         "skills": trace["skills"],

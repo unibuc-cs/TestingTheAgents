@@ -8,16 +8,21 @@ A run of the experiment lives in `runs/<name>/` at the repository root:
 
 ```text
 runs/<name>/
-  variants/<change>/   one changed copy of the app per change, with its diff.patch
+  variants/<change>/   one changed copy of the app per change, with its diff.patch; variants/baseline/sut is the
+                       recording's own copy of the original app, which every changed copy is made from
   history/             the recorded runs: baseline.jsonl for the original app, variants/ for the changed copies;
+                       unchanged.jsonl, the empty change: the original app run the way the changed copies are;
                        cassette.jsonl, the answers the model gave the original app;
-                       replay_first.jsonl, every copy replayed against those answers
+                       manifest.json, what the recording was made from and with;
+                       replay_first.jsonl, every copy replayed against those answers;
+                       generated.jsonl, the generated changes replayed the same way (§6)
   results/             report.md, its figures, replay.csv, prioritization.csv, replay_first.csv
 ```
 
 `traceeval check` (`experiment/check.py`) runs the README's loop live for one change: it replays the change first,
 then runs the tests that diverge with the model. A recording (`--history`) supplies the original app's answers,
-the baseline traces, the costs and the other changes' outcomes ([EXPERIMENT.md](EXPERIMENT.md) §5).
+the baseline traces, the costs and the other changes' outcomes ([EXPERIMENT.md](EXPERIMENT.md) §5). The check
+refuses a recording made on another version of the app (§8).
 
 ## 2. Vocabulary
 
@@ -33,11 +38,23 @@ Paths are relative to `traceeval/`.
   site optimization, W3 legal takedown, W4 localized price update, W5 broken release rollback, W6 privacy request.
 - **Declared dependencies**: the `declared:` block a test author writes, incomplete on purpose.
 - **Observed dependencies**: the components the trace shows the run touched (`agent:x`, `skill:x`, `tool:x`,
-  `config:key`, `code:file::function`, `line:file:n`).
+  `config:key`, `code:file::function`, `line:file:n`), and what the model was sent without the run acting on it:
+  `tool:x#schema` for every tool an agent was offered, called or not, and `fixture:x`, the starting data.
 - **Change set**: the diff turned into components with the same identifiers (`mutation/changeset.py`). Comments,
-  docstrings, blank lines and formatting add no component and no diff line.
+  docstrings, blank lines and formatting add no component and no diff line. What the model is sent counts as it
+  is sent:
+  - a skill's front matter and prose are compared as text, its procedure as the steps the model is shown;
+  - a tool's description or parameters give `tool:x#schema`, beside `tool:x` for its code;
+  - an agent added or taken away gives `agent:<orchestrator>.specialists`, since the orchestrator lists them all.
 - **Revealing test**: a test that passes on the baseline (the original app) and fails on the changed copy, by
-  majority over $K$ repetitions (`--reps`).
+  majority over $K$ repetitions (`--reps`), and that still passes under the empty change.
+- **Empty change** (`history/unchanged.jsonl`): the original app run the way the changed copies are, several
+  cases at a time and without coverage. It is not evaluated as a change. It shows what the way of running does
+  alone: the tests that end otherwise than in the baseline, and the requests the model answers otherwise.
+- **Missing pair**: a (change, test) pair with no valid run. No strategy is given the test on that change, it
+  reveals nothing, and the report counts the pairs.
+- **Manifest** (`history/manifest.json`, `experiment/manifest.py`): the model and its server, the commit, digests
+  of the app and of the catalog, and how each part was run.
 - **Budget**: tokens, as a fraction of the full-suite cost.
 - **Cassette**: the answers a model gave, each stored under the exact request that got it (`llm/cache.py`). A
   recording keeps the answers of its original app in `history/cassette.jsonl`; the test suite replays
@@ -76,12 +93,14 @@ Paths are relative to `traceeval/`.
 | how the orchestrator plans | `sut/skills/routing/SKILL.md`, `sut/tools/control_tools.py`, `runtime.py` (`_delegate`) |
 | how a test is run and scored | `experiment/executor.py` (`run_case`), `scoring/scorers.py` |
 | how a change becomes components | `mutation/catalog.py` (data), `mutation/changeset.py` |
+| the changes made mechanically from the app | `mutation/generator.py` (its docstring lists the kinds), `experiment/generated.py` (their replay) |
 | how every strategy is run | `selection/base.py` (the two rules, in its docstring; `Strategy.run`) |
 | the baselines | `selection/strategies.py`; two more in `selection/extras.py`, `observed_diverse` and `history_ml` |
 | two methods from the literature, adapted | `selection/adapted.py` (CASPER's slices, Risk-Aware Adaptive Evaluation's bandit and its per-token variant; each docstring says what was adapted) |
 | the proposed method | `selection/adaptive_bayes.py` (its docstring explains the five steps) |
 | the replay and the metrics | `experiment/evaluate.py`, `experiment/metrics.py` |
-| replay-first: which tests a change reaches, found without a model | `experiment/replay_first.py` (its docstring, then `replay_suite`); the two clients it uses, `Tee` and `ReplayFirstClient`, in `llm/cache.py` |
+| replay-first: which tests a change reaches, found without a model | `experiment/replay_first.py` (its docstring, then `replay_suite`); the clients it uses, `Tee`, `ReplayFirstClient` and `Compare`, in `llm/cache.py` |
+| how a recording is made, and what it was made from | `experiment/runner.py` (its docstring), `experiment/manifest.py` |
 | the report's tables | `experiment/report.py` |
 | coverage (of the suite, of a change) | `experiment/coverage.py` |
 | the prototype (one change, live) | `experiment/check.py` (its docstring: the replay, then the method over the diverged tests) |
@@ -91,9 +110,12 @@ Everything else is plumbing (loaders, tracing, report).
 
 ## 4. How to read the report
 
+- **Under the header**: how the recording was made (model, commit, repetitions, tests at a time), what the empty
+  change shows (the tests that end otherwise than in the baseline, the requests answered otherwise), and the
+  (change, test) pairs with no valid run, if any.
 - **Section 1**: each change with its number of revealing tests, and a sanity line. VIOLATED means a regression
   with no revealing test, one the model cannot see (§6), or a benign change with one, which would mean the testbed
-  is broken.
+  is broken. A generated change has no label and no part in the sanity line.
 - **Section 2**, detection within a budget. Every strategy runs under the two rules of §2, so the tables compare
   like for like:
   - `detected`: the share of the revealed regressions on which a revealing test ran and failed, by nominal budget;
@@ -130,8 +152,8 @@ Everything else is plumbing (loaders, tracing, report).
     $\mathrm{APFD}_c = (C - C_{TF} - c_{TF}/2)/C$. The paper also weighs faults by severity, which cancels out with
     one fault. Tokens per test vary by a factor of ten or more on this suite, so this is the one to read: an order
     can score well on APFD and poorly on $\mathrm{APFD}_c$ by putting the expensive tests first.
-  - What to expect: `random` near 0.76 on both (the mean over the seeds), `full` (catalog order) near 0.74, an
-    order that uses the change 0.87 or more on $\mathrm{APFD}_c$. The adaptive method's order is the one its model
+  - What to expect: `random` near 0.77 on both (the mean over the seeds), `full` (catalog order) near 0.75, an
+    order that uses the change 0.88 or more on $\mathrm{APFD}_c$. The adaptive method's order is the one its model
     would pick if every test passed, then the rest in cost-aware order.
   - Selected cost: a strategy that orders the whole suite selects 0.90 of its tokens, since the tests the model
     already fails hold the rest.
@@ -140,7 +162,7 @@ Everything else is plumbing (loaders, tracing, report).
 - **Section 6**: coverage, of the suite and of each change. For the suite, per dimension (agent, feature, skill,
   tool, tool error path, configuration, setting value, property, workflow, execution path, risk): what the tests
   declare, what the traces show, what nothing covers; then, per agent, skill, tool and feature, the tests that
-  declare it and the tests that invoke it (`traceeval coverage --history runs/gemma7` prints this part). For each
+  declare it and the tests that invoke it (`traceeval coverage --history runs/gemma8` prints this part). For each
   change, without the ground truth: the changed components the executed tests exercised, the affected properties
   they checked, the affected workflows they ran, the affected features they reached, and how often a run that found
   no regression tested every affected mandatory property. [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5 defines the
@@ -152,12 +174,16 @@ Everything else is plumbing (loaders, tracing, report).
   - the replay against the recorded ground truth: the replayed outcomes that differ from the recorded majority,
     and where the revealing tests end up. A revealing test that replays to a pass is one the replay misses;
   - the replay against the recorded runs, one by one: how many end like the replay, and how many are the very
-    conversation the replay follows. This measures the condition replay-first rests on, a model call being a
-    function of its request, under the serving setup of the recording;
+    conversation the replay follows, for the original app, for the empty change and for the changed copies;
+  - the condition replay-first rests on, a model call being a function of its request, request by request:
+    of the requests that were sent more than once, how many got another answer, in the baseline's own
+    repetitions, under the empty change and on the changed copies;
   - the strategies run replay-first, in the tables of sections 2 and 3: compare a strategy's row there with its
     row here. The third table gives the tokens of the same tests run whole, without the replayed part taken
     off. Two orders appear only here: `cheapest`, by cost, and `late_divergence`, by how late the change reaches
     the test.
+- **Section 8**, for a recording whose generated changes were replayed (`traceeval replay-first --generated`):
+  by kind of generated change (§6), what the replay settles without a model and what is left for it.
 - `replay.csv`: one row per (change, strategy, budget, seed), for slicing the results yourself;
   `prioritization.csv`: one row per (change, strategy), and per seed for an order drawn at random, for section 4;
   `replay_first.csv`: as `replay.csv`, for section 7, with `whole_cost_fraction` beside `cost_fraction`.
@@ -168,7 +194,7 @@ For every changed part of the app (a function, a skill's procedure, a config key
 estimates a **sensitivity**: the probability that the test fails if that part is broken. It runs the test that
 tells it the most per token, high sensitivity at low cost, and a sensitive test that passes is strong evidence that
 nothing broke. The sensitivity is the product of four factors (`selection/adaptive_bayes.py::sensitivity`); the
-examples are for `code_retry_drop_idempotency` (retried writes lose their idempotency key, §6) on `runs/gemma7`:
+examples are for `code_retry_drop_idempotency` (retried writes lose their idempotency key, §6) on `runs/gemma8`:
 
 ```mermaid
 flowchart LR
@@ -232,7 +258,7 @@ editing the app's code.
 ## 6. The controlled changes
 
 The 43 changes (`mutation/catalog.py`): what each does, why it is in the set (a kind of change, a reach, or a trap
-for selection), and the number of tests that reveal it in `runs/gemma7`. The other models' recordings are not clean
+for selection), and the number of tests that reveal it in `runs/gemma8`. The other models' recordings are not clean
 ground truths ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4), so they have no column.
 
 | change | what it does | why it is in the set | revealing tests (Gemma) |
@@ -251,7 +277,7 @@ ground truths ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4), so they have no colu
 | `skill_publish_drop_link_validation` | publishing no longer validates links | a change to a skill's procedure rather than to code. No test declares the link-check skill. The method alone calls the change clean, and the mandatory-coverage rule catches it | 4 |
 | `skill_publish_drop_permission_check` | publishing no longer checks the user's permission | a safety rule enforced only in a skill: nothing below it stops the write | 3 |
 | `skill_authoring_drop_metadata` | new pages no longer get SEO metadata | a removed step that one test notices | 1 |
-| `skill_translation_wrong_default` | translation uses en-US instead of the configured languages | a skill that ignores a configuration value | 4 |
+| `skill_translation_wrong_default` | translation uses en-US instead of the configured languages | a skill that ignores a configuration value | 3 |
 | `skill_rollback_drop_permission_check` | rollback no longer checks the permission; the service still refuses | defence in depth: the data stays safe and only the behaviour shows the mistake | 1 |
 | `skill_rollback_restores_latest` | rollback restores the latest version instead of the requested one | a wrong argument in a procedure step | 3 |
 | `skill_linkval_ignore_assets` | the shared link-validation skill lets broken asset references through | a change to a skill included by others, reaching tests that never name it | 0 |
@@ -263,7 +289,7 @@ ground truths ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4), so they have no colu
 | **Configuration** | | | |
 | `config_disable_validate_links` | a feature flag turns link validation off everywhere | one key with a wide reach: the broad change in the set | 49 |
 | `config_require_review_false` | pages no longer need an approved review before publishing | a policy switch in configuration; Gemma's own mistake hides it | 0 |
-| `config_max_tool_calls_5` | each agent's step budget drops from 12 to 5 tool calls | a value that limits every agent; long tasks fail | 10 |
+| `config_max_tool_calls_5` | each agent's step budget drops from 12 to 5 tool calls | a value that limits every agent; long tasks fail | 11 |
 | `config_retries_0` | temporary tool failures are no longer retried | a change only the tests with an injected fault notice; reused by the SDD demo (FS-0105) | 8 |
 | `config_seo_title_20` | the maximum SEO title length drops from 60 to 20 | a boundary value; Gemma ignores the limit anyway | 0 |
 | `config_default_agent_publishing` | requests no specialist owns go to publishing instead of authoring | a routing setting the orchestrator reads | 3 |
@@ -279,7 +305,7 @@ ground truths ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4), so they have no colu
 | `benign_translation_intents_reordered` | the translation agent's intents are reordered | an order a model ignores | 0 |
 | **Aimed at the multi-agent workflows: planning, hand-offs, the AEM-style agents** | | | |
 | `skill_routing_drop_approval` | the orchestrator no longer asks a person before a step that publishes, schedules or takes pages down | a human-in-the-loop rule that lives only in the orchestrator's skill and reaches every workflow. In W3 the dispatcher's token gate still blocks the takedown; in W1, W2 and W4 nothing below the skill stops the write | 11 |
-| `skill_routing_drop_brand_gate` | the plan no longer requires the brand check before scheduling or publishing, and no longer stops at a failed check | a brand gate enforced only in the orchestrator's prose; one test sees it (WF1-02) | 1 |
+| `skill_routing_drop_brand_gate` | the plan no longer requires the brand check before scheduling or publishing, and no longer stops at a failed check | a brand gate enforced only in the orchestrator's prose. One test can see it (WF1-02), and fails in one run of five: in the others Gemma stops at the failed brand check on its own | 0 |
 | `code_delegation_drops_context` | a delegation no longer passes the ids of earlier steps on to the specialist | a bug in the planning path's hand-off. The trace still records the context, so the run looks right, and the tests whose ids travel in the task text do not notice | 4 |
 | `code_insights_rank_reversed` | the pages ranked worst are the most viewed, and those ranked best the least viewed | a service bug in an agent modelled on AEM's, reaching its single-agent tests and W2 | 4 |
 | `code_search_case_sensitive` | page search no longer lower-cases the page text, so a capitalised occurrence is missed | a shared service the brand agent uses: the legal takedown silently leaves a page up | 3 |
@@ -302,7 +328,7 @@ checks it live and prints, after the verdict, the components it blames. Neither 
 strategy learn from a batch's members, or from the batches that share one (`History.training_variants`): a model
 that has seen what each member breaks would know the answer.
 
-| batch | what it bundles | revealing tests (Gemma) |
+| batch | what it bundles | revealing tests (Gemma, beside `runs/gemma7`) |
 |---|---|---|
 | `batch_nightly` | a day's merges: six regressions across tools, harness, skills, an agent definition and a service, plus two harmless edits | 28 |
 | `batch_publishing_pr` | one pull request on the publishing path: the skill drops its link validation, the link check lets external URLs through, taking a page down needs no approval token | 9 |
@@ -311,6 +337,44 @@ that has seen what each member breaks would know the answer.
 RESEARCH_PLAN §5.6 has what the strategies make of them, [results/gemma7/batches.md](results/gemma7/batches.md) the
 full tables, and [results/gemma7/batch_sweep.md](results/gemma7/batch_sweep.md) twenty more batches of two to eight
 changes drawn at random by `scripts/batch_sweep.py`.
+
+### Generated changes
+
+The 43 were written by hand, each to make a point, and each has a label. `mutation/generator.py` makes changes
+mechanically instead, one per place an edit of its kind applies to: 598 on the current app. Nobody labels them;
+the recording says which a test reveals. `traceeval mutations --generated` lists them (ids `g_<kind>_<where>_<n>`).
+
+| kind | the edit | how many |
+|---|---|---|
+| `stepdel`, `stepswap` | a step of a skill's procedure deleted; two adjacent steps swapped | 76, 63 |
+| `whennot`, `guarddel` | the condition of a step negated; the guard on a step's result deleted | 28, 4 |
+| `ruledel` | a bullet deleted from a skill's prose | 18 |
+| `tooldrop` | a tool removed from an agent | 50 |
+| `setting` | a setting at another value: a switch flipped, a number at 0, one less and one more, a list without one item, a tool switched off, another default agent | 65 |
+| `argswap` | two arguments of the same type swapped in a call of a tool adapter | 12 |
+| `tooldesc` | a tool's description cut to its first three words | 32 |
+| `condnot` | the condition of an `if` negated, in the services, the tools and the harness | 120 |
+| `fixture` | a value of the starting data replaced by another the same key has elsewhere | 85 |
+| `rewrap`, `comment` | meant to break nothing: two lines of a skill's prose joined; a comment at the top of a module | 13, 32 |
+
+Two commands use them, on a recording that has a baseline:
+
+```bash
+traceeval replay-first --workdir runs/gemma8_gen --generated     # every one replayed for free: no model, no copy kept
+traceeval mutants --workdir runs/gemma8_gen --reps 5 --generated --reached-only --backend vllm
+```
+
+- The first applies each change to a copy of the recording's original app in a temporary folder, replays every
+  test against the cassette and writes `history/generated.jsonl`: per change, what its diff touched, which tests
+  replay to the end and how they end, and which diverge. The report's section 8 sums it up by kind.
+- The second records them with the model, each for the tests it reaches only (`--reached-only`). The copy is
+  replayed first; a test that replays to the end is not run, and its one record on the copy is that replayed run,
+  marked `stand_in`. `--generated N` takes N changes of each kind, the same ones every time; `--resume` leaves
+  out the changes already recorded.
+
+An edit names the line it starts at and the text it expects there, so a change generated from one version of the
+app does not apply to another. `traceeval evaluate --held-out` evaluates the strategies on one fixed half of the
+generated changes and lets them learn from the other half only ([EXPERIMENT.md](EXPERIMENT.md) §5).
 
 ## 7. How to extend
 
@@ -322,11 +386,15 @@ changes drawn at random by `scripts/batch_sweep.py`.
   already in the catalog keep what a person wrote unless `--fresh`.
 - **Test**: add a YAML entry. `expect` takes `route_to`, `state` (`[path, op, value]` with `==`, `!=`, `len`,
   `contains`, `in`, `>=`, `<=`, `absent`, `exists`), `tools_required`, `tools_forbidden`, `tools_not_attempted`,
-  `tool_attempts`, `tool_results` (`[tool, path, op, value]` on the tool's last successful result), `audit`,
-  `response_contains`, `response_excludes`, `max_steps`, `termination`, `tool_errors`, `agents_in_order` and
-  `tools_in_order`.
+  `tools_attempted`, `tool_attempts`, `tool_results` (`[tool, path, op, value]` on the tool's last successful
+  result), `audit`, `response_contains`, `response_excludes`, `max_steps`, `termination`, `tool_errors`,
+  `agents_in_order` and `tools_in_order`.
   - `agents_in_order` lists the agents the delegations must reach in that order, `tools_in_order` the tools whose
     successful calls must come in that order; anything may come in between.
+  - A case about a refusal needs a positive condition, or an agent that does nothing passes it: `tools_required`
+    for the check that must have succeeded, or `tools_attempted` for the call that must have been tried, whatever
+    came of it (an item that is a list names alternatives). `scripts/analysis/probes/probe_oracles.py` lists the
+    cases a do-nothing agent passes.
   - `response_contains` is for facts the answer must report (a job id, a path, which link is broken), not for
     wording; a list item is a set of alternatives; case, typographic hyphens, spaces and quotes are ignored. A run
     that ends with an answer must not end with an empty one (the `answered` check).
@@ -369,7 +437,13 @@ changes drawn at random by `scripts/batch_sweep.py`.
 ## 8. Gotchas
 
 - A run the environment broke is `INFRA_INVALID` ([EXPERIMENT.md](EXPERIMENT.md) §1): `traceeval check` retries
-  such a run once and otherwise stops without a verdict.
+  such a run once and otherwise stops without a verdict. So is a run whose judge gave no verdict: the judge's
+  answer must open with PASS or FAIL.
+- A recording fits one version of the app: its answers are found by the exact request and its code dependencies
+  are line numbers. `traceeval check` refuses a recording whose copy of the app (`variants/baseline/sut`) is not
+  `traceeval/sut` as it is now, a comment included; `mutants`, `replay-first` and `evaluate` say what differs
+  (the app, or the catalog) and go on. `traceeval mutants` makes the changed copies from the recording's own
+  copy, so changes can be added to a recording after `traceeval/sut` has moved on.
 - A change to anything a prompt is built from (a skill, an agent, a config value, a tool, a case) makes the replay
   miss (`INFRA_INVALID` with `CacheMiss`); record the missing answers again ([EXPERIMENT.md](EXPERIMENT.md) §5).
 - A recording is replayed against its own cassette, which `traceeval baseline` writes. A Gemma recording that

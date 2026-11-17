@@ -45,6 +45,9 @@ class SelectionContext:
     # ``prefix``: for the other tests, the tokens of the requests that replay before the change reaches the model.
     replayed: frozenset = frozenset()
     prefix: dict[str, float] = field(default_factory=dict)
+    # The tests the recording has no valid run of on this changed copy (``History.missing``): the evaluation
+    # cannot answer for them, so they are not run. Empty in a live check, where every test can be run.
+    missing: frozenset = frozenset()
 
     def tests(self) -> list[str]:
         """The suite: the recorded tests that the catalog still has, in the order of the recording."""
@@ -58,8 +61,9 @@ class SelectionContext:
     def runnable(self, t: str) -> bool:
         """Whether running ``t`` can tell anything: it passes on the original app, and the replay has not already
         given its outcome on the changed copy. A test the model already fails on the original app fails on the
-        changed copy too, whatever the change, so no strategy runs it."""
-        return t not in self.replayed and self.history.baseline_pass_rate(t) >= 0.5
+        changed copy too, whatever the change, so no strategy runs it. Nor is a test the recording has no valid
+        run of on this copy."""
+        return t not in self.replayed and t not in self.missing and self.history.baseline_pass_rate(t) >= 0.5
 
 
 @dataclass
@@ -89,16 +93,30 @@ class ExecutionLog:
 
 
 # ---------------------------------------------------------------------------- dependency matching
+def _module_prefix(cid: str) -> str | None:
+    """For a module-level code change (``code:<file>``), the prefix of the code dependencies it touches; None
+    for any other component. A module's own level runs at import, before any test, so no test has its lines:
+    the change touches the tests that ran a function of the file. A package's ``__init__.py`` runs before every
+    module of the package (it is where the tool modules are imported, and so registered): a change there touches
+    the tests that ran any code under the package."""
+    if not cid.startswith("code:") or "::" in cid or "#" in cid:
+        return None
+    if cid.removeprefix("code:").rsplit("/", 1)[-1] == "__init__.py":
+        return cid[: -len("__init__.py")]  # code:tools/__init__.py -> code:tools/
+    return cid + "::"
+
+
 def matches(component: ChangedComponent, deps: set[str]) -> bool:
     """Does a changed component touch a test whose (declared or observed) dependencies are ``deps``?"""
     # Dependencies are recorded at the coarser level (skill:x, agent:x), so a change to skill:x#procedure or
-    # agent:x.tools touches every test that used skill x or ran agent x.
+    # agent:x.tools touches every test that used skill x or ran agent x. A tool's schema is the one sub-part
+    # recorded as such: tool:x#schema for every test in which an agent was offered x, tool:x for those that
+    # called it.
     cid, base = component.id, component.base
     if cid in deps or base in deps:
         return True
-    if cid.startswith("code:") and "::" not in cid and "#" not in cid:
-        return any(d.startswith(cid + "::") for d in deps)  # module-level change in a used file
-    return False
+    prefix = _module_prefix(cid)
+    return prefix is not None and any(d.startswith(prefix) for d in deps)
 
 
 def affinity(change: ChangeSet, deps: set[str]) -> int:
@@ -133,12 +151,9 @@ def weighted_affinity(change: ChangeSet, dep_freq: dict[str, float]) -> float:
             line_files[c.file] = max(line_files.get(c.file, 0.0), dep_freq.get(c.id, 1.0))
             continue
         # the frequency of the dependency that made it match (the same three cases as ``matches``): the
-        # component itself, its base, or a function of a module changed at module level
-        total += max(
-            dep_freq[d]
-            for d in deps
-            if d in (c.id, c.base) or (c.id.startswith("code:") and "::" not in c.id and d.startswith(c.id + "::"))
-        )
+        # component itself, its base, or code of a module (or package) changed at module level
+        prefix = _module_prefix(c.id)
+        total += max(dep_freq[d] for d in deps if d in (c.id, c.base) or (prefix and d.startswith(prefix)))
     return total + sum(line_files.values())
 
 

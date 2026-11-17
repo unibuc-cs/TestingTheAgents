@@ -83,8 +83,8 @@ where each model runs.
 
 ```bash
 scripts/gpu_remote.sh up gemma
-traceeval experiment --backend vllm --workdir runs/gemma7 --reps 5    # about two hours
-# -> runs/gemma7/results/report.md  (tables + 4 figures)
+traceeval experiment --backend vllm --workdir runs/gemma8 --reps 5    # about two hours
+# -> runs/gemma8/results/report.md  (tables + 4 figures)
 scripts/gpu_remote.sh down
 ```
 
@@ -93,8 +93,8 @@ model. Then our method picks a test among those that diverge, the test runs live
 decides what runs next, and the check ends with a verdict.
 
 ```bash
-traceeval check skill_routing_drop_approval --history runs/gemma7 --budget 0.2      # a change from the catalog
-traceeval check path/to/my-copy-of-sut --history runs/qwen7 --backend llm           # your own edit, with Qwen
+traceeval check skill_routing_drop_approval --history runs/gemma8 --budget 0.2      # a change from the catalog
+traceeval check path/to/my-copy-of-sut --history runs/gemma8                        # your own edit
 ```
 
 `--history` points to an experiment recorded with the same model and the same version of the app. It holds the
@@ -103,65 +103,72 @@ answers the model gave that app, what each test costs and which code it runs
 
 ## Main results
 
-The results come from Gemma's recording of the current app (`runs/gemma7`: 180 tests, 43 changes, five repetitions
-per test). Of the 34 regressions, 29 are revealed by at least one test. Gemma ignores the other five either way: it
-behaves the same with or without the change. A benign change is one meant to break nothing; none of them fails a
-test. The table gives the share of those 29 that each strategy detects within a budget of 5% and of 20% of the
-full-suite tokens, and the tokens it actually spends, as a mean over all 43 changes:
+The results come from Gemma's recording of the current app (`runs/gemma8`: 180 tests, 43 changes, five repetitions
+per test). Of the 34 regressions, 28 are revealed by at least one test; with the other six Gemma behaves the same
+with or without the change. A benign change is one meant to break nothing; none of them fails a test. The table
+gives the share of those 28 that each strategy detects within a budget of 5% and of 20% of the full-suite tokens,
+and the tokens it actually spends, as a mean over all 43 changes:
 
 | strategy | detected at 5% | tokens spent | detected at 20% | tokens spent |
 |---|---|---|---|---|
-| `random`: the suite in a random order | 24% | 4.6% | 63% | 15% |
-| `declared`: hand-written dependencies | 59% | 1.5% | 62% | 3.3% |
-| `observed`: dependencies seen in traces | 61% | 2.9% | 85% | 8.4% |
-| `observed_diverse`: the same tests, one behaviour group at a time | 52% | 3.9% | 94% | 9.2% |
-| `ir_tfidf`: text similarity to the diff | 69% | 3.3% | 93% | 9.9% |
-| `history_ml`: a model trained on the other changes | 69% | 3.2% | 90% | 9.8% |
-| `casper_slices`: CASPER's slices, adapted | 28% | 4.4% | 65% | 14% |
+| `random`: the suite in a random order | 24% | 4.6% | 64% | 15% |
+| `declared`: hand-written dependencies | 61% | 1.6% | 61% | 3.8% |
+| `observed`: dependencies seen in traces | 64% | 3.0% | 86% | 8.6% |
+| `observed_diverse`: the same tests, one behaviour group at a time | 54% | 3.8% | 93% | 9.4% |
+| `ir_tfidf`: text similarity to the diff | 71% | 3.3% | 93% | 10% |
+| `history_ml`: a model trained on the other changes | 71% | 3.3% | 89% | 10% |
+| `casper_slices`: CASPER's slices, adapted | 36% | 4.3% | 65% | 15% |
 | `risk_aware_ts`: Risk-Aware Adaptive Evaluation, adapted | 34% | 4.5% | 63% | 15% |
-| `adaptive_bayes`: our method | 74% | 2.7% | 78% | 5.1% |
+| `adaptive_bayes`: our method | 78% | 2.7% | 81% | 5.1% |
 
 - Reading the change pays: ordering the tests by the traces, by the diff's text or by a model trained on the other
-  changes finds 85% to 94% of the regressions at a 20% budget, for about a tenth of the suite's tokens. The two
+  changes finds 86% to 93% of the regressions at a 20% budget, for about a tenth of the suite's tokens. The two
   adapted methods do not read the diff and stay at the level of a random order.
-- Hand-written dependencies stop at 62%: for eleven regressions, no test that reveals the change declares what
+- Hand-written dependencies stop at 61%: for eleven regressions, no test that reveals the change declares what
   changed.
-- The adaptive method finds the most at a small budget. With 29 regressions that lead is not established: its
-  difference to `ir_tfidf` at 5% is 6 points, with a 95% interval from −8 to +19.
-- It stays at 78% to 81% however large the budget, because it calls five narrow regressions clean: at a 20% budget
-  a third of its clean verdicts are given on a regression some test reveals. It never calls a change no test
-  reveals a regression.
+- The adaptive method finds the most at a small budget. With 28 regressions that lead is not established: its
+  difference to `ir_tfidf` at 5% is 6 points, with a 95% interval from −7 to +21.
+- It stays at 81% to 85% however large the budget, because it calls four narrow regressions clean: at a 20% budget
+  27% of its clean verdicts are given on a regression some test reveals. It never calls a change no test reveals a
+  regression.
 - The traces give a clean verdict that holds: once every test whose traces touched the change has run and passed
-  (`observed`, with no budget), no test reveals the change, in every run. That costs 17% of the suite per change on
+  (`observed`, with no budget), no test reveals the change, in every run. That costs 18% of the suite per change on
   average.
-- All 21 changes that break a safety property are caught at 20% by `ir_tfidf` and `observed_diverse`; the adaptive
-  method catches 84%.
-- Of the 23 batches of changes, 18 have a member that is a regression on its own. The adaptive method finds all 18
-  at both budgets, after one to eleven tests and 1.4% of the suite on average, and the component it blames most
-  belongs to such a member in all but one run ([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.6).
+- All 20 changes that break a safety property are caught at 20% by `ir_tfidf` and `observed_diverse`; the adaptive
+  method catches 89%.
 
 Replay-first changes the picture ([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.7). Replaying the 43 changed
 copies takes under a minute and no model:
 
 - Eight of the 43 changes are settled by the replay alone: on five no test diverges, and three are caught by a
-  test that replays to a failure. On average 33 of the 180 tests diverge, and what is left of them after their
+  test that replays to a failure. On average 34 of the 180 tests diverge, and what is left of them after their
   divergence points is 21% of the suite's tokens (8% for the median change).
-- The replayed outcome differs from the recorded one on 1 of 6,302 (change, test) pairs, and every regression
-  keeps a revealing test that diverges or fails in the replay.
-- With no budget, any order of the diverged tests finds all 29 regressions and gives no wrong clean verdict, for
-  7% to 10% of the suite's tokens per change. Without the replay, an order of the whole suite spends 33% to 45%.
-- Within a 5% budget the adaptive method goes from 74% of the regressions for 2.7% of the tokens to 93% for
-  1.4%, and `ir_tfidf` from 69% to 86%. Once the replay has pruned the suite, the order matters much less.
+- The replayed outcome is the recorded one on all 6,298 (change, test) pairs that replay to the end, and every
+  regression keeps a revealing test that diverges or fails in the replay.
+- With no budget, an order of the diverged tests finds 98% to 100% of the regressions and gives no wrong clean
+  verdict, for 9% to 10% of the suite's tokens per change. Without the replay, an order of the whole suite spends
+  34% to 47%.
+- Within a 5% budget the adaptive method goes from 78% of the regressions for 2.7% of the tokens to 96% for
+  1.4%, and `ir_tfidf` from 71% to 89%. Once the replay has pruned the suite, the order matters much less.
+- What replays exactly is the outcome, not every model call: about 2% of the requests a changed copy sends again
+  get another answer than the recorded one, under the same server, and no outcome moves. The empty change, the
+  original app run the way the changed copies are, flips none of the 180 tests.
 
-The full numbers, with intervals over the changes, are in the [Gemma report](docs/results/gemma7/report.md), and the
+The full numbers, with intervals over the changes, are in the [Gemma report](docs/results/gemma8/report.md), and the
 take-aways of the experiments in [RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.5. What follows from them is the plan
 in [TODO.md](TODO.md).
 
-Qwen3.8-27B's and gpt-oss-120b's recordings of the same app are not clean ground truths: recorded many tests at
-once, their answers vary with the batch, and every benign change appears revealed by a few tests. Gemma's recording
-holds: the empty change recorded fifteen times flips nothing, and the whole experiment recorded a second time moves
-4 of 7,740 labels. The models are used as they are served, so the two recordings are a finding, not a result
-([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.4).
+Three results were recorded on the app as it was before the fixes of TODO §3 (`runs/gemma7` and the recordings
+around it), and wait to be recorded again:
+
+- Batches of changes: of 23 batches, 18 have a member that is a regression on its own. The adaptive method finds
+  all 18 at both budgets, after one to eleven tests and 1.4% of the suite on average, and the component it blames
+  most belongs to such a member in all but one run ([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.6).
+- A second recording of the whole experiment from scratch moves 4 of 7,740 labels.
+- Qwen3.8-27B's and gpt-oss-120b's recordings are not clean ground truths: recorded many tests at once, their
+  answers vary with the batch, and every benign change appears revealed by a few tests. The models are used as
+  they are served, so the two recordings are a finding, not a result
+  ([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.4).
 
 ## Built for the Adobe Team
 

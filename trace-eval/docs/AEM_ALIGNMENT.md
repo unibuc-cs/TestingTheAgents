@@ -226,7 +226,7 @@ On Gemma's recording:
 
 - every feature has a test; the thinnest are the site health check (five tests), then scheduling, page analytics
   and rollback (six each);
-- the tests reach 15 of the 31 places where a tool refuses: no test asks for the data of a person the platform does
+- the tests reach 15 of the 32 places where a tool refuses: no test asks for the data of a person the platform does
   not know, has a service refuse a user for a missing role, or sends the dispatcher an unknown tool or malformed
   arguments.
 
@@ -235,7 +235,7 @@ publishing without a required review, scheduling switched off, and the link chec
 the five settings at a non-default value; no case runs with idempotency keys or the required meta description
 switched off.
 
-The report, and `traceeval coverage --history runs/gemma7` in the terminal, also give for each agent, skill, tool
+The report, and `traceeval coverage --history runs/gemma8` in the terminal, also give for each agent, skill, tool
 and feature the number of tests that declare it and the number that invoke it. On Gemma's recording the two counts
 disagree in telling ways:
 

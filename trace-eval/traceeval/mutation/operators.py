@@ -50,3 +50,17 @@ def delete_block(sut_dir: Path, rel: str, start_containing: str, until_containin
 def append(sut_dir: Path, rel: str, new_text: str):
     path = Path(sut_dir) / rel
     path.write_text(path.read_text() + new_text)
+
+
+def replace_lines(sut_dir: Path, rel: str, first: int, old: str, new: str):
+    """Replace the whole lines that start at line ``first`` (counted from 1), which must read ``old``, by ``new``
+    (whole lines too; empty deletes them). For an edit whose text occurs more than once in the file, as the
+    generated changes' do (``generator.py``): the line number says which occurrence, and the text is the anchor."""
+    path = Path(sut_dir) / rel
+    lines = path.read_text().splitlines(keepends=True)
+    n = len(old.splitlines())
+    found = "".join(lines[first - 1 : first - 1 + n])
+    if found != old:
+        raise PatchError(f"line {first} of {rel} does not read {old!r} but {found!r}")
+    lines[first - 1 : first - 1 + n] = [new] if new else []
+    path.write_text("".join(lines))

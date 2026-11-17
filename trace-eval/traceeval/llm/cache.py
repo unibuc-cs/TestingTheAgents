@@ -15,10 +15,12 @@ in the next start's answers, and the app sends them back in later prompts. With 
 replaces every tool-call id by its order of appearance in the conversation, so the recorded answers are found
 again whatever the ids; the answers keep the ids the server gave.
 
-Two more clients serve replay-first testing (``experiment/replay_first.py``). ``Tee`` stands in front of the model
-while the original app is recorded and keeps every answer, which becomes the recording's own cassette.
+Three more clients serve replay-first testing (``experiment/replay_first.py``). ``Tee`` stands in front of the
+model while the original app is recorded and keeps every answer, which becomes the recording's own cassette.
 ``ReplayFirstClient`` answers from that cassette on a changed copy of the app, counts what it could answer, and
 passes the requests the original app never made on to the model, or reports them when there is none.
+``Compare`` stands in front of the model while the changed copies are recorded, and counts the requests the model
+answers otherwise than the cassette does.
 """
 
 import hashlib
@@ -187,6 +189,55 @@ class ReplayFirstClient(CachedClient):
         if self.live is None:
             raise CacheMiss("a request the original app never made: the change reaches the model here")
         return self.live.chat.completions.create(**request)
+
+
+class Compare:
+    """In front of the model while a changed copy of the app is recorded: every request goes to the model, and its
+    answer is compared with the one the original app got for the same request, when the recording's cassette holds
+    it. Nothing is answered from the cassette. Replay-first rests on a model call being a function of its request;
+    this counts, on the recording's own serving setup, how often it is not.
+
+    The counts are per run and per thread (``begin`` before a run, ``counts`` after it, both in the thread that
+    makes the run), so the runs of a suite may reach the server together:
+
+        requests   the model calls the run made
+        known      those the original app made too: the cassette has the request
+        differ     of those, the ones the model now answers otherwise (another text, or other tool calls)
+    """
+
+    def __init__(self, inner, path: str | Path, canonical_ids: bool = False):
+        self.inner = inner  # the client that answers every request
+        self.model_id = inner.model_id
+        self.canonical_ids = canonical_ids
+        self.answers = CachedClient(None, path, inner.model_id, canonical_ids).answers  # request key -> answer
+        self._run = threading.local()  # the counts of the run this thread is making
+        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self.create))
+
+    def begin(self):
+        """Before each run, in its thread: start its counts."""
+        self._run.counts = {"requests": 0, "known": 0, "differ": 0}
+
+    def counts(self) -> dict:
+        """After a run, in its thread: what it counted."""
+        return dict(getattr(self._run, "counts", {}))
+
+    def create(self, **request):
+        """One model call, answered by ``inner`` and compared with the recorded answer to the same request."""
+        resp = self.inner.chat.completions.create(**request)
+        counts = getattr(self._run, "counts", None)
+        if counts is not None:
+            counts["requests"] += 1
+            recorded = self.answers.get(request_key(request, self.canonical_ids))
+            if recorded is not None:
+                counts["known"] += 1
+                counts["differ"] += _said(recorded) != _said(_to_record(resp))
+        return resp
+
+
+def _said(answer: dict) -> tuple:
+    """What an answer says: its text and its tool calls with their arguments. The ids of the calls and the token
+    counts are left out: a server may make up other ids for the same answer."""
+    return answer["content"] or "", [(c["name"], c["arguments"]) for c in answer["tool_calls"]]
 
 
 def _to_record(resp) -> dict:

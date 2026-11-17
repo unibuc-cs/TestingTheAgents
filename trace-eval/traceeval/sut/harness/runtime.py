@@ -16,6 +16,9 @@ from .skills import SkillLoader
 # E.g., with the limit at 3, the orchestrator can hand the request to a specialist, that specialist can
 # hand it on, and the next agent can hand it on once more; at 0, no agent may delegate at all.
 MAX_DELEGATION_DEPTH = 3
+# The context slots a delegation cannot set: the user the request comes from, and the token of the person who
+# approved a guarded step. The runtime carries both itself, from the request and from ``request_approval``.
+HARNESS_SLOTS = ("user_id", "approval_token")
 
 
 @dataclass
@@ -125,10 +128,15 @@ class Runtime:
         """Run one agent's turn and return its final message. The turn ends when the backend gives a final
         answer or when the run's step budget is used up. ``depth`` is the number of delegations that led
         to this agent (0 for the entry agent)."""
-        # Announce the agent. Version and digest identify exactly which definition ran.
+        # Announce the agent. Version and digest identify exactly which definition ran; ``tools`` are the tools the
+        # model is offered in this turn (those of the definition that the registry knows), each with its schema.
+        # The run depends on what those schemas say whether or not it calls the tool.
         agent = self.agents.load(agent_name)
         self.agent_path.append(agent_name)
-        self.tracer.event("agent.start", agent=agent.name, version=agent.version, digest=agent.digest, depth=depth)
+        offered = [t for t in agent.tools if t in self.dispatcher.tools]
+        self.tracer.event(
+            "agent.start", agent=agent.name, version=agent.version, digest=agent.digest, depth=depth, tools=offered
+        )
         # Load the skills the definition names; each load is traced, so the run depends on these skills.
         skills = [self.skills.load(s) for s in agent.skills]
         # An orchestrator chooses by reading the triggers and the description of every specialist (the LLM
@@ -177,9 +185,17 @@ class Runtime:
         """Carry out a ``route_to_agent`` call. The target agent runs one level deeper, on its own instruction
         (``task``; the request itself when there is none) and on the request context plus the values the call
         passes (``context``: the ids earlier steps of a plan reported). Its final message comes back as
-        the result of the call. An unknown target, a context that is not an object, or a chain that is
-        already at the depth limit gets an error result instead, which the delegating agent sees like any
-        other refused call."""
+        the result of the call. A delegation the agent may not make, an unknown target, arguments or a context
+        that are not an object, or a chain that is already at the depth limit gets an error result instead,
+        which the delegating agent sees like any other refused call."""
+        # The dispatcher's gates hold for a delegation as for any tool call: the configuration can switch it off,
+        # and only an agent whose definition lists ``route_to_agent`` may delegate.
+        refusal = self.dispatcher.gate(agent, action.name)
+        if refusal is None and not isinstance(action.args, dict):
+            refusal = {"error": "invalid_arguments", "message": "the arguments must be an object of named values"}
+        if refusal is not None:
+            self.tracer.event("agent.route", source=agent.name, target=None, status="error", reason=refusal["error"])
+            return refusal
         # The call's arguments: the specialist, why it was chosen, the instruction of this step (the whole request
         # when the call gives none) and the values to pass on to it.
         target = action.args.get("agent")
@@ -193,6 +209,9 @@ class Runtime:
         if not isinstance(slots, dict):
             self.tracer.event("agent.route", source=agent.name, target=target, status="error", reason="bad_context")
             return {"error": "invalid_arguments", "message": "context must be an object of named values"}
+        # Who is asking, the approval a person gave and the harness's own switches are the harness's to carry: a
+        # model must not be able to replace them through the values it passes on.
+        slots = {k: v for k, v in slots.items() if k not in HARNESS_SLOTS and not k.startswith("_")}
         # Refuse to nest deeper than the limit, which also ends any chain of agents handing the request on.
         if depth >= MAX_DELEGATION_DEPTH:
             self.tracer.event("agent.route", source=agent.name, target=target, status="error", reason="max_depth")

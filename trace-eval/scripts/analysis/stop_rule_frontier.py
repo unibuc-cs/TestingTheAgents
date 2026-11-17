@@ -24,7 +24,7 @@ REGISTERED = ("declared", "observed", "observed_diverse", "cost_aware", "ir_tfid
 
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
 keep_red = "--keep-red" in sys.argv
-h, cat = load(args[0] if args else "runs/gemma7")
+h, cat = load(args[0] if args else "runs/gemma8")
 variants, tests, full = sorted(h.variants), h.test_ids(), h.total_cost()
 revealing = {v: h.revealing_tests(v) for v in variants}
 passes = {t: h.baseline_pass_rate(t) >= 0.5 for t in tests}

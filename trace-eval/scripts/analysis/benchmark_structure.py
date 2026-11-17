@@ -3,7 +3,7 @@ regression and how many regressions rest on a single test, the cheapest revealin
 oracle would spend), how many hypotheses the adaptive method reasons about per change, and how selective the
 dependencies observed in traces are.
 
-    python scripts/analysis/benchmark_structure.py [recording]     # default runs/gemma7
+    python scripts/analysis/benchmark_structure.py [recording]     # default runs/gemma8
 """
 
 from collections import Counter

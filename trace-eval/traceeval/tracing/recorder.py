@@ -3,9 +3,9 @@
 The SUT emits flat events (``tracer.event(kind, **attrs)``); the recorder turns them into a
 normalised trace document with the dependency information the selectors consume:
 
-    agents, skills (name and version), tools (every call with its arguments and status), config keys
-    read, agent-definition fields consulted for routing, delegations, token usage, steps, final message,
-    termination reason
+    agents, skills (name and version), tools (every call with its arguments and status), the tools each
+    agent was offered, config keys read, agent-definition fields consulted for routing, delegations, token
+    usage, steps, final message, termination reason
 
 The SUT code each test executed is not part of the trace: ``codecov`` measures it and the runner adds it
 to the run's record. ``otel`` exports a trace as OpenTelemetry spans.
@@ -56,6 +56,11 @@ class TraceRecorder:
                 out.append(e["agent"])
         return out
 
+    def tools_offered(self) -> list[str]:
+        """Every tool an agent of the run was offered, once each: its schema was in that agent's requests, so the
+        run depends on what the schema says even when the tool is never called."""
+        return sorted({t for e in self.events if e["kind"] == "agent.start" for t in e.get("tools", [])})
+
     def routes(self) -> list[tuple[str, str]]:
         """Successful delegations only (a refused delegation is not a route)."""
         return [
@@ -96,6 +101,7 @@ class TraceRecorder:
             # the version of each skill as loaded, so a changed skill shows against the baseline's trace
             "skill_versions": {e["skill"]: e["version"] for e in self.events if e["kind"] == "skill.load"},
             "tools": self.tools_called(),
+            "tools_offered": self.tools_offered(),
             # the calls without their times: the scorers check what was called, not when
             "tool_calls": [{k: v for k, v in e.items() if k != "t"} for e in self.tool_calls()],
             "config_keys": self.config_keys(),

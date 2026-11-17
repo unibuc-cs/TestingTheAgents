@@ -12,12 +12,15 @@ pip install -e ".[dev,ml]"          # or: uv pip install --python .venv -e ".[de
 pytest -q                           # ~90 s; must stay green; replays Gemma's recorded answers (tests/cassettes/)
 ruff check traceeval tests          # rules and line length come from pyproject.toml
 ruff format traceeval tests         # see "Gotchas" before formatting sut/
-traceeval experiment --backend vllm --workdir runs/gemma7 --reps 5   # full experiment, Gemma on the GPU server, about two hours
-traceeval experiment --backend llm --workdir runs/qwen7 --reps 5     # the same with Qwen (scripts/gpu_remote.sh up qwen)
-traceeval replay-first --workdir runs/gemma7                        # every changed copy on the original app's answers, no model
-traceeval evaluate --workdir runs/gemma7 && traceeval report --workdir runs/gemma7   # the strategies, then the report
-traceeval check skill_routing_drop_approval --history runs/gemma7   # the prototype: one change, replayed then live
-traceeval coverage --history runs/gemma7                            # coverage of the suite, per dimension and component
+traceeval experiment --backend vllm --workdir runs/gemma8 --reps 5   # full experiment, Gemma on the GPU server, about two hours
+traceeval experiment --backend llm --workdir runs/qwen8 --reps 5     # the same with Qwen (scripts/gpu_remote.sh up qwen)
+traceeval replay-first --workdir runs/gemma8                        # every changed copy on the original app's answers, no model
+traceeval mutations --generated                                     # the changes made mechanically from the app (no labels)
+traceeval replay-first --workdir runs/gemma8_gen --generated        # every generated change replayed for free; no copy kept
+traceeval mutants --workdir runs/gemma8_gen --reps 5 --generated --reached-only --backend vllm   # record them, only the tests each reaches
+traceeval evaluate --workdir runs/gemma8 && traceeval report --workdir runs/gemma8   # the strategies, then the report
+traceeval check skill_routing_drop_approval --history runs/gemma8   # the prototype: one change, replayed then live
+traceeval coverage --history runs/gemma8                            # coverage of the suite, per dimension and component
 traceeval run --test PUB-01 --backend replay --otel trace.json   # one case; its trace as OpenTelemetry spans
 traceeval sdd --workdir runs/sdd                                 # spec-driven development demo, replayed
 traceeval properties draft [--fresh] | apply                     # a model drafts the catalog of properties; you edit
@@ -37,7 +40,8 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
   the catalog of properties with a model.
 - `traceeval/tracing/` — trace recorder, coverage contexts, OpenTelemetry export (`otel.py`).
 - `traceeval/scoring/` — deterministic scorers, and the model judge for cases with a rubric (`TRACEEVAL_JUDGE`).
-- `traceeval/mutation/` — controlled changes (patch operators), change-set extraction.
+- `traceeval/mutation/` — controlled changes (patch operators), change-set extraction; `generator.py`, the
+  changes made mechanically from the app, which have no label.
 - `traceeval/selection/` — `base.py` the interface and the two rules every run follows, `strategies.py` baselines
   (and the two orders only the replay-first comparison runs),
   `adaptive_bayes.py` the proposed method (two text variants and one ablation without its mandatory-coverage rule),
@@ -45,10 +49,12 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
   `extras.py` two more baselines.
 - `traceeval/experiment/` — SUT loader, executor, history, runner, replay evaluator, metrics, coverage, report;
   `replay_first.py`, which tests a change reaches, found by replaying the original app's recorded answers;
+  `manifest.py`, what a recording was made from and with, and what differs from today's files (`drift`);
+  `generated.py`, the generated changes of a recording replayed for free;
   `check.py`, the prototype (one change: the replay, then the method live over the tests that diverge).
 - `traceeval/llm/` — Gemma's client (`chat.py`: prompt, engines, parsing, which model judges) and the answer cache
-  (`cache.py`, with the two clients of replay-first: `Tee` keeps a baseline's answers, `ReplayFirstClient` replays
-  them).
+  (`cache.py`, with the three clients of replay-first: `Tee` keeps a baseline's answers, `ReplayFirstClient`
+  replays them, `Compare` counts the requests a changed copy's recording gets answered otherwise).
 - `traceeval/spec/` — spec-driven development layer: clause catalog (`catalog.yaml`) and model, one checker per
   clause kind (`checks/`), product model, demo PRs, runner, report, drafting with a model (`draft.py`).
   Specs live in `traceeval/specs/FS-*.yaml` as catalog templates + slots (see `docs/SDD_GUIDE.md`).
@@ -63,9 +69,12 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
 
 - Every module starts with a docstring stating its role; keep that when adding modules.
 - Component identifiers are shared between change sets and dependencies
-  (`code:<file>::<fn>`, `code:<file>`, `line:<file>:<n>`, `tool:`, `skill:<name>#procedure|#prose|#meta`,
-  `agent:<name>.<field>`, `config:<key>`, `fixture:<name>`; property sources may also cite `spec:<id>`); do not
-  invent parallel schemes.
+  (`code:<file>::<fn>`, `code:<file>`, `line:<file>:<n>`, `tool:<name>`, `tool:<name>#schema`,
+  `skill:<name>#procedure|#prose|#meta`, `agent:<name>.<field>`, `config:<key>`, `fixture:<name>`; property
+  sources may also cite `spec:<id>`); do not invent parallel schemes.
+- A dependency is what a run was sent as well as what it did: `tool:<name>#schema` for every tool an agent was
+  offered (`agent.start` lists them), `fixture:<name>` for the starting data. `selection/base.py::matches` is the
+  one place that says which component touches which dependency.
 - Strategies may use only baseline history, change sets and *other* variants' outcomes (`ctx.train_variants`; a
   variant is a copy of the app with one change applied); never the variant under evaluation, nor, for a batch, its
   members (`History.training_variants`).
@@ -76,11 +85,23 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
   tests `ctx.runnable` and scores with `ctx.cost`; it never reads the replay itself.
 - A recording's cassette (`history/cassette.jsonl`) holds the answers of its original app and nothing else: only
   `traceeval baseline` writes it, and a request it lacks means that the change reaches the model.
+- A recording's changed copies are made from its own copy of the original app (`variants/baseline/sut`), and its
+  manifest (`history/manifest.json`) says what it was made from and with. The empty change
+  (`history/unchanged.jsonl`, `History.unchanged`) is the original app run as the changed copies are: it is never
+  among `History.variants`, and a test that fails under it reveals no change.
+- A (change, test) pair with no valid run is missing (`History.missing`): `ctx.runnable` is false for it, and it
+  reveals nothing. A run whose judge gave no verdict is such a run (`INFRA_INVALID`).
 - Change sets hold code only: comments, docstrings, blank lines and formatting add no component and no diff
-  line (`mutation/changeset.py`), so no strategy and no probability may depend on them.
+  line (`mutation/changeset.py`), so no strategy and no probability may depend on them. What the model is sent
+  counts as it is sent: a skill's front matter and prose as text, its procedure as the parsed steps in their
+  order, a tool's description and parameters (`tool:<name>#schema`), the agents an orchestrator lists
+  (`agent:<name>.specialists`).
 - Mutation operators assert their anchors; a new mutation labelled a regression must be revealed by ≥ 1 test under
-  at least one model, and one labelled benign by none (section 1 of `docs/results/gemma7/report.md` gives the
-  counts).
+  at least one model, and one labelled benign by none (section 1 of `docs/results/gemma8/report.md` gives the
+  counts). A generated change (`g_<kind>_<where>_<n>`) has no label: the recording says whether a test reveals
+  it. Its edits name a line and the text expected there, so it applies only to the app it was generated from.
+- A copy recorded with `--reached-only` has runs of the tests that diverge in its replay; the others have one
+  record each, their replayed run, marked `stand_in`. The copy is not kept.
 - A test's `properties` must be ids from `traceeval/catalog/properties.yaml` (the catalog of properties; see
   docs/AEM_ALIGNMENT.md); add a property there before using it.
 - A test that runs a multi-agent workflow end to end names it (`workflow: W1`), an id from
@@ -97,6 +118,12 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
   random.
 - A test that expects a tool error declares it (`expect.tool_errors: {tool: code}`); any other unrecovered tool
   error or tool crash fails the test as TOOL_ERROR.
+- A test about a refusal has a positive condition, so that an agent that does nothing fails it:
+  `tools_required` for the check that must have succeeded, or `tools_attempted` for the call that must have been
+  tried (`scripts/analysis/probes/probe_oracles.py` lists the cases without one).
+- A context slot that starts with `_` is a switch for the harness (`_route_only`) and is not shown to the model.
+  The user, the approval token and those switches are the harness's to carry: a delegation cannot set them
+  (`sut/harness/runtime.py::HARNESS_SLOTS`).
 - Demo PRs in `traceeval/spec/prs.py` are mutations too (literal anchors, same rule); every PR's expected
   verdict is checked by `tests/test_sdd.py` and flagged in the sdd report when it differs.
 - A new clause template is an entry in `traceeval/spec/catalog.yaml` and a row in `docs/SDD_GUIDE.md` §3; a new
@@ -118,7 +145,9 @@ TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM 
   missing answers with `TRACEEVAL_BACKEND=vllm pytest -q` and commit `tests/cassettes/gemma.jsonl`; to drop
   answers nothing asks for any more, delete the file first and record everything again.
 - `runs/*/history/*.jsonl` include line-level coverage and are large; do not commit them. For the same reason a
-  history recorded before a code change no longer fits `traceeval check` (lines move): record a new one.
+  history recorded before a change to `traceeval/sut`, a comment included, no longer fits `traceeval check` (lines
+  move, requests change): the check refuses it (`experiment/manifest.py::drift`); record a new one. Do not edit
+  `traceeval/sut/` or the catalog while a recording runs: its steps read both more than once.
 - A Gemma recording made before cassettes were kept gets its cassette from `tests/cassettes/gemma.jsonl` the first
   time it is replayed, which works while that file still holds the answers of the recording's app. Qwen's and
   gpt-oss's recordings have no such source: `traceeval replay-first` refuses them until their baseline is

@@ -26,16 +26,19 @@ from traceeval.experiment.evaluate import evaluate, make_oracle
 from traceeval.experiment.executor import read_jsonl, write_jsonl
 from traceeval.experiment.history import History
 from traceeval.experiment.history import TestStats as RunStats  # not under a name pytest would collect
+from traceeval.experiment.manifest import baseline_copy, drift, load_manifest, tree_digest
 from traceeval.experiment.metrics import apfd, apfdc, evaluate_log
 from traceeval.experiment.replay_first import Replays, cassette_path, replay_first
 from traceeval.experiment.report import write_report
 from traceeval.experiment.runner import record_baseline, record_mutants
 from traceeval.experiment.sutloader import copy_sut
-from traceeval.mutation import MUTATIONS, get_mutation, materialize_variant
+from traceeval.mutation import MUTATIONS, compute_changeset, get_mutation, materialize_variant
 from traceeval.mutation.changeset import ChangedComponent, ChangeSet, _flatten, _python_components, _yaml_code_lines
+from traceeval.mutation.generator import generate, kind_of, sample, split
+from traceeval.mutation.operators import PatchError
 from traceeval.selection import CORE, SelectionContext, Strategy, get_strategy
 from traceeval.selection.adapted import fit_logistic, kmeans, run_signals, sigmoid
-from traceeval.selection.base import ExecutionLog
+from traceeval.selection.base import ExecutionLog, matches, weighted_affinity
 from traceeval.sut import SUT_ROOT
 
 COMMENT_ONLY = {"benign_code_comment_docstring", "benign_config_comments_reordered"}
@@ -182,23 +185,21 @@ def test_apfd_metrics():
     assert apfdc(order, {"z"}, cost) == 0.0
 
 
+def _stats(test, *outcomes):
+    """The recorded runs of one test, one per outcome (True: it passed)."""
+    s = RunStats(test)
+    for passed in outcomes:
+        outcome = "PASS" if passed else "AGENT_FAILURE"
+        s.add({"test_id": test, "passed": passed, "classification": outcome, "tokens": 100, "latency_ms": 1.0})
+    return s
+
+
 def _tiny_recording():
     """Four tests and one changed copy, built by hand: ``red`` fails on the original app, ``b`` fails on the changed
-    copy in every run, and ``c`` in one run of three."""
-
-    def run(test, passed):
-        outcome = "PASS" if passed else "AGENT_FAILURE"
-        return {"test_id": test, "passed": passed, "classification": outcome, "tokens": 100, "latency_ms": 1.0}
-
-    def stats(test, *outcomes):
-        s = RunStats(test)
-        for passed in outcomes:
-            s.add(run(test, passed))
-        return s
-
+    copy in every run, ``c`` in one run of three, and ``a`` has no run there."""
     h = History()
-    h.baseline = {t: stats(t, t != "red") for t in ("red", "a", "b", "c")}
-    h.variants["v"] = {"red": stats("red", False), "b": stats("b", False), "c": stats("c", True, True, False)}
+    h.baseline = {t: _stats(t, t != "red") for t in ("red", "a", "b", "c")}
+    h.variants["v"] = {"red": _stats("red", False), "b": _stats("b", False), "c": _stats("c", True, True, False)}
     catalog = {t: EvalCase(id=t, name=t, agent="orchestrator", request=t) for t in h.baseline}
     return h, catalog
 
@@ -220,15 +221,106 @@ def test_every_run_leaves_out_the_red_tests_and_ends_at_the_first_failure():
     assert log.executed == ["a", "b"] and log.stop_reason == "regression"
     row = evaluate_log(log, "v", h, catalog, 1000)
     assert row["detected"] and not row["false_alarm"] and row["stop_correct"] and row["cost"] == 200
-    log = run("unchanged", 1000)  # a copy nothing was recorded on behaves like the original app: every test passes
+    log = run("unrecorded", 1000)  # asked about a copy with no runs, the oracle answers as the original app
     assert log.executed == ["a", "b", "c"] and log.stop_reason == "exhausted"
-    log = run("unchanged", 200)  # the budget keeps c out: no verdict
+    log = run("unrecorded", 200)  # the budget keeps c out: no verdict
     assert log.executed == ["a", "b"] and log.stop_reason == "budget"
     # a failure of a test that passes by majority on the changed copy is a false alarm; a red test's failure is not
     one_off = ExecutionLog("x", steps=[("c", False, 100.0)], stop_reason="regression")
     row = evaluate_log(one_off, "v", h, catalog, 1000)
     assert row["false_alarm"] and not row["detected"]
     assert not evaluate_log(ExecutionLog("x", steps=[("red", False, 100.0)]), "v", h, catalog, 1000)["false_alarm"]
+
+
+def test_a_missing_pair_is_not_run_and_the_empty_change_takes_its_failures_out():
+    h, catalog = _tiny_recording()
+    # "a" has no run on the changed copy: the pair is missing, so no strategy is given the test and it reveals nothing
+    assert h.missing("v") == {"a"} and h.summary()["missing_pairs"] == 1
+    ctx = SelectionContext(ChangeSet("v"), catalog, h, 1000, random.Random(0), missing=h.missing("v"))
+    assert [t for t in h.baseline if ctx.runnable(t)] == ["b", "c"]
+    assert h.revealing_tests("v") == {"b"} and h.unchanged_flips() == []
+    # the empty change: "b" also fails when the original app is run the way the changed copies are, so its failure
+    # on the changed copy is the way of running, not the change
+    h.unchanged = {"b": _stats("b", False, False, True), "c": _stats("c", True)}
+    assert h.unchanged_flips() == ["b"] and h.revealing_tests("v") == set()
+
+
+def _edited(folder, rel: str, old: str, new: str):
+    """A copy of the app in ``folder`` with one piece of text replaced in the file ``rel``."""
+    path = copy_sut(folder) / rel
+    text = path.read_text()
+    assert text.count(old) == 1, old
+    path.write_text(text.replace(old, new))
+    return folder
+
+
+def test_what_the_model_is_sent_is_in_the_change_set(tmp_path):
+    """Edits that leave the harness as it is and change a prompt each have a component, one the tests' recorded
+    dependencies match."""
+    skill, described = "skills/publishing-workflow/SKILL.md", "Publish, schedule or unpublish a page safely"
+    edits = {
+        # the arguments of a step in another order: the step is shown with them in that order
+        "skill:publishing-workflow#procedure": (
+            skill,
+            "args: {page_id: $page_id, reviewer_id: $approver}",
+            "args: {reviewer_id: $approver, page_id: $page_id}",
+        ),
+        # a front-matter value spaced another way and a re-wrapped paragraph: the file goes into the prompt as written
+        "skill:publishing-workflow#meta": (skill, f"description: {described}", f"description:  {described}"),
+        "skill:publishing-workflow#prose": (
+            skill,
+            "check the permission for the requested action, then (for\npublishing",
+            "check the permission for the requested action,\nthen (for publishing",
+        ),
+        # what an agent is told about a tool it is offered
+        "tool:schedule_publish#schema": (
+            "tools/publish_tools.py",
+            '"Schedule a page to be published at a given time."',
+            '"Publish a page, now or at a given time."',
+        ),
+    }
+    for component, (rel, old, new) in edits.items():
+        assert component in compute_changeset(SUT_ROOT, _edited(tmp_path / "edit", rel, old, new)).ids(), component
+    # a comment inside the procedure block is not sent: the steps are written from the parsed YAML
+    step = "args: {page_id: $page_id, reviewer_id: $approver}"
+    commented = _edited(tmp_path / "edit", skill, step, step + "  # a note")
+    assert compute_changeset(SUT_ROOT, commented).is_provably_benign()
+    # nor is the order of a step's own keys: a step is read by their names
+    reordered = _edited(tmp_path / "edit", skill, "- id: fetch\n  call: get_page\n", "- call: get_page\n  id: fetch\n")
+    assert compute_changeset(SUT_ROOT, reordered).is_provably_benign()
+    # a new agent: no test depends on it, yet the orchestrator now routes every request among one more specialist
+    added = copy_sut(tmp_path / "edit")
+    (added / "agents" / "legal.yaml").write_text("name: legal\ndescription: Legal holds.\ntriggers: [legal]\n")
+    roster = {c.id: c for c in compute_changeset(SUT_ROOT, added).components}["agent:orchestrator.specialists"]
+    assert roster.detail == "added: agent:legal" and matches(roster, {"agent:orchestrator"})
+    # the schema reaches the tests whose agents were offered the tool; the adapter's body only those that called it
+    schema = ChangedComponent("tool:schedule_publish#schema", "tool-schema", "tools/publish_tools.py")
+    adapter = ChangedComponent("tool:schedule_publish", "tool", "tools/publish_tools.py")
+    offered = {"tool:schedule_publish#schema"}
+    assert matches(schema, offered) and matches(schema, {"tool:schedule_publish"}) and not matches(adapter, offered)
+    # a package's __init__ runs before every module of the package (it is where the tools are registered)
+    init = ChangedComponent("code:tools/__init__.py", "code", "tools/__init__.py")
+    ran = {"code:tools/site_tools.py::audit_site": 0.5}
+    assert matches(init, set(ran)) and not matches(init, {"code:services/site.py::audit"})
+    assert weighted_affinity(ChangeSet("v", components=[init]), ran) == 0.5
+
+
+def test_a_recording_knows_the_app_it_was_made_on(tmp_path):
+    """The digest of the app ignores the kind of line ending and nothing else; a recording whose copy of the app
+    is not traceeval/sut as it is now is refused by the check."""
+    app = copy_sut(tmp_path / "app")
+    retry = app / "harness" / "retry.py"
+    retry.write_bytes(retry.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+    assert tree_digest(app) == tree_digest(SUT_ROOT)
+    retry.write_text("# a comment moves every line below it\n" + retry.read_text())
+    assert tree_digest(app) != tree_digest(SUT_ROOT)
+    work = tmp_path / "recording"
+    copy_sut(baseline_copy(work), app)  # a recording made on that app
+    assert set(drift(work)) == {"app"}
+    with pytest.raises(SystemExit, match="differs from the app"):
+        check("code_retry_drop_idempotency", work, 0.2, "replay")
+    copy_sut(baseline_copy(work))  # and one made on today's
+    assert drift(work) == {}
 
 
 def test_training_leaves_out_the_changes_a_batch_shares():
@@ -245,10 +337,21 @@ def test_training_leaves_out_the_changes_a_batch_shares():
 def test_small_end_to_end_experiment(tmp_path, capsys):
     work = tmp_path / "exp"
     record_baseline(work, reps=1)
-    record_mutants(work, mutation_ids=["skill_publish_drop_link_validation", "benign_skill_prose_reflow"], reps=1)
+    changes = ["skill_publish_drop_link_validation", "benign_skill_prose_reflow"]
+    record_mutants(work, mutation_ids=["unchanged", *changes], reps=1)
     h = History.load(work)
     assert h.revealing_tests("skill_publish_drop_link_validation")
     assert not h.revealing_tests("benign_skill_prose_reflow")
+    # the empty change is no change to evaluate: the original app, run as the changed copies are, ends as in the
+    # baseline, and every request it sends is one the baseline sent, answered the same
+    assert sorted(h.variants) == sorted(changes) and set(h.unchanged) == set(h.baseline)
+    assert h.unchanged_flips() == [] and not any(h.missing(v) for v in changes)
+    asked = [r["cassette"] for stats in h.unchanged.values() for r in stats.runs]
+    assert all(c["requests"] == c["known"] > 0 and c["differ"] == 0 for c in asked)
+    # the manifest says what the recording was made from and with, and nothing has moved since
+    manifest = load_manifest(work)
+    assert manifest["app"] == tree_digest(SUT_ROOT) and manifest["model"] and manifest["catalog"]
+    assert (manifest["baseline"]["reps"], manifest["changes"]["workers"]) == (1, 1) and drift(work) == {}
     catalog = {c.id: c for c in load_catalog()}
     red = {t for t in h.baseline if h.baseline_pass_rate(t) < 0.5}
     # every strategy that uses the change or the traces, and the bandit's variant, which the default comparison omits
@@ -271,6 +374,12 @@ def test_small_end_to_end_experiment(tmp_path, capsys):
         assert set(oracle.records) == set(log.executed), name  # the runs it was answered with, for their signals
     df = evaluate(work, strategies=["observed", "adaptive_bayes"], budgets=(0.2, 1.0), seeds=1)
     assert set(df.strategy) == {"observed", "adaptive_bayes"}
+    # a held-out evaluation: one change evaluated, the strategies that learn given the other one only
+    held = evaluate(work, ["history_ml", "adaptive_bayes"], (1.0,), 1, variants=changes[:1], train=changes[1:])
+    assert set(held.variant) == set(changes[:1]) and held.detected.all()
+    # shared out among two processes, the changes get the rows one process gives them
+    two = evaluate(work, strategies=["observed", "adaptive_bayes"], budgets=(0.2, 1.0), seeds=1, jobs=2)
+    assert two.equals(df)  # and results/replay.csv is again the file the report reads
     # coverage: the suite by dimension, and each run's change coverage (no ground truth needed)
     props = load_properties()
     rows = {r["dimension"]: r for r in suite_coverage(h, catalog, props, SUT_ROOT)}
@@ -323,6 +432,7 @@ def test_small_end_to_end_experiment(tmp_path, capsys):
     assert 0 < clean.cost_fraction < clean.whole_cost_fraction < 1
     report = write_report(work).read_text(encoding="utf-8")
     assert "## 7. Replay-first" in report and (work / "results" / "figures" / "replay_first.png").exists()
+    assert "- The empty change" in report and "request by request" in report
     # the prototype: the same change checked live (here on recorded answers), from this history: replay first,
     # then the method over the tests that diverge
     log = check("skill_publish_drop_link_validation", work, 0.3, "replay")
@@ -338,6 +448,77 @@ def test_small_end_to_end_experiment(tmp_path, capsys):
     write_jsonl(work / "history" / "replay_first.jsonl", rows)
     one = evaluate(work, ["ir_tfidf"], (1.0,), 1, ["benign_skill_prose_reflow"], replay_first=True).iloc[0]
     assert one.stop_reason == "regression" and one.cost_fraction == 0 and one.tests_run == 0 and one.false_alarm
+    # the benign change recorded again for the tests it reaches only: the others have no run, the replay gives their
+    # outcome, and every test ends as it did when the whole suite was recorded
+    benign, whole = "benign_skill_prose_reflow", History.load(work)
+    comment = "g_comment_links_1"  # a generated change: a comment, which no test's requests can show
+    record_mutants(work, mutation_ids=[benign, comment], reps=1, reached_only=True)
+    runs, lean = read_jsonl(work / "history" / "variants" / f"{benign}.jsonl"), History.load(work)
+    asked = {r["test_id"] for r in runs if not r.get("stand_in")}  # the runs that went to the model
+    assert asked == set(replays.diverged(benign)) and len(runs) == len(lean.variants[benign]) == 180
+    assert not lean.missing(benign) and not lean.revealing_tests(benign)
+    assert all(lean.variant_pass_rate(benign, t) == whole.variant_pass_rate(benign, t) for t in whole.baseline)
+    # the generated change: every test replays, so none is run; its copy is not kept, what its diff touched is
+    assert all(st.runs[0]["stand_in"] for st in lean.variants[comment].values()) and len(lean.variants[comment]) == 180
+    assert lean.mutation_meta[comment]["expected_regression"] is None and not lean.changesets[comment].components
+    assert not (work / "variants" / comment / "sut").exists() and not lean.revealing_tests(comment)
+    assert not Replays.load(work).diverged(comment)
+    assert "no label" in write_report(work).read_text(encoding="utf-8")
+
+
+def test_generated_changes_apply_and_leave_an_app_that_loads(tmp_path):
+    """Every generated change applies to the app it was generated from and leaves files that still parse; the ids
+    are unique, tell the kind and fit a Windows path; a sample has the change set its kind should give."""
+    changes = generate()
+    kinds = {kind_of(m.id) for m in changes}
+    skills, others = "stepdel stepswap whennot guarddel ruledel rewrap", "tooldrop setting argswap tooldesc condnot"
+    assert kinds == {*skills.split(), *others.split(), "comment", "fixture"}
+    assert len(changes) > 300 and max(len(m.id) for m in changes) <= 40
+    assert all(m.expected_regression is None for m in changes)  # no label: the recording decides
+    assert get_mutation(changes[0].id).id == changes[0].id
+    # the sample is fixed by the ids and the seed, and holds at most so many of each kind
+    drawn = sample(changes, 2)
+    assert [m.id for m in drawn] == [m.id for m in sample(changes, 2)] != [m.id for m in sample(changes, 2, seed=1)]
+    assert {kind_of(m.id) for m in drawn} == kinds and len(drawn) == 2 * len(kinds)
+    # the two halves of a held-out evaluation: disjoint, each kind in both, the same whatever the order of the ids
+    ids = [m.id for m in changes]
+    learn, held_out = split(ids)
+    assert not set(learn) & set(held_out) and len(learn) + len(held_out) == len(ids)
+    assert {kind_of(i) for i in learn} == {kind_of(i) for i in held_out} == kinds
+    assert abs(len(learn) - len(held_out)) <= len(kinds) and split(ids[::-1])[1] == held_out[::-1]
+    # each change applied to one copy of the app, checked, and taken back
+    copy = copy_sut(tmp_path / "app")
+    for m in changes:
+        files = {edit[1] for edit in m.edits if edit[0] == "lines"} or {"fixtures/base.json"}
+        saved = {rel: (copy / rel).read_text() for rel in files}
+        m.apply(copy)
+        for rel in files:
+            text = (copy / rel).read_text()
+            assert text != saved[rel], m.id
+            if rel.endswith(".py"):
+                ast.parse(text)
+            elif rel.endswith("SKILL.md"):
+                steps = yaml.safe_load(text.split("```yaml\n", 1)[1].split("```", 1)[0]) or []
+                assert all(isinstance(step, dict) for step in steps), m.id
+            else:
+                assert yaml.safe_load(text), m.id  # the agent definitions, the settings and the fixture (JSON is YAML)
+        if m in drawn:
+            ids = compute_changeset(SUT_ROOT, copy).ids()
+            if kind_of(m.id) == "comment":
+                assert not ids, m.id  # a comment is no change
+            else:
+                expected = {"fixture": "fixture:", "setting": "config:", "tooldrop": "agent:", "tooldesc": "tool:"}
+                prefix = expected.get(kind_of(m.id), "skill:" if m.category in ("skill", "benign") else "code:")
+                assert any(i.startswith(prefix) for i in ids), (m.id, ids)
+        for rel, text in saved.items():
+            (copy / rel).write_text(text)
+    assert compute_changeset(SUT_ROOT, copy).is_provably_benign()  # every change was taken back
+    # a change generated from one version of the app does not apply to another: the line no longer reads the same
+    (copy / "config" / "runtime.yaml").write_text(
+        "# a new first line\n" + (copy / "config" / "runtime.yaml").read_text()
+    )
+    with pytest.raises(PatchError):
+        next(m for m in changes if kind_of(m.id) == "setting").apply(copy)
 
 
 def test_batches_compose_changes_that_edit_disjoint_files(tmp_path):

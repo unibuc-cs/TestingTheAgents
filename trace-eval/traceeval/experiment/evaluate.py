@@ -13,6 +13,8 @@ replayed: a test that replays to the end on the changed copy is not run, a repla
 any test runs, and a diverged test is charged the tokens after its divergence point."""
 
 import random
+from concurrent.futures import ProcessPoolExecutor
+from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
@@ -51,9 +53,9 @@ def make_oracle(history: History, variant: str, rng: random.Random, prefix: dict
 
     def oracle(test_id: str):
         stats = history.variants.get(variant, {}).get(test_id)
-        # A test the variant never ran (a recording made with --only, say), or ran only in runs the environment broke,
-        # behaves as on the original app: the same convention as History.variant_pass_rate, so the oracle and the
-        # ground truth agree. A run the environment broke is never drawn.
+        # A run the environment broke is never drawn. A pair with no valid run at all is missing (History.missing):
+        # ``ctx.runnable`` keeps it from every strategy, so the baseline's runs below answer only a caller that
+        # asks all the same, with the outcome History.variant_pass_rate gives the pair.
         base = history.baseline[test_id]
         runs = stats.valid_runs if stats and stats.valid_runs else (base.valid_runs or base.runs)
         rec = rng.choice(runs)
@@ -64,28 +66,37 @@ def make_oracle(history: History, variant: str, rng: random.Random, prefix: dict
     return oracle
 
 
-def evaluate(
-    workdir: Path,
-    strategies: list[str] | None = None,
-    budgets=DEFAULT_BUDGETS,
-    seeds: int = 5,
-    variants: list[str] | None = None,
-    replay_first: bool = False,
-) -> pd.DataFrame:
-    """The replay: one row of results/replay.csv per (change, strategy, budget, seed). The strategy sees the change
-    set and the baseline facts, picks tests, and the oracle answers from the recorded runs of the changed copy.
-
-    With ``replay_first`` the rows go to results/replay_first.csv, and each run starts from what the replay of the
-    changed copy already gave (``history/replay_first.jsonl``)."""
-    workdir = Path(workdir)
+def _load(workdir: Path) -> History:
+    """The recording, for an evaluation: nothing in it changes from here on, so the tests that reveal each change
+    are worked out once (the strategies that learn from the other changes ask for them at every run)."""
     history = History.load(workdir)
+    reveal = history.revealing_tests
+    history.revealing_tests = lru_cache(maxsize=None)(
+        lambda variant, threshold=0.5: frozenset(reveal(variant, threshold))
+    )
+    return history
+
+
+def _learns_from(history: History, variant: str, train: list[str] | None) -> list[str]:
+    """The recorded changes a strategy may learn from when ``variant`` is under test: every other one that shares
+    no change with it (``History.training_variants``) and, when ``train`` is given, is in that list. A held-out
+    evaluation passes the half of the generated changes set aside for learning (``generator.split``)."""
+    allowed = history.training_variants(variant)
+    return allowed if train is None else [v for v in allowed if v in set(train)]
+
+
+def _rows(job: tuple) -> list[dict]:
+    """The rows of ``evaluate`` for some of the changes: (recording, strategies, budgets, seeds, the changes,
+    replay-first or not, the changes to learn from). The rows of one change do not depend on any other change
+    being evaluated, so the changes can be shared out among processes."""
+    workdir, strategies, budgets, seeds, variants, replay_first, train = job
+    history = _load(workdir)
     catalog = {c.id: c for c in load_catalog()}
     props = load_properties()
     replays = Replays.load(workdir) if replay_first else None
     if replay_first and replays is None:
         raise SystemExit(f"{workdir} has not been replayed: run traceeval replay-first --workdir {workdir}")
     strategies = _resolve(strategies, replay_first)
-    variants = variants or sorted(history.variants)
     full = history.total_cost()
     rows = []
     # a strategy's prioritized order depends on the change (and the seed) only, so it is shared across budgets
@@ -96,7 +107,9 @@ def evaluate(
         affected = affected_properties(change, history, catalog, props)
         affected_wf = affected_workflows(change, history, catalog)
         # learning may use every recorded change but this one and those that share a change with it (a batch's members)
-        train = history.training_variants(variant)
+        learn = _learns_from(history, variant, train)
+        # the tests the recording cannot answer for on this copy: no strategy is given them to run
+        missing = history.missing(variant)
         # Replay-first: what the replay of this copy gave, before any test runs. ``replayed``: the tests whose
         # outcome is known; ``prefix``: per diverged test, the tokens that replay before the divergence; ``found``:
         # the tests that pass on the original app and replay to a failure, which is a regression for no tokens.
@@ -123,7 +136,7 @@ def evaluate(
                         log = ExecutionLog(name, steps=[(t, False, 0.0) for t in found], stop_reason="regression")
                     else:
                         ctx = SelectionContext(
-                            change, catalog, history, budget, rng, train, opts, replayed=replayed, prefix=prefix
+                            change, catalog, history, budget, rng, learn, opts, replayed, prefix, missing
                         )
                         log = strat.run(ctx, oracle)
                     row = evaluate_log(log, variant, history, catalog, budget, props, affected, affected_wf, known)
@@ -142,20 +155,56 @@ def evaluate(
                         if found:  # nothing ran: the failures were read off the replay
                             row["tests_run"], row["time_fraction"] = 0, 0.0
                     rows.append(row)
-    df = pd.DataFrame(rows)
+    return rows
+
+
+def evaluate(
+    workdir: Path,
+    strategies: list[str] | None = None,
+    budgets=DEFAULT_BUDGETS,
+    seeds: int = 5,
+    variants: list[str] | None = None,
+    replay_first: bool = False,
+    train: list[str] | None = None,
+    jobs: int = 1,
+) -> pd.DataFrame:
+    """The replay: one row of results/replay.csv per (change, strategy, budget, seed). The strategy sees the change
+    set and the baseline facts, picks tests, and the oracle answers from the recorded runs of the changed copy.
+    ``variants`` names the changes to evaluate (all by default) and ``train`` those a strategy may learn from (all
+    the others by default). With ``jobs`` > 1 the changes are shared out among that many processes, each of which
+    loads the recording: worth it for several hundred changes.
+
+    With ``replay_first`` the rows go to results/replay_first.csv, and each run starts from what the replay of the
+    changed copy already gave (``history/replay_first.jsonl``)."""
+    workdir = Path(workdir)
+    variants = variants or sorted(path.stem for path in (workdir / "history" / "variants").glob("*.jsonl"))
+    shares = [variants[i::jobs] for i in range(max(1, jobs))]
+    todo = [(workdir, strategies, budgets, seeds, share, replay_first, train) for share in shares if share]
+    if len(todo) > 1:
+        with ProcessPoolExecutor(max_workers=len(todo)) as pool:
+            shared_out = list(pool.map(_rows, todo))
+    else:
+        shared_out = [_rows(job) for job in todo]
+    # one table, in the order of the changes whichever process evaluated each (the sort keeps a change's rows in order)
+    place = {variant: i for i, variant in enumerate(variants)}
+    df = pd.DataFrame(sorted((row for rows in shared_out for row in rows), key=lambda row: place[row["variant"]]))
     (workdir / "results").mkdir(exist_ok=True, parents=True)
     df.to_csv(workdir / "results" / ("replay_first.csv" if replay_first else "replay.csv"), index=False)
     return df
 
 
 def evaluate_prioritization(
-    workdir: Path, strategies: list[str] | None = None, seeds: int = 5, variants: list[str] | None = None
+    workdir: Path,
+    strategies: list[str] | None = None,
+    seeds: int = 5,
+    variants: list[str] | None = None,
+    train: list[str] | None = None,
 ) -> pd.DataFrame:
     """APFD / APFD_c of each strategy's complete prioritized order (selection + prioritization view). An order that
     is drawn at random is scored over ``seeds`` draws per change; any other order is the same every time and is
     scored once."""
     workdir = Path(workdir)
-    history = History.load(workdir)
+    history = _load(workdir)
     catalog = {c.id: c for c in load_catalog()}
     strategies = _resolve(strategies)
     variants = variants or sorted(history.variants)
@@ -171,7 +220,7 @@ def evaluate_prioritization(
         if not revealing:
             continue
         change = history.changesets[variant]
-        train = history.training_variants(variant)
+        learn = _learns_from(history, variant, train)
         for name in strategies:
             strat = get_strategy(name)
             for seed in range(seeds if strat.stochastic else 1):
@@ -179,7 +228,7 @@ def evaluate_prioritization(
                 rng = random.Random(1000 * seed + sum(map(ord, variant)))
                 # an unlimited budget: what is measured is the order, not what the strategy would run within a budget
                 ctx = SelectionContext(
-                    change, catalog, history, float("inf"), rng, train_variants=train, options=dict(shared, seed=seed)
+                    change, catalog, history, float("inf"), rng, train_variants=learn, options=dict(shared, seed=seed)
                 )
                 order = [t for t in strat.order(ctx) if t in cost]
                 seen = set(order)

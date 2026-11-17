@@ -137,7 +137,13 @@ The harness checks every tool call. The dispatcher refuses a call when:
 - the tool does not exist, or the settings have switched it off;
 - this agent is not allowed to use it;
 - it is guarded and the request has no approval token;
-- the arguments do not fit.
+- the arguments do not fit: a name the tool does not have, or a value of the wrong type (a word where the tool
+  takes a number).
+
+A delegation passes the first two gates as well: only an agent whose definition lists `route_to_agent` may
+delegate, and the settings can switch delegation off. The values a delegation passes on cannot replace what the
+harness carries itself: the user the request comes from, the approval a person gave, and the harness's own
+switches.
 
 A call that gets through runs with fault injection, and transient failures are retried. Write tools also get an
 idempotency key, a key that identifies the operation so that a service can recognise a repeat. It is derived from

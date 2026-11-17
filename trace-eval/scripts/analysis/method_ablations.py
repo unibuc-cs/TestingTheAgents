@@ -3,7 +3,7 @@ removed in turn, the calibration given fewer earlier changes to learn from, and 
 shipped method, the method without any history and the method without the tests' own records differ. Takes a few
 minutes.
 
-    python scripts/analysis/method_ablations.py [recording]        # default runs/gemma7
+    python scripts/analysis/method_ablations.py [recording]        # default runs/gemma8
 """
 
 import random
