@@ -571,15 +571,17 @@ changes have no revealing test (section 7).
 ## 7. The recordings
 
 The recordings of the current app, with 180 tests, 43 changes, the empty change, five repetitions and the model
-judge. The first is the recording of record; the others start from its baseline and cassette:
+judge. The first is the recording of record. The others start from its baseline and cassette, except
+`runs/gemma8_exact` and `runs/qwen8`, which have a baseline and a cassette of their own:
 
 | recording | model | where | time |
 |---|---|---|---|
 | `runs/gemma8`, report in `docs/results/gemma8/` | Gemma | fmi0's GPU0 | about two hours: 30 minutes for the baseline, one test at a time, and under two minutes per changed copy, 32 tests at a time (`--workers`); then a minute for the replay and six for the evaluation |
 | `runs/gemma8_restart`, written up in `docs/results/gemma8/second_recording.md` | Gemma, started anew | two cluster GPUs | 33 minutes: the empty change, and the 43 changes for the tests each reaches (`--reached-only`), from `runs/gemma8`'s baseline and cassette |
 | `runs/gemma8_pc0_w32`, `_pc0_w1`, `_pc1_w32`, `_pc1_w1` ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7) | Gemma, started anew with its prefix cache off (`pc0`) and on (`pc1`) | fmi0's GPU0 | two to three minutes 32 tests at a time (`w32`), 30 minutes one at a time (`w1`): the empty change only, from `runs/gemma8`'s baseline and cassette |
-| `runs/gemma8_exact`, `runs/gemma8_exact_restart` ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7) | Gemma without its prefix cache, two starts | fmi0's GPU0 | 33 minutes for the baseline and 30 for each empty change, one test at a time: a baseline and cassette of its own, the empty change under the same start, and under another from a copy of that baseline |
+| `runs/gemma8_exact`, `runs/gemma8_exact_restart` ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7) | Gemma without its prefix cache, two starts | fmi0's GPU0 | 33 minutes for the baseline, 30 for each empty change and six hours for the 43 changes (the tests each reaches), one test at a time: a baseline and cassette of its own, the empty change under the same start and under another from a copy of that baseline, then the changed copies; report in `docs/results/gemma8_exact/` |
 | `runs/gemma8_gen`, report in `docs/results/gemma8_gen/` | Gemma, started anew | fmi0's GPU0 | a little over six hours: 691 of the 692 generated changes for the tests each reaches, 114,230 runs, from `runs/gemma8`'s baseline and cassette; then half an hour for the held-out evaluation on ten processes |
+| `runs/qwen8`, report in `docs/results/qwen8/` | Qwen | fmi0's GPU1 | seventeen hours, one test at a time throughout: 78 minutes for the baseline, 77 for the empty change, and fifteen hours for the 43 changes (the tests each reaches) |
 
 On the original app 172 of 180 tests pass, 28 of the 34 regressions are revealed and no benign change is, so the
 report's sanity line says VIOLATED for the six changes below. They stay in the set:
@@ -614,10 +616,11 @@ The recordings below are of the app as it was before the harness and test fixes 
 | `runs/gptoss7` | the whole experiment, three and a half hours | gpt-oss, both of fmi0's GPUs | `results/gptoss7/report.md`; not a clean ground truth (below) |
 | `runs/gptoss7_w1` | the empty change one test at a time, three repetitions | gpt-oss, both of fmi0's GPUs | `results/gptoss7/one_at_a_time.md` |
 
-Qwen's and gpt-oss's recordings are not clean ground truths ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4). The 116
-baseline runs of Qwen's recording that a dropped tunnel broke are left out, so about 110 of its tests have four
-valid baseline runs instead of five. The models are taken as they are served, with no re-runs or filtering to make
-them agree with themselves, so the results are Gemma's.
+These recordings of Qwen and gpt-oss, made many tests at a time, are not clean ground truths
+([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4). The 116 baseline runs of `runs/qwen7` that a dropped tunnel broke are
+left out, so about 110 of its tests have four valid baseline runs instead of five. The models are taken as they
+are served, with no re-runs or filtering to make them agree with themselves. So the results are Gemma's, and
+Qwen's come from `runs/qwen8`, which was recorded one test at a time.
 
 ## 8. Where to look in the code
 

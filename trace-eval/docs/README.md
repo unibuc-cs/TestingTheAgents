@@ -40,6 +40,9 @@ flowchart TD
     a reached test costs when the cassette answers every request it knows;
   - `gemma8/live_checks.md`: `traceeval check` live on each of the 43 changes, against the evaluator.
 
+  `gemma8_exact` is the same app and changes recorded with the server set so that every answer repeats, and
+  `qwen8` is Qwen's recording of them, one test at a time ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7).
+
   `gemma8_gen` is the recording of the changes generated from the app ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.8),
   evaluated on the half the strategies did not learn from, and beside its report:
   - `gemma8_gen/stopping.md`: the full tables of the stopping rule with a bounded miss rate (§5.9);

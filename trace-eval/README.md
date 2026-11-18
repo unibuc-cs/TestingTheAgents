@@ -131,7 +131,13 @@ generated from the app, five repetitions each ([docs/RESEARCH_PLAN.md](docs/RESE
   multi-agent workflows whose five runs disagree.
 - The other answers come from two settings of the server: many tests at a time, and its prefix cache. One test at
   a time and without the cache, every one of 11,010 requests gets its recorded answer again, across a restart of
-  the server too, and a pass of the suite takes six minutes instead of half a minute.
+  the server too, and a pass of the suite takes six minutes instead of half a minute. The five runs of a test on
+  a changed copy are then one and the same run.
+
+**A second model.** Qwen, recorded one test at a time, gives the same picture on the 43 changes: no test flips
+under the empty change, the replay settles 8 changes, and every order of the reached tests finds all 32 of its
+regressions for 4% to 5% of the suite, where the cache pays 14%. Three edits meant as harmless break a test under
+Qwen: what a suite reveals belongs to the model.
 
 **What a verdict costs**, in tokens per change, on the 43 changes:
 

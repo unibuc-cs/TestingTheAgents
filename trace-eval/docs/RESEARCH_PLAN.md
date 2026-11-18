@@ -35,6 +35,8 @@ University of Bucharest / ILDS. The results are in `docs/results/gemma8/report.m
     at its target, and with `adaptive_bayes`'s probability it also holds on changes unlike the past ones.
   - Live, `traceeval check` gives the offline verdict on 41 of the 43 changes. With a target miss rate of 10% it
     finds all 28 regressions and raises no false alarm, for 2.8% of the suite's tokens per check.
+  - Qwen, recorded one test at a time, gives the same picture on the 43 changes: every order of the reached tests
+    finds all 32 of its regressions, for 4% to 5% of the suite.
 - **Without the replay (§5.1).** Reading the change pays: the strategies that read the diff or the traces find 86%
   to 93% of the regressions for a tenth of the suite's tokens, hand-written dependencies 61%. `adaptive_bayes`
   finds the most at a small budget and stays near 85% however large the budget, because a quarter of its clean
@@ -42,8 +44,8 @@ University of Bucharest / ILDS. The results are in `docs/results/gemma8/report.m
 - **What is not new (§7).** Replaying recorded answers into changed code is test factoring's mechanism (2005), and
   a cache of answers already pays only for changed requests. The cache is the baseline every cost is given
   against.
-- **Next.** The plan is `TODO.md`: Qwen's recording under the same protocol, the 43 changes under the serving
-  setup in which every answer repeats, a second application (tau2-bench, §6). Re-planning after a failed step
+- **Next.** The plan is `TODO.md`: a second application (tau2-bench, §6), the serving setup in which every
+  answer repeats for the other models, real changes beside the generated ones. Re-planning after a failed step
   waits for a product decision (`docs/AEM_ALIGNMENT.md` §4.1).
 
 ---
@@ -1098,6 +1100,28 @@ and in the recordings above) and how many tests run at a time. The empty change 
   default one. A pipeline picks one: a slower recording whose answers repeat exactly, or the default setup, with
   the empty change recorded to check that the outcomes still hold.
 
+**The 43 changes under that setup** (`runs/gemma8_exact`: the tests each change reaches, five repetitions, one
+test at a time; `docs/results/gemma8_exact/report.md`), beside the two recordings made the default way:
+
+| | `runs/gemma8` | `runs/gemma8_restart` | `runs/gemma8_exact` |
+|---|---|---|---|
+| requests of the reached tests that the baseline had sent, answered otherwise | 564 of 30,738 (1.8%) | 745 of 30,183 (2.5%) | 0 of 31,840 |
+| pairs whose five runs disagree, of the 1,442 reached (change, test) pairs | 4 | 13 | 0 |
+| changes with a revealing test | 28 | 29 | 30 |
+| regressions an order of the reached tests finds, with no budget | 98% to 100% | 93% to 99% | all, with every order |
+| what such an order costs, charged for its new requests only | not counted | 5.1% to 6.6% | 4.8% to 6.1% |
+| the whole suite through a cache of answers | not counted | 13.5% | 12.8% |
+
+- *One run of a test is its outcome.* The five runs of every one of the 1,442 pairs are one and the same run, so
+  under this setup one repetition would do.
+- *With runs that repeat, no order misses a regression.* The misses of the other recordings come from pairs
+  whose five runs disagree: a run draws the passing run of a revealing test, or the one failing run of a test
+  that does not reveal the change. Here no pair has such runs.
+- *The ground truth moves a little with the setup.* 3 of the 1,442 labels differ from `runs/gemma8`, each with
+  all five runs on one side. Two changes gain a revealing test: the routing skill without its brand gate, which
+  the default setup leaves at one failing run of five, and a reordering of the routing guidance labelled benign,
+  which PUB-02 now fails in every run. A label is a fact about a model and the way it is served.
+
 **The strategies, replay-first.** Detection of the 28 regressions, with the tokens spent as a mean over all
 changes: each strategy as in §5.1, and replay-first.
 
@@ -1152,10 +1176,38 @@ changes: each strategy as in §5.1, and replay-first.
   replayed outcomes differs from the recorded one. With no budget every order finds the 17 batches a test reveals,
   the harmless edits that break PUB-02 together included, which no strategy but the bandit reached within a 20%
   budget (`docs/results/gemma7/batch_sweep.md`).
-- *The other models.* Qwen's baseline is recorded again, one test at a time (`runs/qwen8`): 865 of its 900 runs
-  pass, its empty change flips no test, and 20 of the empty change's 5,580 requests (0.4%) are answered otherwise,
-  a fifth of Gemma's rate. Its changed copies are being recorded, one test at a time. gpt-oss's recording was
-  made before the baseline kept its answers and cannot be replayed (`TODO.md` §4).
+- *The other models.* Qwen is recorded again under this protocol, one test at a time (below). gpt-oss's
+  recording was made before the baseline kept its answers and cannot be replayed (`TODO.md` §4).
+
+**A second model** (`runs/qwen8`: Qwen3.8-27B with its own baseline and cassette, the empty change, and the 43
+changes for the tests each reaches, all one test at a time; `docs/results/qwen8/report.md`), beside Gemma's
+recording:
+
+| | Gemma, `runs/gemma8` | Qwen, `runs/qwen8` |
+|---|---|---|
+| tests the model fails on the original app | 8 | 7 |
+| the empty change: tests that flip | 0 | 0 |
+| its requests answered otherwise | 104 of 5,218 (2.0%) | 20 of 5,580 (0.4%) |
+| changes the replay settles | 8: five as clean, three as regressions | 8: four as clean, four as regressions |
+| tests a change reaches, mean (median) | 34 (12) | 34 (11) |
+| reached (change, test) pairs whose five runs disagree | 4 of 1,442 | 2 of 1,448 |
+| their requests that the baseline had sent, answered otherwise | 564 of 30,738 (1.8%) | 634 of 27,244 (2.3%) |
+| changes with a revealing test | 28 | 32 |
+| regressions an order of the reached tests finds, with no budget | 98% to 100% | all |
+| what such an order costs, by the bound | 9% to 10% | 4.4% to 7.5% |
+
+- *The picture holds for a second model.* One test at a time, Qwen's ground truth is as stable as Gemma's: no
+  test flips under the empty change, and the five runs disagree on 2 of 1,448 pairs.
+- *Every order of the reached tests finds all 32 regressions*, for 3.6% to 5.4% of the suite when a test is
+  charged for its new requests only. The whole suite through a cache pays 14.2%.
+- *What a model reveals is its own.* Qwen reveals 29 of the 34 changes meant as regressions, and three of the
+  nine meant as harmless: the reworded orchestrator prompt, the reordered routing guidance and the reflowed
+  skill prose each break a test in most runs. Three of the five regressions it does not reveal rest on PUB-07
+  and SEO-07, which Qwen fails on the original app.
+- *The stop of `adaptive_bayes` does not carry over as it is.* With its own constant it finds 84% of the
+  regressions for 1.6% of the suite, and 31% of its clean verdicts are given on a regression. Three of the five
+  regressions it calls clean are edits to prompts or prose, which its priors hold nearly harmless. The
+  thresholds of §5.9 are set on Gemma's changes; Qwen has no generated recording to set its own on.
 
 ### 5.8 Generated changes
 
@@ -1403,11 +1455,11 @@ twenty seeds; a repetition is another recorded run of the same test on the same 
 | 1. Testbed | SUT, catalog, tracing, mutations, change sets, record/replay, metrics, report, CLI, tests | done |
 | 2. Methods | baselines + cost-aware + predictive + adaptive Bayesian selector with stopping | done, with the mandatory-coverage rule (§5.3); open: tuning $\varepsilon$, the priors and the discount |
 | 3. Method improvements | (a) test-level learned sensitivities (per test and component kind) instead of kind-level; (b) IR relevance inside the Bayesian likelihood; (c) CASPER-style slices and the Risk-Aware Adaptive Evaluation bandit as adapted baselines | (a) done; (b) done as an option (§5.2); (c) done: `casper_slices` and `risk_aware_ts` (§5.1) |
-| 4. Models | ContentOps with three models (local vLLM): all changes, $K$ repetitions | done: Gemma (`runs/gemma8`); Qwen's (`runs/qwen7`) and gpt-oss's (`runs/gptoss7`) recordings, of an earlier version of the app, are spoiled by run-to-run variation and are not used for the results (§5.4) |
+| 4. Models | ContentOps with three models (local vLLM): all changes, $K$ repetitions | done: Gemma (`runs/gemma8`) and Qwen one test at a time (`runs/qwen8`, §5.7); the recordings of Qwen and gpt-oss made many tests at a time on an earlier version of the app (`runs/qwen7`, `runs/gptoss7`) are spoiled by run-to-run variation and are not used for the results (§5.4) |
 | 5. Second system under test | tau2-bench, a public benchmark of tool-using agents with a simulated user (`docs/REFERENCES.md`): the airline domain, 50 tasks with a reward computed from the database state and the agent's communication, no model judge; the local model plays both the agent and the user, the controlled changes mutate the policy and the tool code (12 mutations: 6 policy, 4 tool-code, 2 benign), and the replay evaluator and the strategies run unchanged | next |
 | 6. Scale/robustness | changes generated mechanically from the app, recorded and evaluated on a half held out of what the strategies learn from; a second recording under another start of the server; live checks | done: 691 generated changes (§5.8), `runs/gemma8_restart` (§5.7), the 43 live checks (§5.1, §5.9); open: sensitivity to budget definitions (time against tokens), more repetitions for the models whose answers vary |
 | 7. Paper | see §7 | drafted: `docs/paper/main.tex` |
-| 8. Replay-first | a cassette per recording, every changed copy replayed against it, the strategies over the diverged tests, the check in two phases (§3.3); stopping with a bounded miss rate (§3.4) | done on Gemma's recordings (§5.7 to §5.9); Qwen's recording under the same protocol is being made; the stopping rule is measured by a script and is in `traceeval check --miss-rate` |
+| 8. Replay-first | a cassette per recording, every changed copy replayed against it, the strategies over the diverged tests, the check in two phases (§3.3); stopping with a bounded miss rate (§3.4) | done on Gemma's recordings (§5.7 to §5.9) and, for the 43 changes, on Qwen's (§5.7); the stopping rule is measured by a script and is in `traceeval check --miss-rate` |
 
 Re-planning after a failed step is built on a branch and waits for one product decision (`docs/AEM_ALIGNMENT.md`
 §4.1).

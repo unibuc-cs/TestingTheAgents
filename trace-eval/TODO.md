@@ -133,10 +133,14 @@ The app and the tests:
 - [ ] The batches again on the current app: those of `docs/results/gemma7/` were recorded before the fixes of
       section 3.
 - [ ] Model updates as changes without a diff: the three baselines already give six (`model_updates.py`).
-- [ ] A second model with its own cassette, baseline and changed copies recorded the same way: Qwen's is being
-      made (`runs/qwen8`, the 43 changes for the tests they reach, one test at a time). Its baseline and its
-      empty change are in: 865 of 900 runs pass, the empty change flips no test, and 20 of its 5,580 requests are
-      answered otherwise (0.4%). gpt-oss's baseline is still to be recorded again.
+- [x] A second model with its own cassette, baseline and changed copies recorded the same way (`runs/qwen8`,
+      one test at a time; `docs/results/qwen8/`, `docs/RESEARCH_PLAN.md` §5.7): the empty change flips no test,
+      the five runs disagree on 2 of 1,448 reached pairs, the replay settles 8 of the 43 changes, and every
+      order of the reached tests finds all 32 of Qwen's regressions for 3.6% to 5.4% of the suite, where the
+      cache pays 14.2%. Three changes meant as harmless are regressions under Qwen.
+- [ ] gpt-oss's baseline recorded again, with its cassette.
+- [ ] Generated changes and stop thresholds for Qwen: `adaptive_bayes` with its own constant gives 31% of its
+      clean verdicts on a regression there.
 - [x] The condition of replay-first on Gemma's serving setup (`runs/gemma8`; `docs/RESEARCH_PLAN.md` §5.7): the
       empty change flips no test, every recorded run of a pair that replays ends like the replay, and about 2%
       of the requests sent again are answered otherwise.
@@ -145,14 +149,18 @@ The app and the tests:
       the server was sent before. With neither (`runs/gemma8_exact`: `--workers 1`, and
       `--no-enable-prefix-caching` through `TRACEEVAL_VLLM_ARGS`), no request of 11,010 is answered otherwise,
       under the baseline's start of the server and under another.
-- [ ] The 43 changes recorded under that setup (`runs/gemma8_exact`), then replayed and evaluated like
-      `runs/gemma8`: the condition on changed copies, and the costs when the replay is exact.
+- [x] The 43 changes recorded under that setup (`runs/gemma8_exact`, `docs/results/gemma8_exact/`): none of
+      the 31,840 requests the baseline had sent is answered otherwise, and the five runs of each of the 1,442
+      reached pairs are one and the same run. 3 labels differ from `runs/gemma8` and 30 changes have a revealing
+      test. Every order of the reached tests finds all 30, for 4.8% to 6.1% of the suite, where the cache pays
+      12.8%.
 - [ ] The same setup for the other models: whether Qwen (0.4% of its requests answered otherwise one test at a
       time, with the cache on) and gpt-oss (outcomes that change with a restart) repeat exactly without the
       prefix cache.
 - [x] A cassette built from the baseline's own five repetitions, the answer given most often: the one outcome
       the replay got wrong on `runs/gemma7` (WF3-01, whose runs take two paths) is right on `runs/gemma8`.
-- [ ] The same condition for a second model and its serving setup (with its recording, above).
+- [x] The same condition for a second model and its serving setup (`runs/qwen8`): 0.4% of the empty change's
+      requests and 2.3% of the reached tests' are answered otherwise, and no outcome moves.
 - [x] `traceeval check` live with its replay phase on the 43 changes (`docs/results/gemma8/live_checks.md`): the
       evaluator's verdict on 41; one false alarm from a single run of a test whose runs disagree, and one check
       that fits more tests in its budget than the evaluator charges it for.

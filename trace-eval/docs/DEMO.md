@@ -281,7 +281,8 @@ cases:
   cannot reveal a change, which is why no strategy runs it.
 - *Why only Gemma's numbers?* Qwen's and gpt-oss's recordings of the same app are not clean ground truths
   ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4): recorded many tests at once, a change that alters nothing appears to
-  break a few tests. One test at a time Qwen is as repeatable as Gemma; gpt-oss is not, and its outcomes change
+  break a few tests. One test at a time Qwen is as repeatable as Gemma, and its recording made that way gives
+  the same picture ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7); gpt-oss is not, and its outcomes change
   with a restart of the server. A larger model does not give a cleaner ground truth by itself, so the lesson for
   Adobe is to measure first how much the answers vary under the real serving setup. The harmless change of section
   4, checked with gpt-oss from its cassette, is a false alarm on PUB-22, a test whose runs disagree under that

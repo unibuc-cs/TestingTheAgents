@@ -65,7 +65,8 @@ does so by missing most regressions of one kind of change, and a threshold per g
 model's posterior keeps every group at its target, also on changes unlike those it was set on, once the group has
 enough past regressions;
 (v) checked live, 41 of the 43 hand-written changes get the verdict of the offline evaluation, and with a target
-miss rate of 10\% the check finds all 28 regressions and raises no false alarm, for 2.8\% of the suite's tokens.
+miss rate of 10\% the check finds all 28 regressions and raises no false alarm, for 2.8\% of the suite's tokens;
+(vi) a second model, recorded one test at a time, gives the same picture on the hand-written changes.
 \end{abstract}
 
 
@@ -176,7 +177,7 @@ The contributions are:
         and what follows from it for a test that replays and for one that diverges (Section~\ref{sec:replay}).
   \item \textbf{A protocol that measures the condition} on a recording, at the level of the request, the run and
         the outcome, with an \emph{empty change} as the reference; its result for an open model under two
-        starts of its server, and for the empty change of a second model; and the two settings of a server that
+        starts of its server, and for a second model; and the two settings of a server that
         the differing answers come from, with a setup under which the condition holds exactly
         (Section~\ref{sec:evaluation}).
   \item \textbf{A stopping rule over the reached tests with a bounded miss rate}: a threshold calibrated on past
@@ -759,8 +760,8 @@ drawn kind by kind by a hash of the change's name, and is evaluated on the other
 $G$ & Gemma on one GPU: the baseline, the empty change and the 43 hand-written changes, the whole suite on each: 40,500 runs \\
 $G'$ & the baseline and cassette of $G$; the empty change and, for each of the 43 changes, the tests it reaches, with Gemma started anew on two other GPUs: 8,110 runs, each with the tokens of its requests that the cassette knows \\
 $G_{\mathrm{gen}}$ & the baseline and cassette of $G$; for each generated change, the tests it reaches. A test that replays to the end is not run: under condition R its outcome is the replay's \\
-$X$ & Gemma served without its prefix cache, one test at a time: a baseline and cassette of its own, and the empty change under the baseline's start of the server and under another: 2,700 runs \\
-$Q$ & Qwen, a second model, one test at a time: its own baseline and cassette, and the empty change \\
+$X$ & Gemma served without its prefix cache, one test at a time: a baseline and cassette of its own, the empty change under the baseline's start of the server and under another, and the 43 changes for the tests each reaches: 9,910 runs \\
+$Q$ & Qwen, a second model, one test at a time: its own baseline and cassette, the empty change, and the 43 changes for the tests each reaches: 9,040 runs \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -772,6 +773,10 @@ changes meant as regressions, 28 are revealed by at least one test, seven of the
 remove a guard the model does not act on with or without the change, or rest on one test whose runs are split.
 No benign change is revealed. These 28 regressions and 15 changes no test reveals are the population below.
 The five runs of a (change, test) pair disagree on 4 of the 7,740 pairs.
+
+Under Qwen ($Q$) seven tests fail on the current version, and 32 changes are revealed: 29 of the 34 meant as
+regressions and three of the nine meant as harmless, all three edits to a prompt or to a skill's prose. What a
+suite reveals belongs to the model that plays the agents.
 
 Of the 692 generated changes, 691 were recorded (114,230 runs, none broken by the environment); the one left out
 makes every run loop without end (Threats, below). A test reveals 316 of them (Table~\ref{tab:revealed}). What
@@ -870,6 +875,8 @@ all & 692 & 125 & 36 & 33 (12) & 0.21 (0.08) \\
   \item \emph{The picture is the same on changes nobody chose.} The two sets agree on the share that needs no
         model (19\% in both), on the mean reach (34 and 33 tests) and on the bound on the cost (21\% of the suite
         in both).
+  \item \emph{And for a second model.} In $Q$ the replay settles eight of the 43 changes, four as clean and
+        four as regressions, and a change reaches 34 tests on average and 11 at the median.
 \end{itemize}
 
 \subsection{RQ2: the condition, measured}
@@ -909,10 +916,15 @@ outcome & the empty change, under the baseline's start and under another & 0 of 
 run & the 2,700 runs of the baseline and of the two empty changes & the fifteen runs of each test are one and the same \\
 request & the 922 requests the baseline's repetitions sent more than once & none got more than one answer \\
  & the 11,010 requests of the two empty changes & none answered otherwise \\
+ & the 31,840 requests of the reached tests that the baseline had sent & none answered otherwise \\
+outcome & the 1,442 reached (change, test) pairs & the five runs of every pair are one and the same; 3 labels differ from $G$ \\
+ & the changes with a revealing test & 30: the 28 of $G$ and two more \\
 \midrule
 \multicolumn{3}{l}{\emph{recording $Q$: a second model, one test at a time}} \\
 outcome & the empty change & 0 of 180 tests flip; 900 of 900 runs end as in the baseline \\
+ & the 1,448 reached (change, test) pairs & the five runs disagree on 2 pairs \\
 request & the 5,580 requests of the empty change, all of them the baseline's & 20 (0.4\%) answered otherwise \\
+ & the 27,244 requests of the reached tests that the baseline had sent & 634 (2.3\%) answered otherwise \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -959,12 +971,17 @@ $X$ & off, same start & 1 & 0 of 5,505 & 180 & 0 \\
         otherwise than the cassette in every run. A start of the server by itself changes nothing.
   \item \emph{With neither, condition R holds exactly.} In recording $X$ no request of 11,010 is answered
         otherwise, under the baseline's start of the server and under another, and the fifteen runs of each test
-        are one run. The price is time: five passes of the suite take half an hour instead of two to three
-        minutes.
-  \item \emph{A second model, one test at a time, is closer to the condition.} Qwen's empty change flips no test
-        either, and one request in 280 is answered otherwise. Served many tests at once, the same model does not
-        repeat its outcomes (Section~\ref{sec:evaluation}, other serving setups): the condition belongs to a model
-        and to the way it is served.
+        are one run. On the changed copies it is the same: none of 31,840 requests is answered otherwise, and
+        the five runs of each of the 1,442 reached pairs are one run, so one repetition would do. The price is
+        time: five passes of the suite take half an hour instead of two to three minutes.
+  \item \emph{The ground truth moves a little with the setup.} Three of the 1,442 labels differ between $G$
+        and $X$, each with all five runs on one side, and $X$ counts 30 regressions: a label is a fact about a
+        model and the way it is served.
+  \item \emph{A second model, one test at a time, meets the condition as well.} Qwen's empty change flips no
+        test either, and one request in 280 is answered otherwise; on its changed copies the five runs of a
+        reached pair disagree on 2 pairs of 1,448. Served many tests at once, the same model does not repeat its
+        outcomes (Section~\ref{sec:evaluation}, other serving setups): the condition belongs to a model and to
+        the way it is served.
   \item \emph{The replay misses nothing it could see.} Of the 183 revealing (change, test) pairs of $G$, 170
         diverge and 13 replay to a failure; none replays to a pass. Every regression keeps a revealing test that
         diverges or fails in the replay, and no change that no test reveals has a replayed failure.
@@ -1072,6 +1089,12 @@ the whole suite through a cache & 1.00 & 20.7 & 13.5 & 12.5 & 15.6 \\
   \item \emph{On a change that breaks nothing the two cost the same,} 12\% to 14\% of the suite: every reached
         test has to run. Only a rule that stops early changes that, and \strat{adaptive\_bayes} does, at 3.7\%,
         while missing two of the 29 regressions. Whether such a rule can be trusted is the next question.
+  \item \emph{Under the setup whose answers repeat ($X$) the picture is the same, without the misses:} every
+        order of the reached tests finds all 30 regressions for 4.8\% to 6.1\% of the suite, and the cache pays
+        12.8\%.
+  \item \emph{For a second model ($Q$) too:} every order of the reached tests finds all 32 of Qwen's regressions
+        for 3.6\% to 5.4\% of the suite, and the cache pays 14.2\%. \strat{adaptive\_bayes}, with constants set
+        on Gemma, finds 84\% of them and gives 31\% of its clean verdicts on a regression.
 \end{itemize}
 
 \paragraph{On changes the strategies never learned from.} The 691 generated changes of $G_{\mathrm{gen}}$ are
@@ -1395,11 +1418,11 @@ prompt rewordings break together a test that neither breaks alone.
         every request carries one long policy, an edit to the policy reaches every test, and the replay prunes
         nothing; it prunes for changes to tools and data. The share of such prompts in a real platform decides
         what replay first is worth there.
-  \item \emph{One model with a stable ground truth, and one server software.} Condition R is measured, not
-        assumed, and the measurement is the contribution; its result is Gemma's under vLLM, and Qwen's one test
-        at a time. The setup under which it holds exactly was tried with that model, that server and one kind of
-        GPU. Another batch size, another version or a hosted model may differ, and a hosted model can change
-        without notice, which invalidates a cassette silently unless the empty change is re-recorded.
+  \item \emph{Two models, one server software.} Condition R is measured, not assumed, and the measurement is
+        the contribution; its result is Gemma's under vLLM, and Qwen's one test at a time. The generated changes,
+        the stopping thresholds and the setup under which the condition holds exactly were tried with Gemma only,
+        on one kind of GPU. Another batch size, another version or a hosted model may differ, and a hosted model
+        can change without notice, which invalidates a cassette silently unless the empty change is re-recorded.
   \item \emph{The ground truth is a majority of five runs.} Seven of the 28 regressions are revealed by a single
         test, and a second recording turns a change no test revealed into a regression, through one test whose
         runs are split. Results that rest on one test move with it.
