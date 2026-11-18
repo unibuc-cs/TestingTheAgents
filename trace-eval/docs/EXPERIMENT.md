@@ -148,7 +148,7 @@ token and with it the rest of the run ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.
 
 | setting | what it does to an answer | how to take it out |
 |---|---|---|
-| the batch a request lands in | a test's runs differ from each other | one test at a time: `--workers 1` |
+| the batch a request lands in | a test's runs differ from each other | one test at a time per server: `--workers` as many as servers |
 | the server's prefix cache | the answer depends on what the server was sent before | `TRACEEVAL_VLLM_ARGS="--no-enable-prefix-caching" scripts/gpu_remote.sh up gemma` |
 
 With both taken out, Gemma and Qwen answer every request the same way again, also after a restart of the server:
@@ -204,6 +204,7 @@ scripts/gpu_remote.sh setup     # creates ~/traceeval-vllm/.venv on the server, 
 ```bash
 scripts/gpu_remote.sh up gemma  # start Gemma on GPU0, open its tunnel, wait until it answers
 scripts/gpu_remote.sh up qwen   # the same for Qwen on GPU1
+scripts/gpu_remote.sh up qwen2  # a second Qwen, on GPU0, for a run over both GPUs (section 3)
 scripts/gpu_remote.sh status    # GPU memory, and for each model: server, tunnel, endpoint
 
 # Gemma
@@ -265,15 +266,21 @@ outside it, such as another user's server or one started on fmi0, and may hand o
 does happen, so check `TRACEEVAL_SITE=hpc scripts/gpu_remote.sh status` and, if needed, ask the cluster's
 admin which GPUs are free.
 
-To use both sites in one run, list both servers in the URL variable, separated by commas. Each request goes to the
-next server in turn (`traceeval/llm/chat.py::Servers`), so a server listed twice gets twice the requests. List the
-cluster's server twice when it holds a copy of the model on each of its two GPUs. The servers give the same answers
-apart from rare one-off differences, which a split run makes somewhat more frequent (section 3). For Qwen:
+To use several servers in one run, list them in the URL variable, separated by commas. Each thread of the run
+keeps to one server, given in turn at its first call (`traceeval/llm/chat.py::Servers`), so a server listed twice
+gets twice the threads. List the cluster's server twice when it holds a copy of the model on each of its two GPUs.
+The servers give the same answers apart from rare one-off differences (section 3). For Qwen:
 
 ```bash
-# Qwen on fmi0's GPU1 and on the cluster's two GPUs: a third of the requests to fmi0, two thirds to the cluster
+# Qwen on fmi0's GPU1 and on the cluster's two GPUs: a third of the threads on fmi0, two thirds on the cluster
 export TRACEEVAL_LLM_BASE_URL=http://127.0.0.1:18101/v1,http://127.0.0.1:18111/v1,http://127.0.0.1:18111/v1
 traceeval experiment --backend llm --workdir runs/qwen8 --reps 5 --workers 64
+
+# Qwen on both of fmi0's GPUs, one test at a time on each and without the prefix cache: every answer repeats
+TRACEEVAL_VLLM_ARGS="--no-enable-prefix-caching" scripts/gpu_remote.sh up qwen
+TRACEEVAL_VLLM_ARGS="--no-enable-prefix-caching" scripts/gpu_remote.sh up qwen2
+export TRACEEVAL_LLM_BASE_URL=http://127.0.0.1:18101/v1,http://127.0.0.1:18103/v1
+traceeval mutants --backend llm --workdir runs/qwen8_gen --reps 1 --workers 2 --reached-only --only ...
 ```
 
 For Gemma the variable is `TRACEEVAL_VLLM_URL` (ports 18100 and 18110).
@@ -374,7 +381,8 @@ traceeval report --workdir runs/gemma8_gen
 `--reps 1` is good for a first look. For a ground truth you'll rely on, `--reps 3` is enough for Gemma (section 7);
 the recording the results come from used 5. The majority vote over the repetitions absorbs the one-off differences
 of section 3; for a model whose answers vary more, no number of repetitions settles it
-([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4).
+([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4). Served so that every answer repeats (section 3), one run is the ground
+truth: Qwen's generated changes are recorded with `--reps 1`.
 
 The work folder is git-ignored ([USER_GUIDE.md](USER_GUIDE.md) §1 shows its layout); to keep a run, copy its
 `results/` into `docs/results/`.
@@ -628,7 +636,7 @@ Qwen's come from `runs/qwen8`, which was recorded one test at a time.
 | file | role |
 |---|---|
 | [`scripts/gpu_remote.sh`](../scripts/gpu_remote.sh) | start, check and stop the model server on the GPU server |
-| [`traceeval/llm/chat.py`](../traceeval/llm/chat.py) | the model client: prompt, engines (`hf`, `vllm`), parsing, log; the `llm` backend's client; several servers in turn (`Servers`); which model judges (`judge_client`) |
+| [`traceeval/llm/chat.py`](../traceeval/llm/chat.py) | the model client: prompt, engines (`hf`, `vllm`), parsing, log; the `llm` backend's client; several servers, one per thread (`Servers`); which model judges (`judge_client`) |
 | [`traceeval/llm/cache.py`](../traceeval/llm/cache.py) | recorded answers: the cache in front of a model, `replay` without one, and the clients that keep a recording's answers (`Tee`), replay them (`ReplayFirstClient`) and compare with them (`Compare`) |
 | [`traceeval/sut/harness/backends/llm_openai.py`](../traceeval/sut/harness/backends/llm_openai.py) | one agent's conversation with the model: system prompt, tool calls, results |
 | [`traceeval/sut/harness/skills.py`](../traceeval/sut/harness/skills.py) | skills, and `render_procedure`, which writes a procedure as plain steps |

@@ -185,11 +185,14 @@ class HFChatClient(GemmaChat):
 
 
 class Servers:
-    """Several OpenAI-compatible servers of one model behind a single client. ``urls`` is a comma-separated list,
-    and each call goes to the next server in turn, so one run can use the GPUs of several machines (fmi0 and the
-    SLURM cluster, ``scripts/gpu_remote.sh``). Decoding is greedy, so the servers give the same answers up to the
-    rare one-off difference that batching causes; spreading a run over servers makes those somewhat more frequent
-    (Qwen: docs/EXPERIMENT.md §7)."""
+    """Several OpenAI-compatible servers of one model behind a single client, so that one run can use the GPUs of
+    several machines (fmi0 and the SLURM cluster, ``scripts/gpu_remote.sh``). ``urls`` is a comma-separated list.
+
+    Each thread keeps to one server, the next in turn when it makes its first call: the calls of a test, the
+    judge's included, all go to that server. With as many threads as servers (``--workers``), each server then
+    answers one test at a time, and without its prefix cache every answer repeats (docs/EXPERIMENT.md §3). A
+    server listed twice gets twice the threads. Decoding is greedy, so the servers give the same answers up to the
+    rare one-off difference that batching causes."""
 
     def __init__(self, urls: str, model_id: str, api_key: str = "EMPTY"):
         """One OpenAI client per URL in ``urls``; ``api_key`` is whatever the servers expect (vLLM takes any)."""
@@ -199,7 +202,8 @@ class Servers:
         # A long timeout: a batched server may take minutes over a long prompt. A failed request is sent twice more.
         clients = [OpenAI(base_url=u.strip(), api_key=api_key, timeout=600, max_retries=2) for u in urls.split(",")]
         self._turn = itertools.cycle(clients)
-        self._lock = threading.Lock()  # the threads of a run take turns from the same cycle
+        self._lock = threading.Lock()  # the threads take their servers from the same cycle, one at a time
+        self._mine = threading.local()  # the server this thread was given
         # The two call shapes in use: completions (Gemma, sent as token ids) and chat completions (Qwen).
         self.completions = SimpleNamespace(create=lambda **kw: self._next().completions.create(**kw))
         self.chat = SimpleNamespace(
@@ -207,9 +211,13 @@ class Servers:
         )
 
     def _next(self):
-        """The server whose turn it is; the threads of a run take turns one at a time."""
-        with self._lock:
-            return next(self._turn)
+        """This thread's server: the next in turn at its first call, the same one at every call after it. The
+        threads of a run start together, so those running at once are given different servers."""
+        server = getattr(self._mine, "server", None)
+        if server is None:
+            with self._lock:
+                server = self._mine.server = next(self._turn)
+        return server
 
 
 class VLLMChatClient(GemmaChat):

@@ -27,10 +27,11 @@ traceeval sdd --workdir runs/sdd                                 # spec-driven d
 traceeval properties draft [--fresh] | apply                     # a model drafts the catalog of properties; you edit
 TRACEEVAL_BACKEND=vllm pytest -q    # record the answers the cassette lacks (Gemma up on the GPU server)
 traceeval sdd draft --request r.md --id FS-0106 [--replay a.json]  # draft a spec with a model
-scripts/gpu_remote.sh up [gemma|qwen|gptoss] | status | down   # models on the GPU server; see docs/EXPERIMENT.md
+scripts/gpu_remote.sh up [gemma|qwen|qwen2|gptoss] | status | down   # models on the GPU server; docs/EXPERIMENT.md
 TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM cluster (2 GPUs, port + 10)
 TRACEEVAL_VLLM_ARGS="--no-enable-prefix-caching" scripts/gpu_remote.sh up gemma   # with --workers 1: every answer repeats
-# several servers in one run: TRACEEVAL_VLLM_URL / TRACEEVAL_LLM_BASE_URL take comma-separated URLs
+# several servers in one run: TRACEEVAL_VLLM_URL / TRACEEVAL_LLM_BASE_URL take comma-separated URLs; each thread
+# keeps to one server, so --workers 2 over qwen and qwen2 answers one test at a time on each GPU
 ```
 
 ## Layout (one line each)
