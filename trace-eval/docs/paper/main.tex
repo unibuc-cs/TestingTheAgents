@@ -301,15 +301,29 @@ suite, and always a mean over \emph{all} changes, since a strategy does not know
 \section{Replay first}
 \label{sec:replay}
 
+Before any model call and for no tokens, the replay answers three questions a selection needs: which tests a
+change can affect through the model, which outcomes the change already determines, and what each remaining test
+will cost at most.
+
 \subsection{The mechanism}
 
-A run of a test is a sequence of model calls with code between them. A call sends a \emph{request} $q$, the whole
-input of the model (the system prompt, the messages so far, the tools on offer, the decoding settings), and gets
-an answer. Let $Q_0$ be the requests the $K$ runs of the suite made on $V_0$, and $A_0$ the \emph{cassette}: for
-each request of $Q_0$ the answer it got, the most frequent one when the runs disagree.
+A run of a test $t$ on a version $V$ alternates model calls with code. The code is everything but the model: the
+harness that drives the agents, the tools and the services behind them, the starting data, and the checks of the
+test. Written out,
+\begin{equation}
+  q_1 = g^t_V(), \qquad a_i = M(q_i), \qquad q_{i+1} = g^t_V(a_1, \dots, a_i), \qquad
+  X_t(V) = h^t_V(a_1, \dots, a_n),
+  \label{eq:run}
+\end{equation}
+where $M$ is the model and $q_i$ the $i$-th \emph{request}, the whole input of a call: the system prompt, the
+messages so far with every tool result, the tools on offer and the decoding settings. A judge's calls are among
+them. $g^t_V$ runs the code of $V$ up to the next call, and $h^t_V$ runs it to the end and applies the test's
+checks to the final state, the tool calls and the answer. Let $Q_0$ be the requests the $K$ runs of the suite made
+on $V_0$, and $A_0$ the \emph{cassette}: for each request of $Q_0$ the answer it got, the most frequent one when
+the runs disagree. A request is stored under a hash of all of it, so two requests match only when they are equal.
 
-To \emph{replay} a test $t$ on $V_1$ is to run it there with every call answered from $A_0$ instead of the model.
-One of two things happens:
+To \emph{replay} a test $t$ on $V_1$ is to run Equation~\ref{eq:run} with $M$ replaced by $A_0$: the code is that
+of $V_1$ and runs as it is, and only the answers come from the cassette. One of two things happens:
 \begin{itemize}
   \item every request of the run is in $Q_0$. The run ends without the model; $t$ \emph{replays to the end}, with
         an outcome $\hat{X}_t(V_1)$;
@@ -318,25 +332,56 @@ One of two things happens:
 \end{itemize}
 The replay splits the suite into $T^{\mathrm{rep}}(\Delta)$ and $T^{\mathrm{div}}(\Delta)$ in seconds of processor
 time and for no tokens. A test of $T^{\mathrm{div}}(\Delta)$ is one the change \emph{reaches}: it puts before the
-model something the model was not sent on $V_0$. The divergence point also says how. Either it opens an agent's
-conversation, and then what the agent is sent up front changed (its prompt, its skills, its tools or its task),
-or it comes later, and then a tool result changed. A change can also alter the outcome of a test it does not
-reach, through the code that runs between the calls: such a test replays to a failure.
+model something the model was not sent on $V_0$. Since $g$ and $h$ are the code of $V_1$, a change shows wherever
+it alters what the model is sent or what the code does with the answers:
+\begin{itemize}
+  \item a change to what an agent is sent up front (its prompt, its skills, the tools it is offered and their
+        descriptions, its task) alters the first request of the agent's conversation, and the test diverges there;
+  \item a change to a tool's code, a service, the starting data or a setting the code reads alters a tool result
+        when the test's call meets the changed behaviour. The next request then differs, and the test diverges
+        there. When the change alters only state the model never reads, $h$ sees it, and the test replays to a
+        failure;
+  \item a change that alters neither leaves the run as it was on $V_0$, and the test replays to its recorded
+        outcome.
+\end{itemize}
 
 \subsection{What it rests on}
 
 \begin{quote}
-\textbf{Condition R.} Under the serving setup in use, the answer to a request is a function of the request.
+\textbf{Condition R.} Under the serving setup in use, the answer to a request is a function of the request: $M(q)
+= A_0(q)$ for every $q \in Q_0$.
+
+\textbf{Condition D.} Given the answers, the code of a version is deterministic: $g^t_V$ and $h^t_V$ read no
+clock, draw no random number and ask no outside service whose answer can change.
 \end{quote}
-Under R, a test of $T^{\mathrm{rep}}(\Delta)$ run on $V_1$ with the model makes the calls of its replay and gets
-the answers of its replay, so $X_t(V_1) = \hat{X}_t(V_1)$; and a test of $T^{\mathrm{div}}(\Delta)$ run on $V_1$
-agrees with its replay up to the divergence point. Table~\ref{tab:replayfirst} lists what follows. The last row is
-the verdict a strategy that runs every reached test can give: it is \clean{} with nothing the change reaches left
-untested, which no selection by dependencies can say without trusting the dependencies to be complete.
+
+\begin{proposition}
+\label{prop:replay}
+Under R and D, a test of $T^{\mathrm{rep}}(\Delta)$ run on $V_1$ with the model makes the requests of its replay
+and gets its answers, so $X_t(V_1) = \hat{X}_t(V_1)$. A test of $T^{\mathrm{div}}(\Delta)$ run on $V_1$ agrees with
+its replay up to its divergence point.
+\end{proposition}
+
+\noindent\emph{Proof.} By induction on $i$ in Equation~\ref{eq:run}. The first requests are equal, since both runs
+execute the code of $V_1$, which D makes deterministic. If the $i$-th requests are equal and in $Q_0$, the model
+answers $M(q_i) = A_0(q_i)$ by R, so the $i$-th answers are equal, and by D so are the next requests. A test of
+$T^{\mathrm{rep}}(\Delta)$ ends with equal answers, to which $h^t_{V_1}$ gives one outcome; a test of
+$T^{\mathrm{div}}(\Delta)$ keeps equal requests and answers up to its first request outside $Q_0$.
+\hfill$\square$
+
+Table~\ref{tab:replayfirst} lists what follows. The last row is the verdict a strategy that runs every reached test
+can give: it is \clean{} with nothing the change reaches left untested, which no selection by dependencies can say
+without trusting the dependencies to be complete.
+
+Condition D belongs to the system under test. The testbed meets it by construction: its services run in process
+and are deterministic, idempotency keys and seeds are derived from the operation and from names, and the ids a
+server makes up for tool calls are numbered by order of appearance in the request's key. It is checked for free,
+since $V_0$ replayed against its own cassette must replay every test to the end with its recorded outcome. A
+system whose tools ask outside services meets D by recording or simulating those services too.
 
 \begin{table}[t]
 \centering\small
-\caption{What a replay gives, under condition R.}
+\caption{What a replay gives, under conditions R and D.}
 \label{tab:replayfirst}
 \begin{tabular}{p{56mm}p{92mm}}
 \toprule
@@ -391,6 +436,12 @@ every regression. Replay first can cost less than that in three ways:
 \end{itemize}
 The first two are the rules of Section~\ref{sec:abstractions}. The third is the subject of
 Section~\ref{sec:stopping}, and it is where most of the remaining tokens are.
+
+\paragraph{Not prompt caching.} The cassette is an exact-match cache of answers: a request it holds makes no call.
+The prompt caching of model providers and servers, the prefix cache of vLLM among them, is another thing: it keeps
+the computation of a prompt prefix seen before and still generates the answer, so it lowers the price and the
+latency of a call but saves no call. On a GPU server it is also one of the settings under which the same request
+can get another answer (Section~\ref{sec:rq2}).
 
 \section{Ordering and stopping over the reached tests}
 \label{sec:method}
@@ -642,6 +693,7 @@ Replaying a changed copy takes a few seconds of processor time.
 \end{itemize}
 
 \subsection{RQ2: the condition, measured}
+\label{sec:rq2}
 
 Table~\ref{tab:condition} measures condition R on four recordings: $G$, another start of its server ($G'$), a
 serving setup chosen for the condition ($X$), and a second model ($Q$).
@@ -686,6 +738,8 @@ changes with a revealing test, of 43 & 28 & 29 & 30 & 32 \\
         five passes take 100 minutes instead of 78. Three of the 1,442 labels differ between $G$ and $X$, and five
         of Qwen's 180 tests pass or fail on the current version otherwise than in $Q$: a label belongs to a model
         and to the way it is served.
+  \item \emph{Condition D holds on every recording.} Replayed against its own cassette, $V_0$ replays all 180 tests
+        to the end, each with its recorded outcome.
   \item \emph{The replay misses nothing it could see.} Of the 183 revealing (change, test) pairs of $G$, 170
         diverge and 13 replay to a failure; none replays to a pass.
 \end{itemize}

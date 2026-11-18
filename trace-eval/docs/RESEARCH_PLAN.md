@@ -334,10 +334,23 @@ flowchart LR
     S -->|"all pass"| CL["clean: nothing the change<br/>reaches is left untested"]
 ```
 
-- **Why it works.** The models decode greedily and the app has no clock and no randomness, so a model call is a
-  function of its request. A test whose every request on the changed copy is one the original app made gets the
-  same answers, and its outcome follows without the model. The change can still alter that outcome through the
-  code that runs between the calls: such a test replays to a failure.
+- **What runs, and what is answered.** Only the model's calls are answered from the cassette. Everything else
+  runs as the changed copy has it: the harness, the tools and the services behind them, the starting data and the
+  test's checks. A request is matched whole (the prompt, every message so far with its tool results, the tools
+  offered, the decoding settings), so a change shows wherever it alters what the model is sent:
+  - what an agent is sent up front (its prompt, skills, tools and their descriptions): the first request of its
+    conversation is new;
+  - a tool's code, a service, the starting data: a tool result differs, and with it the next request. A change
+    that alters only state the model never reads shows in the checks: the test replays to a failure.
+- **Why it works: two conditions.** R, the same request gets the same answer under the serving setup in use. D,
+  given the answers the app's code is deterministic: no clock, no randomness, no outside service, and the ids a
+  server makes up for tool calls are numbered in the key. Under both, a test that replays to the end makes the
+  same requests and gets the same answers when run with the model, so its outcome is the replay's (the paper's
+  Proposition 1). D holds here by construction and is checked for free: the original app replayed against its own
+  cassette replays every test to the end with its recorded outcome. R is measured (§5.7).
+- **Not prompt caching.** The cassette returns a recorded answer, with no call. The prompt (prefix) caching of
+  providers and servers reuses the computation of a prompt prefix and still generates the answer: it saves price
+  and time per call, not calls, and the server's prefix cache is one of the settings that break R (§5.7).
 - **The cassette.** `traceeval baseline` keeps every answer the model gives the original app
   (`history/cassette.jsonl`). When the repetitions answer a request in more than one way, the answer given most
   often is kept.
@@ -352,8 +365,8 @@ flowchart LR
 - **What the verdicts mean.** A replayed failure of a test that passes on the original app is a regression found
   for no tokens. A strategy that orders the whole suite and runs every diverged test without a failure gives a
   clean verdict that leaves no reachable test untested.
-- **The condition.** All of it holds as far as a model call is a function of its request under the serving setup
-  in use. A recording measures it three ways (§5.7):
+- **The condition.** All of it holds as far as condition R holds under the serving setup in use. A recording
+  measures it three ways (§5.7):
   - request by request: while the changed copies are recorded, each answer is compared with the cassette's answer
     to the same request (`llm/cache.py::Compare`);
   - on the empty change: the original app run as the changed copies are, against the baseline;

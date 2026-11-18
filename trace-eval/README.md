@@ -68,6 +68,35 @@ flowchart LR
   over the changes, the changes that break a safety property, what is spent on the changes no test reveals, the
   verdict each run ends with, the coverage of the suite and of each change, and the same strategies replay-first.
 
+## How replay-first works
+
+The recording keeps only the model's answers, each under the exact request that got it: the prompt, every message
+so far with its tool results, the tools offered, the decoding settings. On a changed copy every test runs with the
+model's calls answered from those answers, and everything else runs as the copy has it: the harness, the tools, the
+services and the test's checks.
+
+| the change alters | what the replay sees | the test |
+|---|---|---|
+| what an agent is sent up front: its prompt, skills, tools and their descriptions | the first request of the agent's conversation is new | diverges there, and goes to the model |
+| what a tool returns: its code, a service, the starting data | a tool result differs, and with it the next request | diverges there, and goes to the model |
+| only state the model never reads | every request is one the original app made; the checks see the new state | replays to its outcome: a failure if the change broke it |
+| nothing the test's run touches | every request is one the original app made | replays to its recorded outcome |
+
+The replayed outcome is the live one under two conditions: the model as served gives the same request the same
+answer (R), and the app's code is deterministic given the answers (D). The empty change measures R for a model and
+its server. D holds here by construction, and the original app replayed against its own answers checks it
+([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §3.3, [the paper](docs/paper/main.tex) §4). This is not the prompt
+caching of model providers, which reuses part of the computation and still calls the model: a request the
+recording holds makes no call at all.
+
+What it is for:
+
+- a change that no test can tell from the original app is settled without the model, and so is one that a replayed
+  test fails;
+- a strategy orders only the tests the change reaches, each with a cost known in advance: at most its tokens after
+  the divergence point;
+- once all of those pass, the clean verdict leaves nothing the change reaches untested.
+
 ## Run it
 
 The test suite (`pytest`) and the spec-driven development (SDD) demo replay Gemma's recorded answers, stored in

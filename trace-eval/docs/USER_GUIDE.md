@@ -58,7 +58,9 @@ Paths are relative to `traceeval/`.
 - **Budget**: tokens, as a fraction of the full-suite cost.
 - **Cassette**: the answers a model gave, each stored under the exact request that got it (`llm/cache.py`). A
   recording keeps the answers of its original app in `history/cassette.jsonl`; the test suite replays
-  `tests/cassettes/gemma.jsonl`.
+  `tests/cassettes/gemma.jsonl`. Only the model's answers are kept: in a replay the tools, the services and the
+  checks run as the copy has them, and a request is matched whole, tool results included. The two conditions under
+  which a replayed outcome is the live one are in [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §3.3.
 - **Replay-first** (`experiment/replay_first.py`; pictured in [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §3.3): every
   test is run on the changed copy with the model's calls answered from the recording's cassette. That takes
   seconds and no tokens, and each test ends in one of two ways:

@@ -32,7 +32,8 @@ Order of work: sections 1 to 3 are done; 4 and 5 are done for Gemma, with what i
 | 2 | The batches on the current app: the 23 batches recorded again beside `runs/gemma8`, evaluated, and checked live | §4 | done |
 | 3 | The paper: fewer tables and a shorter text, keeping what the argument needs; then the venue's format | §6 | cut to 13 tables and 18 pages of text; the venue and its page limit are still to choose |
 | 4 | A second application, tau2-bench's airline domain | §4 | waits for the go-ahead to install and run its code |
-| 5 | Stop thresholds for Qwen, set on generated changes recorded with Qwen | §4 | can start from `runs/qwen8_exact`: Qwen repeats exactly, so one run per reached test is enough, about 23,000 runs or 40 hours of one GPU |
+| 5 | Stop thresholds for Qwen, set on generated changes recorded with Qwen | §4 | running: the 43 changes into `runs/qwen8_exact` and the generated ones into `runs/qwen8_gen`, one run per reached test, over both of fmi0's GPUs without the prefix cache; then the live checks at a 10% and a 20% target |
+| 6 | The replay's stand-ins checked live: a random sample of the (change, test) pairs a generated-change recording did not run, because they replay to the end, run with the model and compared with the replay | §4 | after item 5, when fmi0's GPUs are free |
 
 ## 1. Fair tables (replay only): done
 
