@@ -246,10 +246,11 @@ The app and the tests:
 - [x] The secondary numbers corrected or gone, and the threats added: constants set on the hand-written changes,
       changes kept or relabelled after measuring, declared metadata incomplete by design, regressions that rest
       on one test, the bound of the stopping rule being marginal.
-- [ ] The paper waits for two results: Qwen's recording (the rows of recording Q in its tables 13 and 16) and the
-      prefix-cache experiment (its RQ2).
-- [ ] Venue format: the draft is 31 pages with 25 tables, 24 pages before the references and the appendix. What
-      to cut depends on the venue.
+- [x] The two results the paper waited for are in it: Qwen's recording (recording Q, in its tables of the
+      recordings and of the condition) and the serving experiment (its RQ2, with recording X).
+- [ ] Venue format: the draft is 34 pages with 27 tables: 23 pages of text, then the references and an appendix
+      of 9 pages. What to cut depends on the venue.
+- [ ] A full editing pass over the paper: only the passages the last results touched were reworded.
 - [ ] The Adobe Team's agreement to being named; an anonymous version for a double-blind venue.
 
 ## 7. With the Adobe Team
