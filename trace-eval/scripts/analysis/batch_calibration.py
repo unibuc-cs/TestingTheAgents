@@ -10,7 +10,7 @@ This script shows what that rule changes, by replaying the batches three ways:
 and then, under the evaluator's rule, whether the component the method blames most belongs to a member that is a
 regression on its own.
 
-    python scripts/analysis/batch_calibration.py [recording ...]   # default runs/gemma7_sweep runs/gemma7_batches
+    python scripts/analysis/batch_calibration.py [recording ...]   # default runs/gemma8_batches
 """
 
 import json
@@ -23,7 +23,7 @@ from replaylib import CachedAB, load, replay
 pd.set_option("display.width", 250)
 pd.set_option("display.max_rows", 200)
 
-for workdir in sys.argv[1:] or ["runs/gemma7_sweep", "runs/gemma7_batches"]:
+for workdir in sys.argv[1:] or ["runs/gemma8_batches"]:
     h, cat = load(workdir)
     variants = sorted(h.variants)
     members = {}

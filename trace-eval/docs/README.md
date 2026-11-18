@@ -42,6 +42,8 @@ flowchart TD
 
   `gemma8_exact` is the same app and changes recorded with the server set so that every answer repeats, and
   `qwen8` is Qwen's recording of them, one test at a time ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7).
+  `gemma8_batches` adds 23 batches of changes beside them, with `batches.md`: every batch, replayed, evaluated and
+  checked live (§5.6).
 
   `gemma8_gen` is the recording of the changes generated from the app ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.8),
   evaluated on the half the strategies did not learn from, and beside its report:
@@ -54,8 +56,6 @@ flowchart TD
   - `gemma7/false_alarm_one_at_a_time.md`: the change behind the one live false alarm, recorded one test at a time;
   - `gemma7/noise_floor.md`: the empty change recorded fifteen times, against the number of runs;
   - `gemma7/batch_invariant.md`: why Gemma 4 cannot be served in vLLM's batch-invariant mode;
-  - `gemma7/batches.md`: the three batches of changes, replayed and checked live;
-  - `gemma7/batch_sweep.md`: twenty batches of two to eight changes drawn at random, replayed and checked live;
   - `gemma7/second_recording.md`: the whole experiment recorded a second time, on other GPUs, against
     `runs/gemma7`;
   - `qwen7/one_at_a_time.md`: Qwen's empty change recorded one test at a time, against its batched recording;

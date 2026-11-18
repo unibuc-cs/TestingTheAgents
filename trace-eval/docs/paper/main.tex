@@ -603,6 +603,7 @@ $G'$ & the baseline and cassette of $G$; the empty change and, for each of the 4
 $G_{\mathrm{gen}}$ & the baseline and cassette of $G$; for each generated change, the tests it reaches. A test that replays to the end is not run: under condition R its outcome is the replay's \\
 $X$ & Gemma served without its prefix cache, one test at a time: a baseline and cassette of its own, the empty change under the baseline's start of the server and under another, and the 43 changes for the tests each reaches: 9,910 runs \\
 $Q$ & Qwen, a second model, one test at a time: its own baseline and cassette, the empty change, and the 43 changes for the tests each reaches: 9,040 runs \\
+$X_Q$ & Qwen served as in $X$: its own baseline and cassette, and the empty change under the baseline's start of the server and under another: 2,700 runs \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -680,8 +681,11 @@ changes with a revealing test, of 43 & 28 & 29 & 30 & 32 \\
         cassette in every run.
   \item \emph{With neither, condition R holds exactly} ($X$). No request is answered otherwise, under the
         baseline's start of the server or under another, and the five runs of every reached pair are one run.
-        Five passes of the suite then take half an hour instead of two to three minutes. Three of the 1,442
-        labels differ from $G$: a label belongs to a model and to the way it is served.
+        Five passes of the suite then take half an hour instead of two to three minutes. Qwen served the same way
+        ($X_Q$) answers none of its 5,310 requests otherwise either, under two starts, where $Q$ had 0.4\%; its
+        five passes take 100 minutes instead of 78. Three of the 1,442 labels differ between $G$ and $X$, and five
+        of Qwen's 180 tests pass or fail on the current version otherwise than in $Q$: a label belongs to a model
+        and to the way it is served.
   \item \emph{The replay misses nothing it could see.} Of the 183 revealing (change, test) pairs of $G$, 170
         diverge and 13 replay to a failure; none replays to a pass.
 \end{itemize}
@@ -958,11 +962,13 @@ eight for gpt-oss-120b; one test at a time it flipped one for Qwen, and ten for 
 server. Condition R belongs to a model \emph{and} to how it is served: for Qwen it asks for the reached tests to be
 run one at a time, which is how $Q$ is made, and for gpt-oss no number of repetitions settles it.
 
-\paragraph{Batches.} A nightly run sees a day's merges at once. On twenty batches of two to eight hand-written
-changes, drawn at random, 10 to 172 of the 180 tests diverge, so the replay prunes less than for a single change.
-It stays exact: none of the 1,115 replayed outcomes differs from the recorded one, and with no budget every order
-of the reached tests finds the 17 batches a test reveals. A batch is not the union of its members: two harmless
-prompt rewordings break together a test that neither breaks alone.
+\paragraph{Batches.} A nightly run sees a day's merges at once. On 23 batches of two to nine hand-written
+changes beside $G$, 10 to 172 of the 180 tests diverge, 120 on average, so the replay prunes less than for a single
+change. It stays exact: none of the 1,374 replayed outcomes differs from the recorded one, and with no budget every
+order of the reached tests finds the 20 batches a test reveals. A batch is not the union of its members: under
+three batches a test fails that no member fails alone, two of them made only of harmless edits. Checked live with
+the members held out, at a 20\% budget, 19 of the 20 are found with no false alarm, and in 17 of the 18 with a
+member that is a regression alone the component blamed most belongs to such a member.
 
 \subsection{Threats to validity}
 
@@ -975,8 +981,9 @@ prompt rewordings break together a test that neither breaks alone.
   \item \emph{One application, built for the purpose,} with a suite written by the authors; its tests and changes
         share vocabulary, which favours the strategies that read text. Where every request carries one long policy,
         an edit to the policy reaches every test and the replay prunes nothing.
-  \item \emph{Two models, one server software, one kind of GPU.} The generated changes, the stopping thresholds and
-        the setup under which condition R holds exactly were tried with Gemma only. A hosted model can change
+  \item \emph{Two models, one server software, one kind of GPU.} The generated changes and the stopping thresholds
+        were tried with Gemma only, and the setup under which condition R holds exactly with Gemma and, on the
+        empty change, Qwen. A hosted model can change
         without notice, which invalidates a cassette silently unless the empty change is recorded again.
   \item \emph{The ground truth is a majority of five runs,} and seven of the 28 regressions rest on a single test.
   \item \emph{The stopping rule's guarantee is marginal and assumes exchangeability:} over the changes of a group,

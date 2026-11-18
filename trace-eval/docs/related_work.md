@@ -207,7 +207,8 @@ Fault-injection work that can generate a ground truth or serve as a contrast:
   output, through non-associative floating-point arithmetic at limited precision. It explains why about 2% of the
   requests of a recording are answered otherwise when sent again, and why the condition of replay-first has to be
   measured per serving setup. Measured here (`RESEARCH_PLAN.md` §5.7): the batch and the server's prefix cache
-  account for all of it, and with neither every request gets its recorded answer again, across a restart too.
+  account for all of it, and with neither every request gets its recorded answer again, across a restart too,
+  under Gemma and under Qwen.
 - **Non-Determinism of "Deterministic" LLM Settings.** Atil et al., arXiv 2408.04667 (Eval4NLP 2025). Identical
   output strings are rarer than identical parsed answers: the same gap between answers and outcomes as in the
   recording.

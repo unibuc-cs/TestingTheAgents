@@ -726,65 +726,31 @@ What the experiments say, in the order a team would act on them. The numbers are
 
 ### 5.6 Batches of changes
 
-A nightly run sees a day's merges at once, and a pull request several related edits. A batch is replayed like a
-single change, with one more rule: the method does not learn from the batch's members, nor from the batches that
-share one (§4.4). The batches below were recorded on the app as it was before the fixes of `TODO.md` §3, beside
-`runs/gemma7`, and are to be recorded again on the current app (`TODO.md` §4). Three batches of catalog changes,
-recorded with Gemma like the single changes (`docs/results/gemma7/batches.md`), show what the strategies make of
-that:
+A nightly run sees a day's merges at once, and a pull request several related edits. A batch is replayed and
+checked like a single change, with one more rule: the method does not learn from the batch's members, nor from the
+batches that share one (§4.4). `runs/gemma8_batches` holds 23 batches beside the 43 single changes: the three of
+the catalog (`batch_nightly`, six regressions and two harmless edits; `batch_publishing_pr`, three related changes
+on the publishing path; `batch_benign`, all nine harmless edits) and twenty of two to eight changes drawn at random
+(`scripts/batch_sweep.py`). Eighteen have a member that is a regression on its own, and a test reveals twenty
+(`docs/results/gemma8_batches/batches.md` has every batch).
 
-- `batch_nightly` (six regressions and two harmless edits, 28 revealing tests): every strategy that reads the diff
-  or the traces ends at a failure within a 5% budget. The adaptive method needs one test, 0.3% of the suite, and
-  blames the SEO agent's lost tool; the other members stay near their prior, untested, because the run ends at the
-  first failure.
-- `batch_publishing_pr` (three related changes on the publishing path, 9 revealing tests): `declared` and
-  `observed` find it with their first test, the adaptive method after four tests, 1.9% of the suite, blaming the
-  link check. `full` and CASPER's slices miss it at 5%, `random` finds it in one seed of five.
-- `batch_benign` (all nine benign changes): revealed by one test, PUB-02, which fails in all five runs under the
-  batch and passes under every member alone. Two prompt edits do it together, the orchestrator's prompt reworded
-  and its routing guidance reordered: the orchestrator then drops the broken link from the answer it relays. Only
-  the bandit, which runs the risky tests first, reaches PUB-02 within a 20% budget, in four seeds of five. The
-  adaptive method spends the budget on 37 tests and ends without a verdict: one member adds a tool no agent may
-  use, which no test can reach and nothing can clear.
+- *The replay prunes less, and stays exact:* 10 to 172 of the 180 tests diverge, 120 on average, and none of the
+  1,374 outcomes that replay to the end differs from the recorded majority.
+- *A batch is not the union of its members.* PUB-02 fails under three batches that hold the reordered routing
+  guidance, two of them harmless edits only, and passes under every member alone; `batch_nightly` gains two
+  revealing tests. No batch loses one of its members'.
+- *The size makes no difference to detection.* With no budget every order of the reached tests finds every
+  revealed batch. Members held out, `adaptive_bayes` finds 88% of them at a 5% budget and 95% at 20%, after four
+  to six tests and 1.7% to 2.7% of the suite; calibrated on the members too, 95% at both budgets after two to four.
+- *The posterior names the member to blame:* in 88 of the 95 runs that end at a failure, the component blamed most
+  belongs to a member that is a regression alone (`scripts/analysis/batch_calibration.py`).
+- *Live,* with the members held out and a 20% budget, `traceeval check` finds 19 of the 20 revealed batches,
+  `batch_benign` included, and gives no regression verdict on the other three. The one missed is a batch of
+  harmless edits revealed only by PUB-02, which runs out of budget.
 
-Twenty more batches drawn at random (`scripts/batch_sweep.py`: three of each size from two to seven and two of
-eight, members editing disjoint files, four batches from the harmless changes only), recorded the same way
-(`docs/results/gemma7/batch_sweep.md`):
-
-| batch size | batches | with a regression member | found by the adaptive method at 5% and at 20% |
-|---|---|---|---|
-| 2 | 3 | 2 | 2, in every seed |
-| 3 | 3 | 2 | 2, in every seed |
-| 4 | 3 | 3 | 3, in every seed |
-| 5 | 3 | 3 | 3, in every seed |
-| 6 | 3 | 1 | 1, in every seed |
-| 7 | 3 | 3 | 3, in every seed |
-| 8 | 2 | 2 | 2, in every seed |
-
-- The size makes no difference: every batch with a regression member is found in all five seeds at 5% and at 20%,
-  after one to eleven tests, for 1.4% of the suite on average and 6.3% at most.
-- At a 20% budget `ir_tfidf`, `observed`, `cost_aware` and `history_ml` find the same sixteen, for 3% to 5% of the
-  suite on those batches against the adaptive method's 1.5%. At 5% they find 62% to 88% of them.
-- Holding the members out costs tests, not detection: with the members among the changes it learns from, the
-  method needs 3.4 tests per batch at a 5% budget instead of 4.1 (`scripts/analysis/batch_calibration.py`).
-- The blame is right: in 79 of the 80 runs that end at a failure, the component blamed most belongs to a member
-  that is a regression on its own, and in 65 the failed test is one that reveals that very member alone. The others
-  are a tie between two members' components, a test that reveals another member, and PUB-02 under a batch whose
-  members do not reveal it alone.
-- Harmless edits harmful together, again: one of the four harmless batches fails PUB-02 in all five runs, with the
-  same pair of prompt edits among its members as `batch_benign`; only the bandit reaches the test, in four seeds
-  of five.
-- Batches also hide what their members reveal: in two of the 20, a test that reveals a member alone passes under
-  the batch (WF4-01 under one batch of eight, WF1-02 under the other, where it is the one test that reveals the
-  routing skill's lost brand gate). Sixteen of the 20 have exactly the union of their members' revealing tests.
-- Each batch was also checked live (`traceeval check`), with its members still among the changes the check learned
-  from: all eighteen batches with a regression member were found, after one to five tests. Those checks are to be
-  repeated with the members held out (`TODO.md` §4).
-
-Three lessons. A batch is checked like a change, whatever its size, and the posterior names the member to blame,
-which is what a nightly pipeline needs after a red run. Harmless edits are not harmless together, and a batch can
-hide what a member alone reveals: the ground truth of a batch is not the union of its members', so a nightly batch
-needs its own recording, not the sum of the day's single-change checks.
+So a batch is checked like a change, whatever its size, and the posterior says which member to look at after a red
+run. Harmless edits are not harmless together, so a nightly batch needs its own recording, not the sum of the
+day's single-change checks.
 
 ### 5.7 Replay-first
 
@@ -841,9 +807,12 @@ the cassette lacks (`docs/results/gemma8/second_recording.md`, `docs/results/gem
   the server was sent before, and the cassette was recorded with it on. With neither (`runs/gemma8_exact`, a
   baseline of its own), no request is answered otherwise and the five runs of every pair are one run, so one
   repetition would do. Five passes of the suite then take 30 minutes instead of two to three.
+- *Qwen served the same way repeats exactly too* (`runs/qwen8_exact`: a baseline of its own, and the empty change
+  under its start of the server and under another): none of 5,310 requests is answered otherwise, against 20 of
+  5,580 with the cache on (`runs/qwen8`). Five passes take 100 minutes instead of 78.
 - *The ground truth moves a little with the setup:* 3 of the 1,442 labels differ between `runs/gemma8` and
-  `runs/gemma8_exact`, each with all five runs on one side. A label is a fact about a model and the way it is
-  served.
+  `runs/gemma8_exact`, and 5 of the 180 tests pass or fail on the original app under Qwen otherwise than in
+  `runs/qwen8`, each with all five runs on one side. A label is a fact about a model and the way it is served.
 - *A second model, one test at a time, meets the condition as well.* Under Qwen, 29 of the 34 changes meant as
   regressions are revealed, and three of the nine meant as harmless: the reworded orchestrator prompt, the
   reordered routing guidance and the reflowed skill prose. Three of the five regressions it does not reveal rest on

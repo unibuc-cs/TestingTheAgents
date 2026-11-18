@@ -192,12 +192,11 @@ traceeval check batch_nightly --history runs/gemma8 --budget 0.2     # live
 replay: 113 of 180 tests replay to the end, for no tokens, in 2 s; 67 diverge and need the model
 ```
 
-On the recording of the batch, the method finds it with the first test it runs, for 0.4% of the suite's tokens, and
-blames the SEO agent's lost tool; the other members stay near their prior of one half, untested
-([results/gemma7/batches.md](results/gemma7/batches.md)). [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.6 has the three
-batches, including the nine harmless edits that break a test together, and the twenty batches of two to eight
-changes drawn at random, on which the size makes no difference and the blame falls on a member that is a regression
-on its own in all but one run.
+Live, the check finds it with the first test it runs, for 0.4% of the suite's tokens, and blames the SEO agent's
+lost tool; the other members stay near their prior of one half, untested
+([results/gemma8_batches/batches.md](results/gemma8_batches/batches.md)). [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.6
+has the 23 batches, including the harmless edits that break a test together: the size makes no difference, and the
+blame falls on a member that is a regression on its own in most runs.
 
 "What about a bigger model?" The same two checks were run with Qwen and with gpt-oss, each against its own
 recording and without a replay phase, since those recordings keep no answers of their original app:

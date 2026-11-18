@@ -28,11 +28,11 @@ Order of work: sections 1 to 3 are done; 4 and 5 are done for Gemma, with what i
 
 | | what | where it is | state |
 |---|---|---|---|
-| 1 | Exact serving for the other models: Qwen with the prefix cache off, one test at a time, a baseline and the empty change under two starts of the server (gpt-oss needs both GPUs and comes later) | §4 | running |
-| 2 | The batches on the current app: the 23 batches recorded again beside `runs/gemma8`, evaluated, and checked live | §4 | running |
+| 1 | Exact serving for the other models: Qwen with the prefix cache off, one test at a time, a baseline and the empty change under two starts of the server (gpt-oss needs both GPUs and comes later) | §4 | done for Qwen (`runs/qwen8_exact`): no request of 5,310 answered otherwise, under either start; gpt-oss open |
+| 2 | The batches on the current app: the 23 batches recorded again beside `runs/gemma8`, evaluated, and checked live | §4 | done |
 | 3 | The paper: fewer tables and a shorter text, keeping what the argument needs; then the venue's format | §6 | cut to 13 tables and 18 pages of text; the venue and its page limit are still to choose |
 | 4 | A second application, tau2-bench's airline domain | §4 | waits for the go-ahead to install and run its code |
-| 5 | Stop thresholds for Qwen, set on generated changes recorded with Qwen | §4 | after item 1: one repetition per test is enough if Qwen repeats exactly |
+| 5 | Stop thresholds for Qwen, set on generated changes recorded with Qwen | §4 | can start from `runs/qwen8_exact`: Qwen repeats exactly, so one run per reached test is enough, about 23,000 runs or 40 hours of one GPU |
 
 ## 1. Fair tables (replay only): done
 
@@ -140,8 +140,9 @@ The app and the tests:
 - [x] What a reached test costs when the cassette answers every request it knows, counted while a copy is
       recorded (`cassette.known_tokens`): about a third less than the tokens after the divergence point.
       `runs/gemma8` and `runs/gemma8_gen` were recorded before the count and keep the bound.
-- [ ] The batches again on the current app: those of `docs/results/gemma7/` were recorded before the fixes of
-      section 3.
+- [x] The batches again on the current app (`runs/gemma8_batches`, `docs/results/gemma8_batches/batches.md`):
+      the replay stays exact on all 1,374 replayed outcomes, and every revealed batch is found offline with no
+      budget.
 - [ ] Model updates as changes without a diff: the three baselines already give six (`model_updates.py`).
 - [x] A second model with its own cassette, baseline and changed copies recorded the same way (`runs/qwen8`,
       one test at a time; `docs/results/qwen8/`, `docs/RESEARCH_PLAN.md` §5.7): the empty change flips no test,
@@ -164,9 +165,12 @@ The app and the tests:
       reached pairs are one and the same run. 3 labels differ from `runs/gemma8` and 30 changes have a revealing
       test. Every order of the reached tests finds all 30, for 4.8% to 6.1% of the suite, where the cache pays
       12.8%.
-- [ ] The same setup for the other models: whether Qwen (0.4% of its requests answered otherwise one test at a
-      time, with the cache on) and gpt-oss (outcomes that change with a restart) repeat exactly without the
-      prefix cache.
+- [x] The same setup for Qwen (`runs/qwen8_exact`: a baseline and cassette of its own, and the empty change
+      under two starts of the server): none of 5,310 requests is answered otherwise, against 20 of 5,580 with
+      the cache on (`runs/qwen8`), and five passes take 100 minutes instead of 78. Five tests pass or fail on the
+      original app otherwise than in `runs/qwen8`.
+- [ ] The same setup for gpt-oss, whose outcomes change with a restart of the server; it needs both of fmi0's
+      GPUs.
 - [x] A cassette built from the baseline's own five repetitions, the answer given most often: the one outcome
       the replay got wrong on `runs/gemma7` (WF3-01, whose runs take two paths) is right on `runs/gemma8`.
 - [x] The same condition for a second model and its serving setup (`runs/qwen8`): 0.4% of the empty change's
@@ -192,9 +196,8 @@ The app and the tests:
       - to check before recording: the ids the server makes up for tool calls (number them, as the `llm` backend
         does), and a report that prefix caching on the server breaks repeatability on these tasks.
 - [ ] Real changes beside the generated ones (skill revision histories).
-- [ ] The live checks of the 23 batches again: those of `docs/results/gemma7/batches.md` and `batch_sweep.md` were
-      run with each batch's members among the changes the check learned from, which `traceeval check` now holds
-      out, and without the replay phase.
+- [x] The live checks of the 23 batches again, with their members held out and the replay phase: 19 of the 20
+      revealed batches found, no false alarm, the blame on a member that is a regression alone in 17 of 18.
 
 ## 5. The method: stopping on the diverged tests
 

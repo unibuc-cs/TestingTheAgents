@@ -151,9 +151,10 @@ token and with it the rest of the run ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.
 | the batch a request lands in | a test's runs differ from each other | one test at a time: `--workers 1` |
 | the server's prefix cache | the answer depends on what the server was sent before | `TRACEEVAL_VLLM_ARGS="--no-enable-prefix-caching" scripts/gpu_remote.sh up gemma` |
 
-With both taken out, Gemma answers every request the same way again, also after a restart of the server
-(`runs/gemma8_exact`): no request of 11,010 is answered otherwise. A pass of the suite then takes six minutes
-instead of half a minute.
+With both taken out, Gemma and Qwen answer every request the same way again, also after a restart of the server:
+no request is answered otherwise, of 11,010 for Gemma (`runs/gemma8_exact`) and of 5,310 for Qwen
+(`runs/qwen8_exact`). A pass of the suite then takes six minutes instead of half a minute with Gemma, and 20
+instead of 16 with Qwen, which was recorded one test at a time already.
 
 How much the default setting matters depends on the model. A change that alters nothing, recorded again and again
 against the baseline, measures it ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4 has the numbers):
@@ -572,7 +573,7 @@ changes have no revealing test (section 7).
 
 The recordings of the current app, with 180 tests, 43 changes, the empty change, five repetitions and the model
 judge. The first is the recording of record. The others start from its baseline and cassette, except
-`runs/gemma8_exact` and `runs/qwen8`, which have a baseline and a cassette of their own:
+`runs/gemma8_exact`, `runs/qwen8` and `runs/qwen8_exact`, which have a baseline and a cassette of their own:
 
 | recording | model | where | time |
 |---|---|---|---|
@@ -581,7 +582,9 @@ judge. The first is the recording of record. The others start from its baseline 
 | `runs/gemma8_pc0_w32`, `_pc0_w1`, `_pc1_w32`, `_pc1_w1` ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7) | Gemma, started anew with its prefix cache off (`pc0`) and on (`pc1`) | fmi0's GPU0 | two to three minutes 32 tests at a time (`w32`), 30 minutes one at a time (`w1`): the empty change only, from `runs/gemma8`'s baseline and cassette |
 | `runs/gemma8_exact`, `runs/gemma8_exact_restart` ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7) | Gemma without its prefix cache, two starts | fmi0's GPU0 | 33 minutes for the baseline, 30 for each empty change and six hours for the 43 changes (the tests each reaches), one test at a time: a baseline and cassette of its own, the empty change under the same start and under another from a copy of that baseline, then the changed copies; report in `docs/results/gemma8_exact/` |
 | `runs/gemma8_gen`, report in `docs/results/gemma8_gen/` | Gemma, started anew | fmi0's GPU0 | a little over six hours: 691 of the 692 generated changes for the tests each reaches, 114,230 runs, from `runs/gemma8`'s baseline and cassette; then half an hour for the held-out evaluation on ten processes |
+| `runs/gemma8_batches`, in `docs/results/gemma8_batches/` | Gemma, started anew | fmi0's GPU0 | 40 minutes for the 23 batches beside a copy of `runs/gemma8`, the whole suite on each, 32 tests at a time; then 12 minutes for their live checks (`scripts/batch_sweep.py`) |
 | `runs/qwen8`, report in `docs/results/qwen8/` | Qwen | fmi0's GPU1 | seventeen hours, one test at a time throughout: 78 minutes for the baseline, 77 for the empty change, and fifteen hours for the 43 changes (the tests each reaches) |
+| `runs/qwen8_exact`, `runs/qwen8_exact_restart` ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7) | Qwen without its prefix cache, two starts | fmi0's GPU1 | five hours, one test at a time: 100 minutes for the baseline, with a cassette of its own, and 100 for each empty change, under the same start and under another from a copy of that baseline |
 
 On the original app 172 of 180 tests pass, 28 of the 34 regressions are revealed and no benign change is, so the
 report's sanity line says VIOLATED for the six changes below. They stay in the set:
@@ -608,8 +611,6 @@ The recordings below are of the app as it was before the harness and test fixes 
 | `runs/gemma7_second` | the whole experiment a second time, from scratch | Gemma, two SLURM GPUs | `results/gemma7/second_recording.md`: the same original app run for run, 4 of 7,740 labels differ |
 | `runs/gemma7_oneatatime` | the benign rewording of the orchestrator's prompt, one test at a time, five repetitions | Gemma, fmi0's GPU0 | `results/gemma7/false_alarm_one_at_a_time.md` |
 | `runs/gemma7_noise` | the empty change fifteen times, 32 tests at a time | Gemma, fmi0's GPU0 | `results/gemma7/noise_floor.md` |
-| `runs/gemma7_batches` | a copy of `runs/gemma7` plus the three batches | Gemma, fmi0's GPU0 | `results/gemma7/batches.md` |
-| `runs/gemma7_sweep` | a copy of `runs/gemma7` plus the twenty batches of `scripts/batch_sweep.py` | Gemma, fmi0's GPU0 | `results/gemma7/batch_sweep.md` |
 | `runs/qwen7` | the whole experiment, about six hours | Qwen, two SLURM GPUs | `results/qwen7/report.md`; not a clean ground truth (below) |
 | `runs/qwen_w1_a`, `runs/qwen_w1_b` | the empty change one test at a time, three and two repetitions | Qwen, two SLURM GPUs and fmi0's GPU1 | `results/qwen7/one_at_a_time.md` |
 | `runs/qwen7_noise` | the empty change fifteen times, 64 tests at a time | Qwen, two SLURM GPUs | `results/qwen7/noise_floor.md` |

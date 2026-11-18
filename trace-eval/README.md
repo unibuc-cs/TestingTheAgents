@@ -123,8 +123,8 @@ generated from the app, five repetitions each ([docs/RESEARCH_PLAN.md](docs/RESE
   prompt every request reads reaches 153.
 - **What replays is the outcome, not every model call.** 2% to 3% of the requests sent again get another answer,
   and no test ends otherwise. The other answers come from two settings of the server, many tests at a time and its
-  prefix cache. One test at a time and without the cache, every request gets its recorded answer again, across a
-  restart of the server too, at a tenth of the speed.
+  prefix cache. One test at a time and without the cache, Gemma and Qwen give every request its recorded answer
+  again, across a restart of the server too; Gemma's suite then takes ten times as long.
 - **The cache is the baseline.** Replaying recorded answers is an old idea (test factoring, 2005), and a cache
   already saves most of the tokens ([docs/related_work.md](docs/related_work.md) §8). What the replay adds is
   knowing, before any model call, which tests a change reaches: a regression then costs 2% to 3% of the suite
@@ -148,7 +148,8 @@ The full numbers, with intervals over the changes, are in the reports of the rec
 [Qwen](docs/results/qwen8/report.md)), and the take-aways in [RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.5. What
 follows from them is the plan in [TODO.md](TODO.md).
 
-The batches of changes are measured on the app as it was before the fixes of TODO §3
+**Batches** of two to nine changes, as a nightly run sees them: the replay stays exact, and live checks find 19
+of the 20 batches a test reveals, with no false alarm; the method names the member to blame
 ([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.6). The recordings of Qwen and gpt-oss made many tests at once
 are not clean ground truths: their answers vary with the batch ([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md)
 §5.4).

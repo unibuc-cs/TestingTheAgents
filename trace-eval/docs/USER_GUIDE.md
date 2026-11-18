@@ -88,7 +88,7 @@ Paths are relative to `traceeval/`.
 
 ## 3. Where to look in the code (in this order)
 
-| Want to understand… | Read |
+| Want to understand | Read |
 |---|---|
 | what the agents do | `sut/skills/publishing-workflow/SKILL.md`, `sut/agents/publishing.yaml`, `sut/config/runtime.yaml` |
 | how a request becomes tool calls | `sut/harness/runtime.py` (`_run_agent`), `dispatcher.py`, `backends/llm_openai.py` |
@@ -367,15 +367,15 @@ checks it live and prints, after the verdict, the components it blames. Neither 
 strategy learn from a batch's members, or from the batches that share one (`History.training_variants`): a model
 that has seen what each member breaks would know the answer.
 
-| batch | what it bundles | revealing tests (Gemma, beside `runs/gemma7`) |
+| batch | what it bundles | revealing tests (Gemma, beside `runs/gemma8`) |
 |---|---|---|
-| `batch_nightly` | a day's merges: six regressions across tools, harness, skills, an agent definition and a service, plus two harmless edits | 28 |
+| `batch_nightly` | a day's merges: six regressions across tools, harness, skills, an agent definition and a service, plus two harmless edits | 30 |
 | `batch_publishing_pr` | one pull request on the publishing path: the skill drops its link validation, the link check lets external URLs through, taking a page down needs no approval token | 9 |
 | `batch_benign` | all nine benign changes at once | 1: two of the prompt edits, harmless alone, change the orchestrator's answer together |
 
-RESEARCH_PLAN §5.6 has what the strategies make of them, [results/gemma7/batches.md](results/gemma7/batches.md) the
-full tables, and [results/gemma7/batch_sweep.md](results/gemma7/batch_sweep.md) twenty more batches of two to eight
-changes drawn at random by `scripts/batch_sweep.py`.
+RESEARCH_PLAN §5.6 has what the strategies make of them, with twenty more batches of two to eight changes drawn at
+random by `scripts/batch_sweep.py`, and [results/gemma8_batches/batches.md](results/gemma8_batches/batches.md)
+every batch.
 
 ### Generated changes
 
