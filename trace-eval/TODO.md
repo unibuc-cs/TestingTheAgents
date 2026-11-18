@@ -24,6 +24,16 @@ script in [`scripts/analysis/`](scripts/analysis/README.md)):
 
 Order of work: sections 1 to 3 are done; 4 and 5 are done for Gemma, with what is open marked; 6 is the paper.
 
+## Next, in this order
+
+| | what | where it is | state |
+|---|---|---|---|
+| 1 | Exact serving for the other models: Qwen with the prefix cache off, one test at a time, a baseline and the empty change under two starts of the server (gpt-oss needs both GPUs and comes later) | §4 | running |
+| 2 | The batches on the current app: the 23 batches recorded again beside `runs/gemma8`, evaluated, and checked live | §4 | running |
+| 3 | The paper: fewer tables and a shorter text, keeping what the argument needs; then the venue's format | §6 | in progress; the venue and its page limit are still to choose |
+| 4 | A second application, tau2-bench's airline domain | §4 | waits for the go-ahead to install and run its code |
+| 5 | Stop thresholds for Qwen, set on generated changes recorded with Qwen | §4 | after item 1: one repetition per test is enough if Qwen repeats exactly |
+
 ## 1. Fair tables (replay only): done
 
 The numbers and their reading are in `docs/RESEARCH_PLAN.md` §5.1 and §5.6.
