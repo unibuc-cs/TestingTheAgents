@@ -13,12 +13,9 @@
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{6pt}
 \raggedright
-\hyphenpenalty=10000
-\exhyphenpenalty=10000
 
-\newtheorem{propozitie}{Propozitie}
-\newtheorem{corolar}{Corolar}
-\renewcommand{\proofname}{Demonstratie}
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
 
 \newcommand{\strat}[1]{\texttt{#1}}
 \newcommand{\Ddecl}{D^{\mathrm{decl}}_t}
@@ -26,349 +23,334 @@
 \newcommand{\Trep}{T^{\mathrm{rep}}(\Delta)}
 \newcommand{\Tdiv}{T^{\mathrm{div}}(\Delta)}
 
-\title{Replay-first: ce evaluari rulam dupa o schimbare,\\ in ce ordine si cand ne oprim}
+\title{Replay first: which evals to run after a change,\\ in what order, and when to stop}
 \date{}
 
 \begin{document}
 \maketitle
 \vspace{-1.5cm}
 
-\section*{Rezumat}
+\section{The problem}
 
-Un sistem cu agenti LLM se schimba des: un prompt, un skill, un tool, codul care conduce agentii, o setare. Dupa
-fiecare schimbare vrem sa stim daca s-a stricat ceva, iar evaluarile costa, pentru ca fiecare test face apeluri la
-model si fiecare apel se plateste in tokeni. Intrebarea este deci ce teste rulam dupa o schimbare, in ce ordine si
-cand ne putem opri, astfel incat sa prindem regresiile cu cat mai putini tokeni.
+An LLM agent system is made of agents (a model with a prompt, skills and tools), the harness code that runs them, and
+configuration. A \emph{test}, or eval, sends the system a request and checks what it did: the final state, the tool
+calls and the answer. Every test calls the model, so every test costs tokens.
 
-Raspunsul are trei pasi. Intai rejucam toata suita pe raspunsurile pe care modelul le-a dat versiunii curente, fara
-sa apelam modelul. Testele care ajung asa pana la final isi au rezultatul fara niciun token; cele care ii pun
-modelului o intrebare noua sunt exact cele prin care schimbarea ajunge la model, si doar ele mai trebuie rulate.
-Apoi o strategie pune aceste teste intr-o ordine, iar rularea se opreste la prima regresie. In fine, o regula de
-oprire poate declara schimbarea curata inainte sa le ruleze pe toate, cu un prag ales astfel incat proportia
-regresiilor ratate sa nu depaseasca o tinta fixata dinainte. Setul de teste rulat depinde astfel de schimbare, spre
-deosebire de un set minimal fix, ales o singura data; sectiunea~\ref{sec:setminimal} explica de ce diferenta
-conteaza.
+A \emph{change} $\Delta$ turns the current version $V_0$ into a new version $V_1$: an edited prompt or skill, a tool
+that works differently, a new setting. Because a model produces the outcome, we run each test $K$ times on $V_0$ and
+call $f_t$ the share of those runs that fail. A test with $f_t \ge \frac12$ is one the model already fails, and it
+cannot tell us anything about a change. A test \emph{reveals} $\Delta$ when it passes on $V_0$ and fails on $V_1$;
+$\mathrm{Rev}(\Delta)$ is the set of such tests, and $\Delta$ is a \emph{regression} when that set is not empty.
 
-\section{Notatii}
-
-\begin{tabular}{>{$}l<{$}p{12.4cm}}
-\toprule
-\text{simbol} & semnificatie \\
-\midrule
-V_0,\ V_1 = V_0 + \Delta & versiunea curenta si versiunea schimbata; $\Delta$ este schimbarea (diff-ul) \\
-C(\Delta) & componentele atinse de schimbare: functii si linii de cod, tool-uri si descrierea lor, procedura si
-  textul unui skill, campuri ale unui agent, setari, datele de start \\
-T,\ c(t) & suita de teste; costul testului $t$ in tokeni, masurat pe $V_0$ \\
-\rho_t,\ f_t & ponderea de risc a testului; rata lui de picare pe $V_0$ \\
-\Ddecl & dependentele declarate de autorul testului \\
-\Dobs,\ \phi_t(d) & componentele exersate efectiv de rularile lui $t$ pe $V_0$ (din trace-uri si coverage); fractiunea
-  de rulari ale lui $t$ care au exersat componenta $d$ \\
-M,\ q_i,\ a_i & modelul; a $i$-a cerere a unei rulari si raspunsul ei \\
-Q_0,\ A_0 & cererile trimise modelului pe $V_0$; caseta, care asociaza fiecarei cereri raspunsul primit \\
-\Trep,\ \Tdiv & testele care ajung la final in replay; testele atinse de schimbare \\
-c_\Delta(t) & ce costa $t$ pe $V_1$ in spatele casetei: tokenii cererilor lui care nu sunt in $Q_0$ \\
-\mathrm{Rev}(\Delta) & testele care prind schimbarea: trec pe $V_0$ si pica pe $V_1$ \\
-\bottomrule
-\end{tabular}
-
-\section{Cum functioneaza replay-ul}
-\label{sec:mecanism}
-
-O rulare a testului $t$ pe o versiune $V$ alterneaza apeluri ale modelului cu cod. Prin cod intelegem tot ce nu e
-model: harness-ul care conduce agentii, tool-urile si serviciile din spatele lor, datele de start si verificarile
-testului. Formal,
-\[
-  q_1 = g^t_V(), \qquad a_i = M(q_i), \qquad q_{i+1} = g^t_V(a_1, \dots, a_i), \qquad
-  X_t(V) = h^t_V(a_1, \dots, a_n).
-\]
-Cererea $q_i$ este tot ce primeste modelul la al $i$-lea apel: promptul de sistem, mesajele de pana atunci cu fiecare
-rezultat de tool, tool-urile oferite si setarile de decodare; apelurile unui judecator (un model care noteaza
-raspunsul) sunt si ele printre aceste cereri. $g^t_V$ ruleaza codul lui $V$ pana la urmatorul apel, iar $h^t_V$ il
-ruleaza pana la final si aplica verificarile testului pe starea finala, pe apelurile de tool si pe raspuns.
-
-Pe $V_0$ rulam suita o data si pastram, pentru fiecare cerere $q \in Q_0$, raspunsul primit $A_0(q)$; cand rularile
-repetate dau raspunsuri diferite, il pastram pe cel mai frecvent. Aceasta este \emph{caseta}. O cerere e indexata
-dupa un hash al ei intregi, asa ca doua cereri se potrivesc doar daca sunt identice. Identificatorii pe care serverul
-ii inventeaza pentru apelurile de tool sunt inlocuiti in cheie cu ordinea aparitiei lor, ca sa nu strice potrivirea.
-
-A \emph{rejuca} testul $t$ pe $V_1$ inseamna a rula ecuatiile de mai sus cu $M$ inlocuit de $A_0$. Codul este cel al
-lui $V_1$ si ruleaza ca atare; doar raspunsurile modelului vin din caseta. Rularea fie ajunge la final cu toate
-cererile in $Q_0$, si atunci testul e in $\Trep$ cu un rezultat $\hat{X}_t(V_1)$, fie ajunge la o cerere $q \notin
-Q_0$, numita punct de divergenta. Caseta nu are raspuns pentru ea, replay-ul testului se opreste acolo, iar testul e
-in $\Tdiv$: este atins de schimbare. Totul se face fara niciun apel al modelului, deci fara tokeni, in timpul in care
-ruleaza codul.
-
-Pentru ca $g$ si $h$ sunt codul lui $V_1$, o schimbare se vede oriunde schimba ce primeste modelul sau ce face codul
-cu raspunsurile lui:
+The question is which tests to run after a change, in what order, and when to stop, so that we catch regressions
+while paying as few tokens as possible. Our answer has three steps:
 \begin{itemize}
-  \item daca schimba ce primeste un agent de la inceput (promptul, skill-urile, tool-urile oferite si descrierile lor,
-        sarcina), schimba prima cerere a conversatiei agentului, iar testul diverge acolo;
-  \item daca schimba codul unui tool, un serviciu, datele de start sau o setare citita de cod, schimba un rezultat de
-        tool atunci cand apelul testului ajunge la comportamentul schimbat; urmatoarea cerere e atunci diferita si
-        testul diverge acolo. Tool-urile nu sunt niciodata rejucate din inregistrare: ruleaza mereu cu codul nou;
-  \item daca schimba doar starea pe care modelul nu o citeste, verificarile din $h$ o vad, iar testul ajunge la final
-        in replay cu un rezultat picat;
-  \item daca nu schimba nimic din toate acestea, rularea ramane cea de pe $V_0$ si testul ajunge la final cu
-        rezultatul inregistrat.
+  \item \textbf{Replay.} We record the model's answers on $V_0$ once. After a change, we rerun every test with those
+        recorded answers in place of the model. A test that never asks the model anything new gets its outcome for
+        free. A test that does ask something new is one the change reaches, and only those need the model.
+  \item \textbf{Order.} A strategy puts the reached tests in an order, and the run stops at the first failure.
+  \item \textbf{Stop.} A stopping rule may call the change clean before every reached test has run, with a
+        threshold set on past changes so that the share of missed regressions stays under a target we choose.
 \end{itemize}
 
-Caseta seamana cu un cache, dar nu cu prompt caching-ul furnizorilor de modele sau al serverelor (de exemplu
-cache-ul de prefix din vLLM). Acela pastreaza calculul pentru un prefix de prompt deja vazut si genereaza totusi
-raspunsul: scade pretul si latenta unui apel, dar nu economiseste apeluri. Caseta raspunde cu potrivire exacta, iar o
-cerere pe care o contine nu face niciun apel. Pe un server GPU, cache-ul de prefix este chiar una din setarile care
-pot face ca aceeasi cerere sa primeasca alt raspuns (sectiunea~\ref{sec:conditii}).
+\section{How the replay works}
+\label{sec:replay}
 
-\section{De ce rezultatul rejucat este cel real}
-\label{sec:conditii}
+\paragraph{A run, written down.} A run of test $t$ on version $V$ alternates calls to the model $M$ with code. By
+\emph{code} we mean everything that is not the model: the harness, the tools and the services behind them, the
+starting data, and the test's checks. Each call sends a \emph{request} $q_i$ and gets an \emph{answer} $a_i$:
+\[
+  q_1 = g^t_V(), \qquad a_i = M(q_i), \qquad q_{i+1} = g^t_V(a_1, \dots, a_i), \qquad X_t(V) = h^t_V(a_1, \dots, a_n).
+\]
+\begin{itemize}
+  \item A request is everything the model sees in that call: the system prompt, the messages so far including every
+        tool result, the tools on offer, and the decoding settings. Calls to a judge model that grades the answer
+        are requests too.
+  \item $g^t_V$ runs the code of $V$ up to the next call. $h^t_V$ runs it to the end and applies the test's checks;
+        $X_t(V)$ is the outcome, pass or fail.
+\end{itemize}
 
-Replay-ul inlocuieste modelul cu o inregistrare, deci rezultatul lui spune ceva despre rularea reala doar daca doua
-lucruri sunt adevarate.
+\paragraph{The cassette.} We run the suite on $V_0$ and keep every answer under the request that produced it. $Q_0$
+is the set of those requests and $A_0(q)$ the answer stored for $q$; when repeated runs disagree, we keep the most
+frequent answer. We call this store the \emph{cassette}. A request is looked up by a hash of all of it, so two
+requests match only if they are identical. Tool-call ids that a server makes up are replaced by their order of
+appearance before hashing, so that they do not break the match.
 
-\textbf{Conditia R.} In configuratia de servire folosita, raspunsul la o cerere este o functie de cerere:
-$M(q) = A_0(q)$ pentru orice $q \in Q_0$.
+\paragraph{Replaying a test.} To replay test $t$ on $V_1$, we run it with $A_0$ in place of $M$. The code is the
+code of $V_1$ and runs as it is; only the model's answers come from the cassette. One of two things happens:
+\begin{itemize}
+  \item every request is in $Q_0$. The run finishes without the model, with outcome $\hat{X}_t(V_1)$, and $t$
+        \emph{replays to the end}. These tests form $\Trep$;
+  \item the run reaches a request $q \notin Q_0$, its \emph{divergence point}. The cassette has no answer, the
+        replay of $t$ stops there, and $t$ \emph{diverges}. These tests form $\Tdiv$, the tests the change
+        \emph{reaches}.
+\end{itemize}
+The replay makes no model call, so it costs no tokens and takes only the time the code needs.
 
-\textbf{Conditia D.} Dandu-se raspunsurile, codul unei versiuni este determinist: $g^t_V$ si $h^t_V$ nu citesc ceasul,
-nu trag numere aleatoare si nu intreaba servicii externe al caror raspuns se poate schimba.
+\paragraph{Where a change shows.} Since $g$ and $h$ are the code of $V_1$, a change shows wherever it alters what
+the model sees or what the code does with the answers:
+\begin{itemize}
+  \item a change to what an agent gets up front (its prompt, its skills, its tools and their descriptions, its task)
+        alters the first request of that agent's conversation, and the test diverges there;
+  \item a change to a tool's code, a service, the starting data or a setting the code reads alters a tool result
+        whenever the test's call hits the changed behaviour. The next request is then new, and the test diverges
+        there. Tools are never replayed from the recording; they always run the new code;
+  \item a change that only alters state the model never reads is caught by the checks in $h$: the test replays to
+        the end and fails;
+  \item a change that alters none of this leaves the run as it was on $V_0$, and the test replays to its recorded
+        outcome.
+\end{itemize}
 
-\begin{propozitie}
+\paragraph{Not prompt caching.} Model providers and servers offer \emph{prompt caching}, also called prefix caching:
+they keep the computation for a prompt prefix they have seen before, and still generate a new answer. That makes a
+call cheaper and faster, but every call is still made. The cassette is different: a request it holds makes no call
+at all.
+
+\section{When the replayed outcome is the real one}
+\label{sec:conditions}
+
+The replay stands in for the model, so it tells us about a real run only if two conditions hold.
+\begin{itemize}
+  \item \textbf{Condition R.} With the model served the way we serve it, the same request always gets the same
+        answer: $M(q) = A_0(q)$ for every $q \in Q_0$.
+  \item \textbf{Condition D.} Given the answers, the code is deterministic: $g^t_V$ and $h^t_V$ read no clock, draw
+        no random numbers, and call no outside service whose reply can change.
+\end{itemize}
+
+\begin{proposition}
 \label{prop:replay}
-Sub R si D, un test din $\Trep$ rulat pe $V_1$ cu modelul trimite cererile replay-ului si primeste raspunsurile lui,
-deci $X_t(V_1) = \hat{X}_t(V_1)$. Un test din $\Tdiv$ rulat pe $V_1$ coincide cu replay-ul lui pana la punctul de
-divergenta.
-\end{propozitie}
+Under R and D, a test in $\Trep$, run on $V_1$ with the real model, sends the requests of its replay and gets the
+same answers, so $X_t(V_1) = \hat{X}_t(V_1)$. A test in $\Tdiv$ matches its replay up to its divergence point.
+\end{proposition}
 
 \begin{proof}
-Prin inductie dupa $i$. Primele cereri sunt egale, pentru ca ambele rulari executa codul lui $V_1$, determinist prin
-D. Daca cererile $i$ sunt egale si in $Q_0$, modelul raspunde $M(q_i) = A_0(q_i)$ prin R, deci raspunsurile $i$ sunt
-egale, iar prin D si cererile urmatoare. Un test din $\Trep$ se termina cu raspunsuri egale, carora $h^t_{V_1}$ le
-da un singur rezultat; un test din $\Tdiv$ pastreaza cereri si raspunsuri egale pana la prima cerere din afara lui
-$Q_0$.
+By induction on $i$. The first requests match, because both runs execute the code of $V_1$, which is deterministic
+by D. If the $i$-th requests match and are in $Q_0$, the model answers $M(q_i) = A_0(q_i)$ by R, so the $i$-th answers
+match, and by D so do the next requests. A test in $\Trep$ ends with the same answers, and $h^t_{V_1}$ turns them into
+one outcome. A test in $\Tdiv$ matches up to its first request outside $Q_0$.
 \end{proof}
 
-\begin{corolar}
-\label{cor:sigur}
-Sub R si D, fiecare test care prinde schimbarea fie diverge, fie ajunge la final in replay cu un rezultat picat:
-$\mathrm{Rev}(\Delta) \subseteq \Tdiv \cup \{t \in \Trep : \hat{X}_t(V_1) = \text{pica}\}$.
-\end{corolar}
+\begin{corollary}
+\label{cor:safe}
+Under R and D, every test that reveals the change either diverges or fails in the replay:
+$\mathrm{Rev}(\Delta) \subseteq \Tdiv \cup \{t \in \Trep : \hat{X}_t(V_1) = \text{fail}\}$.
+\end{corollary}
 
 \begin{proof}
-Un test din $\Trep$ care prinde schimbarea pica pe $V_1$; prin propozitie, $\hat{X}_t(V_1) = X_t(V_1)$, deci pica si
-in replay.
+A test in $\Trep$ that reveals the change fails on $V_1$, and by the proposition its replay has the same outcome.
 \end{proof}
 
-Conditiile nu se presupun, ci se verifica. Conditia D tine de sistemul testat: serviciile trebuie simulate sau
-inregistrate, fara ceas si fara aleatoriu, iar cheile derivate din operatie. Ea se verifica gratis: $V_0$, rejucat pe
-propria caseta, trebuie sa ajunga la final cu rezultatul inregistrat la fiecare test. Un sistem ale carui tool-uri
-intreaba servicii externe o indeplineste doar daca si raspunsurile acelor servicii sunt inregistrate sau simulate.
+Neither condition is assumed. We check both:
+\begin{itemize}
+  \item \textbf{D} belongs to the system under test: services simulated or recorded, no clock, no randomness, keys
+        derived from the operation. It is checked for free: replayed against its own cassette, $V_0$ must reach the
+        end of every test with the recorded outcome. A system whose tools call outside services meets D only if
+        those services are recorded or simulated too.
+  \item \textbf{R} belongs to the model and the way it is served. Even with deterministic decoding (temperature 0,
+        always the most likely token), a GPU server is not exact to the bit: the batch a request shares with other
+        requests, and the server's prefix cache, change the floating-point arithmetic and now and then a token. We
+        measure R with the \emph{empty change}: $V_0$ run again exactly the way a changed version is run, compared
+        with the cassette request by request, run by run, and outcome by outcome. Replay first needs only the last
+        of the three.
+  \item When exact answers matter, serve the model without its prefix cache and with one test at a time per server,
+        and confirm it with the empty change.
+  \item A cassette is valid only for the model and the serving setup it was recorded with. A hosted model can
+        change without notice; running the empty change from time to time tells us when to record again.
+\end{itemize}
 
-Conditia R tine de model si de felul in care e servit. Decodarea greedy pe un server GPU nu este exacta la bit: lotul
-(batch-ul) in care intra o cerere si cache-ul de prefix schimba aritmetica in virgula mobila si, din cand in cand, un
-token. R se masoara cu \emph{schimbarea vida}, adica $V_0$ rulat din nou exact cum se ruleaza o versiune schimbata, pe
-trei niveluri: cererea (fiecare raspuns comparat cu cel din caseta), rularea (comparata apel cu apel cu replay-ul) si
-rezultatul (cum se termina testul). Metoda are nevoie doar de ultimul nivel. Cand e nevoie de raspunsuri exacte,
-configuratia candidata este servirea fara cache de prefix, cu cate un test pe rand pe fiecare server, verificata tot
-cu schimbarea vida. Caseta ramane valabila doar pentru modelul si configuratia cu care a fost inregistrata; un model
-gazduit se poate schimba fara anunt, iar schimbarea vida, rulata periodic, spune cand trebuie reinregistrata.
+\section{What the replay gives}
+\label{sec:gives}
 
-\section{Ce castigam}
-\label{sec:ajuta}
-
-Sub cele doua conditii, replay-ul da direct urmatoarele concluzii:
+Under R and D:
 
 \begin{center}
 \begin{tabular}{p{7.2cm}p{8.4cm}}
 \toprule
-ce gaseste replay-ul & ce urmeaza \\
+the replay finds & so \\
 \midrule
-$t \in \Trep$ trece & $t$ trece pe $V_1$; nu trebuie rulat \\
-$t \in \Trep$ pica, si $f_t < \tfrac12$ & regresie, inainte de orice apel al modelului \\
-$\Tdiv = \emptyset$ si niciun astfel de test picat & curat: niciun test nu poate deosebi $V_1$ de $V_0$ \\
-$t \in \Tdiv$ & $t$ are nevoie de model, pentru cererile care nu sunt in $Q_0$ \\
-toate testele din $\Tdiv$ cu $f_t < \tfrac12$ rulate si trecute & curat, fara niciun test atins de schimbare lasat
-  nerulat \\
+$t \in \Trep$ passes & $t$ passes on $V_1$; no need to run it \\
+$t \in \Trep$ fails, and $f_t < \tfrac12$ & regression, before any model call \\
+$\Tdiv$ is empty, and no such failure & clean: no test can tell $V_1$ from $V_0$ \\
+$t \in \Tdiv$ & $t$ needs the model, for its requests outside $Q_0$ \\
+every $t \in \Tdiv$ with $f_t < \tfrac12$ is run and passes & clean, with nothing the change reaches left untested
+  \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-Un test atins ruleaza cu modelul in spatele casetei: o cerere din $Q_0$ primeste raspunsul din caseta oriunde apare,
-si doar celelalte ajung la model. Costul lui este
+\paragraph{What a reached test costs.} A reached test runs with the model behind the cassette: any request already in
+$Q_0$ is answered from the cassette, and only new requests go to the model. Its cost is
 \[
-  c_\Delta(t) = \sum_{q \,\in\, \mathrm{rulare}(t, V_1),\ q \notin Q_0} \mathrm{tokeni}(q),
+  c_\Delta(t) = \sum_{q \,\in\, \mathrm{run}(t, V_1),\ q \notin Q_0} \mathrm{tokens}(q).
 \]
-iar replay-ul il margineste inainte de orice apel, prin tokenii lui $t$ de dupa punctul de divergenta. Strategiile
-planifica cu aceasta margine.
+Before any model call, the replay bounds it from above by the tokens of $t$ after its divergence point. Strategies
+plan with that bound.
 
-Un simplu cache de raspunsuri pus in fata modelului ar da aceeasi economie oricarei rulari repetate a suitei:
-toata suita prin cache costa $\sum_{t} c_\Delta(t)$. Ce adauga replay-ul este faptul ca stim dinainte ce teste atinge
-schimbarea, si de aici trei economii in plus: testele pe care modelul le pica deja pe $V_0$ nu se mai ruleaza;
-rularea se opreste la primul test care pica, asa ca ordinea testelor atinse decide cat costa o regresie; iar o regula
-care se opreste mai devreme decide cat costa o schimbare care nu strica nimic. In plus, punctul de divergenta spune
-unde ajunge schimbarea la model: la inceputul conversatiei unui agent, cand s-a schimbat ce primeste agentul, sau
-dupa un rezultat de tool, cand s-a schimbat ce intoarce un tool.
+\paragraph{Compared with a plain answer cache.} A cache of answers in front of the model would give the same saving
+to any rerun of the suite. What the replay adds is knowing, before any call, which tests the change reaches. That
+buys three more savings:
+\begin{itemize}
+  \item tests the model already fails on $V_0$ are not run;
+  \item the run stops at the first failing test, so the order of the reached tests decides what a regression costs;
+  \item a stopping rule decides what a change that breaks nothing costs.
+\end{itemize}
+The divergence point also says where the change reaches the model: at the start of an agent's conversation, when
+what the agent gets has changed, or after a tool result, when what a tool returns has changed.
 
-\section{In ce ordine rulam testele atinse}
-\label{sec:strategii}
+\section{Ordering the reached tests}
+\label{sec:order}
 
-Replay-ul lasa intrebarea clasica a prioritizarii, dar pe o suita mai mica. Toate strategiile respecta aceleasi doua
-reguli: un test pe care modelul il pica deja pe $V_0$ ($f_t \ge \tfrac12$) nu se ruleaza, pentru ca nu poate arata
-nimic, iar rularea se opreste la primul test care pica, pentru ca un test care trecea pe $V_0$ si pica pe $V_1$
-inseamna regresie. Cu replay, se pot rula doar testele din $\Tdiv$, iar costul unui test este $c_\Delta(t)$.
+This is classic test prioritization on a smaller suite. Every strategy follows the same two rules:
+\begin{itemize}
+  \item a test with $f_t \ge \frac12$ is not run;
+  \item the run stops at the first failure, since a test that passed on $V_0$ and fails on $V_1$ means a regression.
+\end{itemize}
+With the replay, only tests in $\Tdiv$ can be run, and a test costs $c_\Delta(t)$.
 
-Strategiile difera prin ce citesc despre schimbare si despre teste. Unele se bazeaza pe ce a declarat autorul
-testului, altele pe date: componentele pe care trace-urile arata ca testul le-a exersat efectiv, textul testului si
-al diff-ului, sau istoricul altor schimbari si al testelor care le-au prins. O componenta se potriveste cu un test
-dupa o singura regula, aceeasi peste tot: o functie sau o linie schimbata cu testele care au rulat-o, un skill cu
-testele care l-au incarcat, un tool (descrierea lui) cu testele carora le-a fost oferit, o setare cu testele care au
-citit-o.
+The strategies differ in what they read. A \emph{component} is a part of the system a change can touch: a function
+or line of code, a tool and its description, a skill's procedure or text, a field of an agent, a setting, the
+starting data. $C(\Delta)$ is the set of components the change touches. For each test we know:
+\begin{itemize}
+  \item $c(t)$, its cost in tokens on $V_0$, and $\rho_t$, a risk weight its author gave it;
+  \item $\Ddecl$, the components its author declared it depends on;
+  \item $\Dobs$, the components its runs on $V_0$ actually exercised, from traces and code coverage, and
+        $\phi_t(d)$, the share of its runs that exercised component $d$.
+\end{itemize}
+A component matches a test by one rule used everywhere: a changed function or line matches the tests that ran it, a
+skill the tests that loaded it, a tool the tests it was offered to, a setting the tests that read it.
 
-\begin{enumerate}
-  \item \strat{random}: o permutare aleatoare a suitei, ca referinta.
-
-  \item \strat{declared}, selectia clasica pe metadate:
-  \[
-    S = \{t : \Ddecl \cap C(\Delta) \neq \emptyset\}, \qquad a_t = |\Ddecl \cap C(\Delta)|,
-  \]
-  ordonate dupa $\rho_t$ descrescator, apoi $a_t$ descrescator, apoi $c(t)$ crescator.
-
-  \item \strat{observed}, pe trace-uri:
-  \[
-    S = \{t : \Dobs \cap C(\Delta) \neq \emptyset\}, \qquad a_t = \sum_{c \,\in\, C(\Delta) \cap \Dobs} \phi_t(c),
-    \qquad \mathrm{scor}(t) = \frac{a_t\, \rho_t}{c(t)} .
-  \]
-  Varianta \strat{observed\_diverse} ia testele din $S$ pe rand, din grupuri de comportament diferite.
-
-  \item \strat{cost\_aware} ordoneaza toata suita dupa
-  \[
-    \mathrm{scor}(t) = \frac{\rho_t\, (\beta_0 + a_t + e_t)\, (1 + f_t)}{c(t)},
-  \]
-  unde $e_t = 1$ daca $t$ a rulat o linie schimbata si $\beta_0$ este o constanta mica.
-
-  \item \strat{ir\_tfidf}, pe text: cu $q$ vectorul TF-IDF al diff-ului si $v_t$ cel al textului testului (nume,
-  cerere, asteptari), $\mathrm{scor}(t) = \cos(q, v_t)$.
-
-  \item \strat{history\_ml}, invatata din istoric: o regresie logistica, cu regularizare si clase echilibrate, pe
-  perechi (alta schimbare, test), cu eticheta ``testul a prins schimbarea'' si features precum impactul static al
-  schimbarii asupra testului pe tip de componenta, costul, riscul si forma testului. Cu $p_t$ probabilitatea data de
-  model, $\mathrm{scor}(t) = p_t\, \rho_t / c(t)$.
-
-  \item \strat{adaptive\_bayes}, adaptiva: nu fixeaza ordinea dinainte, ci o recalculeaza dupa fiecare test.
+\begin{itemize}
+  \item \strat{random}: a random permutation, as a reference.
+  \item \strat{declared}, classic selection on declared dependencies: take $S = \{t : \Ddecl \cap C(\Delta) \neq
+        \emptyset\}$ and $a_t = |\Ddecl \cap C(\Delta)|$, sorted by $\rho_t$, then $a_t$, both descending, then by
+        $c(t)$ ascending.
+  \item \strat{observed}, the same on observed dependencies: take $S = \{t : \Dobs \cap C(\Delta) \neq \emptyset\}$,
+        with $a_t = \sum_{c \in C(\Delta) \cap \Dobs} \phi_t(c)$, sorted by $a_t\, \rho_t / c(t)$, descending. A
+        variant, \strat{observed\_diverse}, takes the tests of $S$ from different behaviour groups in turn.
+  \item \strat{cost\_aware} sorts the whole suite by $\rho_t\, (\beta_0 + a_t + e_t)\, (1 + f_t) / c(t)$, where
+        $e_t = 1$ if $t$ ran a changed line and $\beta_0$ is a small constant.
+  \item \strat{ir\_tfidf} sorts by text similarity. TF-IDF turns a text into word weights, where a word counts more
+        when it is frequent in this text and rare across the tests. The score is the cosine between the weights of
+        the diff and those of the test's text (name, request, expected outcome).
+  \item \strat{history\_ml} learns from past changes. A logistic regression, a linear model that outputs a
+        probability, is fitted on pairs (past change, test) labelled ``this test revealed this change'', with
+        features such as the change's static impact on the test by kind of component, and the test's cost, risk and
+        shape. With $p_t$ its probability, tests are sorted by $p_t\, \rho_t / c(t)$.
+  \item \strat{adaptive\_bayes}, our method, recomputes the order after every test:
   \begin{itemize}
-    \item Ipotezele sunt $h \in \{0,1\}^{C(\Delta)}$, adica ce componente sunt stricate, cu un prior $\pi_c$ dupa
-          tipul componentei: mai mare pentru cod, procedura unui skill, setari si campurile unui agent, mai mic pentru
-          textul prompturilor, proza skill-urilor si descrierile tool-urilor.
-    \item Un test trece doar daca ar trece pe $V_0$ si nicio componenta stricata nu il face sa pice:
-          \[
-            P(t \text{ pica} \mid h) = 1 - (1 - f_t) \prod_{c:\, h_c = 1} (1 - s_{tc}) .
-          \]
-    \item Sensibilitatea $s_{tc}$ se invata din celelalte schimbari:
-          \[
-            s_{tc} = \mathrm{clip}\big(r_{k} \cdot \ell_{tk} \cdot \phi_t(c) \cdot \tau_t,\ s_{\min},\ s_{\max}\big),
-          \]
-          unde $k$ este tipul componentei $c$; $r_k$ arata cat de des testele care atingeau schimbari de tipul $k$
-          le-au si prins, $\ell_{tk}$ cat de bine a prins testul $t$ astfel de schimbari fata de un test mediu,
-          $\phi_t(c)$ cat de des a exersat $t$ componenta, iar $\tau_t$ este un bonus daca textul testului seamana cu
-          diff-ul sau daca autorul a declarat dependenta.
-    \item Urmatorul test este cel cu cea mai mare scadere asteptata a entropiei posteriorului per token, inclinata
-          dupa risc:
-          \[
-            t^\star = \arg\max_t\ \frac{H(h) - \mathbb{E}\big[H(h \mid X_t)\big]}{c(t)}
-            \cdot \big(1 + \gamma\,(\rho_t - 1)\big) .
-          \]
-          Dupa un test care trece, sensibilitatea testelor aproape identice cu el se inmulteste cu $\delta < 1$.
+    \item a hypothesis $h \in \{0,1\}^{C(\Delta)}$ says which changed components are broken. Each component starts
+          with a prior probability $\pi_c$ that depends on its kind: higher for code, skill procedures, settings and
+          agent fields, lower for prompt wording, skill prose and tool descriptions;
+    \item a test passes only if it would pass on $V_0$ and no broken component makes it fail:
+          $P(t \text{ fails} \mid h) = 1 - (1 - f_t) \prod_{c:\, h_c = 1} (1 - s_{tc})$;
+    \item the \emph{sensitivity} $s_{tc}$, the chance that $t$ fails when $c$ is broken, is learned from past
+          changes: $s_{tc} = \mathrm{clip}(r_k\, \ell_{tk}\, \phi_t(c)\, \tau_t,\ s_{\min},\ s_{\max})$, where $k$ is
+          the kind of $c$, $r_k$ is how often tests that touched past changes of kind $k$ revealed them, $\ell_{tk}$
+          is how much better than average $t$ did on that kind, and $\tau_t$ is a bonus when the test's text is close
+          to the diff or its author declared the dependency;
+    \item after each result, Bayes' rule gives the \emph{posterior}, the probability of each hypothesis given the
+          results so far. Its \emph{entropy} $H(h)$ measures how unsure we still are about what is broken. The next
+          test is the one whose result is expected to lower that uncertainty the most per token, tilted by risk:
+          $\arg\max_t \frac{H(h) - \mathbb{E}[H(h \mid X_t)]}{c(t)}\, (1 + \gamma(\rho_t - 1))$;
+    \item after a test passes, the sensitivity of near-duplicates of that test is multiplied by $\delta < 1$, since
+          their passing would add little.
   \end{itemize}
+  \item \strat{casper\_slices}, adapted from CASPER: it groups the tests with k-means (clusters of tests whose
+        behaviour on $V_0$ looks alike: turns, tool calls, skills loaded, pass rate), runs a few representatives of
+        each group on $V_1$, and then runs the groups whose failure rate moved the most.
+  \item \strat{risk\_aware\_ts}, adapted from Risk-Aware Adaptive Evaluation: a bandit with Thompson sampling. At each
+        step, a logistic regression on the results so far gives each test an estimate $\mu_t$; we draw a plausible
+        failure probability $\theta_t \sim \mathrm{Beta}(1 + \alpha\mu_t + k_t,\ 1 + \alpha(1 - \mu_t) + n_t - k_t)$,
+        where $n_t$ and $k_t$ count the runs and failures seen for $t$, and run the test with the largest
+        $\rho_t\, \theta_t$.
+  \item two orders that need nothing but the replay: \strat{cheapest}, by the cost bound, ascending, and
+        \strat{late\_divergence}, by how late the change reaches the test, latest first.
+\end{itemize}
 
-  \item \strat{casper\_slices}, adaptata din CASPER: imparte suita in felii cu k-means, pe semnale de comportament
-  din rularile pe $V_0$ (ture, apeluri de tool-uri, skill-uri incarcate etc.) plus rata de trecere, ruleaza cativa
-  reprezentanti din fiecare felie pe $V_1$, ordoneaza feliile dupa cat s-a schimbat rata de picare a
-  reprezentantilor si apoi ruleaza membrii lor.
+\section{When to stop}
+\label{sec:stop}
 
-  \item \strat{risk\_aware\_ts}, adaptata din Risk-Aware Adaptive Evaluation, un bandit cu Thompson sampling: la
-  fiecare pas, o regresie logistica pe rezultatele de pana atunci da $\mu_t$, se trage
-  \[
-    \theta_t \sim \mathrm{Beta}\big(1 + \alpha\mu_t + k_t,\ 1 + \alpha(1 - \mu_t) + n_t - k_t\big)
-  \]
-  si se ruleaza testul cu $\rho_t\, \theta_t$ maxim, unde $n_t$ si $k_t$ sunt rularile si picarile vazute pentru $t$.
+A failure ends the run at once. The expensive verdict is \emph{clean}: without any rule, giving it means running
+every reached test. A stopping rule saves exactly there, but it has to say how often it is wrong.
 
-  \item Doar cu replay: \strat{cheapest} ia testele atinse dupa marginea lui $c_\Delta(t)$, crescator, iar
-  \strat{late\_divergence} dupa cat de tarziu ajunge schimbarea in test, descrescator.
-\end{enumerate}
+\paragraph{The rule.} A stopping rule gives each test in its plan a value $v_1 \ge v_2 \ge \dots$, how much reason is
+left to keep going, and stops with ``clean'' at the first value below a threshold $\tau$. For
+\strat{adaptive\_bayes} the value before a test is $P(\text{something is broken}) = 1 - P(h = \mathbf{0} \mid
+\text{results so far})$.
 
-\section{Cand ne oprim}
-\label{sec:prag}
-
-O regresie opreste rularea imediat. Partea scumpa este verdictul ``curat'': ca sa-l dai fara sa ratezi nimic din ce
-atinge schimbarea, trebuie sa rulezi toate testele din $\Tdiv$. O regula de oprire economiseste tocmai aici, dar
-trebuie sa spuna cat de des greseste.
-
-O astfel de regula da fiecarui test din plan o valoare $v_1 \ge v_2 \ge \dots$ si se opreste cu ``curat'' la prima
-valoare sub un prag $\tau$. La \strat{adaptive\_bayes}, valoarea dinaintea unui test este $P(\text{ceva stricat}) = 1 -
-P(h = \mathbf{0} \mid \text{rezultate})$. Pragul nu e o constanta aleasa dupa ureche, ci se seteaza pe schimbarile
-trecute. Pentru o regresie $\Delta$, fie $s(\Delta)$ valoarea la primul test din plan care o prinde. Pe $n$ regresii
-trecute din acelasi grup de schimbari (pasii unui skill, textul pe care il citeste modelul, tool-urile si skill-urile
-unui agent, setarile, datele de start, codul),
+\paragraph{Setting the threshold.} We set $\tau$ on past regressions, with \emph{split conformal prediction}, a
+technique that turns the ranks of past scores into a bound on the error rate. For a past regression $\Delta$, let
+$s(\Delta)$ be the value at the first test in the plan that reveals it. With $n$ past regressions and a target miss
+rate $\alpha$,
 \[
   \tau = s_{(k)}, \qquad k = \lfloor \alpha (n + 1) \rfloor ,
 \]
-adica a $k$-a cea mai mica valoare. Atunci o regresie noua din acelasi grup e declarata ``curata'' cu probabilitate
-cel mult $\alpha$, daca schimbarile sunt schimbabile intre ele (exchangeable). Garantia este in medie peste schimbari
-si peste seturile de regresii trecute, si presupune ca schimbarile viitoare seamana cu cele trecute. Pragul se
-seteaza pe grupuri pentru ca grupurile se comporta diferit: un prag comun ar putea respecta tinta in medie si rata
-totusi multe regresii dintr-un grup anume.
-
-Proprietatile completeaza regula. Fiecare test e etichetat cu cerintele pe care le verifica, dintr-un catalog de
-proprietati, iar din componentele atinse de schimbare se afla ce proprietati pot fi afectate. Inainte de ``curat'',
-fiecare proprietate obligatorie afectata primeste cel putin un test, cel mai ieftin care o verifica, iar verificarea
-raporteaza ce parte din componentele schimbate a exersat, ce parte din proprietatile afectate a verificat si care au
-ramas neverificate.
-
-\section{De ce nu un set minimal fix}
-\label{sec:setminimal}
-
-Alternativa clasica este sa alegi o singura data un set mic de teste care acopera toata aplicatia si sa rulezi doar
-setul acela la fiecare schimbare. Formal este o problema de acoperire (set cover): cu $U_t$ ce acopera testul $t$
-(componentele exersate sau proprietatile verificate),
-\[
-  \min_{S \subseteq T} |S| \quad \text{(sau } \textstyle\sum_{t \in S} c(t)\text{)} \qquad \text{astfel incat} \qquad
-  \bigcup_{t \in S} U_t = \bigcup_{t \in T} U_t ,
-\]
-rezolvata de obicei greedy, adaugand repetat testul care acopera cel mai mult din ce a ramas neacoperit (sau cel mai
-mult per token).
-
-Un astfel de set rateaza regresii din doua motive. Primul este ca a acoperi nu inseamna a prinde: un test acopera o
-componenta daca o exerseaza, dar o prinde stricata doar daca verificarile lui observa exact comportamentul schimbat.
-In notatia de mai sus, $P(t \text{ prinde} \mid t \text{ acopera } c) = s_{tc}$, de obicei mic. De exemplu, o schimbare
-care ocoleste o verificare de permisiune e acoperita de toate testele care trec prin codul verificarii, dar o prind
-doar testele care exerseaza cazul in care verificarea trebuia sa opreasca actiunea. Al doilea motiv este ca setul nu
-stie schimbarea: un set fix $S$ rateaza $\Delta$ exact cand $\mathrm{Rev}(\Delta) \cap S = \emptyset$, iar o regresie
-prinsa de un singur test $t^\ast$ e prinsa doar daca $t^\ast \in S$, desi $S$ a fost ales inainte sa se stie
-$\Delta$.
-
-Selectia per schimbare evita ambele probleme. Replay-ul ia, pentru fiecare schimbare, exact testele prin care ea poate
-ajunge la model, iar prin corolarul~\ref{cor:sigur}, sub R si D, rularea tuturor testelor din $\Tdiv$ impreuna cu
-citirea rezultatelor din replay nu rateaza niciun test care prinde schimbarea. Ordinea decide apoi cat costa o
-regresie, iar pragul cat costa o schimbare care nu strica nimic, cu rata de ratare aleasa.
-
-\section{Limite}
-
-Pe langa conditiile R si D, fara de care un rezultat rejucat nu e neaparat cel real, metoda are cateva limite de
-care trebuie tinut cont:
+the $k$-th smallest of those values. A new regression is then called clean with probability at most $\alpha$, as
+long as past and new changes are \emph{exchangeable}, that is, drawn alike from the same pool of changes.
 \begin{itemize}
-  \item potrivirea este exacta, deci conservatoare: o cerere care difera cu un singur caracter, de exemplu un prompt
-        reformulat, trimite testul la model chiar daca sensul e acelasi. Cand fiecare cerere poarta un prompt comun
-        lung, o editare a lui atinge toate testele si replay-ul nu mai taie nimic;
-  \item costul calculat de replay este o margine superioara: dupa punctul de divergenta, o rulare mai trimite si
-        cereri din $Q_0$, de exemplu tura unui agent pe care schimbarea nu il atinge, iar acestea primesc raspunsul
-        din caseta;
-  \item ``curat'' e relativ la suita: replay-ul spune ce teste existente vad schimbarea, iar o regresie pe care
-        niciun test nu o verifica ramane nevazuta, ca la orice selectie de teste.
+  \item The bound holds on average, over changes and over the sets of past regressions, and only for changes like
+        the past ones.
+  \item We set one threshold per group of changes: a skill's steps, text the model reads, an agent's tools and
+        skills, the settings, the starting data, the code. A single threshold for all changes can meet the target on
+        average while missing most regressions of one group.
 \end{itemize}
 
-\section{Unde e implementat}
+\paragraph{Properties.} Each test is tagged with the requirements it checks, taken from a catalog of
+\emph{properties} (for example, ``a page is never published with broken links''). From the components the change
+touches we know which properties it may affect. Before saying ``clean'', the rule runs at least one test, the
+cheapest, for every mandatory property the change may affect, and reports which affected properties were checked
+and which were not.
 
-Verificarea unei schimbari se face cu \texttt{traceeval check <schimbare> -{}-history <inregistrare>}
-(\texttt{traceeval/experiment/check.py}). Replay-ul este in \texttt{traceeval/experiment/replay\_first.py}, iar caseta
-si clientii care raspund din ea in \texttt{traceeval/llm/cache.py}. Inregistrarea schimbarilor doar pe testele atinse
-se face cu \texttt{traceeval mutants -{}-reached-only} (\texttt{traceeval/experiment/runner.py::record\_mutants}).
-Strategiile sunt in \texttt{traceeval/selection/}, iar pragul in \texttt{traceeval/experiment/stopping.py}.
+\section{Why not a fixed minimal set}
+\label{sec:minimal}
+
+The classic alternative is \emph{test-suite minimization}: pick once a small set of tests that still covers the whole
+system, and run only that set after every change. With $U_t$ what test $t$ covers (the components it exercises, or the
+properties it checks), this is a \emph{set cover} problem:
+\[
+  \min_{S \subseteq T} |S| \ \ \text{(or } \textstyle\sum_{t \in S} c(t)\text{)} \qquad \text{such that} \qquad
+  \bigcup_{t \in S} U_t = \bigcup_{t \in T} U_t ,
+\]
+usually solved greedily, adding the test that covers the most of what is still uncovered (or the most per token).
+Such a set misses regressions for two reasons:
+\begin{itemize}
+  \item \textbf{Covering is not catching.} A test covers a component when it exercises it, but it catches a broken
+        component only if its checks look at exactly the behaviour that broke. A change that skips a permission
+        check, for instance, is covered by every test that goes through that code, and caught only by the tests that
+        exercise the case where the check should have stopped the action.
+  \item \textbf{The set does not know the change.} A fixed set $S$ misses $\Delta$ exactly when $\mathrm{Rev}(\Delta)
+        \cap S = \emptyset$. A regression that only one test reveals is caught only if that test happens to be in
+        $S$, which was chosen before $\Delta$ existed.
+\end{itemize}
+Choosing per change avoids both. The replay picks, for each change, the tests through which it can reach the model,
+and by Corollary~\ref{cor:safe}, running all of $\Tdiv$ and reading the outcomes of the others from the replay misses
+no test that reveals the change. The order then decides what a regression costs, and the threshold decides what a
+change that breaks nothing costs, at the miss rate we chose.
+
+\section{Limits}
+
+Besides conditions R and D:
+\begin{itemize}
+  \item \textbf{Exact matching is conservative.} A request that differs by one character, say a reworded prompt,
+        sends the test to the model even if the meaning is the same. When every request carries one long shared
+        prompt, editing it reaches every test and the replay saves nothing.
+  \item \textbf{The cost bound is an upper bound.} After its divergence point, a run still sends some requests that
+        are in $Q_0$, such as the turn of an agent the change does not touch, and the cassette answers those.
+  \item \textbf{Clean means clean for this suite.} The replay says which existing tests can see the change. A
+        regression that no test checks stays invisible, as with any test selection.
+\end{itemize}
+
+\section{Where it lives in the code}
+
+\begin{itemize}
+  \item checking one change live: \texttt{traceeval check <change> -{}-history <recording>},
+        \texttt{traceeval/experiment/check.py};
+  \item the replay: \texttt{traceeval/experiment/replay\_first.py}; the cassette and the clients that answer from
+        it: \texttt{traceeval/llm/cache.py};
+  \item recording changes on the reached tests only: \texttt{traceeval mutants -{}-reached-only},
+        \texttt{traceeval/experiment/runner.py::record\_mutants};
+  \item the strategies: \texttt{traceeval/selection/}; the stopping threshold:
+        \texttt{traceeval/experiment/stopping.py}.
+\end{itemize}
 
 \end{document}
