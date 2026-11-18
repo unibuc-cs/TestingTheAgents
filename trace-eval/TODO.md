@@ -30,7 +30,7 @@ Order of work: sections 1 to 3 are done; 4 and 5 are done for Gemma, with what i
 |---|---|---|---|
 | 1 | Exact serving for the other models: Qwen with the prefix cache off, one test at a time, a baseline and the empty change under two starts of the server (gpt-oss needs both GPUs and comes later) | §4 | running |
 | 2 | The batches on the current app: the 23 batches recorded again beside `runs/gemma8`, evaluated, and checked live | §4 | running |
-| 3 | The paper: fewer tables and a shorter text, keeping what the argument needs; then the venue's format | §6 | in progress; the venue and its page limit are still to choose |
+| 3 | The paper: fewer tables and a shorter text, keeping what the argument needs; then the venue's format | §6 | cut to 13 tables and 18 pages of text; the venue and its page limit are still to choose |
 | 4 | A second application, tau2-bench's airline domain | §4 | waits for the go-ahead to install and run its code |
 | 5 | Stop thresholds for Qwen, set on generated changes recorded with Qwen | §4 | after item 1: one repetition per test is enough if Qwen repeats exactly |
 
@@ -258,9 +258,10 @@ The app and the tests:
       on one test, the bound of the stopping rule being marginal.
 - [x] The two results the paper waited for are in it: Qwen's recording (recording Q, in its tables of the
       recordings and of the condition) and the serving experiment (its RQ2, with recording X).
-- [ ] Venue format: the draft is 34 pages with 27 tables: 23 pages of text, then the references and an appendix
-      of 9 pages. What to cut depends on the venue.
-- [ ] A full editing pass over the paper: only the passages the last results touched were reworded.
+- [x] The paper cut to what the argument needs: 13 tables instead of 27 (the others are a sentence or merged), and
+      18 pages of text instead of 23.
+- [ ] Venue format: the draft is 27 pages: 18 of text, then the references and an appendix of 6 pages with the
+      strategies' algorithms and constants. What else to cut depends on the venue.
 - [ ] The Adobe Team's agreement to being named; an anonymous version for a double-blind venue.
 
 ## 7. With the Adobe Team

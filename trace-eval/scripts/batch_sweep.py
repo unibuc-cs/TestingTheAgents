@@ -4,19 +4,18 @@ The batches are drawn with ``random.Random(0)`` from the changes whose edits nam
 custom edit and the two comment-only changes are left out): three of each size from 2 to 7 and two of 8, the
 members of a batch editing pairwise disjoint files so that their edits compose, four of the batches of a size the
 harmless changes can fill drawn from those only. They are not in the catalog, so the experiment never records
-them by itself; the results are in ``docs/results/gemma7/batch_sweep.md``.
+them by itself.
 
     python scripts/batch_sweep.py list                                  # the batches and their members
-    python scripts/batch_sweep.py record runs/gemma7_sweep [reps] [workers]   # into a copy of runs/gemma7
-    traceeval evaluate --workdir runs/gemma7_sweep && traceeval report --workdir runs/gemma7_sweep
-    python scripts/batch_sweep.py check runs/gemma7 batch_sweep_2_1 [budget]  # live, like `traceeval check`
+    python scripts/batch_sweep.py record runs/gemma8_batches [reps] [workers]   # into a copy of runs/gemma8
+    traceeval replay-first --workdir runs/gemma8_batches && traceeval evaluate --workdir runs/gemma8_batches
+    python scripts/batch_sweep.py check runs/gemma8_batches batch_sweep_2_1 [budget]   # live, like traceeval check
 """
 
 from __future__ import annotations
 
 import random
 import sys
-import time
 from pathlib import Path
 
 from traceeval.mutation.catalog import BATCHES, MUTATIONS, Mutation, batch
@@ -76,42 +75,15 @@ SWEEP = draw_sweep()
 
 
 def record(workdir: Path, reps: int, workers: int) -> None:
-    """Record every batch into <workdir>/history/variants/, as the experiment records the catalog's changes."""
-    from traceeval.catalog import load_catalog
-    from traceeval.experiment.executor import write_jsonl
-    from traceeval.experiment.runner import run_suite
-    from traceeval.experiment.sutloader import load_sut
-    from traceeval.mutation import materialize_variant
+    """Record every batch into a copy of a recording, as `traceeval mutants` records the catalog's changes: the
+    whole suite on each batch's copy of the app, ``reps`` times, ``workers`` tests at a time, each answer compared
+    with the recording's cassette. A batch recorded already is left out, so a stopped recording can be taken up
+    again."""
+    from traceeval.experiment.runner import record_mutants
 
-    cases = load_catalog()
-    for m in SWEEP:
-        out = workdir / "history" / "variants" / f"{m.id}.jsonl"
-        if out.exists():
-            print(f"[{m.id}] already recorded, skipped", file=sys.stderr, flush=True)
-            continue
-        started = time.time()
-        sut_dir, _ = materialize_variant(m, workdir / "variants")
-        sut = load_sut(sut_dir)
-        try:
-            records = run_suite(
-                sut,
-                cases,
-                reps=reps,
-                variant=m.id,
-                backend="vllm",
-                config_overrides=None,
-                with_coverage=False,
-                workers=workers,
-            )
-        finally:
-            sut.unload()
-        write_jsonl(out, records)
-        failing = sorted({r["test_id"] for r in records if not r["passed"]})
-        print(
-            f"[{m.id}] {len(records)} runs, {len(failing)} failing tests, {time.time() - started:.0f} s",
-            file=sys.stderr,
-            flush=True,
-        )
+    BATCHES.extend(SWEEP)  # so that the recorder finds the batches by id, as it finds the catalog's
+    ids = [m.id for m in SWEEP]
+    record_mutants(workdir, mutation_ids=ids, reps=reps, backend="vllm", workers=workers, resume=True)
 
 
 def main(argv: list[str]) -> None:
