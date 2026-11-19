@@ -54,8 +54,8 @@ The numbers and their reading are in `docs/RESEARCH_PLAN.md` §5.1 and §5.6.
 - [x] APFD: one fault per change, over the tests that pass on the original app; an order drawn at random is the
       mean over the seeds.
 - [x] Batches: the batch's members, and the batches that share one, held out of what a strategy learns from
-      (`History.training_variants`, also in `traceeval check`); the sweep's change sets recomputed on the
-      recording's own tree (`stale_line_ids.py`).
+      (`History.training_variants`, also in `traceeval check`); a recording makes its changed copies from its own
+      copy of the app, so their change sets are those of its own tree.
 - [x] "The text of a test" said to include the declared block (`docs/RESEARCH_PLAN.md` §3; `test_text.py` measures
       what it is worth).
 - [x] CASPER and the bandit called adaptations (`selection/adapted.py`). CASPER's slices are ranked by the shift of

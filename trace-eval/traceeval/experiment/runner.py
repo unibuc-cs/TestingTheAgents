@@ -36,7 +36,7 @@ from traceeval.tracing.codecov import CoverageSession
 from .executor import attach_code_functions, default_backend, run_case, write_jsonl
 from .history import UNCHANGED
 from .manifest import baseline_copy, load_manifest, selection_digest, write_manifest
-from .replay_first import Replays, add_replay, cassette_client, cassette_path, in_front, recording_engine, replay_suite
+from .replay_first import Replays, add_replay, cassette_path, cassette_replay, in_front, recording_engine
 from .sutloader import load_sut
 
 
@@ -182,16 +182,10 @@ def record_mutants(
     write_manifest(workdir, "changes", **how, selection=first or selection_digest())
     engine = recording_engine(workdir)  # whose requests the cassette is keyed by: what a replay runs as
 
-    def replayed(sut, variant: str) -> list[dict]:
-        """``sut`` replayed against the recording's cassette, in seconds and without a model. The cassette stands
-        in front for the length of the replay; the client that was there (the model's) comes back after it."""
-        with in_front(engine, cassette_client(workdir, engine), judge_too=True) as cassette_only:
-            return replay_suite(sut, cases, cassette_only, engine, variant)
-
     if reached_only and "baseline" not in (Replays.load(workdir) or Replays([])).rows:
         # the replay of the original app: what "a test that passes there and fails here" is read against
         baseline = load_sut(original)
-        add_replay(workdir, replayed(baseline, "baseline"))
+        add_replay(workdir, cassette_replay(baseline, cases, workdir, engine, "baseline"))
         baseline.unload()
     out: dict[str, list[dict]] = {}
     with in_front(backend, compare) if compare else nullcontext():
@@ -224,7 +218,7 @@ def record_mutants(
                 if lean:
                     # Replay first. A test that replays to the end is not run: its replayed run is its record on
                     # this copy, marked as a stand-in. Only the tests that diverge go to the model.
-                    replay = replayed(sut, mid)
+                    replay = cassette_replay(sut, cases, workdir, engine, mid)
                     add_replay(workdir, replay)
                     stand_ins = [
                         {**row, "stand_in": True, "rep": 0, "backend": engine} for row in replay if row["replayed"]

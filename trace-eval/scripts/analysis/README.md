@@ -2,8 +2,8 @@
 
 Offline checks of the results, behind the plan in [`TODO.md`](../../TODO.md). Run them from the repository root
 with the project's Python. They read a recording (`runs/<name>`, `runs/gemma8` unless another is given) and the
-test suite's recorded answers, call no model and change nothing in a recording (`stale_line_ids.py --fix` is the
-exception); what they write goes under `runs/analysis/`, which git ignores.
+test suite's recorded answers, call no model and change nothing in a recording; what they write goes under
+`runs/analysis/`, which git ignores.
 
 ```
 python scripts/analysis/<script>.py [recording]
@@ -39,7 +39,6 @@ over all changes, as in the report.
 | `benchmark_structure.py` | the suite by kind, revealing tests per regression, hypotheses per change, how selective the traces are | 7 of 28 regressions rest on one test; 34 of 43 changes have one hypothesis; 94 of 180 tests reveal nothing |
 | `other_models_stable_tests.py` | a second model with its unstable tests left out (default `runs/qwen7`) | on `runs/qwen7` and `runs/gptoss7`, indicative: the same ranking as under Gemma |
 | `model_updates.py` | tests that flip between the models' baselines: changes without a diff | on the three recordings of the earlier app: six ordered pairs, 3 to 23 tests regress |
-| `stale_line_ids.py` | change sets that are not those of the recording's own tree; `--fix` rewrites them and keeps the old ones | none: a recording now makes its changed copies from its own copy of the app |
 | `paper_counts.py` | the draft's floats, words and citation keys | 24 tables; every key resolves |
 
 `replaylib.py` holds what they share: loading a recording, the evaluator's replay loop, and variants of the method.

@@ -68,17 +68,15 @@ def member_replays(members, cases, history_dir: Path, backend: str, home: Path) 
     recording's cassette: member -> test id -> its replay's row. The cassette answers alone: no model is called."""
     from traceeval.mutation import get_mutation, materialize_variant
 
-    from .replay_first import cassette_client, in_front, replay_suite
+    from .replay_first import cassette_replay
     from .sutloader import load_sut
 
-    client = cassette_client(history_dir, backend)  # a client of its own, with no model behind it
     rows = {}
     for member in members:
         sut_dir, _ = materialize_variant(get_mutation(member), home)
         sut = load_sut(sut_dir)
         try:
-            with in_front(backend, client, judge_too=True):
-                rows[member] = {r["test_id"]: r for r in replay_suite(sut, cases, client, backend, member)}
+            rows[member] = {r["test_id"]: r for r in cassette_replay(sut, cases, history_dir, backend, member)}
         finally:
             sut.unload()
     return rows

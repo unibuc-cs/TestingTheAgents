@@ -399,14 +399,8 @@ class AdaptiveBayes(Strategy):
                     break
                 i = int(left[np.argmin(cost[left])])
             # run it on the changed copy (the oracle: a replay of the recording, or the live app in traceeval check)
-            log.trace.append(float(1.0 - post[0]))  # what the clean verdict was compared with before this test
-            passed, spent = oracle(tests[i])
-            ran[i] = True
+            passed, spent, post = self._observe(oracle, log, tests, i, ran, post, p_fail)
             remaining -= spent
-            log.steps.append((tests[i], passed, spent))
-            # Bayes' rule: weigh every hypothesis by the likelihood of the observed outcome
-            post = post * ((1 - p_fail[i]) if passed else p_fail[i])
-            post /= post.sum() or 1e-12
             if stopping and not passed and fails_anyway[i] < 0.5:  # it passed on the original app: step 4
                 post[0] = 0.0  # a changed behaviour rules out "nothing is broken"
                 log.stop_reason = "regression"
@@ -432,6 +426,17 @@ class AdaptiveBayes(Strategy):
         pairs = zip(m["comps"], marginals, strict=True)
         log.blame = sorted(((c.id, float(p)) for (c, _), p in pairs), key=lambda cp: -cp[1])
         return log
+
+    @staticmethod
+    def _observe(oracle, log, tests, i, ran, post, p_fail):
+        """Run test ``i`` through ``oracle`` and log it, then weigh every hypothesis by the likelihood of its outcome
+        (Bayes' rule). Returns whether it passed, what it cost, and the new posterior."""
+        log.trace.append(float(1.0 - post[0]))  # what the clean verdict was compared with before this test
+        passed, spent = oracle(tests[i])
+        ran[i] = True
+        log.steps.append((tests[i], passed, spent))
+        post = post * ((1 - p_fail[i]) if passed else p_fail[i])
+        return passed, spent, post / (post.sum() or 1e-12)
 
     @staticmethod
     def _cover_mandatory(ctx, oracle, log, m, ran, remaining, post, p_fail, fails_anyway):
@@ -465,16 +470,10 @@ class AdaptiveBayes(Strategy):
             if pid in checked or not options:
                 continue
             i = min(options, key=lambda j: cost[j])
-            log.trace.append(float(1.0 - post[0]))
-            passed, spent = oracle(tests[i])
-            ran[i] = True
+            passed, spent, post = AdaptiveBayes._observe(oracle, log, tests, i, ran, post, p_fail)
             remaining -= spent
-            log.steps.append((tests[i], passed, spent))
             checked |= set(ctx.catalog[tests[i]].properties)
-            # the same Bayes update and regression stop as in step 4
-            post = post * ((1 - p_fail[i]) if passed else p_fail[i])
-            post /= post.sum() or 1e-12
-            if not passed:
+            if not passed:  # a regression, as in step 4
                 post[0] = 0.0
                 log.stop_reason = "regression"
                 break
@@ -501,15 +500,9 @@ class AdaptiveBayes(Strategy):
             i = index[t]
             if cost[i] > remaining:  # the budget keeps this one out; a cheaper one may still fit
                 continue
-            log.trace.append(float(1.0 - post[0]))
-            passed, spent = oracle(t)
-            ran[i] = True
+            passed, spent, post = AdaptiveBayes._observe(oracle, log, tests, i, ran, post, p_fail)
             remaining -= spent
-            log.steps.append((t, passed, spent))
-            # the same Bayes update and regression stop as in step 4
-            post = post * ((1 - p_fail[i]) if passed else p_fail[i])
-            post /= post.sum() or 1e-12
-            if not passed:
+            if not passed:  # a regression, as in step 4
                 post[0] = 0.0
                 log.stop_reason = "regression"
                 break

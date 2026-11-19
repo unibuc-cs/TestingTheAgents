@@ -3,6 +3,7 @@
 | you want to                                                                                                                                              | read |
 |----------------------------------------------------------------------------------------------------------------------------------------------------------|---|
 | understand the goals, the pieces and the main results                                                                                                    | [README](../README.md) |
+| a short summary of replay-first for colleagues: the method and its guarantee, without results                                                            | [summary/summary.pdf](summary/summary.pdf) |
 | see the application the tests exercise: its users, agents, skills, tools and rules                                                                       | [CONTENTOPS.md](CONTENTOPS.md) |
 | Adobe's platform, what the Adobe Team asked for, the features built for it, the next steps                                                                 | [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) |
 | the research: the problem, the abstractions, the methods, the results, the take-aways, the roadmap                                                       | [RESEARCH_PLAN.md](RESEARCH_PLAN.md) |
@@ -69,4 +70,6 @@ flowchart TD
   answers, so the draft can be replayed without a GPU.
 - `diagrams/` and `figures/`: the Mermaid sources and the rendered images the guides use.
 - `paper/`: the LaTeX paper, its bibliography and the overview figure.
+- `summary/`: the short summary of replay-first in LaTeX and PDF, general and without results.
+- `papers/`: a copy of a paper the related work cites (SABER, arXiv 2512.07850).
 - `experiments/`: the author's working files, not part of the testbed.

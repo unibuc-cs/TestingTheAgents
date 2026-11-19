@@ -72,6 +72,13 @@ def cassette_client(workdir: Path, engine: str) -> ReplayFirstClient:
     return ReplayFirstClient(cassette_path(workdir), model_name(engine), canonical_ids=(engine == "llm"))
 
 
+def cassette_replay(sut, cases, workdir: Path, engine: str, variant: str) -> list[dict]:
+    """``sut`` replayed on ``cases`` against the recording's cassette, in seconds and with no model: the cassette
+    stands in front of ``engine`` for the length of the replay, and the client that was there comes back after it."""
+    with in_front(engine, cassette_client(workdir, engine), judge_too=True) as client:
+        return replay_suite(sut, cases, client, engine, variant)
+
+
 def replay_suite(sut, cases, client: ReplayFirstClient, engine: str, variant: str) -> list[dict]:
     """Every case once on ``sut``, a changed copy of the app, answered from the cassette alone by ``client``,
     which must be the process's client of ``engine`` (``in_front``). One row per test: whether it replayed to the
@@ -133,8 +140,7 @@ def _replay_copy(job: tuple[str, str, str, list[str]]) -> list[dict]:
     cases = [c for c in load_catalog() if c.id in tests]
     sut = load_sut(workdir / "variants" / variant / "sut")
     try:
-        with in_front(engine, cassette_client(workdir, engine), judge_too=True) as client:
-            return replay_suite(sut, cases, client, engine, variant)
+        return cassette_replay(sut, cases, workdir, engine, variant)
     finally:
         sut.unload()
 

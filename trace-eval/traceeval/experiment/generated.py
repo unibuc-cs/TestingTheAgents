@@ -28,7 +28,7 @@ from traceeval.mutation.generator import generated, kind_of, sample
 
 from .executor import read_jsonl
 from .manifest import baseline_copy
-from .replay_first import Replays, cassette_client, in_front, recording_engine, replay_suite
+from .replay_first import Replays, cassette_replay, recording_engine
 from .sutloader import load_sut
 
 # what a row keeps: enough to say whether the test replays, how it ends and where it diverges
@@ -60,8 +60,7 @@ def _replay_one(job: tuple[str, str | None, str, list[str]]) -> dict:
             rows = [{"test_id": c.id, **failed, "requests": 0, "tokens": 0, "diverged_in": None} for c in cases]
         else:
             try:
-                with in_front(engine, cassette_client(workdir, engine), judge_too=True) as client:
-                    rows = replay_suite(sut, cases, client, engine, mid or "baseline")
+                rows = cassette_replay(sut, cases, workdir, engine, mid or "baseline")
             finally:
                 sut.unload()
     return {

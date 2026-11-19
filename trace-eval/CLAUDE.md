@@ -66,7 +66,7 @@ TRACEEVAL_VLLM_ARGS="--no-enable-prefix-caching" scripts/gpu_remote.sh up gemma 
   clause kind (`checks/`), product model, demo PRs, runner, report, drafting with a model (`draft.py`).
   Specs live in `traceeval/specs/FS-*.yaml` as catalog templates + slots (see `docs/SDD_GUIDE.md`).
 - `tests/` — pytest; `runs/` — experiment outputs (git-ignored); `docs/` — guide, plan, related work, references,
-  results, and the paper draft (`docs/paper/`, LaTeX).
+  results, the paper draft (`docs/paper/`, LaTeX) and its short summary without results (`docs/summary/`).
 - `scripts/` — `gpu_remote.sh` (the model servers), `batch_sweep.py`, and `analysis/`: offline checks of the
   results and probes of the measurement chain, listed in `scripts/analysis/README.md`.
 - `TODO.md` — the plan the work follows (replay-first); read it before changing strategies, the evaluator or the
