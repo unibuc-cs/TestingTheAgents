@@ -1,7 +1,8 @@
-"""History store: baseline runs (with observed dependencies, costs, pass rates) and per-variant runs
-(the ground-truth fault matrix). Everything the selectors may use about the change under evaluation is
-derived from the *baseline* history; variant runs are used by the replay oracle, by the metrics, and by
-the strategies that learn from the *other* changes (``ctx.train_variants``).
+"""A recording as the strategies and the evaluator read it: the runs on the original app (with the code each
+exercised, its cost and its outcome) and the runs on each changed copy (the ground truth). Everything a strategy
+may use about the change under evaluation comes from the runs on the original app; the runs on the changed copies
+are read by the evaluator's oracle, by the metrics, and by the strategies that learn from the *other* changes
+(``ctx.train_variants``).
 
 A recording also holds the empty change (``history/unchanged.jsonl``): the original app run the way the changed
 copies are, several cases at a time and without coverage. It is no change to evaluate; it says what the way of
@@ -38,7 +39,7 @@ class TestStats:
         """One more recorded run: a line of the history file."""
         self.runs.append(rec)
         for kept in ("valid_runs", "pass_rate", "mean_tokens", "dep_frequency", "deps"):
-            self.__dict__.pop(kept, None)  # worked out from the runs so far: no longer right
+            self.__dict__.pop(kept, None)  # worked out from the earlier runs: out of date now
 
     @property
     def n(self) -> int:
@@ -63,7 +64,7 @@ class TestStats:
 
     @cached_property
     def dep_frequency(self) -> dict[str, float]:
-        """Fraction of the valid runs in which each component was exercised (depth/frequency of dependency)."""
+        """For each component, the share of the valid runs that exercised it: how often the test depends on it."""
         runs = self.valid_runs or self.runs
         counts = Counter(d for r in runs for d in set(r.get("deps", [])))
         return {d: c / len(runs) for d, c in counts.items()}
@@ -178,9 +179,9 @@ class History:
         return [v for v in self.variants if v != variant and not changes(v) & mine]
 
     def revealing_tests(self, variant: str, threshold: float = 0.5) -> set[str]:
-        """Tests whose majority outcome flips from pass (baseline) to fail (variant) = ground truth. A test that
-        already fails under the empty change is left out: the way the changed copies are run, not the change, is
-        what fails it."""
+        """The tests that reveal the change, its ground truth: their majority outcome is a pass on the original app
+        and a failure on the changed copy. A test that already fails under the empty change is left out: the way
+        the changed copies are run, not the change, is what fails it."""
         noisy = {t for t in self.unchanged if not self.passes_unchanged(t, threshold)}
         out = set()
         for t in self.baseline:

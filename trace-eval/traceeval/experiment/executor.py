@@ -1,6 +1,6 @@
 """Execute eval cases against a loaded SUT variant and produce history records.
 
-A history record is the unit the selectors learn from and the replay evaluator samples from:
+A history record is the unit the strategies learn from and the replay evaluator samples from:
     test_id, dataset, variant, rep, backend, passed, classification, checks, tokens (agent + judge),
     latency_ms, steps, deps (observed components), trace summary.
 """

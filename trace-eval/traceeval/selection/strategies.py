@@ -1,6 +1,6 @@
 """Baseline strategies and the strategy registry.
 
-    full        whole suite in catalogue order (reference)
+    full        whole suite in catalog order (reference)
     random      random permutation
     declared    change-based selection on hand-written dependencies (classic RTS on metadata)
     ir_tfidf    text similarity between the diff and each test (IR-based prioritization, REPiR-style)
@@ -57,7 +57,7 @@ def tokens(text: str) -> list[str]:
 
 
 def change_text(change) -> str:
-    """Everything textual we know about a change: file names, component ids and the diff of the code
+    """Everything textual about a change: its file names, its component ids and the diff of its code
     (comments, docstrings and blank lines are never part of a change set)."""
     return " ".join(change.files) + " " + " ".join(c.id for c in change.components) + " " + change.diff
 

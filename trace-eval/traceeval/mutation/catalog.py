@@ -1,7 +1,7 @@
 """The 43 controlled changes ("mutations"), written as data, and the batches that bundle several of them.
 
 A mutation is a controlled change to the system under test, applied as a real file edit. The
-experiment never shows the selectors the mutation label - only the diff. ``regression`` says whether
+experiment never shows the strategies the mutation label - only the diff. ``regression`` says whether
 we *expect* at least one test to reveal it; the report checks that expectation (sanity line).
 
 Each entry: id, category, description, regression?, edits. An edit is one of
@@ -219,7 +219,7 @@ MUTATIONS: list[Mutation] = [
 
 
 def batch(bid: str, description: str, member_ids: list[str]) -> Mutation:
-    """A batch: the members' edits applied in order to one copy. The members must edit disjoint files, so that
+    """A batch: the members' edits applied one after another to one copy. The members must edit disjoint files, so that
     every anchor is still there when its edit comes; ``tests/test_mutation_and_selection.py`` checks it."""
     members = [get_mutation(m) for m in member_ids]
     return Mutation(

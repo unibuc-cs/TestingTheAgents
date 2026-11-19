@@ -1,11 +1,12 @@
-"""Record phase of the record-then-replay protocol.
+"""Recording: the runs that every strategy and every evaluation read (``runs/<name>/history``).
 
-baseline : run the full suite K times on the unmodified SUT with code-coverage contexts
-           -> history/baseline.jsonl (observed deps, cost, pass rate), history/cassette.jsonl (its answers)
-mutants  : the empty change first: the same app, run the way the changed copies are
-           -> history/unchanged.jsonl (what the way of running alone does to the outcomes)
-           then, for each mutation, materialise the variant, extract its change set, run the full suite K times
-           -> history/variants/<id>.jsonl (ground-truth fault matrix)
+- ``record_baseline`` runs the whole suite ``reps`` times on the original app, with code coverage. It writes
+  ``baseline.jsonl`` (each run's outcome, cost and the code it exercised) and ``cassette.jsonl`` (every answer
+  the model gave, which replay-first answers from).
+- ``record_mutants`` runs the empty change first: the original app, run the way the changed copies are
+  (``unchanged.jsonl``, what that way of running does to the outcomes on its own). Then, for each change, it
+  makes the changed copy, works out its change set, and runs the whole suite ``reps`` times on it
+  (``variants/<id>.jsonl``, the ground truth of that change).
 
 With a served model (``workers`` > 1) the cases of a run go to the server in parallel threads; the baseline
 stays sequential, because its coverage contexts are process-wide. The two ways of running are therefore not the

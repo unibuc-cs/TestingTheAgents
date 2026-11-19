@@ -1,4 +1,4 @@
-"""Controlled changes to the SUT (mutations) and the change sets the selectors see."""
+"""Controlled changes to the SUT (mutations) and the change sets the strategies see."""
 
 from .catalog import BATCHES, MUTATIONS, Mutation, get_mutation
 from .changeset import ChangeSet, compute_changeset

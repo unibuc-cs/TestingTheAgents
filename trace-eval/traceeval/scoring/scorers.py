@@ -1,6 +1,6 @@
 """Deterministic scorers over (final state, trace, final message) plus an optional judge step.
 
-Result classification follows the TRACE-Eval handoff, extended with the tool boundary:
+A run is classified as one of:
     PASS           every expectation holds
     TOOL_ERROR     a tool call crashed, or failed with an error the case does not allow and was not recovered
     AGENT_FAILURE  tool calls behaved as allowed, but an expectation failed

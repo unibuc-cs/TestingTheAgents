@@ -1,7 +1,7 @@
 """Trace recording.
 
 The SUT emits flat events (``tracer.event(kind, **attrs)``); the recorder turns them into a
-normalised trace document with the dependency information the selectors consume:
+normalised trace document with the dependency information the strategies use:
 
     agents, skills (name and version), tools (every call with its arguments and status), the tools each
     agent was offered, config keys read, agent-definition fields consulted for routing, delegations, token
@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 
 @dataclass
 class TraceRecorder:
-    """The events of one run, in the order they happened, and the views the scorers and selectors read.
+    """The events of one run, in the order they happened, and the views the scorers and strategies read.
 
     The SUT only ever calls ``event``; everything else here derives from the event list afterwards."""
 

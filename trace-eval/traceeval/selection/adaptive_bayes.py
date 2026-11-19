@@ -1,32 +1,33 @@
 """The proposed method: adaptive Bayesian test selection with budget-aware stopping.
 
 In plain words
-  1. Each changed component (a function, a skill procedure, a config key, ...) may or may not be broken.
-     We keep a probability for every combination of broken components (2^k, k <= 8).
-  2. For every test we estimate how likely it is to FAIL if a given component is broken ("sensitivity").
-     Covering a component is weak evidence by itself, so the sensitivity is calibrated from history:
-     among the tests that statically looked impacted by earlier changes of the same kind, how many
-     actually revealed the change?  A ratio learned from one or two changes stays near a default for its kind,
-     so that a single earlier change cannot make a whole kind look certain.  That ratio is then scaled by the
-     test's own record on earlier changes of that kind that touched it: the changes it revealed over those an
-     average impacted test would have revealed.  Catching a change that broke almost everything says little;
-     being the one test that caught a subtle change says a lot.  The sensitivity is finally tilted up for tests
-     whose own text (name, request, expectations) shares vocabulary with the diff, and for tests whose author
-     declared the dependency.  An agent's tool or skill list that only lost items reaches only the
-     tests that used one of them.  How text is compared is an option (``text``): word overlap by default,
-     the TF-IDF similarity of the ``ir_tfidf`` strategy, or not at all (the variants registered at the end).
-  3. We run the test with the best expected information per token, update the probabilities with the
-     outcome, and repeat; each test runs at most once.  A test that already fails on the original app (a
-     mistake of the model) tells nothing either way, and is not run (``ctx.runnable``); with replay-first,
-     neither is a test whose outcome on the changed copy the replay already gave.  After a test passes, tests
-     that behave exactly like it (same agents, tools, fault profile, dataset) count for much less.
-  4. We stop with "regression" as soon as a test that passed on the original app fails, as every strategy
-     does (``base.py``): the models decode greedily, so that failure shows a changed behaviour (it is what
-     the ground truth calls revealing).  What only this method does is stop with "clean", when P(something
-     is broken) drops below eps_clean; otherwise it stops when every test that can be run has passed
-     ("exhausted"), when the budget is spent, or when no test could change the verdict.  eps_clean is a constant
-     by default.  A check can set it instead on the recorded changes, for a miss rate it chooses
-     (``experiment/stopping.py``); the tests that can no longer move the probability then run too
+  1. Each changed component (a function, a skill procedure, a config key, ...) may or may not be broken. We keep
+     a probability for every combination of broken components (2^k of them, with k <= 8).
+  2. For every test we estimate how likely it is to fail if a given component is broken: its *sensitivity*.
+     Covering a component is weak evidence on its own, so the sensitivity is the product of three factors
+     learned from the recorded changes:
+     - the reveal ratio: among the tests that looked impacted by earlier changes of the same kind, the share
+       that revealed the change. A ratio learned from one or two changes stays near a default for its kind,
+       so that a single earlier change cannot make a whole kind look certain;
+     - the test's lift: its own record on the earlier changes of that kind that touched it, the changes it
+       revealed over those an average impacted test would have revealed. Catching a change that broke almost
+       everything says little; being the one test that caught a subtle change says a lot;
+     - a tilt up for a test whose text (name, request, expectations) shares words with the diff, and for one
+       whose author declared the dependency. How text is compared is an option (``text``): word overlap by
+       default, the TF-IDF similarity of the ``ir_tfidf`` strategy, or not at all (the variants at the end).
+     An agent's tool or skill list that only lost items reaches only the tests that used one of them.
+  3. We run the test with the best expected information per token, update the probabilities with its outcome,
+     and repeat; each test runs at most once. A test that already fails on the original app (a mistake of the
+     model) tells nothing either way and is not run (``ctx.runnable``); with replay-first, neither is a test
+     whose outcome on the changed copy the replay already gave. After a test passes, the tests that behave
+     exactly like it (same agents, tools, fault profile and dataset) count for much less.
+  4. We stop with "regression" as soon as a test that passed on the original app fails, as every strategy does
+     (``base.py``): the models decode greedily, so that failure shows a changed behaviour (it is what the ground
+     truth calls revealing). What only this method does is stop with "clean", when P(something is broken)
+     drops below ``eps_clean``. Otherwise it stops when every test that can be run has passed ("exhausted"),
+     when the budget is spent, or when no test could change the verdict. ``eps_clean`` is a constant by
+     default; a check can set it instead on the recorded changes, for a miss rate it chooses
+     (``experiment/stopping.py``). The tests that can no longer move the probability then run too
      (``exhaustive``), so that "exhausted" means every test the change reaches has run.
   5. A run that found no regression does not end before every mandatory property the change may affect (the
      catalog of properties, ``experiment/coverage.py``) has a test, the cheapest that checks it, while the budget
@@ -75,7 +76,8 @@ DEFAULT_REVEAL = {
 
 
 def _kind_key(comp) -> str:
-    """Calibration bucket of a component: agent fields are calibrated separately (triggers vs tools...)."""
+    """The bucket a component's reveal ratio is learned in: its kind, and for an agent the field as well, since an
+    agent's triggers and its tools break tests differently."""
     if comp.kind == "agent" and "." in comp.id:
         return "agent." + comp.id.split(".", 1)[1]
     return comp.kind
@@ -143,7 +145,9 @@ class AdaptiveBayes(Strategy):
     # ------------------------------------------------------------------ step 2: sensitivities
     @staticmethod
     def impacted(ctx, change, comp) -> dict[str, set[str]]:
-        """Tests that statically look impacted by ``comp``: executed a changed line / the function / match."""
+        """The tests that look impacted by ``comp`` before anything runs, in three buckets: those that executed one
+        of its changed lines ("line"), those that only called its function or module ("fn"), and, for any other
+        kind of component, those whose dependencies it matches ("match")."""
         out = {"line": set(), "fn": set(), "match": set()}
         # the changed lines of the component's file: running one is the finest observed link to the change
         lines = [c for c in change.components if c.kind == "line" and c.file == comp.file]
@@ -337,7 +341,7 @@ class AdaptiveBayes(Strategy):
     @staticmethod
     def p_fail_matrix(S, fails_anyway, hyps):
         """P(test fails | hypothesis) for every test x hypothesis:
-        1 - (1 - fails_anyway) * prod_{broken c} (1 - S_tc).  A test passes only if it would pass on the original
+        1 - (1 - fails_anyway) * prod_{broken c} (1 - S_tc). A test passes only if it would pass on the original
         app and none of the broken components makes it fail."""
         return 1.0 - (1.0 - fails_anyway)[:, None] * np.exp(np.log1p(-np.clip(S, 0, 0.999)) @ hyps.T)
 

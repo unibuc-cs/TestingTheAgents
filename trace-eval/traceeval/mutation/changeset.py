@@ -1,6 +1,6 @@
 """Change-set extraction: baseline SUT tree vs. variant tree -> changed *components*.
 
-This is the only information about a change that the selectors receive (they never see the
+This is the only information about a change that the strategies receive (they never see the
 mutation label). Components use the same identifiers as observed/declared dependencies:
 
     code:<relpath>::<qualname>      function-level code change (AST-normalised, docstrings ignored)
@@ -16,7 +16,7 @@ mutation label). Components use the same identifiers as observed/declared depend
 
 Comments do not count. An edit that provably cannot change what the harness does (comments, docstrings,
 blank lines and formatting, YAML comments, the order of config mappings) adds nothing to the change set:
-no component, no file and no diff line, so no selector and no probability depends on it. For the same
+no component, no file and no diff line, so no strategy and no probability depends on it. For the same
 reason the diff and the line components are computed on the code alone, with comments, docstrings and
 blank lines removed.
 

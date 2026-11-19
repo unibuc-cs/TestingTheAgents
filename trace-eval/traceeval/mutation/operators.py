@@ -1,4 +1,4 @@
-"""Textual patch operators used by the mutation catalogue. Every operator asserts that the anchor text
+"""Textual patch operators used by the mutation catalog. Every operator asserts that the anchor text
 exists so that a mutation can never silently become a no-op after the SUT evolves."""
 
 from pathlib import Path
