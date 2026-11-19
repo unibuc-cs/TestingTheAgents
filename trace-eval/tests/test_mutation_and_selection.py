@@ -53,7 +53,7 @@ COMMENT_ONLY = {"benign_code_comment_docstring", "benign_config_comments_reorder
 def test_every_mutation_applies_and_changes_something(tmp_path):
     for m in MUTATIONS:
         _, cs = materialize_variant(m, tmp_path / "v")
-        if m.id in COMMENT_ONLY:  # comments and formatting reach no selector
+        if m.id in COMMENT_ONLY:  # comments and formatting reach no strategy
             assert not (cs.files or cs.components or cs.diff), m.id
         else:
             assert cs.files and cs.components, m.id

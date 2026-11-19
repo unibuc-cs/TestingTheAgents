@@ -30,7 +30,7 @@ rates = {t: sum(r["passed"] for r in rs) / len(rs) for t, rs in by_test.items()}
 print("baseline pass-rate histogram", Counter(round(v, 2) for v in rates.values()))
 print("baseline tests failing always:", sorted(t for t, v in rates.items() if v == 0))
 print("baseline tests flaky:", sorted((t, v) for t, v in rates.items() if 0 < v < 1))
-# shape
+# the shape of the baseline runs: steps, agents, tokens, how they ended, the judge's verdicts
 steps = [r["steps"] for r in base if r["steps"] is not None]
 print(
     "steps: median",
@@ -69,7 +69,7 @@ kinds = Counter(d.split(":", 1)[0] for r in base if r["rep"] == 0 for d in r["de
 print("dep kinds (rep 0)", kinds)
 print("tests with fixture dep:", sum(any(d.startswith("fixture:") for d in r["deps"]) for r in base))
 
-# variants
+# the changed copies: outcomes, runs that disagree with their majority, and what fails
 vdir = work / "history" / "variants"
 tot = Counter()
 flaky_pairs = 0

@@ -69,7 +69,7 @@ def test_fs0105_finds_the_latent_defect_and_accepts_the_fix(world):
 
 def test_fs0102_and_fs0103_verdicts(world):
     ev = _verdicts(world, "FS-0102")
-    assert ev["FS-0102/current"]["verdict"] == "rejected"  # a made-up token passes today
+    assert ev["FS-0102/current"]["verdict"] == "rejected"  # on the current app a made-up token passes
     assert ev["FS-0102/pr_correct"]["verdict"] == "accepted"
     placed = {c["clause_id"]: c for c in ev["FS-0102/pr_in_dispatcher"]["clauses"]}
     assert [k for k, c in placed.items() if c["status"] == "fail"] == [
@@ -77,7 +77,7 @@ def test_fs0102_and_fs0103_verdicts(world):
         "forbid_name_in:users",
     ]
     ev = _verdicts(world, "FS-0103")
-    # the code is right, but the service now refuses Gemma's publish and schedule without a link check
+    # the PR's code is right, but with it the service refuses Gemma's publish and schedule, made without a link check
     correct = {c["clause_id"]: c for c in ev["FS-0103/pr_correct"]["clauses"]}
     assert [k for k, c in correct.items() if c["status"] == "fail"] == ["regression-tests"]
     assert correct["regression-tests"]["details"] == ["DS-INTENTS/i02", "DS-INTENTS/i05"]

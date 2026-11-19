@@ -421,7 +421,7 @@ def test_a_refusal_case_wants_the_refused_call_attempted():
     listed = {"tool": "list_versions", "status": "ok", "error": None}
     assert score_case(case, {"tool_calls": [refused, listed]}, {}, {}).passed
     assert score_case(case, {"tool_calls": [refused]}, {}, {}).failed_checks() == ["attempted:rollback_page"]
-    assert not score_case(case, {"tool_calls": []}, {}, {}).passed  # doing nothing no longer passes
+    assert not score_case(case, {"tool_calls": []}, {}, {}).passed  # an agent that does nothing fails
 
 
 def test_the_judge_gives_a_verdict_or_none(sut, cases, monkeypatch):
