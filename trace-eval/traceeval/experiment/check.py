@@ -54,6 +54,7 @@ from .coverage import (
     invoked,
     tools_called,
 )
+from .culprits import member_suspects
 from .executor import run_case
 from .history import History
 from .manifest import drift
@@ -69,12 +70,15 @@ def check(
     backend: str,
     confirm: bool = False,
     miss_rate: float | None = None,
+    floor: bool = False,
 ):
     """Check ``change``, a mutation id or the folder of a changed copy of ``traceeval/sut``, spending at most
     ``budget`` (a fraction of the full suite's tokens) on the model. Prints the replay's result and each test as
     it runs, then the verdict and the change coverage; returns the execution log. With ``confirm`` a test that
     fails is run again before its failure ends the check. With ``miss_rate`` the clean verdict's threshold is set
-    on the history's changes, for that miss rate at most."""
+    on the history's changes, for that miss rate at most. With ``floor`` no clean verdict is given before the
+    coverage floor has run: the cheapest reached tests that cover every changed component and every affected
+    mandatory property (``coverage.coverage_floor``)."""
     # The change is compared with traceeval/sut as it is now, and what is known beforehand was recorded on the app
     # as it was. If the two differ, even by a comment, the recorded line numbers and answers no longer fit: refuse.
     if "app" in (differs := drift(history_dir)):
@@ -173,7 +177,9 @@ def check(
                 # unless the threshold stops it.
                 tau, learn, basis = clean_threshold(history_dir, history, catalog, cs, miss_rate, learn)
                 print(basis)
-                method = AdaptiveBayes(eps_clean=tau, exhaustive=True)
+                method = AdaptiveBayes(eps_clean=tau, exhaustive=True, cover_floor=floor)
+            elif floor:
+                method = AdaptiveBayes(cover_floor=True)
             ctx = SelectionContext(
                 change=cs,
                 catalog=catalog,
@@ -187,12 +193,20 @@ def check(
             client.live = new_client(backend)
             with in_front(backend, client):
                 log = method.run(ctx, oracle)
+        # For a batch, the members' own replays name those that can make a failing test fail (``culprits.py``):
+        # each member replayed alone on the failing tests, with the cassette and no model
+        failing = [t for t, ok, _ in log.steps if not ok]
+        suspected = {}
+        if members and failing:
+            suspected = member_suspects(members, failing, catalog, history_dir, backend, Path(tmp) / "members")
         sut.unload()
 
     failed = sorted({t for t, ok, _ in log.steps if not ok})
     # the diverged tests that could still tell something: they pass on the original app and were not run
     unrun = len([t for t in diverged if passes[t] and t not in log.executed])
     left = f" ({unrun} tests the change reaches were not run)" if unrun else ""
+    if floor and log.stop_reason == "clean":
+        left = f", after the coverage floor{left}"
     if found:
         verdict = f"REGRESSION: {', '.join(failed)} failed in the replay, before any model call"
     elif not diverged:
@@ -219,6 +233,12 @@ def check(
     blamed = [f"{c} {pc:.2f}" for c, pc in (getattr(log, "blame", None) or []) if pc >= 0.2]
     if blamed:
         print("blamed: " + ", ".join(blamed[:6]))
+    # the members that can make each failing test fail on their own; none means only the members together do
+    for t, named in suspected.items():
+        if named:
+            print(f"suspects for {t} (the members whose own replay reaches it or fails it): {', '.join(named)}")
+        else:
+            print(f"no member reaches {t} on its own: the members make it fail only together")
     # the tests whose outcome on the changed app is now known: those run, and those that replayed and pass on the
     # original app (one that fails there checks nothing)
     known = log.executed + sorted(t for t in replayed if passes[t] and t not in log.executed)

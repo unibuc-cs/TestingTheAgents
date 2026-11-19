@@ -30,7 +30,10 @@ In plain words
      (``exhaustive``), so that "exhausted" means every test the change reaches has run.
   5. A run that found no regression does not end before every mandatory property the change may affect (the
      catalog of properties, ``experiment/coverage.py``) has a test, the cheapest that checks it, while the budget
-     allows (``cover_mandatory``; switched off in the ablation ``adaptive_bayes_nomandatory``).
+     allows (``cover_mandatory``; switched off in the ablation ``adaptive_bayes_nomandatory``). With
+     ``cover_floor`` (the variant ``adaptive_bayes_floor``, and ``traceeval check --floor``) the rule is the
+     coverage floor instead (``coverage.coverage_floor``): the cheapest set of tests that also covers every changed
+     component, the tests already run and those the replay settled counting as covering.
 """
 
 import math
@@ -105,6 +108,7 @@ class AdaptiveBayes(Strategy):
         text="overlap",
         cover_mandatory=True,
         exhaustive=False,
+        cover_floor=False,
     ):
         """The settings, each explained beside its field with the step of the module docstring it enters."""
         self.eps_clean = eps_clean  # "clean" below this P(something is broken) (step 4)
@@ -115,6 +119,8 @@ class AdaptiveBayes(Strategy):
         self.prior_strength = prior_strength  # padding of a test's record (step 2): a short record moves little
         self.text = text  # how a test's text is compared with the change (step 2): "overlap", "tfidf" or "none"
         self.cover_mandatory = cover_mandatory  # test every mandatory property the change may affect (step 5)
+        # step 5 as the coverage floor: also every changed component, by the cheapest set of tests that covers it all
+        self.cover_floor = cover_floor
         # go on through the tests that can no longer move the probability, cheapest first, instead of ending
         # "uninformative" (step 4): with a threshold set on recorded changes, a run that is not stopped by it
         # must end with every runnable test run
@@ -413,8 +419,11 @@ class AdaptiveBayes(Strategy):
             if remaining <= 0:
                 log.stop_reason = "budget"
                 break
-        # step 5: after a run that ended clean, on budget or uninformative, the mandatory-coverage rule
-        if stopping and self.cover_mandatory and log.stop_reason != "regression":
+        # step 5: after a run that ended clean, on budget or uninformative, the coverage floor or the
+        # mandatory-coverage rule
+        if stopping and self.cover_floor and log.stop_reason != "regression":
+            post = self._cover_floor(ctx, oracle, log, m, ran, remaining, post, p_fail)
+        elif stopping and self.cover_mandatory and log.stop_reason != "regression":
             post = self._cover_mandatory(ctx, oracle, log, m, ran, remaining, post, p_fail, fails_anyway)
         # the verdict's probability: P(at least one component is broken | the outcomes)
         log.p_broken = float(1.0 - post[0])
@@ -462,6 +471,41 @@ class AdaptiveBayes(Strategy):
             remaining -= spent
             log.steps.append((tests[i], passed, spent))
             checked |= set(ctx.catalog[tests[i]].properties)
+            # the same Bayes update and regression stop as in step 4
+            post = post * ((1 - p_fail[i]) if passed else p_fail[i])
+            post /= post.sum() or 1e-12
+            if not passed:
+                post[0] = 0.0
+                log.stop_reason = "regression"
+                break
+        return post
+
+    @staticmethod
+    def _cover_floor(ctx, oracle, log, m, ran, remaining, post, p_fail):
+        """Step 5 as the coverage floor (``coverage.coverage_floor``): a run that found no regression does not end
+        before the cheapest set of tests that covers every changed component and every affected mandatory property
+        has run, while the budget allows. The tests already run, and with replay-first those whose outcome the replay
+        gave, count as covering. A failure is a regression, as in step 4, and ends the run. Returns the posterior."""
+        from traceeval.catalog import load_properties
+        from traceeval.experiment.coverage import coverage_floor
+
+        tests, cost = m["tests"], m["cost"]
+        index = {t: i for i, t in enumerate(tests)}
+        # covering already: the tests run so far, and those the replay settled that pass on the original app
+        known = [
+            t for i, t in enumerate(tests) if ran[i] or (t in ctx.replayed and ctx.history.baseline_pass_rate(t) >= 0.5)
+        ]
+        candidates = [t for i, t in enumerate(tests) if not ran[i] and ctx.runnable(t)]
+        floor = coverage_floor(ctx.change, ctx.history, ctx.catalog, load_properties(), candidates, known, ctx.cost)
+        for t in floor:
+            i = index[t]
+            if cost[i] > remaining:  # the budget keeps this one out; a cheaper one may still fit
+                continue
+            log.trace.append(float(1.0 - post[0]))
+            passed, spent = oracle(t)
+            ran[i] = True
+            remaining -= spent
+            log.steps.append((t, passed, spent))
             # the same Bayes update and regression stop as in step 4
             post = post * ((1 - p_fail[i]) if passed else p_fail[i])
             post /= post.sum() or 1e-12
@@ -519,3 +563,14 @@ class AdaptiveBayesNoMandatory(AdaptiveBayes):
 
     def __init__(self):
         super().__init__(cover_mandatory=False)
+
+
+@register
+class AdaptiveBayesFloor(AdaptiveBayes):
+    """Step 5 as the coverage floor: no clean verdict before every changed component and affected mandatory
+    property is covered, by the cheapest set of tests that does it (``coverage.coverage_floor``)."""
+
+    name = "adaptive_bayes_floor"
+
+    def __init__(self):
+        super().__init__(cover_floor=True)

@@ -56,7 +56,9 @@ TRACEEVAL_VLLM_ARGS="--no-enable-prefix-caching" scripts/gpu_remote.sh up gemma 
   `generated.py`, the generated changes of a recording replayed for free;
   `check.py`, the prototype (one change: the replay, then the method live over the tests that diverge);
   `stopping.py`, the threshold at which a check says clean for a target miss rate, set per group of changes on
-  the recording's own changes (`traceeval check --miss-rate`).
+  the recording's own changes (`traceeval check --miss-rate`); `coverage.py`, coverage of the suite and of a
+  change, and the coverage floor (`traceeval check --floor`); `culprits.py`, a batch failure's suspects among its
+  members, from their own replays.
 - `traceeval/llm/` — Gemma's client (`chat.py`: prompt, engines, parsing, which model judges) and the answer cache
   (`cache.py`, with the three clients of replay-first: `Tee` keeps a baseline's answers, `ReplayFirstClient`
   replays them, `Compare` counts the requests a changed copy's recording gets answered otherwise).

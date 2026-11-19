@@ -57,9 +57,12 @@ one test at a time without a prefix cache, every request gets its recorded answe
 (iii) an order of the reached tests, stopped at its first failure, finds 98\% to 100\% of the regressions for 5\%
 to 7\% of the suite's tokens, under half of what the whole suite costs through a cache of answers;
 (iv) a stop threshold calibrated per group of changes keeps the miss rate of a clean verdict at its target, also
-on changes unlike those it was set on, where one threshold for all changes or a learned score does not;
+on changes unlike those it was set on, where one threshold for all changes or a learned score does not, and a
+coverage floor under it makes every clean verdict cover what the change touches for a fraction of a point;
 (v) checked live at a 10\% target miss rate, all 28 regressions are found with no false alarm, for 2.8\% of the
-suite's tokens per check. A second model gives the same picture.
+suite's tokens per check;
+(vi) on batches of changes tested together, the members' own replays name the suspects of a failure, which hold
+every culprit, for no tokens. A second model gives the same picture.
 \end{abstract}
 
 
@@ -147,13 +150,15 @@ conformal risk control \cite{angelopoulos2024conformal,angelopoulos2025ltt} & a 
 
 Our contributions are:
 \begin{enumerate}
-  \item \textbf{replay first as test selection} for agent systems, and the condition it rests on
-        (Section~\ref{sec:replay});
+  \item \textbf{replay first as test selection} for agent systems, the condition it rests on
+        (Section~\ref{sec:replay}), and its use on a batch of changes, where the members' own replays name the
+        suspects of a failure (Section~\ref{sec:suspects});
   \item \textbf{a protocol that measures the condition} at the level of the request, the run and the outcome,
         with an \emph{empty change} as the reference, and the two settings of a server that the differing answers
         come from (Section~\ref{sec:evaluation});
   \item \textbf{a stopping rule with a bounded miss rate}: a threshold calibrated per group of past changes by
-        split conformal prediction (Section~\ref{sec:stopping});
+        split conformal prediction, with a coverage floor that keeps a clean verdict from leaving a changed
+        component or a release blocker untested (Section~\ref{sec:stopping});
   \item \textbf{a testbed and an evaluation}: a multi-agent application, 180 tests, 43 hand-written and 692
         generated changes, eleven strategies under the same rules with and without the replay, offline and live,
         for two models (Sections~\ref{sec:setup} and~\ref{sec:evaluation}).
@@ -610,6 +615,21 @@ Equation~\ref{eq:clean}. Where the method would have no informative test left, t
 next, so that a low threshold can be reached. The check states what its threshold rests on, or that the group
 has too few past regressions for one.
 
+\paragraph{A coverage floor.} A threshold decides when the evidence is strong enough, not what has been looked at.
+The \emph{coverage floor} adds that: a run does not end \clean{} before every changed component that some test
+exercised on $V_0$, and every affected mandatory property that some test checks, is covered by a test it ran or by
+one whose outcome the replay gave. With $K$ those tests, the ones of $T^{\mathrm{rep}}(\Delta)$ that pass on $V_0$
+and the ones run, and $U_t$ what test $t$ covers of the change, the floor is a cheapest
+\begin{equation}
+  F(\Delta) \subseteq T^{\mathrm{div}}(\Delta) \quad \text{with} \quad \bigcup_{t \in F(\Delta) \cup K} U_t =
+  \bigcup_{t \in T^{\mathrm{div}}(\Delta) \cup K} U_t ,
+  \label{eq:floor}
+\end{equation}
+found greedily, by the most uncovered items per token. It runs just before a clean verdict, so it costs nothing
+when a failure ends the run earlier, and it replaces the mandatory rule of Section~\ref{sec:adaptive}, which covers
+the properties alone. It is the minimal covering set of test-suite minimization \cite{yoo2012regression}, computed
+per change among the reached tests and used as a floor under the threshold, not as the selection.
+
 \subsection{A failure confirmed by a repetition}
 \label{sec:confirm}
 
@@ -618,6 +638,24 @@ change makes a test unstable, so that it fails in one run of five, a single run 
 verdict is a false alarm. The remedy costs a test, not a suite: after a failure the test is run again, and a third
 time when the second run passes; two failures of three end the run, and a failure that does not repeat counts as a
 pass. A repetition is paid like any run, behind the cassette.
+
+\subsection{A batch, and the suspects of a failure}
+\label{sec:suspects}
+
+A nightly run tests a day's changes $\Delta_1, \dots, \Delta_m$ together, as one change: the reached tests run once
+for all of them, and a failure that appears only when the changes meet shows. A failing test $t$ then has to be
+traced to a member, and the members' own replays do that for no tokens. The \emph{suspects} of $t$ are the members
+whose own replay reaches it or fails it:
+\begin{equation}
+  \mathrm{Sus}(t) = \{\Delta_j : t \in T^{\mathrm{div}}(\Delta_j) \ \text{or} \ \hat{X}_t(V_0 + \Delta_j) =
+  \text{fail}\}.
+  \label{eq:suspects}
+\end{equation}
+By Proposition~\ref{prop:replay}, a member whose own replay runs $t$ to the end and passes makes $t$ pass when it
+is applied alone, so under R and D every member that makes $t$ fail by itself is a suspect. One suspect is the
+culprit, with no further run. Several are told apart by halving, about $\lceil \log_2 |\mathrm{Sus}(t)| \rceil$
+runs of $t$, instead of $\lceil \log_2 m \rceil$. No suspect, or halving that leaves none failing alone, means that
+the members fail $t$ only together.
 
 \section{Evaluation}
 \label{sec:evaluation}
@@ -947,6 +985,7 @@ text & 0.0\% & 1.8\% & 15.3\% & 0 & 2 & 3 & 25.2 & 22.4 \\
 learned & 0.4\% & 4.6\% & 6.4\% & 5 & 5 & 6 & 28.2 & 27.5 \\
 learned, with the replay & 0.0\% & 1.4\% & 17.4\% & 0 & 1 & 1 & 28.6 & 19.0 \\
 adaptive & 0.4\% & 3.2\% & 11.0\% & 0 & 0 & 3 & 15.3 & 9.6 \\
+adaptive, with the coverage floor & 0.4\% & 2.8\% & 8.9\% & 0 & 0 & 2 & 15.7 & 10.0 \\
 \midrule
 adaptive, with its constant $\varepsilon$ & \multicolumn{3}{c}{7.5\%} & \multicolumn{3}{c}{2} & \multicolumn{2}{c}{19.2} \\
 \bottomrule
@@ -962,6 +1001,14 @@ adaptive, with its constant $\varepsilon$ & \multicolumn{3}{c}{7.5\%} & \multico
         not from a model of what past changes looked like. With a threshold per group it stays within its target
         on both sets, and on the hand-written changes it is safer and cheaper than with its constant: none missed
         for 15.3\% of the suite at a 10\% target, where the constant misses two for 19.2\%.
+  \item \emph{The coverage floor costs little, and catches some of what the threshold lets through.} With it,
+        every clean verdict covers every changed component and affected mandatory property that some test covers;
+        without it, the clean verdicts on the hand-written changes cover 95.7\% of them at a 10\% target. It costs
+        0.4 points more on a clean verdict, and within the generated changes it takes the miss rate at a 10\%
+        target from 5.3\% to 4.4\%, with no split over the target.
+  \item \emph{Covering is not catching.} The 15 tests that cover all that the suite covers (14\% of it), run on
+        every change, miss 13 of the 25 hand-written regressions, although their clean verdicts cover everything
+        the changes touch. The floor alone misses 18, for 0.5\% of the suite: it is a floor, not a selection.
   \item \emph{The second set is small:} 25 regressions, so one miss is four points.
 \end{itemize}
 The answer to RQ4 is yes, with two qualifications. What makes a rule cheap inside the population can make it wrong
@@ -1022,7 +1069,12 @@ change. It stays exact: none of the 1,374 replayed outcomes differs from the rec
 order of the reached tests finds the 20 batches a test reveals. A batch is not the union of its members: under
 three batches a test fails that no member fails alone, two of them made only of harmless edits. Checked live with
 the members held out, at a 20\% budget, 19 of the 20 are found with no false alarm, and in 17 of the 18 with a
-member that is a regression alone the component blamed most belongs to such a member.
+member that is a regression alone the component blamed most belongs to such a member. The suspects of
+Equation~\ref{eq:suspects} hold every member that fails the test alone, in all 273 pairs of a batch and a revealing
+test that have one. They are 1.9 of 5.7 members on average and the culprit alone in 85 pairs, and halving them
+takes 0.9 runs of the failing test on average, against 2.5 for all the members. For the test each live check
+failed on, they hold the culprit in all 18 failures that have one and name it alone in 9; the component blamed most
+belongs to it in 13.
 
 \subsection{Threats to validity}
 
@@ -1061,8 +1113,12 @@ member that is a regression alone the component blamed most belongs to such a me
         regression; a good one does it for half the tokens of a random one (RQ3).
   \item \textbf{Stop early only with a miss rate you chose,} per group of changes and on a score that travels to
         changes unlike the past ones, and record enough changes of the groups whose clean verdicts cost most (RQ4).
+  \item \textbf{Put a coverage floor under the threshold, not in its place.} The cheapest reached tests that
+        cover what the change touches cost little; on their own they miss most regressions (RQ4).
   \item \textbf{Confirm a failure before acting on it:} one failing run of a long test can be the minority of its
         runs (RQ5).
+  \item \textbf{Test a day's changes together, and let the members' replays name the suspects} of a failure:
+        they hold the culprit, and halving them takes fewer runs than halving the day (batches).
 \end{enumerate}
 
 \section{Conclusion and future work}

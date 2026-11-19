@@ -3,6 +3,7 @@
 import ast
 import math
 import random
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -17,12 +18,14 @@ from traceeval.experiment.coverage import (
     affected_error_paths,
     affected_features,
     affected_properties,
+    coverage_floor,
     error_paths,
     suite_coverage,
 )
 from traceeval.experiment.coverage import (
     tests_per_component as per_component,
 )
+from traceeval.experiment.culprits import halving_runs, suspects
 from traceeval.experiment.evaluate import evaluate, make_oracle
 from traceeval.experiment.executor import read_jsonl, write_jsonl
 from traceeval.experiment.history import History
@@ -40,6 +43,7 @@ from traceeval.mutation.generator import generate, kind_of, sample, split
 from traceeval.mutation.operators import PatchError
 from traceeval.selection import CORE, SelectionContext, Strategy, get_strategy
 from traceeval.selection.adapted import fit_logistic, kmeans, run_signals, sigmoid
+from traceeval.selection.adaptive_bayes import AdaptiveBayes
 from traceeval.selection.base import ExecutionLog, matches, weighted_affinity
 from traceeval.sut import SUT_ROOT
 
@@ -333,6 +337,67 @@ def test_training_leaves_out_the_changes_a_batch_shares():
     assert h.training_variants("batch_ab") == ["c"]  # not its members, nor the batch that shares one
     assert h.training_variants("unrecorded_batch", members=["c"]) == ["a", "b", "batch_ab"]
     assert {"history_ml", "observed_diverse"} <= set(CORE)
+
+
+def _floor_recording():
+    """Five tests and a change to two functions, f and g, with a mandatory property whose source is f: ``both`` runs
+    f and g but costs more than ``only_f`` and ``only_g`` together, ``check_p`` checks the property, ``red`` fails
+    on the original app, and ``known_g`` is a test whose outcome is already known."""
+    f, g = "code:tools/x.py::f", "code:tools/x.py::g"
+
+    def stats(test, deps, tokens, passed=True):
+        s = RunStats(test)
+        outcome = "PASS" if passed else "AGENT_FAILURE"
+        s.add({"test_id": test, "passed": passed, "classification": outcome, "tokens": tokens, "latency_ms": 1.0,
+               "deps": deps})  # fmt: skip
+        return s
+
+    h = History()
+    tests = {"both": ([f, g], 300), "only_f": ([f], 100), "only_g": ([g], 100), "check_p": ([], 20)}
+    h.baseline = {t: stats(t, deps, tokens) for t, (deps, tokens) in tests.items()}
+    h.baseline["red"] = stats("red", [f, g], 10, passed=False)
+    h.baseline["known_g"] = stats("known_g", [g], 50)
+    catalog = {t: EvalCase(id=t, name=t, agent="orchestrator", request=t) for t in h.baseline}
+    catalog["check_p"].properties = ["p"]
+    props = {"p": SimpleNamespace(id="p", sources=[f], mandatory=True)}
+    change = ChangeSet("v", components=[ChangedComponent(c, "code", "tools/x.py") for c in (f, g)])
+    return h, catalog, props, change
+
+
+def test_the_coverage_floor_is_the_cheapest_cover_of_what_a_change_touches():
+    h, catalog, props, change = _floor_recording()
+    candidates = ["both", "only_f", "only_g", "check_p", "red"]
+    # per token: the property's test first, then the two cheap tests rather than the one that runs both functions;
+    # the red test covers nothing
+    assert coverage_floor(change, h, catalog, props, candidates, cost=h.cost) == ["check_p", "only_f", "only_g"]
+    # a test whose outcome is known covers for free
+    assert coverage_floor(change, h, catalog, props, candidates, ["known_g"], h.cost) == ["check_p", "only_f"]
+    # counted in tests, not tokens: one test runs both functions
+    assert coverage_floor(change, h, catalog, props, candidates) == ["both", "check_p"]
+
+
+def test_with_the_floor_a_clean_verdict_waits_for_the_floor(monkeypatch):
+    h, catalog, props, change = _floor_recording()
+    monkeypatch.setattr("traceeval.catalog.load_properties", lambda: props)
+    ctx = SelectionContext(change, catalog, h, 1e9, random.Random(0), replayed=frozenset({"known_g"}))
+    # a constant so high that the method would call the change clean before any test: the floor runs first
+    method = AdaptiveBayes(eps_clean=0.99, cover_floor=True)
+    log = method.run(ctx, lambda t: (True, h.cost(t)))
+    assert log.executed == ["check_p", "only_f"] and log.stop_reason == "clean"
+    # a floor test that fails is a regression, and ends the run
+    log = method.run(ctx, lambda t: (t != "check_p", h.cost(t)))
+    assert log.executed == ["check_p"] and log.stop_reason == "regression"
+
+
+def test_the_suspects_of_a_batch_failure_are_the_members_whose_own_replay_reaches_the_test():
+    rows = {
+        "reaches": {"T": {"replayed": False, "passed": False}},  # diverges on T: the change reaches it
+        "fails": {"T": {"replayed": True, "passed": False}},  # T replays to the end and fails
+        "leaves": {"T": {"replayed": True, "passed": True}},  # T replays to the end and passes: not a suspect
+    }
+    assert suspects(rows, "T") == ["reaches", "fails"]
+    assert suspects({"leaves": rows["leaves"]}, "T") == []  # no suspect: only the members together fail T
+    assert [halving_runs(n) for n in (0, 1, 2, 3, 4, 5, 8)] == [0, 0, 1, 2, 2, 3, 3]
 
 
 def test_a_stop_threshold_is_a_low_value_of_the_past_regressions():

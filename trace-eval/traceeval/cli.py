@@ -30,7 +30,8 @@ traceeval check <mutation id | changed copy of traceeval/sut> --history runs/gem
     check one change live: replay first, then the proposed method over the tests that diverge; --history is an
     experiment recorded with the same model; prints the verdict and the change coverage; --confirm runs a test
     that fails again before its failure counts; --miss-rate 0.1 sets the threshold of the clean verdict on the
-    history's changes, so that at most one regression in ten is called clean
+    history's changes, so that at most one regression in ten is called clean; --floor gives no clean verdict
+    before the cheapest reached tests that cover every changed component and mandatory property have run
 traceeval properties draft [--max 15] [--per-test 5] [--fresh] [--replay a.json] [--save-response a.json]
     a model (Qwen, the llm backend) drafts the catalog of properties from the requirements and tags the tests
 traceeval properties apply   write properties.yaml and the tests' tags from the reviewed draft
@@ -248,7 +249,7 @@ def cmd_check(args):
     experiment."""
     from traceeval.experiment.check import check
 
-    check(args.change, Path(args.history), args.budget, args.backend, args.confirm, args.miss_rate)
+    check(args.change, Path(args.history), args.budget, args.backend, args.confirm, args.miss_rate, args.floor)
 
 
 def cmd_coverage(args):
@@ -391,6 +392,12 @@ def main(argv=None):
         "--miss-rate",
         type=float,
         help="set the clean verdict's threshold on the history's changes, for this miss rate at most (e.g. 0.1)",
+    )
+    ck.add_argument(
+        "--floor",
+        action="store_true",
+        help="no clean verdict before the cheapest reached tests that cover every changed component and affected "
+        "mandatory property have run",
     )
     ck.set_defaults(fn=cmd_check)
 

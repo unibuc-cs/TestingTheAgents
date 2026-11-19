@@ -275,6 +275,16 @@ each one still unchecked, the cheapest test that checks it and passes on the ori
 A failure there is a regression, as usual. The rule turns the catalog's mandatory flag into a guarantee at almost
 no cost (RESEARCH_PLAN §5.3); `adaptive_bayes_nomandatory` is the ablation without it.
 
+### The coverage floor
+
+`traceeval check --floor` (and the variant `adaptive_bayes_floor`) puts a floor under the clean verdict in place
+of the mandatory rule: before saying clean, the check runs the cheapest set of reached tests that, with the tests
+already run and those the replay settled, covers every changed component some test exercised on the original app
+and every affected mandatory property some test checks (`experiment/coverage.py::coverage_floor`). The set is
+chosen greedily, by the uncovered items a test adds per token. It runs last, so a regression found earlier costs
+nothing more. It is a coverage guarantee, not a detection one: a set chosen only to cover misses most regressions
+on its own (RESEARCH_PLAN §5.9).
+
 ### Weights
 
 `prior_strength` sets how far a short record can move a test, the tilt has a fixed range and `indirect` sets the
@@ -368,6 +378,12 @@ The 43 are recorded by default, a batch on request (`traceeval mutants --only <b
 checks it live and prints, after the verdict, the components it blames. Neither the check nor the replay lets a
 strategy learn from a batch's members, or from the batches that share one (`History.training_variants`): a model
 that has seen what each member breaks would know the answer.
+
+When a test fails on a batch, the check also replays each member alone on that test, with the cassette and no
+model (`experiment/culprits.py`), and prints the suspects: the members whose own replay reaches the test or fails
+it. A member whose own replay runs the test to the end and passes cannot make it fail by itself, so the one to
+blame is among them. A single suspect is the culprit; several are told apart by running the test with half of them
+at a time; none means the members fail it only together.
 
 | batch | what it bundles | revealing tests (Gemma, beside `runs/gemma8`) |
 |---|---|---|

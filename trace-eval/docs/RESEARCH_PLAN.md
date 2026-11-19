@@ -443,6 +443,14 @@ flowchart LR
   recording's changes in two fixed halves: `adaptive_bayes` learns from one, and the regressions of the other give
   the values, kept in `history/stop_values.json`. The threshold of the change's group replaces the method's
   constant, and the check says what it rests on.
+- **A coverage floor under the threshold** (`coverage.py::coverage_floor`; `traceeval check --floor`, and the
+  variant `adaptive_bayes_floor`). A threshold says when the evidence is strong enough, not what has been looked
+  at. Before a clean verdict, the floor runs the cheapest reached tests that, with the tests already run and those
+  the replay settled, cover every changed component some test exercised on the original app and every affected
+  mandatory property some test checks: a greedy weighted set cover, by the uncovered items a test adds per token.
+  It runs last, so a failure found earlier costs nothing more; it takes the place of the mandatory rule (§3.1),
+  which covers the properties alone. It is suite minimization done per change, among the reached tests, and kept
+  as a floor: covering a component is not catching its break.
 
 Five rules are measured: a random order with random values (what a threshold buys with no information); the
 TF-IDF similarity of a test to the diff (`ir_tfidf`'s order); a logistic model of "this test reveals this change"
@@ -757,13 +765,21 @@ on the publishing path; `batch_benign`, all nine harmless edits) and twenty of t
   to six tests and 1.7% to 2.7% of the suite; calibrated on the members too, 95% at both budgets after two to four.
 - *The posterior names the member to blame:* in 88 of the 95 runs that end at a failure, the component blamed most
   belongs to a member that is a regression alone (`scripts/analysis/batch_calibration.py`).
+- *The members' own replays name the suspects, for no tokens* (`traceeval/experiment/culprits.py`,
+  `docs/results/gemma8_batches/culprits.md`): for a test that fails on the batch, the members whose own replay
+  reaches it or fails it. Every member the test reveals alone is a suspect, in 273 of 273 pairs of a batch and a
+  revealing test, as Corollary 1 of the paper says it must be. The suspects are 1.9 of 5.7 members on average, and
+  the culprit alone in 85. Halving them finds a culprit in 0.9 runs of the failing test, halving all the members in
+  2.5. The 5 pairs only the members together fail have suspects too, none of which fails alone.
 - *Live,* with the members held out and a 20% budget, `traceeval check` finds 19 of the 20 revealed batches,
   `batch_benign` included, and gives no regression verdict on the other three. The one missed is a batch of
-  harmless edits revealed only by PUB-02, which runs out of budget.
+  harmless edits revealed only by PUB-02, which runs out of budget. For the test each check failed on, the suspects
+  hold the culprit in all 18 failures with one, and name it alone in 9; the component blamed most belongs to it in
+  13.
 
-So a batch is checked like a change, whatever its size, and the posterior says which member to look at after a red
-run. Harmless edits are not harmless together, so a nightly batch needs its own recording, not the sum of the
-day's single-change checks.
+So a batch is checked like a change, whatever its size. After a red run the members' replays name the suspects for
+free, and the posterior says which of them to look at first. Harmless edits are not harmless together, so a
+nightly batch needs its own recording, not the sum of the day's single-change checks.
 
 ### 5.7 Replay-first
 
@@ -983,6 +999,27 @@ Missed at a 5%, 10% and 20% target:
   instead of 37.0%. The method's own constant misses two of the 25 for 19.2%, and promises nothing.
 - So the rule to keep is the method's probability with a threshold per group, which is what
   `traceeval check --miss-rate` does.
+
+**With a coverage floor** (§3.4; the same script). `adaptive_bayes` with a threshold per group; each cell gives the
+value without the floor, then with it run before a clean verdict:
+
+| measured on, target | regressions missed | a clean verdict covers of what the change touches | a clean verdict costs |
+|---|---|---|---|
+| the generated changes, within, 10% | 5.3%, 4.4% | 98.2%, 100% | 17.5%, 17.5% |
+| a kind never seen, 20% | 31, 25 of 281 | 92.7%, 100% | 9.6%, 9.8% |
+| the hand-written changes, 10% | 0, 0 of 25 | 95.7%, 100% | 15.3%, 15.7% |
+| the hand-written changes, 20% | 3, 2 of 25 | 94.5%, 100% | 9.6%, 10.0% |
+
+- *The floor is cheap:* a few tenths of a point on a clean verdict. It is small because the replayed tests already
+  cover most of what a change touches: on the 43 hand-written changes, at most six tests, most often one or none.
+- *It catches some of what the threshold lets through,* and within the generated changes no split is over its
+  10% target any more (one in twenty without the floor).
+- *Covering is not catching.* A fixed minimal set, the 15 tests that cover everything the suite covers on the
+  original app (14.0% of it) chosen once, misses 13 of the 25 hand-written regressions, although each of its clean
+  verdicts covers all the change touches. Run on every change it costs 11.5% of the suite on average, 3.3% on the
+  tests each change reaches. The floor alone misses 18 of the 25, for 0.5%.
+- Run first instead of last, the floor finds the same regressions and costs a little more on a regression, 1.0%
+  of the suite instead of 0.8% at a 10% target on the hand-written changes: last it is.
 
 **Live** (`docs/results/gemma8_gen/live_checks_miss_rate.md`). `traceeval check --miss-rate --confirm` on each of
 the 43 hand-written changes, with no budget and the thresholds set on `runs/gemma8_gen`:

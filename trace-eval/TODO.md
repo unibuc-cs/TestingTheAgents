@@ -34,6 +34,9 @@ Order of work: sections 1 to 3 are done; 4 and 5 are done for Gemma, with what i
 | 4 | A second application, tau2-bench's airline domain | §4 | waits for the go-ahead to install and run its code |
 | 5 | Stop thresholds for Qwen, set on generated changes recorded with Qwen | §4 | running: the 43 changes into `runs/qwen8_exact` and the generated ones into `runs/qwen8_gen`, one run per reached test, over both of fmi0's GPUs without the prefix cache; then the live checks at a 10% and a 20% target |
 | 6 | The replay's stand-ins checked live: a random sample of the (change, test) pairs a generated-change recording did not run, because they replay to the end, run with the model and compared with the replay | §4 | after item 5, when fmi0's GPUs are free |
+| 7 | A day of changelists, step 2: the coverage floor, the cheapest reached tests that cover every changed component and affected mandatory property, run before a clean verdict | §9 | done: every clean verdict covers what the change touches, for a few tenths of a point; it catches a few regressions the threshold lets through |
+| 8 | A day of changelists, step 4: the culprit of a batch's failure found from the members' own replays | §9 | done: the suspects held every culprit (273 of 273), two of six members on average |
+| 9 | A day of changelists, the other steps: the per-changelist map, the rolling cassette, a live sample to watch R, and the adaptive method for a day's many components | §9 | after items 7 and 8 |
 
 ## 1. Fair tables (replay only): done
 
@@ -282,6 +285,40 @@ The app and the tests:
 - [ ] A `LICENSE` file (`pyproject.toml` says MIT) and a CI job for `pytest` and `ruff`.
 - [ ] The GPU server's address and login out of `docs/EXPERIMENT.md` and `scripts/gpu_remote.sh`.
 - [ ] `CLAUDE.md` says every demo PR's verdict is checked by `tests/test_sdd.py`; 14 of 25 are.
+
+## 9. A day of changelists
+
+The Adobe Team submits a set of changelists (CLs) every day. The day's testing must be prioritized, and a minimal
+set of tests must reach coverage.
+
+- Already there: per change, the replay, an order of the reached tests and a stop with a bounded miss rate; a batch
+  tested as one change, which also catches the failures no member causes alone, with the component blamed most.
+- Gaps: coverage is reported, not sought; the members' own replays are not used to find a culprit; the adaptive
+  method keeps at most eight changed components, too few for a day; the cassette goes stale once the day's CLs
+  merge; on a hosted model condition R can only be watched; the stop thresholds need past changes in every group.
+
+The daily pipeline:
+
+1. [ ] Replay each CL alone and the merged day, without the model: which tests each CL reaches (the CL x test map),
+       and the CLs settled for free.
+2. [x] A coverage floor: the cheapest set of reached tests that, with the tests the replay settles, covers every
+       changed component and every affected mandatory property; no clean verdict before the floor has run
+       (`coverage.py::coverage_floor`, `traceeval check --floor`, `adaptive_bayes_floor`). With a threshold per
+       group, every clean verdict then covers what the change touches (93% to 98% without), for a few tenths of
+       a point of the suite; it catches 25 instead of 31 regressions missed of a kind never seen at a 20% target,
+       2 instead of 3 of the hand-written ones. Run first instead of last it costs more on a regression. A fixed
+       minimal set of 15 tests misses 13 of the 25 hand-written regressions (`docs/RESEARCH_PLAN.md` §5.9).
+3. [x] The floor with the adaptive order, until the calibrated threshold:
+       `traceeval check --miss-rate 0.1 --floor`.
+4. [x] On a failure of the merged day, the suspects are the CLs whose own replay reaches the failing test or fails
+       it (`experiment/culprits.py`, printed by `traceeval check <batch>`). On `runs/gemma8_batches` every culprit
+       is a suspect (273 of 273), the suspects are 1.9 of 5.7 members and the culprit alone in 85, and halving them
+       takes 0.9 runs of the failing test instead of 2.5 (`docs/results/gemma8_batches/culprits.md`).
+   - [ ] Halving live: run the failing test with half of the suspects at a time until one remains.
+5. [ ] Overnight: the reached tests the stop skipped, to refresh the cassette for the next day, and a random sample
+       of replayed tests run live, to watch condition R.
+
+- [ ] The adaptive method for a day's many components: one hypothesis per CL, or components taken as independent.
 
 ## Parked: the spec-driven development layer
 

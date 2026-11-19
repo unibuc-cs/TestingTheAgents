@@ -38,6 +38,14 @@ A threshold is set in three ways (``traceeval/experiment/stopping.py`` has the a
 - ``one, sure``: one for all changes, lower, so that the miss rate is under its target for nine sets of past
   regressions in ten and not only on average over such sets.
 
+The per-group thresholds are also measured with the change's coverage floor (``coverage.coverage_floor``: the
+cheapest diverged tests that, with the replayed ones, cover every changed component and affected mandatory
+property), run before a clean verdict (``floor last``) or before the plan (``floor first``). Every table gives the
+coverage of the clean verdicts too: the share of what the tests can cover of the change that the tests run and the
+replayed ones cover, when the verdict is clean.
+On the second recording, for comparison, two selections that never stop on a value: a fixed minimal set of the
+whole suite (test-suite minimization, chosen once without the change) and the coverage floor alone.
+
 Three measurements:
 
 - *Within one set of changes.* The changes are split three ways by their ids (``generator.split``): one part is
@@ -65,6 +73,8 @@ import numpy as np
 import pandas as pd
 from replaylib import load, recording
 
+from traceeval.catalog import load_properties
+from traceeval.experiment.coverage import coverage_floor, floor_items
 from traceeval.experiment.replay_first import Replays
 from traceeval.experiment.stopping import LearnsOnce, group_of, threshold
 from traceeval.mutation.generator import kind_of, split
@@ -93,6 +103,7 @@ workdir = recording("runs/gemma8_gen")
 h, catalog, its_replays = replayed(workdir)
 full = h.total_cost()
 passes = {t: h.baseline_pass_rate(t) >= 0.5 for t in h.baseline}
+props = load_properties()
 
 
 # ---------------------------------------------------------------------------- the changes, and what the replay leaves
@@ -115,6 +126,8 @@ class Change:
         self.revealing = source.revealing_tests(variant) & set(self.tests)
         # a replayed test that fails: the replay alone shows the regression
         self.found_by_replay = any(passes.get(t) for t in replays.new_failures(variant))
+        # the replayed tests that pass on the original app: their outcome is known, and they cover what they exercise
+        self.known = [t for t in replays.replayed(variant) if passes.get(t)]
         # What a strategy is given for this change (``evaluate.py`` builds the same). Its history is always the
         # first recording, ``h``: that is where the changes a rule learns from are, and the baseline is the same.
         # Who it learns from is set per measurement.
@@ -153,6 +166,23 @@ class Change:
         """Per diverged test, the TF-IDF similarity of its text to the diff."""
         relevance = tfidf_relevance(self.ctx)
         return {t: float(relevance.get(t, 0.0)) for t in self.tests}
+
+    @cached_property
+    def covers(self) -> dict[str, set[str]]:
+        """What each diverged or replayed test covers of what the change touches (``coverage.floor_items``)."""
+        return floor_items(self.ctx.change, h, catalog, props, [*self.tests, *self.known])
+
+    @cached_property
+    def floor(self) -> list[str]:
+        """The coverage floor: the cheapest diverged tests that, with the replayed ones, cover all they can."""
+        return coverage_floor(self.ctx.change, h, catalog, props, self.tests, self.known, self.cost.get)
+
+    def coverage(self, executed: list[str]) -> float:
+        """The share of what the tests can cover of the change that the executed and the replayed ones cover."""
+        coverable = set().union(*self.covers.values())
+        if not coverable:
+            return np.nan
+        return len(set().union(*(self.covers[t] for t in [*executed, *self.known])) & coverable) / len(coverable)
 
 
 def after_replay(source, replays, name: str) -> list[str]:
@@ -268,17 +298,31 @@ def at_first_reveal(c: Change, plan: list[tuple[str, float]]) -> float:
     return low
 
 
-def run(c: Change, plan: list[tuple[str, float]], tau: float) -> tuple[str, float]:
+def run(c: Change, plan: list[tuple[str, float]], tau: float, floor: str | None = None) -> tuple[str, float, list]:
     """The rule on one change: its tests in the plan's order, until one fails or the value is under ``tau``.
-    Each test ends as the majority of its recorded runs does. Returns the verdict and the tokens spent."""
-    spent = 0.0
-    for t, value in plan:
+    Each test ends as the majority of its recorded runs does. With ``floor`` "first", the change's coverage floor
+    runs before the plan, and with "last", before a clean verdict. Returns the verdict, the tokens spent and the
+    tests run."""
+    executed: list[str] = []
+
+    def reveals(tests) -> bool:
+        """Run the tests not run yet, in order, until one reveals the change."""
+        for t in tests:
+            if t not in executed:
+                executed.append(t)
+                if t in c.revealing:
+                    return True
+        return False
+
+    found = floor == "first" and reveals(c.floor)
+    for t, value in [] if found else plan:
         if value < tau:
             break
-        spent += c.cost[t]
-        if t in c.revealing:
-            return "regression", spent
-    return "clean", spent
+        if reveals([t]):
+            found = True
+            break
+    found = found or (floor == "last" and reveals(c.floor))
+    return ("regression" if found else "clean"), sum(c.cost[t] for t in executed), executed
 
 
 def measure(trained: list[str], calibrated: list[str], measured: list[str]) -> pd.DataFrame:
@@ -303,13 +347,17 @@ def measure(trained: list[str], calibrated: list[str], measured: list[str]) -> p
             c = changes[v]
             # the thresholds this change is run under: how each was set, its target, its value (target 0: every
             # diverged test runs; a group without a past regression has no threshold either)
-            under = [("one", alpha, threshold(firsts["all"], alpha)) for alpha in (0.0, *ALPHAS)]
-            under += [("per group", alpha, threshold(firsts.get(c.group, []), alpha)) for alpha in ALPHAS]
-            under += [("one, sure", alpha, threshold(firsts["all"], alpha, SURE)) for alpha in ALPHAS]
+            under = [("one", alpha, threshold(firsts["all"], alpha), None) for alpha in (0.0, *ALPHAS)]
+            per_group = [(alpha, threshold(firsts.get(c.group, []), alpha)) for alpha in ALPHAS]
+            under += [("per group", alpha, tau, None) for alpha, tau in per_group]
+            # the same thresholds with the change's coverage floor, run before a clean verdict or before the plan
+            under += [("per group, floor last", alpha, tau, "last") for alpha, tau in per_group]
+            under += [("per group, floor first", alpha, tau, "first") for alpha, tau in per_group]
+            under += [("one, sure", alpha, threshold(firsts["all"], alpha, SURE), None) for alpha in ALPHAS]
             if constant is not None:  # the constant the method ships with, which promises no miss rate
-                under.append(("one", f"none (eps_clean = {constant})", constant))
-            for how, target, tau in under:
-                verdict, spent = run(c, plans[v], tau)
+                under.append(("one", f"none (eps_clean = {constant})", constant, None))
+            for how, target, tau, floor in under:
+                verdict, spent, executed = run(c, plans[v], tau, floor)
                 rows.append(
                     {
                         "rule": label,
@@ -319,6 +367,7 @@ def measure(trained: list[str], calibrated: list[str], measured: list[str]) -> p
                         "regression": bool(c.revealing),
                         "verdict": verdict,
                         "tokens": spent / full,
+                        "coverage": c.coverage(executed),
                     }
                 )
     return pd.DataFrame(rows)
@@ -340,10 +389,33 @@ def summary(rows: pd.DataFrame, by: tuple[str, ...] = ("thresholds", "rule", "ta
                 "tokens, no test reveals": g[~g.regression].tokens.mean() if not g.regression.all() else 0.0,
                 "tokens, regressions": regressions.tokens.mean() if len(regressions) else 0.0,
                 "tokens, all": g.tokens.mean(),
+                # on a clean verdict, what the tests run and those the replay settled cover of what the change
+                # touches, on average (a regression verdict needs no coverage)
+                "coverage when clean": clean.coverage.mean(),
             }
         )
 
-    return rows.groupby(list(by), sort=False)[["regression", "verdict", "tokens"]].apply(one)
+    return rows.groupby(list(by), sort=False)[["regression", "verdict", "tokens", "coverage"]].apply(one)
+
+
+def fixed_minimal_set() -> list[str]:
+    """Test-suite minimization, for comparison: the fewest tests that pass on the original app and cover all that
+    the suite covers there (every component a run exercised, lines aside, and every mandatory property a test
+    checks), chosen once and without any change. Greedy, the cheaper test first on a tie."""
+    mandatory = {p for p, prop in props.items() if prop.mandatory}
+    covers = {
+        t: {d for d in h.deps(t) if not d.startswith("line:")}
+        | {f"property:{p}" for p in mandatory & set(catalog[t].properties)}
+        for t in h.baseline
+        if passes.get(t) and t in catalog
+    }
+    left, chosen = set().union(*covers.values()), []
+    pool = sorted(covers, key=lambda t: (h.cost(t), t))
+    while left:
+        best = max(pool, key=lambda t: len(covers[t] & left))
+        chosen.append(best)
+        left -= covers[best]
+    return chosen
 
 
 def show(title: str, table: pd.DataFrame):
@@ -433,3 +505,32 @@ if len(sys.argv) > 2:
         f"{len(calibrated)} ({sum(bool(changes[v].revealing) for v in calibrated)} regressions), run on those changes",
         summary(measure(trained, calibrated, still_open)),
     )
+
+    # For comparison, selections that never stop on a value: a fixed minimal set of the whole suite, chosen once
+    # without the change (test-suite minimization), run on the tests the change reaches or run whole; and the
+    # change's own coverage floor alone.
+    fixed = fixed_minimal_set()
+    reference = []
+    for v in still_open:
+        c = changes[v]
+        for label, tests, cost in (
+            ("a fixed minimal set, the tests the change reaches", [t for t in fixed if t in c.cost], c.cost),
+            ("a fixed minimal set, run whole", fixed, {t: h.cost(t) for t in fixed}),
+            ("the coverage floor alone", c.floor, c.cost),
+        ):
+            executed = []
+            for t in tests:  # in the set's order, until a test reveals the change
+                executed.append(t)
+                if t in c.revealing:
+                    break
+            reference.append(
+                {
+                    "selection": label,
+                    "regression": bool(c.revealing),
+                    "verdict": "regression" if c.revealing & set(executed) else "clean",
+                    "tokens": sum(cost[t] for t in executed) / full,
+                    "coverage": c.coverage([t for t in executed if t in c.covers]),
+                }
+            )
+    print(f"\nthe fixed minimal set: {len(fixed)} tests, {sum(h.cost(t) for t in fixed) / full:.1%} of the suite")
+    print(summary(pd.DataFrame(reference), by=("selection",)).reset_index().to_string(index=False))

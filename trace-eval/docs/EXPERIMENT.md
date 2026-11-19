@@ -419,6 +419,7 @@ traceeval check skill_routing_drop_approval --history runs/gemma8 --budget 0.2  
 traceeval check my-sut-copy --history runs/qwen8 --backend llm                    # a changed copy of traceeval/sut
 traceeval check benign_orchestrator_prompt_wording --history runs/gemma8 --confirm   # a failure is run again first
 traceeval check skill_seo_drop_length_guard --history runs/gemma8_gen --miss-rate 0.1   # "clean" at a miss rate
+traceeval check skill_seo_drop_length_guard --history runs/gemma8_gen --miss-rate 0.1 --floor   # and covered
 ```
 
 `--confirm` is for the test whose runs disagree: one failing run of a long test can be the minority of its runs.
@@ -451,6 +452,10 @@ flowchart LR
 - The values are worked out at the first check, in under a minute, and kept in the recording's
   `history/stop_values.json` until the recording, the strategies or `stopping.py` change.
 
+`--floor` adds the coverage floor: no clean verdict before the cheapest reached tests that cover every changed
+component and affected mandatory property have run ([USER_GUIDE.md](USER_GUIDE.md) §5,
+[RESEARCH_PLAN.md](RESEARCH_PLAN.md) §3.4). It costs a few tenths of a point of the suite on a clean verdict.
+
 It prints how many tests replay and how many diverge, then each test of the loop of
 [USER_GUIDE.md](USER_GUIDE.md) §5 as it runs, then:
 
@@ -466,7 +471,8 @@ It prints how many tests replay and how many diverge, then each test of the loop
   unchecked (marked when mandatory), the workflows not run, the features not reached and the refusals not reached;
 - what the tests invoked: how many of the application's agents, skills, tools and features;
 - for a batch of changes, `blamed`: the components the method holds responsible, with its probability for each,
-  most likely first.
+  most likely first; and for each test that failed, its suspects: the members whose own replay reaches it or fails
+  it (`traceeval/experiment/culprits.py`, found with the cassette alone).
 
 `--history` is a recording made with the same model (the README) and on the app as it is now;
 `traceeval experiment --reps 1` is enough for it. The check refuses a recording whose copy of the app

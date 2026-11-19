@@ -95,7 +95,8 @@ What it is for:
   test fails;
 - a strategy orders only the tests the change reaches, each with a cost known in advance: at most its tokens after
   the divergence point;
-- once all of those pass, the clean verdict leaves nothing the change reaches untested.
+- once all of those pass, the clean verdict leaves nothing the change reaches untested;
+- for a batch of changes, a failing test's suspects are the members whose own replay reaches it, found for free.
 
 ## Run it
 
@@ -123,12 +124,14 @@ scripts/gpu_remote.sh down
 
 The prototype, `traceeval check`, checks one change live. It replays the change first, in seconds and without the
 model. Then our method picks a test among those that diverge, the test runs live on the changed app, the outcome
-decides what runs next, and the check ends with a verdict.
+decides what runs next, and the check ends with a verdict. `--floor` adds the coverage floor before a clean
+verdict, and for a batch a failing test is followed by its suspects among the members.
 
 ```bash
 traceeval check skill_routing_drop_approval --history runs/gemma8 --budget 0.2      # a change from the catalog
 traceeval check path/to/my-copy-of-sut --history runs/gemma8                        # your own edit
 traceeval check skill_seo_drop_length_guard --history runs/gemma8_gen --miss-rate 0.1   # clean at a miss rate
+traceeval check skill_seo_drop_length_guard --history runs/gemma8_gen --miss-rate 0.1 --floor   # and covered
 ```
 
 `--history` points to an experiment recorded with the same model and the same version of the app. It holds the
@@ -163,6 +166,10 @@ generated from the app, five repetitions each ([docs/RESEARCH_PLAN.md](docs/RESE
   regressions the replay leaves open, `adaptive_bayes` misses none at a 10% target, for 15% of the suite instead
   of 37%. One threshold for all changes is cheaper, but it misses 87% of the regressions among edits to prompts
   and prose.
+- **A coverage floor under the threshold.** Before a clean verdict, the cheapest reached tests that cover every
+  changed component and affected mandatory property run too: every clean verdict then covers what the change
+  touches, for a few tenths of a point of the suite, and a few more regressions are caught. A fixed minimal set
+  of 15 tests covers as much and misses 13 of the 25 regressions: covering is not catching.
 - **Live**, `traceeval check --miss-rate 0.1 --confirm` finds all 28 regressions and raises no false alarm, for
   2.8% of the suite per check, and it says what its threshold rests on.
 - **The same holds** on 342 generated changes the strategies never learned from, and for a second model: with
@@ -178,7 +185,9 @@ The full numbers, with intervals over the changes, are in the reports of the rec
 follows from them is the plan in [TODO.md](TODO.md).
 
 **Batches** of two to nine changes, as a nightly run sees them: the replay stays exact, and live checks find 19
-of the 20 batches a test reveals, with no false alarm; the method names the member to blame
+of the 20 batches a test reveals, with no false alarm. When a test fails, the members whose own replay reaches it
+are the suspects, for no tokens: they always held the member that fails it alone, two members of six on average,
+and halving them finds that member in under one run of the test instead of two and a half
 ([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.6). The recordings of Qwen and gpt-oss made many tests at once
 are not clean ground truths: their answers vary with the batch ([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md)
 §5.4).
