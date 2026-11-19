@@ -61,8 +61,9 @@ on changes unlike those it was set on, where one threshold for all changes or a 
 coverage floor under it makes every clean verdict cover what the change touches for a fraction of a point;
 (v) checked live at a 10\% target miss rate, all 28 regressions are found with no false alarm, for 2.8\% of the
 suite's tokens per check;
-(vi) on batches of changes tested together, the members' own replays name the suspects of a failure, which hold
-every culprit, for no tokens. A second model gives the same picture.
+(vi) on batches of changes tested together, the members' own replays say, for no tokens, which tests each member
+reaches and which members need no model, and name the suspects of a failure, which hold every culprit. A second
+model gives the same picture.
 \end{abstract}
 
 
@@ -151,8 +152,8 @@ conformal risk control \cite{angelopoulos2024conformal,angelopoulos2025ltt} & a 
 Our contributions are:
 \begin{enumerate}
   \item \textbf{replay first as test selection} for agent systems, the condition it rests on
-        (Section~\ref{sec:replay}), and its use on a batch of changes, where the members' own replays name the
-        suspects of a failure (Section~\ref{sec:suspects});
+        (Section~\ref{sec:replay}), and its use on a batch of changes, where the members' own replays map which
+        tests each member reaches and name the suspects of a failure (Section~\ref{sec:suspects});
   \item \textbf{a protocol that measures the condition} at the level of the request, the run and the outcome,
         with an \emph{empty change} as the reference, and the two settings of a server that the differing answers
         come from (Section~\ref{sec:evaluation});
@@ -639,13 +640,17 @@ verdict is a false alarm. The remedy costs a test, not a suite: after a failure 
 time when the second run passes; two failures of three end the run, and a failure that does not repeat counts as a
 pass. A repetition is paid like any run, behind the cassette.
 
-\subsection{A batch, and the suspects of a failure}
+\subsection{A batch: the day's map, and the suspects of a failure}
 \label{sec:suspects}
 
 A nightly run tests a day's changes $\Delta_1, \dots, \Delta_m$ together, as one change: the reached tests run once
-for all of them, and a failure that appears only when the changes meet shows. A failing test $t$ then has to be
-traced to a member, and the members' own replays do that for no tokens. The \emph{suspects} of $t$ are the members
-whose own replay reaches it or fails it:
+for all of them, and a failure that appears only when the changes meet shows. Each member can also be replayed
+alone, for no tokens. Before any test runs, these replays give the day's \emph{map}, $T^{\mathrm{div}}(\Delta_j)$
+for every member: a member that reaches no test and fails none in its replay needs no model at all
+(Proposition~\ref{prop:replay}), a member whose replay fails a test that passes on $V_0$ is a regression whose
+culprit is known, and each reached test has the members that reach it. A failing test $t$ then has to be traced
+to a member, and the same replays do that. The \emph{suspects} of $t$ are the members whose own replay reaches it
+or fails it:
 \begin{equation}
   \mathrm{Sus}(t) = \{\Delta_j : t \in T^{\mathrm{div}}(\Delta_j) \ \text{or} \ \hat{X}_t(V_0 + \Delta_j) =
   \text{fail}\}.
@@ -1066,8 +1071,13 @@ run one at a time, which is how $Q$ is made, and for gpt-oss no number of repeti
 \paragraph{Batches.} A nightly run sees a day's merges at once. On 23 batches of two to nine hand-written
 changes beside $G$, 10 to 172 of the 180 tests diverge, 120 on average, so the replay prunes less than for a single
 change. It stays exact: none of the 1,374 replayed outcomes differs from the recorded one, and with no budget every
-order of the reached tests finds the 20 batches a test reveals. A batch is not the union of its members: under
-three batches a test fails that no member fails alone, two of them made only of harmless edits. Checked live with
+order of the reached tests finds the 20 batches a test reveals. Before any model call, the members' replays map
+the day: every batch reaches exactly the tests its members reach alone, 2,766 in all; 18 of the 117 members reach
+none and need no model, and the one regression among them is one no test reveals, so the map shows the suite's gap
+first; 1,505 of the reached tests are reached by a single member, which a failure there names. Run once for the
+batch, the reached tests take 55\% of the tokens of checking each member alone. What a batch fails is not the union
+of what its members fail: under three batches a test fails that no member fails alone, two of them made only of
+harmless edits. Checked live with
 the members held out, at a 20\% budget, 19 of the 20 are found with no false alarm, and in 17 of the 18 with a
 member that is a regression alone the component blamed most belongs to such a member. The suspects of
 Equation~\ref{eq:suspects} hold every member that fails the test alone, in all 273 pairs of a batch and a revealing
@@ -1117,8 +1127,9 @@ belongs to it in 13.
         cover what the change touches cost little; on their own they miss most regressions (RQ4).
   \item \textbf{Confirm a failure before acting on it:} one failing run of a long test can be the minority of its
         runs (RQ5).
-  \item \textbf{Test a day's changes together, and let the members' replays name the suspects} of a failure:
-        they hold the culprit, and halving them takes fewer runs than halving the day (batches).
+  \item \textbf{Test a day's changes together, and let the members' replays map the day and name the suspects}
+        of a failure: the map says which members need no model, and the suspects hold the culprit, so halving them
+        takes fewer runs than halving the day (batches).
 \end{enumerate}
 
 \section{Conclusion and future work}

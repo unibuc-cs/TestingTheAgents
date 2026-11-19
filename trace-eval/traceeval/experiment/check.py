@@ -13,6 +13,10 @@ The check has two phases.
    a long test can be the minority of its runs, so a failure can first be confirmed (``confirm``): the test is
    run again, and a third time when the second run passes; two failures of three count.
 
+For a batch (a day's changes checked as one), each member is also replayed alone after phase 1, still with no
+model: which tests each member reaches, the members that reach none, and, when a test fails, the members that can
+make it fail on their own (``culprits.py``).
+
 "Confident" is a threshold on the method's probability that something broke. By default it is the method's
 constant. With a target miss rate (``miss_rate``) it is set on the history's own changes, per group of changes, so
 that a regression is called clean at most that often (``stopping.py``); the method then learns from the half of
@@ -54,7 +58,7 @@ from .coverage import (
     invoked,
     tools_called,
 )
-from .culprits import member_suspects
+from .culprits import day_map, member_replays
 from .executor import run_case
 from .history import History
 from .manifest import drift
@@ -120,6 +124,13 @@ def check(
         found = [t for t in replay if t in replayed and passes[t] and not replay[t]["passed"]]
         for t in found:
             print(f"  {t:22s} FAIL {','.join(replay[t]['failed_checks']):40s} replayed, no tokens", flush=True)
+        # For a batch, each member replayed alone as well, still with no model: the day's map (``culprits.py``),
+        # which tests each member reaches, and the members that reach none. A failure's suspects come from it.
+        day = None
+        if members:
+            started = time.perf_counter()
+            day = day_map(member_replays(members, cases, history_dir, backend, Path(tmp) / "members"), passes)
+            _print_day(day, diverged, time.perf_counter() - started)
 
         # ---- phase 2, the diverged tests, live: the recorded answers stay in front of the model
         seconds = [0.0]  # wall time of the tests run so far
@@ -193,15 +204,11 @@ def check(
             client.live = new_client(backend)
             with in_front(backend, client):
                 log = method.run(ctx, oracle)
-        # For a batch, the members' own replays name those that can make a failing test fail (``culprits.py``):
-        # each member replayed alone on the failing tests, with the cassette and no model
-        failing = [t for t, ok, _ in log.steps if not ok]
-        suspected = {}
-        if members and failing:
-            suspected = member_suspects(members, failing, catalog, history_dir, backend, Path(tmp) / "members")
         sut.unload()
 
     failed = sorted({t for t, ok, _ in log.steps if not ok})
+    # for a batch, the members that can make each failing test fail on their own, from the day's map
+    suspected = {t: day["owners"].get(t, []) for t in failed} if day else {}
     # the diverged tests that could still tell something: they pass on the original app and were not run
     unrun = len([t for t in diverged if passes[t] and t not in log.executed])
     left = f" ({unrun} tests the change reaches were not run)" if unrun else ""
@@ -244,6 +251,26 @@ def check(
     known = log.executed + sorted(t for t in replayed if passes[t] and t not in log.executed)
     _print_coverage(cs, known, history, catalog)
     return log
+
+
+def _print_day(day: dict, diverged: list[str], seconds: float):
+    """The day's map of a batch (``culprits.day_map``): what each member reaches on its own, the members settled
+    with no model, and how many members reach each test the batch reaches."""
+    print(f"members, each replayed alone (no model, {seconds:.0f} s):")
+    for m, tests in day["reached"].items():
+        broken = day["broken"][m]
+        what = f"reaches {len(tests)} tests" if tests else "reaches no test"
+        if broken:
+            what += f", fails {len(broken)} in the replay that pass on the original app: {', '.join(broken)}"
+        elif not tests:
+            what += ": settled, the tests cannot tell it from the original app"
+        print(f"  {m:40s} {what}")
+    # each test the batch reaches, by how many members reach it alone: one names its culprit if it fails
+    counts = [len(day["owners"].get(t, [])) for t in diverged]
+    print(
+        f"of the {len(diverged)} tests the batch reaches: {counts.count(1)} reached by one member, "
+        f"{sum(c > 1 for c in counts)} by several, {counts.count(0)} by none alone"
+    )
 
 
 def _print_coverage(cs, executed, history, catalog):

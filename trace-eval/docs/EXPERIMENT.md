@@ -470,9 +470,11 @@ It prints how many tests replay and how many diverge, then each test of the loop
 - the change coverage ([USER_GUIDE.md](USER_GUIDE.md) §4) and what the tests left out: the affected properties left
   unchecked (marked when mandatory), the workflows not run, the features not reached and the refusals not reached;
 - what the tests invoked: how many of the application's agents, skills, tools and features;
-- for a batch of changes, `blamed`: the components the method holds responsible, with its probability for each,
-  most likely first; and for each test that failed, its suspects: the members whose own replay reaches it or fails
-  it (`traceeval/experiment/culprits.py`, found with the cassette alone).
+- for a batch of changes, right after the replay, the day's map: each member replayed alone with the cassette, the
+  tests it reaches, the members that reach none, and how many members reach each test the batch reaches
+  (`traceeval/experiment/culprits.py`); after the verdict, `blamed`: the components the method holds responsible,
+  with its probability for each, most likely first; and for each test that failed, its suspects from the map: the
+  members whose own replay reaches it or fails it.
 
 `--history` is a recording made with the same model (the README) and on the app as it is now;
 `traceeval experiment --reps 1` is enough for it. The check refuses a recording whose copy of the app

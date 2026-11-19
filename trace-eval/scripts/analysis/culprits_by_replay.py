@@ -1,7 +1,15 @@
-"""Culprits by replay (TODO.md section 9, step 4): on a recording of batches whose members are recorded alone too,
-how well the members' own replays name the member a batch's failure comes from.
+"""The members' own replays (TODO.md section 9, steps 1 and 4): on a recording of batches whose members are recorded
+alone too, what the members' replays say before any model call, and how well they name the member a batch's failure
+comes from.
 
-For every pair of a batch and a test that reveals it:
+The day's map (step 1), for every batch, from ``experiment/culprits.py::day_map``:
+
+- the members that reach no test and break none (settled with no model), and whether a test reveals any of them;
+- the members whose own replay breaks a test (a regression found with its culprit);
+- the tests the batch reaches against those its members reach alone, and by how many members each is reached;
+- the test runs and tokens of the reached tests, checked once for the batch against once per member.
+
+The culprits (step 4), for every pair of a batch and a test that reveals it:
 
 - the culprits: the members the test reveals on their own (none: the members fail it only together);
 - the suspects: the members whose own replay reaches the test or fails it (``experiment/culprits.py``), found with
@@ -24,7 +32,7 @@ import pandas as pd
 sys.path.insert(0, "scripts")
 from batch_sweep import SWEEP  # noqa: E402  (the twenty batches drawn at random)
 
-from traceeval.experiment.culprits import halving_runs, suspects  # noqa: E402
+from traceeval.experiment.culprits import day_map, halving_runs, suspects  # noqa: E402
 from traceeval.experiment.history import History  # noqa: E402
 from traceeval.experiment.replay_first import Replays  # noqa: E402
 from traceeval.mutation.catalog import BATCHES, get_mutation  # noqa: E402
@@ -52,11 +60,37 @@ def live(batch: str) -> tuple[str, str]:
     return failed, blamed
 
 
-pairs, batches = [], []
+passes = {t: h.baseline_pass_rate(t) >= 0.5 for t in h.test_ids()}
+pairs, batches, days = [], [], []
 for b in sorted(v for v in h.variants if v.startswith("batch_")):
     members = get_mutation(b).members
     member_rows = {m: rp.rows[m] for m in members if m in rp.rows}
     alone = {m: h.revealing_tests(m) for m in members}
+    # the day's map: what the members' replays say before any model call
+    day = day_map(member_rows, passes)
+    reached = set(rp.diverged(b))  # the tests the batch reaches
+    union = set().union(*map(set, day["reached"].values()))  # those its members reach alone
+    owners = [len(day["owners"].get(t, [])) for t in reached]
+    days.append(
+        {
+            "batch": b,
+            "members": len(members),
+            "settled": len(day["settled"]),
+            "settled, revealed alone": sum(1 for m in day["settled"] if alone[m]),
+            "breaking in the replay": sum(1 for m in members if day["broken"][m]),
+            "reached": len(reached),
+            "reached by the members": len(union),
+            "batch only": len(reached - union),
+            "members only": len(union - reached),
+            "by one member": owners.count(1),
+            "by several": sum(c > 1 for c in owners),
+            # checking the reached tests once for the batch, against once for each member alone
+            "runs, batch": len(reached),
+            "runs, each member": sum(len(v) for v in day["reached"].values()),
+            "tokens, batch": sum(h.cost(t) for t in reached),
+            "tokens, each member": sum(h.cost(t) for v in day["reached"].values() for t in v),
+        }
+    )
     for t in sorted(h.revealing_tests(b)):
         culprits = [m for m in members if t in alone[m]]
         named = suspects(member_rows, t)
@@ -96,6 +130,24 @@ for b in sorted(v for v in h.variants if v.startswith("batch_")):
             }
         )
 
+dm = pd.DataFrame(days)
+n = dm.sum(numeric_only=True)
+print(f"{workdir}: the day's map of {len(dm)} batches, {int(n.members)} members")
+print(
+    f"settled with no model (they reach no test and break none): {int(n.settled)} of {int(n.members)} members; "
+    f"a test reveals {int(n['settled, revealed alone'])} of them; members that break a test in their own replay: "
+    f"{int(n['breaking in the replay'])}"
+)
+print(
+    f"the batches reach {int(n.reached)} tests, their members alone {int(n['reached by the members'])}: "
+    f"{int(n['batch only'])} reached by a batch and no member, {int(n['members only'])} by a member and not its batch"
+)
+print(
+    f"of the tests a batch reaches: {int(n['by one member'])} reached by one member, {int(n['by several'])} by "
+    f"several; checked once per batch they are {int(n['runs, batch'])} runs, once per member "
+    f"{int(n['runs, each member'])}, and {n['tokens, batch'] / n['tokens, each member']:.0%} of the tokens\n"
+)
+
 df = pd.DataFrame(pairs)
 single = df[~df.interaction]
 print(
@@ -126,7 +178,20 @@ if batches:
         f"culprit, in {int(a.unique.sum())}; every suspect a culprit in {int(a['only culprits'].sum())}"
     )
 if md:
+    total = h.total_cost()
     out = [
+        "| batch | members | settled with no model | tests reached | by one member | by several | by no member "
+        "alone | tokens of the reached tests: batch, each member (% of the suite) |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for r in days:
+        out.append(
+            f"| `{r['batch']}` | {r['members']} | {r['settled']} | {r['reached']} | {r['by one member']} | "
+            f"{r['by several']} | {r['batch only']} | {r['tokens, batch'] / total:.0%}, "
+            f"{r['tokens, each member'] / total:.0%} |"
+        )
+    out += [
+        "",
         "| batch | members | revealing tests | with a culprit alone | culprit among the suspects | one suspect, the "
         "culprit | runs to find it: suspects, all members |",
         "|---|---|---|---|---|---|---|",

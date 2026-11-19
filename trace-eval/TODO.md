@@ -28,15 +28,16 @@ Order of work: sections 1 to 3 are done; 4 and 5 are done for Gemma, with what i
 
 | | what | where it is | state |
 |---|---|---|---|
-| 1 | Exact serving for the other models: Qwen with the prefix cache off, one test at a time, a baseline and the empty change under two starts of the server (gpt-oss needs both GPUs and comes later) | §4 | done for Qwen (`runs/qwen8_exact`): no request of 5,310 answered otherwise, under either start; gpt-oss open |
+| 1 | Exact serving for the other models: Qwen with the prefix cache off, one test at a time, a baseline and the empty change under two starts of the server (gpt-oss needs both GPUs and comes later) | §4 | done for Qwen (`runs/qwen8_exact`): no request of 5,310 answered otherwise, under either start; gpt-oss later |
 | 2 | The batches on the current app: the 23 batches recorded again beside `runs/gemma8`, evaluated, and checked live | §4 | done |
-| 3 | The paper: fewer tables and a shorter text, keeping what the argument needs; then the venue's format | §6 | cut to 13 tables and 18 pages of text; the venue and its page limit are still to choose |
-| 4 | A second application, tau2-bench's airline domain | §4 | waits for the go-ahead to install and run its code |
+| 3 | The paper: fewer tables and a shorter text, keeping what the argument needs; then the venue's format | §6 | cut to 13 tables and 18 pages of text; the venue and its page limit later |
+| 4 | A second application, tau2-bench's airline domain | §4 | later: waits for the go-ahead to install and run its code |
 | 5 | Stop thresholds for Qwen, set on generated changes recorded with Qwen | §4 | running: the 43 changes into `runs/qwen8_exact` and the generated ones into `runs/qwen8_gen`, one run per reached test, over both of fmi0's GPUs without the prefix cache; then the live checks at a 10% and a 20% target |
 | 6 | The replay's stand-ins checked live: a random sample of the (change, test) pairs a generated-change recording did not run, because they replay to the end, run with the model and compared with the replay | §4 | after item 5, when fmi0's GPUs are free |
 | 7 | A day of changelists, step 2: the coverage floor, the cheapest reached tests that cover every changed component and affected mandatory property, run before a clean verdict | §9 | done: every clean verdict covers what the change touches, for a few tenths of a point; it catches a few regressions the threshold lets through |
 | 8 | A day of changelists, step 4: the culprit of a batch's failure found from the members' own replays | §9 | done: the suspects held every culprit (273 of 273), two of six members on average |
-| 9 | A day of changelists, the other steps: the per-changelist map, the rolling cassette, a live sample to watch R, and the adaptive method for a day's many components | §9 | after items 7 and 8 |
+| 9 | A day of changelists, step 1: the map of which tests each changelist reaches, from their own replays, and the changelists settled with no model | §9 | done: a batch reaches exactly what its members reach; 18 of 117 members reach nothing; 54% of the reached tests have one owner |
+| 10 | A day of changelists, the other steps: halving live, the rolling cassette, a live sample to watch R, and the adaptive method for a day's many components | §9 | next |
 
 ## 1. Fair tables (replay only): done
 
@@ -293,14 +294,19 @@ set of tests must reach coverage.
 
 - Already there: per change, the replay, an order of the reached tests and a stop with a bounded miss rate; a batch
   tested as one change, which also catches the failures no member causes alone, with the component blamed most.
-- Gaps: coverage is reported, not sought; the members' own replays are not used to find a culprit; the adaptive
-  method keeps at most eight changed components, too few for a day; the cassette goes stale once the day's CLs
-  merge; on a hosted model condition R can only be watched; the stop thresholds need past changes in every group.
+- Gaps left: the adaptive method keeps at most eight changed components, too few for a day; the cassette goes
+  stale once the day's CLs merge; on a hosted model condition R can only be watched; the stop thresholds need past
+  changes in every group.
 
 The daily pipeline:
 
-1. [ ] Replay each CL alone and the merged day, without the model: which tests each CL reaches (the CL x test map),
-       and the CLs settled for free.
+1. [x] Replay each CL alone and the merged day, without the model: which tests each CL reaches (the CL x test map),
+       and the CLs settled for free (`culprits.py::day_map`, printed by `traceeval check <batch>`). On
+       `runs/gemma8_batches` a batch reaches exactly the tests its members reach (2,766, none more, none fewer);
+       18 of 117 members reach no test, and the one regression among them is one no test reveals, so the map shows
+       the suite's gap first; 1,505 of the reached tests are reached by one member, whose failure then names it;
+       the reached tests checked once for the day take 55% of the tokens of checking each member alone
+       (`docs/results/gemma8_batches/culprits.md`).
 2. [x] A coverage floor: the cheapest set of reached tests that, with the tests the replay settles, covers every
        changed component and every affected mandatory property; no clean verdict before the floor has run
        (`coverage.py::coverage_floor`, `traceeval check --floor`, `adaptive_bayes_floor`). With a threshold per

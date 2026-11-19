@@ -440,9 +440,17 @@ reached tests after the replay, and used as a floor under the stopping rule rath
 
 A team merges many changes a day. Testing each one alone repeats the tests they share, and misses failures that
 appear only when changes meet. Testing the day's changes together, as one \emph{batch}, avoids both, but a failing
-test then does not say which change broke it. The replay narrows that down for free:
+test then does not say which change broke it. The replay helps before and after the batch runs, for free:
 \begin{itemize}
-  \item every change of the day is replayed alone, as well as the batch, without the model;
+  \item every change of the day is replayed alone, as well as the batch, without the model. This gives the day's
+        \emph{map}: which tests each change reaches;
+  \item a change that reaches no test and fails none in its replay needs no model at all, since no test can reveal
+        it (Corollary~\ref{cor:safe}). If it was meant to change what the application does, the suite has no test
+        for it, and the map shows that gap before anything runs;
+  \item a change whose own replay fails a test that passes on the original application is a regression, found
+        with its culprit before any model call;
+  \item the tests the batch reaches run once for the whole day, so a test that several changes reach is paid for
+        once, not once per change;
   \item when a test fails on the batch, the \emph{suspects} are the changes whose own replay reaches that test or
         fails it. A change whose own replay runs the test to the end and passes cannot make it fail on its own;
   \item a single suspect is the culprit, with no further run. Several are told apart by halving: run the failing
@@ -469,8 +477,8 @@ Besides conditions R and D:
 \begin{itemize}
   \item checking one change live: \texttt{traceeval check <change> -{}-history <recording>}, with
         \texttt{-{}-miss-rate} for the threshold and \texttt{-{}-floor} for the coverage floor,
-        \texttt{traceeval/experiment/check.py}; for a batch, the check also prints the suspects of a failing test
-        (\texttt{traceeval/experiment/culprits.py});
+        \texttt{traceeval/experiment/check.py}; for a batch, the check also prints the day's map and the suspects
+        of a failing test (\texttt{traceeval/experiment/culprits.py});
   \item the coverage floor: \texttt{traceeval/experiment/coverage.py::coverage\_floor};
   \item the replay: \texttt{traceeval/experiment/replay\_first.py}; the cassette and the clients that answer from
         it: \texttt{traceeval/llm/cache.py};

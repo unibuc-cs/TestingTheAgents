@@ -25,7 +25,7 @@ from traceeval.experiment.coverage import (
 from traceeval.experiment.coverage import (
     tests_per_component as per_component,
 )
-from traceeval.experiment.culprits import halving_runs, suspects
+from traceeval.experiment.culprits import day_map, halving_runs, suspects
 from traceeval.experiment.evaluate import evaluate, make_oracle
 from traceeval.experiment.executor import read_jsonl, write_jsonl
 from traceeval.experiment.history import History
@@ -398,6 +398,25 @@ def test_the_suspects_of_a_batch_failure_are_the_members_whose_own_replay_reache
     assert suspects(rows, "T") == ["reaches", "fails"]
     assert suspects({"leaves": rows["leaves"]}, "T") == []  # no suspect: only the members together fail T
     assert [halving_runs(n) for n in (0, 1, 2, 3, 4, 5, 8)] == [0, 0, 1, 2, 2, 3, 3]
+
+
+def test_the_day_map_says_what_each_member_reaches_and_which_members_need_no_model():
+    passed, diverges = {"replayed": True, "passed": True}, {"replayed": False, "passed": None}
+    failed = {"replayed": True, "passed": False}
+    rows = {
+        "a": {"T1": diverges, "T2": passed, "T3": passed},  # reaches T1
+        "b": {"T1": diverges, "T2": diverges, "T3": passed},  # reaches T1 and T2
+        "c": {"T1": passed, "T2": passed, "T3": passed},  # reaches nothing: settled with no model
+        "d": {"T1": passed, "T2": passed, "T3": failed},  # breaks T3, which passes on the original app
+        "e": {"T1": passed, "T2": failed, "T3": passed},  # fails T2 in the replay, but T2 fails there anyway
+    }
+    day = day_map(rows, {"T1": True, "T2": False, "T3": True})
+    assert day["reached"] == {"a": ["T1"], "b": ["T1", "T2"], "c": [], "d": [], "e": []}
+    assert day["broken"] == {"a": [], "b": [], "c": [], "d": ["T3"], "e": []}
+    assert day["settled"] == ["c", "e"]
+    # the members that reach or break each test: T1 two, T3 the one that breaks it; e's failure of T2, a test that
+    # fails on the original app anyway, says nothing of e
+    assert day["owners"] == {"T1": ["a", "b"], "T2": ["b"], "T3": ["d"]}
 
 
 def test_a_stop_threshold_is_a_low_value_of_the_past_regressions():

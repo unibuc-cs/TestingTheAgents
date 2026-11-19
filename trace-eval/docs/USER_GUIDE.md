@@ -379,11 +379,15 @@ checks it live and prints, after the verdict, the components it blames. Neither 
 strategy learn from a batch's members, or from the batches that share one (`History.training_variants`): a model
 that has seen what each member breaks would know the answer.
 
-When a test fails on a batch, the check also replays each member alone on that test, with the cassette and no
-model (`experiment/culprits.py`), and prints the suspects: the members whose own replay reaches the test or fails
-it. A member whose own replay runs the test to the end and passes cannot make it fail by itself, so the one to
-blame is among them. A single suspect is the culprit; several are told apart by running the test with half of them
-at a time; none means the members fail it only together.
+Before the live tests, the check replays each member alone as well, with the cassette and no model
+(`experiment/culprits.py`), and prints the day's map: the tests each member reaches, the members that reach none
+(the tests cannot tell them from the original app, so they need no model), a member whose own replay already fails
+a test, and how many of the tests the batch reaches are reached by one member, by several and by none alone.
+
+When a test fails on the batch, the check prints its suspects from that map: the members whose own replay reaches
+the test or fails it. A member whose own replay runs the test to the end and passes cannot make it fail by itself,
+so the one to blame is among them. A single suspect is the culprit; several are told apart by running the test with
+half of them at a time; none means the members fail it only together.
 
 | batch | what it bundles | revealing tests (Gemma, beside `runs/gemma8`) |
 |---|---|---|

@@ -96,7 +96,8 @@ What it is for:
 - a strategy orders only the tests the change reaches, each with a cost known in advance: at most its tokens after
   the divergence point;
 - once all of those pass, the clean verdict leaves nothing the change reaches untested;
-- for a batch of changes, a failing test's suspects are the members whose own replay reaches it, found for free.
+- for a batch of changes, each member's own replay says which tests it reaches and whether it needs the model at
+  all, and a failing test's suspects are the members whose own replay reaches it, found for free.
 
 ## Run it
 
@@ -125,7 +126,8 @@ scripts/gpu_remote.sh down
 The prototype, `traceeval check`, checks one change live. It replays the change first, in seconds and without the
 model. Then our method picks a test among those that diverge, the test runs live on the changed app, the outcome
 decides what runs next, and the check ends with a verdict. `--floor` adds the coverage floor before a clean
-verdict, and for a batch a failing test is followed by its suspects among the members.
+verdict. For a batch it first prints which tests each member reaches, and a failing test is followed by its
+suspects among the members.
 
 ```bash
 traceeval check skill_routing_drop_approval --history runs/gemma8 --budget 0.2      # a change from the catalog
@@ -185,7 +187,9 @@ The full numbers, with intervals over the changes, are in the reports of the rec
 follows from them is the plan in [TODO.md](TODO.md).
 
 **Batches** of two to nine changes, as a nightly run sees them: the replay stays exact, and live checks find 19
-of the 20 batches a test reveals, with no false alarm. When a test fails, the members whose own replay reaches it
+of the 20 batches a test reveals, with no false alarm. Before any model call the members' own replays map the day:
+a batch reaches exactly the tests its members reach, one member in seven reaches none and needs no model, and half
+the reached tests are reached by a single member. When a test fails, the members whose own replay reaches it
 are the suspects, for no tokens: they always held the member that fails it alone, two members of six on average,
 and halving them finds that member in under one run of the test instead of two and a half
 ([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.6). The recordings of Qwen and gpt-oss made many tests at once

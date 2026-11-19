@@ -765,21 +765,28 @@ on the publishing path; `batch_benign`, all nine harmless edits) and twenty of t
   to six tests and 1.7% to 2.7% of the suite; calibrated on the members too, 95% at both budgets after two to four.
 - *The posterior names the member to blame:* in 88 of the 95 runs that end at a failure, the component blamed most
   belongs to a member that is a regression alone (`scripts/analysis/batch_calibration.py`).
-- *The members' own replays name the suspects, for no tokens* (`traceeval/experiment/culprits.py`,
-  `docs/results/gemma8_batches/culprits.md`): for a test that fails on the batch, the members whose own replay
-  reaches it or fails it. Every member the test reveals alone is a suspect, in 273 of 273 pairs of a batch and a
-  revealing test, as Corollary 1 of the paper says it must be. The suspects are 1.9 of 5.7 members on average, and
-  the culprit alone in 85. Halving them finds a culprit in 0.9 runs of the failing test, halving all the members in
-  2.5. The 5 pairs only the members together fail have suspects too, none of which fails alone.
+- *The members' own replays give the day's map before any model call* (`traceeval/experiment/culprits.py`,
+  `docs/results/gemma8_batches/culprits.md`). A batch reaches exactly the tests its members reach alone (2,766 over
+  the 23 batches, none more, none fewer): what the members change together is outcomes, not which tests the change
+  reaches. 18 of the 117 members reach no test and need no model; the one regression among them is a change no test
+  reveals, so the map shows the suite's gap before anything runs. 1,505 of the reached tests are reached by one
+  member, and a failure there names it. Checked once for the batch, the reached tests take 55% of the tokens of
+  checking each member alone.
+- *The members' own replays name the suspects, for no tokens:* for a test that fails on the batch, the members
+  whose own replay reaches it or fails it. Every member the test reveals alone is a suspect, in 273 of 273 pairs of
+  a batch and a revealing test, as Proposition 1 of the paper says it must be. The suspects are 1.9 of 5.7 members
+  on average, and the culprit alone in 85. Halving them finds a culprit in 0.9 runs of the failing test, halving
+  all the members in 2.5. The 5 pairs only the members together fail have suspects too, none of which fails alone.
 - *Live,* with the members held out and a 20% budget, `traceeval check` finds 19 of the 20 revealed batches,
   `batch_benign` included, and gives no regression verdict on the other three. The one missed is a batch of
   harmless edits revealed only by PUB-02, which runs out of budget. For the test each check failed on, the suspects
   hold the culprit in all 18 failures with one, and name it alone in 9; the component blamed most belongs to it in
   13.
 
-So a batch is checked like a change, whatever its size. After a red run the members' replays name the suspects for
-free, and the posterior says which of them to look at first. Harmless edits are not harmless together, so a
-nightly batch needs its own recording, not the sum of the day's single-change checks.
+So a batch is checked like a change, whatever its size. Before it runs, the members' replays say which members need
+the model at all and which tests each reaches; after a red run they name the suspects for free, and the posterior
+says which of them to look at first. Harmless edits are not harmless together, so a nightly batch needs its own
+recording, not the sum of the day's single-change checks.
 
 ### 5.7 Replay-first
 
