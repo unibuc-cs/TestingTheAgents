@@ -286,6 +286,11 @@ The app and the tests:
 - [ ] A `LICENSE` file (`pyproject.toml` says MIT) and a CI job for `pytest` and `ruff`.
 - [ ] The GPU server's address and login out of `docs/EXPERIMENT.md` and `scripts/gpu_remote.sh`.
 - [ ] `CLAUDE.md` says every demo PR's verdict is checked by `tests/test_sdd.py`; 14 of 25 are.
+- [ ] With the next change to `traceeval/sut` that needs new recordings anyway: "selectors" becomes "strategies" in
+      the two comments of `harness/dispatcher.py` (lines 31 and 133). Any edit there, a comment included, makes
+      `traceeval check` refuse every recording made before it, so it waits; the rest of the app's comments read
+      well. The inline comment `# edits invalidate approvals` in `services/repository.py` stays as it is: it is
+      part of the anchor of the change `code_edit_keeps_review`.
 
 ## 9. A day of changelists
 
