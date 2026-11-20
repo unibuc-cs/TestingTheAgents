@@ -52,7 +52,8 @@ flowchart TD
   `gemma8_gen` is the recording of the changes generated from the app ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.3),
   evaluated on the half the strategies did not learn from, and beside its report:
   - `gemma8_gen/stopping.md`: the full tables of the stopping rule with a bounded miss rate (§5.4);
-  - `gemma8_gen/live_checks_miss_rate.md`: `traceeval check --miss-rate` live on each of the 43 changes.
+  - `gemma8_gen/live_checks_miss_rate.md`: `traceeval check --miss-rate` live on each of the 43 changes;
+  - `gemma8_gen/stand_ins_live.md`: a sample of the pairs the recording took from the replay, run live.
 
   `gemma7`, `qwen7` and `gptoss7` are of the app before the fixes of [TODO.md](../TODO.md) §3, with their
   follow-up experiments:

@@ -591,7 +591,7 @@ The recording is `docs/EXPERIMENT.md` §5's `baseline` and `mutants` steps with 
 The generated changes (§4.3) are recorded and evaluated with two differences:
 
 - they are recorded for the tests they reach only: a copy is replayed first, the tests that diverge are run with
-  the model, and the others keep the replay's outcome;
+  the model, and the others keep the replay's outcome, which a sample run live confirms (§5.3);
 - they are split into two fixed halves, kind by kind: the strategies that learn from other changes (`history_ml`,
   the adaptive method's calibration) learn from one half, and every strategy is evaluated on the other.
 
@@ -778,6 +778,11 @@ so no run ends (the app has no limit on model calls per run, `TODO.md` §3).
   tools that a test reaches, a quarter of the edits to a skill's steps and a sixth of the edits to text, where the
   model often does the task anyway. A re-wrapped prose, which changes no word, is revealed once: what is harmless
   cannot be told from the diff.
+- *The pairs the recording did not run end as their replay says* (`scripts/analysis/stand_ins_live.py`,
+  `docs/results/gemma8_gen/stand_ins_live.md`). Of the 101,534 pairs taken from the replay, 2,973 drawn at random
+  over 100 changes were run with the model: all 2,973 end like their stand-in, the 146 replayed failures included.
+  2,503 are the same conversation; in the others an answer is worded otherwise (522 of the 15,634 requests the
+  cassette knows) and the outcome does not move.
 
 **The strategies on changes they never learned from** (`traceeval evaluate --held-out`). The strategies that learn
 do so from one fixed half, 349 changes, and all are evaluated on the other 342, of which 165 are regressions:

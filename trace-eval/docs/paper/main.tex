@@ -784,6 +784,10 @@ changes with a revealing test, of 43 & 28 & 29 & 30 & 32 \\
         differ between $G$ and $X$, and five
         of Qwen's 180 tests pass or fail on the current version otherwise than in $Q$: a label belongs to a model
         and to the way it is served.
+  \item \emph{The outcomes taken from the replay hold up live.} $G_{\mathrm{gen}}$ ran only the tests each
+        change reaches and took the other 101,534 pairs from the replay. Of those, 2,973 drawn at random over 100
+        changes were then run with the model: all end like the replay, the 146 replayed failures included, and
+        84\% are the same conversation.
   \item \emph{Condition D holds on every recording.} Replayed against its own cassette, $V_0$ replays all 180 tests
         to the end, each with its recorded outcome.
   \item \emph{The replay misses nothing it could see.} Of the 183 revealing (change, test) pairs of $G$, 170
