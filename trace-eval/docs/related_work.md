@@ -8,23 +8,26 @@ of §8, on replaying recorded answers, were read at their sources unless marked 
 ## 1. Test selection / prioritization for LLM applications and agents
 
 - **CASPER: Change-Aware Slice Prioritization for Efficient Regression Testing of LLM-based Systems.** Muse,
-  Briand, Lu, Gallaba (U. Ottawa / Huawei Canada), arXiv 2608.00378, Aug 2026. The closest prior work. It
-  partitions a regression suite into slices that are semantically coherent in a feature space of behavioural
-  signals and consistent in performance (mostly pass or mostly fail). The signals are 10 domain-specific features
-  mined from agent execution logs on the baseline V0, such as file-level recall, trajectory entropy deviation,
-  plan compliance and test failure rate; the slices are found by a multi-objective search (NSGA-II). After a
-  change, it runs only representative instances of each slice on V1, extracts the signals again, and scores the
-  impact of the change with a failure-prediction model trained on V0. Slices are ranked by a predicted category
-  first (regression, improvement, unchanged), then by predicted impact inside the category. It is evaluated on
-  LLM-agent issue resolution, under model changes and prompt changes, across budget levels, against GMM/HDBSCAN
-  (slicing) and random (ranking) baselines. It is adapted as the `casper_slices` strategy
-  (`traceeval/selection/adapted.py`): slices from behavioural signals of the baseline traces, two representatives
-  per slice, the slices ranked by how much a failure model's prediction rose on the representatives' signals.
-  CASPER is not diff-aware: it does not map what
-  changed in a skill, prompt or harness to tests. It also reports no APFD-style metric, has no ground truth from
-  mutations or injected faults, covers a single application domain and has no stopping rule. Its strength is the
-  case this testbed does not cover: a change with no diff to map, such as a model upgrade, where only the logs of
-  the last full run exist (RESEARCH_PLAN §5.6 says where it fits beside the change-aware strategies).
+  Briand, Lu, Gallaba (U. Ottawa / Huawei Canada), arXiv 2608.00378, Aug 2026. The closest prior work.
+  - *What it does.* It partitions a regression suite into slices that are semantically coherent in a feature space
+    of behavioural signals and consistent in performance (mostly pass or mostly fail). The signals are 10
+    domain-specific features mined from agent execution logs on the baseline V0, such as file-level recall,
+    trajectory entropy deviation, plan compliance and test failure rate; the slices are found by a multi-objective
+    search (NSGA-II).
+  - *After a change,* it runs only representative instances of each slice on V1, extracts the signals again, and
+    scores the impact of the change with a failure-prediction model trained on V0. Slices are ranked by a
+    predicted category first (regression, improvement, unchanged), then by predicted impact inside the category.
+  - *How it is evaluated.* On LLM-agent issue resolution, under model changes and prompt changes, across budget
+    levels, against GMM/HDBSCAN (slicing) and random (ranking) baselines.
+  - *Here* it is adapted as the `casper_slices` strategy (`traceeval/selection/adapted.py`): slices from
+    behavioural signals of the baseline traces, two representatives per slice, the slices ranked by how much a
+    failure model's prediction rose on the representatives' signals.
+  - *What it lacks.* CASPER is not diff-aware: it does not map what changed in a skill, prompt or harness to
+    tests. It also reports no APFD-style metric, has no ground truth from mutations or injected faults, covers a
+    single application domain and has no stopping rule.
+  - *Its strength* is the case this testbed does not cover: a change with no diff to map, such as a model upgrade,
+    where only the logs of the last full run exist (RESEARCH_PLAN §5.6 says where it fits beside the change-aware
+    strategies).
 - **(Why) Is My Prompt Getting Worse? Rethinking Regression Testing for Evolving LLM APIs.** Ma, Yang, Kästner
   (CMU), arXiv 2311.11123. A case study of silent updates to LLM APIs. It identifies three obstacles to classic
   regression testing (no crisp oracle, brittle prompts, nondeterminism) and recommends slicing the suites.

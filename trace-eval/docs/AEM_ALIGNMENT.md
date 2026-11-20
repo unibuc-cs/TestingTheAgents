@@ -21,12 +21,15 @@ Agent Orchestrator deck and Adobe's public documentation:
   Governance or Brand Governance Agent (brand, security and regulatory policy checks, permissions), the Site
   Optimization Agent (detects and deploys website fixes: traffic, engagement, broken links), the Data Insights
   Agent (analytics questions), the LLM Optimization Agent, the Product Support Agent.
-- **What they do not have yet and want in the prototype** (their answers to our follow-up questions): workflows
-  (they only have features), a catalog of evaluators and properties with thresholds ("prompt, properties and
-  threshold do not exist, but they would like it, and a category of properties too"), per-test metadata (agents,
-  skills, tools, workflows, risk, history, cost), budgets with early stopping, trace assertions (agent order, tool
-  order, forbidden actions, turn limits, final state), and OpenTelemetry traces including "cognition events".
-  Failures caused by the environment (a service down) must not count against the agent.
+- **What they do not have yet and want in the prototype** (their answers to our follow-up questions):
+  - workflows (they only have features);
+  - a catalog of evaluators and properties with thresholds ("prompt, properties and threshold do not exist, but
+    they would like it, and a category of properties too");
+  - per-test metadata (agents, skills, tools, workflows, risk, history, cost);
+  - budgets with early stopping;
+  - trace assertions (agent order, tool order, forbidden actions, turn limits, final state);
+  - OpenTelemetry traces including "cognition events";
+  - failures caused by the environment (a service down) must not count against the agent.
 
 ## 2. Where the testbed stands
 
@@ -95,12 +98,13 @@ sequenceDiagram
 - `route_to_agent(agent, task, context)` gives the specialist its own instruction instead of the user's whole
   request, and in `context` the values it needs (the ids earlier steps reported). The specialist runs
   on a copy of the request context with those values; its answer comes back to the orchestrator for the next step.
-- `request_approval(summary)` stands for the human in the loop. The answer is in the starting data (the fixture,
-  `approvals`: who approves, and whether), so a run is repeatable; a test refuses with
-  `fixture_patch: {approvals.decision: refuse}`. An approval holds for the rest of the request: the runtime adds
-  the approver and their approval token to the orchestrator's context, so the steps after it carry them. Guarded
-  tools such as `unpublish_page` need the token, and the publishing skill has the approver approve a page's review
-  (`approve_review`) instead of only requesting one.
+- `request_approval(summary)` stands for the human in the loop.
+  - The answer is in the starting data (the fixture, `approvals`: who approves, and whether), so a run is
+    repeatable; a test refuses with `fixture_patch: {approvals.decision: refuse}`.
+  - An approval holds for the rest of the request: the runtime adds the approver and their approval token to the
+    orchestrator's context, so the steps after it carry them.
+  - Guarded tools such as `unpublish_page` need the token, and the publishing skill has the approver approve a
+    page's review (`approve_review`) instead of only requesting one.
 - The routing skill states the rules a plan must keep: a campaign page passes the brand check before it is
   scheduled or published; a person approves before anything is published, scheduled or taken down, and a refusal
   stops those steps; a failed step stops the steps that depend on it, while the same action on other pages goes on;

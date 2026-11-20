@@ -137,12 +137,13 @@ Everything else is plumbing (loaders, tracing, report).
   - detection over the critical regressions only: the changes with a revealing test that checks a safety property;
   - the tokens up to the first detection, over the runs that detected.
 - **Section 3**: the tokens spent on the changes no test reveals (the benign ones and the regressions the model
-  cannot see), and the verdicts at a 5% and a 20% budget. For each strategy: the shares of its runs that end with a
-  regression verdict, with a clean one and with none (§2), on the revealed regressions and on the other changes.
-  The last column is the share of its clean verdicts given on a revealed regression: what a clean verdict from
-  that strategy is worth. "Found" there counts every run that ended at a failure, so it can exceed `detected`,
-  which asks for a failure of a revealing test: a run can end on the one failing run of a test that passes in most
-  of its runs.
+  cannot see), and the verdicts at a 5% and a 20% budget:
+  - for each strategy, the shares of its runs that end with a regression verdict, with a clean one and with none
+    (§2), on the revealed regressions and on the other changes;
+  - the last column is the share of its clean verdicts given on a revealed regression: what a clean verdict from
+    that strategy is worth;
+  - "found" counts every run that ended at a failure, so it can exceed `detected`, which asks for a failure of a
+    revealing test: a run can end on the one failing run of a test that passes in most of its runs.
 - **Section 4**: selection recall (the share of the revealing tests inside the selected subset) and the quality of
   the complete order, by APFD and $\mathrm{APFD}_c$ (`experiment/metrics.py`; the papers are in
   [REFERENCES.md](REFERENCES.md)). Both score the tests that pass on the original app, run in that order with no
@@ -152,11 +153,12 @@ Everything else is plumbing (loaders, tracing, report).
     test, $\mathrm{APFD} = 1 - TF/n + 1/(2n)$. Near 1 when the first test of the order reveals the change, near 0
     when the last one does. A random order scores about $1 - 1/(k + 1)$ on a change with $k$ revealing tests: 0.5
     with one, 0.98 with 49.
-  - $\mathrm{APFD}_c$ (Elbaum, Malishevsky and Rothermel 2001) replaces positions by cost: with $C$ the cost of the
-    whole order, $C_{TF}$ the cost spent before the first revealing test and $c_{TF}$ that test's own cost,
-    $\mathrm{APFD}_c = (C - C_{TF} - c_{TF}/2)/C$. The paper also weighs faults by severity, which cancels out with
-    one fault. Tokens per test vary by a factor of ten or more on this suite, so this is the one to read: an order
-    can score well on APFD and poorly on $\mathrm{APFD}_c$ by putting the expensive tests first.
+  - $\mathrm{APFD}_c$ (Elbaum, Malishevsky and Rothermel 2001) replaces positions by cost:
+    $\mathrm{APFD}_c = (C - C_{TF} - c_{TF}/2)/C$, with $C$ the cost of the whole order, $C_{TF}$ the cost spent
+    before the first revealing test and $c_{TF}$ that test's own cost. The paper also weighs faults by severity,
+    which cancels out with one fault.
+  - $\mathrm{APFD}_c$ is the one to read: tokens per test vary by a factor of ten or more on this suite, and an
+    order can score well on APFD and poorly on $\mathrm{APFD}_c$ by putting the expensive tests first.
   - What to expect: `random` near 0.77 on both (the mean over the seeds), `full` (catalog order) near 0.75, an
     order that uses the change 0.88 or more on $\mathrm{APFD}_c$. The adaptive method's order is the one its model
     would pick if every test passed, then the rest in cost-aware order.
@@ -164,14 +166,15 @@ Everything else is plumbing (loaders, tracing, report).
     already fails hold the rest.
 - **Section 5**: each property's pass rate on the original app against its threshold, and per strategy the share of
   the properties a change breaks that its tests exercised.
-- **Section 6**: coverage, of the suite and of each change. For the suite, per dimension (agent, feature, skill,
-  tool, tool error path, configuration, setting value, property, workflow, execution path, risk): what the tests
-  declare, what the traces show, what nothing covers; then, per agent, skill, tool and feature, the tests that
-  declare it and the tests that invoke it (`traceeval coverage --history runs/gemma8` prints this part). For each
-  change, without the ground truth: the changed components the executed tests exercised, the affected properties
-  they checked, the affected workflows they ran, the affected features they reached, and how often a run that found
-  no regression tested every affected mandatory property. [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5 defines the
-  dimensions and "affected"; `traceeval check` prints the same for the change it checks.
+- **Section 6**: coverage, of the suite and of each change ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5 defines the
+  dimensions and "affected"; `traceeval check` prints the same for the change it checks):
+  - the suite, per dimension (agent, feature, skill, tool, tool error path, configuration, setting value,
+    property, workflow, execution path, risk): what the tests declare, what the traces show, what nothing covers;
+  - per agent, skill, tool and feature: the tests that declare it and the tests that invoke it
+    (`traceeval coverage --history runs/gemma8` prints this part);
+  - each change, without the ground truth: the changed components the executed tests exercised, the affected
+    properties they checked, the affected workflows they ran, the affected features they reached, and how often a
+    run that found no regression tested every affected mandatory property.
 - **Section 7**, replay-first, for a recording that has been replayed (`traceeval replay-first`; section 1 then
   also gives each change's diverged tests and replayed failures):
   - what the replay settles alone, by kind of change: the changes on which no test diverges, those on which a
@@ -277,13 +280,16 @@ no cost (RESEARCH_PLAN §5.7); `adaptive_bayes_nomandatory` is the ablation with
 
 ### The coverage floor
 
-`traceeval check --floor` (and the variant `adaptive_bayes_floor`) puts a floor under the clean verdict in place
-of the mandatory rule: before saying clean, the check runs the cheapest set of reached tests that, with the tests
-already run and those the replay settled, covers every changed component some test exercised on the original app
-and every affected mandatory property some test checks (`experiment/coverage.py::coverage_floor`). The set is
-chosen greedily, by the uncovered items a test adds per token. It runs last, so a regression found earlier costs
-nothing more. It is a coverage guarantee, not a detection one: a set chosen only to cover misses most regressions
-on its own (RESEARCH_PLAN §5.4).
+`traceeval check --floor` (and the variant `adaptive_bayes_floor`) puts a floor under the clean verdict, in place
+of the mandatory rule (`experiment/coverage.py::coverage_floor`):
+
+- before saying clean, the check runs the cheapest set of reached tests that, with the tests already run and those
+  the replay settled, covers every changed component some test exercised on the original app and every affected
+  mandatory property some test checks;
+- the set is chosen greedily, by the uncovered items a test adds per token;
+- it runs last, so a regression found earlier costs nothing more;
+- it is a coverage guarantee, not a detection one: a set chosen only to cover misses most regressions on its own
+  (RESEARCH_PLAN §5.4).
 
 ### Weights
 
@@ -372,12 +378,14 @@ A 0 means that no test reveals the change under that model, a fact about the mod
 ### Batches
 
 A batch applies several catalog changes to one copy, as a nightly run or a pull request does (`BATCHES` in
-`mutation/catalog.py`, listed after the 43 by `traceeval mutations`). Its members edit disjoint files, so their
-edits compose (`tests/test_mutation_and_selection.py` checks it), and it is a regression when any member is one.
-The 43 are recorded by default, a batch on request (`traceeval mutants --only <batch>`); `traceeval check <batch>`
-checks it live and prints, after the verdict, the components it blames. Neither the check nor the replay lets a
-strategy learn from a batch's members, or from the batches that share one (`History.training_variants`): a model
-that has seen what each member breaks would know the answer.
+`mutation/catalog.py`, listed after the 43 by `traceeval mutations`):
+
+- its members edit disjoint files, so their edits compose (`tests/test_mutation_and_selection.py` checks it), and
+  it is a regression when any member is one;
+- the 43 are recorded by default, a batch on request (`traceeval mutants --only <batch>`);
+- `traceeval check <batch>` checks it live and prints, after the verdict, the components it blames;
+- neither the check nor the replay lets a strategy learn from a batch's members, or from the batches that share
+  one (`History.training_variants`): a model that has seen what each member breaks would know the answer.
 
 Before the live tests, the check replays each member alone as well, with the cassette and no model
 (`experiment/culprits.py`), and prints the day's map: the tests each member reaches, the members that reach none
@@ -483,22 +491,25 @@ generated changes and lets them learn from the other half only ([EXPERIMENT.md](
   test covers it by calling one of its tools, a change affects it by touching a tool or a part, and `pytest` checks
   that every part exists in the app.
 - **Tool errors**: a tool error the test intends (a refusal, a missing page, an injected outage) must be listed,
-  for example `tool_errors: {unpublish_page: approval_required}`. Any other error fails the test as
-  `tool_error:<tool>` unless a later call of the same tool succeeded; a crash in tool or service code (any
-  exception other than a `ToolError`) fails it as `crash:<tool>`. Both are classified `TOOL_ERROR`.
-  `tool_errors: "*"` allows any error, and a scenario added by a spec in `specs/` ([SDD_GUIDE.md](SDD_GUIDE.md))
-  that writes its own `expect` gets it by default.
+  for example `tool_errors: {unpublish_page: approval_required}`.
+  - Any other error fails the test as `tool_error:<tool>` unless a later call of the same tool succeeded.
+  - A crash in tool or service code (any exception other than a `ToolError`) fails it as `crash:<tool>`. Both are
+    classified `TOOL_ERROR`.
+  - `tool_errors: "*"` allows any error, and a scenario added by a spec in `specs/`
+    ([SDD_GUIDE.md](SDD_GUIDE.md)) that writes its own `expect` gets it by default.
 - **Change**: add a `Mutation(...)` to the table in `mutation/catalog.py`, with `replace`, `delete_line`,
   `delete_block` or `append` edits. Anchors are literal text, so reformatting `sut/` breaks them and the operators
   raise. A regression must be revealed by at least one test, a benign change by none.
 - **Strategy**: in `selection/strategies.py`, subclass `Strategy` (`selection/base.py`), decorate the class with
-  `@register` and implement `order(ctx)`, a prioritized list (tests left out are not selected). The default `run`
-  executes it under the two rules of a run (§2). An adaptive strategy implements `run(ctx, oracle)` itself and
-  keeps both rules: it skips a test when `ctx.runnable(t)` is false and ends at the first failure with the stop
-  reason `regression`. Use only `ctx.change`, `ctx.catalog`, the baseline facts in `ctx.history` and the other
-  changes' outcomes (`ctx.train_variants`). Add the name to `CORE` to include it in the default comparison.
-  Replay-first needs nothing more: `ctx.runnable(t)` is also false for a test whose outcome the replay gave, and
-  `ctx.cost(t)` is what is left of a test after its divergence point.
+  `@register` and implement `order(ctx)`, a prioritized list (tests left out are not selected).
+  - The default `run` executes it under the two rules of a run (§2). An adaptive strategy implements
+    `run(ctx, oracle)` itself and keeps both rules: it skips a test when `ctx.runnable(t)` is false and ends at
+    the first failure with the stop reason `regression`.
+  - Use only `ctx.change`, `ctx.catalog`, the baseline facts in `ctx.history` and the other changes' outcomes
+    (`ctx.train_variants`).
+  - Add the name to `CORE` to include it in the default comparison.
+  - Replay-first needs nothing more: `ctx.runnable(t)` is also false for a test whose outcome the replay gave,
+    and `ctx.cost(t)` is what is left of a test after its divergence point.
 - **Model backends, recorded answers, the judge**: [EXPERIMENT.md](EXPERIMENT.md) §3 and §5.
 
 ## 8. Gotchas

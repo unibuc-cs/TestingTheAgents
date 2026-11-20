@@ -232,11 +232,13 @@ app ([USER_GUIDE.md](USER_GUIDE.md) §4 says how to read it):
 - Section 6: the coverage of [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §3.5. Point at the `not covered` column (the
   tests reach 15 of the 32 places where a tool refuses) and at one declared-against-invoked gap.
   `traceeval coverage --history runs/gemma8` prints the same in the terminal.
-- Section 7 and `figures/replay_first.png`: the same strategies with the replay in front. Eight of the 43 changes
-  need no model at all, the replayed outcome is the recorded one on all 6,298 (change, test) pairs that replay,
-  and with no budget an order of the diverged tests finds 98% to 100% of the regressions for 9% to 10% of the
-  suite's tokens. Put the two figures side by side: every line moves up and to the left. Then the table of the
-  condition: about 2% of the model's calls are answered otherwise when made again, and no outcome moves.
+- Section 7 and `figures/replay_first.png`: the same strategies with the replay in front.
+  - Eight of the 43 changes need no model at all, and the replayed outcome is the recorded one on all 6,298
+    (change, test) pairs that replay.
+  - With no budget an order of the diverged tests finds 98% to 100% of the regressions for 9% to 10% of the
+    suite's tokens. Put the two figures side by side: every line moves up and to the left.
+  - Then the table of the condition: about 2% of the model's calls are answered otherwise when made again, and no
+    outcome moves.
 
 Mention the finding of [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7: the mandatory rule is what catches the publishing
 skill without its link check. Its §5.2 has replay-first, §5.6 goes through the strategies by research question,
@@ -278,14 +280,17 @@ cases:
   link check failed (WF5-02), stops a whole plan after a refused export (WF6-02) and misreports the site
   optimization of section 3 (WF2-03); [EXPERIMENT.md](EXPERIMENT.md) §6 lists them. A test the model already fails
   cannot reveal a change, which is why no strategy runs it.
-- *Why only Gemma's numbers?* Qwen's and gpt-oss's recordings of the same app are not clean ground truths
-  ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.8): recorded many tests at once, a change that alters nothing appears to
-  break a few tests. One test at a time Qwen is as repeatable as Gemma, and its recording made that way gives
-  the same picture ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.2); gpt-oss is not, and its outcomes change
-  with a restart of the server. A larger model does not give a cleaner ground truth by itself, so the lesson for
-  Adobe is to measure first how much the answers vary under the real serving setup. The harmless change of section
-  4, checked with gpt-oss from its cassette, is a false alarm on PUB-22, a test whose runs disagree under that
-  model.
+- *Why only Gemma's numbers?*
+  - Qwen's and gpt-oss's recordings of the same app are not clean ground truths
+    ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.8): recorded many tests at once, a change that alters nothing appears
+    to break a few tests.
+  - One test at a time Qwen is as repeatable as Gemma, and its recording made that way gives the same picture
+    ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.2); gpt-oss is not, and its outcomes change with a restart of the
+    server.
+  - A larger model does not give a cleaner ground truth by itself, so the lesson for Adobe is to measure first how
+    much the answers vary under the real serving setup.
+  - The harmless change of section 4, checked with gpt-oss from its cassette, is a false alarm on PUB-22, a test
+    whose runs disagree under that model.
 - *How would this run at Adobe?* Nightly full-suite runs provide the recordings: the answers the model gave, which
   the replay answers from, and the outcomes the method learns from. For each change, `traceeval check` replays
   it, selects among the tests that diverge, orders them and decides when to stop. The traces are OpenTelemetry,

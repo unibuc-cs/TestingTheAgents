@@ -47,12 +47,16 @@ sequenceDiagram
 ```
 
 The runner ([`experiment/runner.py`](../traceeval/experiment/runner.py)) starts the case through the executor,
-which builds a fresh app from the fixture, the starting data; the path through the orchestrator, the specialist,
+which builds a fresh app from the fixture, the starting data. The path through the orchestrator, the specialist,
 the dispatcher and the scorers is the one [CONTENTOPS.md](CONTENTOPS.md) shows. What it does not show is the model
-call: at every step the runtime ([`sut/harness/runtime.py`](../traceeval/sut/harness/runtime.py)) asks the agent's
-backend ([`backends/llm_openai.py`](../traceeval/sut/harness/backends/llm_openai.py)) what to do next, one model
-call. Gemma picks `route_to_agent(publishing)`, and the publishing agent runs the same way, a model call and a tool
-call in turn, until Gemma answers in plain text.
+call:
+
+1. at every step the runtime ([`sut/harness/runtime.py`](../traceeval/sut/harness/runtime.py)) asks the agent's
+   backend ([`backends/llm_openai.py`](../traceeval/sut/harness/backends/llm_openai.py)) what to do next, one
+   model call;
+2. Gemma picks `route_to_agent(publishing)`;
+3. the publishing agent runs the same way, a model call and a tool call in turn, until Gemma answers in plain
+   text.
 
 ### What Gemma sees
 
@@ -477,11 +481,13 @@ It prints how many tests replay and how many diverge, then each test of the loop
   members whose own replay reaches it or fails it.
 
 `--history` is a recording made with the same model (the README) and on the app as it is now;
-`traceeval experiment --reps 1` is enough for it. The check refuses a recording whose copy of the app
-(`variants/baseline/sut`) differs from `traceeval/sut`, even by a comment: recorded answers are found by the exact
-request and code by line number. A changed copy of the app is compared with `traceeval/sut`, so copy that folder
-before editing it. Should a change leave the change set empty and still make tests diverge, the method has
-nothing to reason about, and the diverged tests run cheapest first.
+`traceeval experiment --reps 1` is enough for it.
+
+- The check refuses a recording whose copy of the app (`variants/baseline/sut`) differs from `traceeval/sut`, even
+  by a comment: recorded answers are found by the exact request and code by line number.
+- A changed copy of the app is compared with `traceeval/sut`, so copy that folder before editing it.
+- Should a change leave the change set empty and still make tests diverge, the method has nothing to reason about,
+  and the diverged tests run cheapest first.
 
 On `runs/gemma8`, the check was run live on all 43 changes, one check at a time, with Gemma started anew on
 other GPUs than the recording's ([results/gemma8/live_checks.md](results/gemma8/live_checks.md)):
@@ -514,12 +520,14 @@ randomness, so a run that starts from recorded answers sends the same prompts ag
   answers above, the first time it is replayed.
 - **`TRACEEVAL_CACHE=<file>`** with `--backend hf`, `vllm` or `llm` answers what the file has, asks the model for
   the rest and adds those answers to the file. Running the same experiment again then costs nothing.
-- With the `llm` backend the key numbers the tool calls instead of carrying the ids the server makes up (they go
-  back into later prompts), and a run whose every answer is recorded never reaches the server. A replay must send
-  the same request as the recording, so gpt-oss's needs its model name and length limit (`TRACEEVAL_LLM_MODEL`,
-  `TRACEEVAL_LLM_MAX_TOKENS`). `tests/cassettes/qwen.jsonl` and `tests/cassettes/gptoss.jsonl` hold the checks of
-  [DEMO.md](DEMO.md) §4 as they ran against `runs/qwen7` and `runs/gptoss7`, two recordings of an earlier version
-  of the app, which the check now refuses (section 7).
+- With the `llm` backend:
+  - the key numbers the tool calls instead of carrying the ids the server makes up (they go back into later
+    prompts), and a run whose every answer is recorded never reaches the server;
+  - a replay must send the same request as the recording, so gpt-oss's needs its model name and length limit
+    (`TRACEEVAL_LLM_MODEL`, `TRACEEVAL_LLM_MAX_TOKENS`);
+  - `tests/cassettes/qwen.jsonl` and `tests/cassettes/gptoss.jsonl` hold the checks of [DEMO.md](DEMO.md) §4 as
+    they ran against `runs/qwen7` and `runs/gptoss7`, two recordings of an earlier version of the app, which the
+    check now refuses (section 7).
 - When the app changes a prompt through a skill, an agent definition, a config value or a tool result,
   the recorded answer no longer matches, and a replay run ends as `INFRA_INVALID` with `CacheMiss`. Start
   Gemma, run `TRACEEVAL_BACKEND=vllm pytest -q`, which replays what it can and records the rest, and commit
