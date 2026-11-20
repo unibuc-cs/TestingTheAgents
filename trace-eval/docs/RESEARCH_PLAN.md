@@ -19,7 +19,7 @@ University of Bucharest / ILDS. The results are in `docs/results/gemma8/report.m
   further models), 180 tests, 43 hand-written changes (9 of them benign) and 692 changes generated mechanically
   from the app. Recordings with five repetitions give the ground truth; eleven strategies are compared offline
   under the same two rules (§3).
-- **Results (§5.7 to §5.9).**
+- **Results (§5.2 to §5.4).**
   - A fifth of the changes need no model, and the others reach 40 of the 180 tests on average.
   - About one request in fifty is answered otherwise when it is sent again, and no test ends otherwise. The other
     answers come from two settings of the server; with neither, every request gets its recorded answer again.
@@ -37,11 +37,17 @@ University of Bucharest / ILDS. The results are in `docs/results/gemma8/report.m
 
 ## 0. Reading order
 
-In reading order: the problem (§1), the abstractions the method rests on (§2), the methods (§3), the evaluation
-environment (§4), the results and the take-aways (§5), the roadmap (§6), the paper (§7) and the open questions for
-the Adobe Team (§8). The research problem is kept general: any agent platform built from skills, prompts, tools,
-harness code and configuration. AEM, Adobe's platform, is the motivating instance, and the method does not depend
-on it.
+- **Short on time:** the "In short" above, then the take-aways (§5.9).
+- **The whole document, in order:** the problem (§1), the abstractions the method rests on (§2), the methods (§3),
+  the evaluation environment (§4), the results (§5), the roadmap (§6), the paper (§7) and the open questions for
+  the Adobe Team (§8).
+- **The results follow the argument:** the recording and its ground truth (§5.1), replay-first (§5.2), the same on
+  generated changes (§5.3), when to stop (§5.4), a day's changes as a batch (§5.5); then the strategies without
+  the replay (§5.6), coverage (§5.7), the other models recorded many tests at once (§5.8), and the take-aways
+  (§5.9).
+
+The research problem is kept general: any agent platform built from skills, prompts, tools, harness code and
+configuration. AEM, Adobe's platform, is the motivating instance, and the method does not depend on it.
 
 **Design decisions**
 
@@ -147,16 +153,19 @@ procedure block is not shown to the model, so it is none.
 - **Declared** dependencies are the metadata a test author wrote (the `declared:` block in the catalog). They are
   incomplete on purpose, as in practice: shared skills reached through `include`, harness code and most
   configuration keys are not declared.
-- **Observed** dependencies come from the baseline traces: the agents started, the agent-definition fields the
-  orchestrator consulted, the skills loaded (with version and digest), the tools called (with status and
-  attempts), the configuration keys read, and the code functions and lines executed (coverage.py dynamic
-  contexts, one context per test and repetition). They also hold what the model was sent without the run acting
-  on it: the tools each agent was offered (`tool:<name>#schema`) and the fixture. Every module is imported before
-  the first test runs, so a module's own level is in no test's coverage: a change there touches the tests that
-  ran a function of the file, or, for a package's `__init__`, any code of the package.
+- **Observed** dependencies come from the baseline traces (coverage.py dynamic contexts, one context per test and
+  repetition):
+  - what the run did: the agents started, the agent-definition fields the orchestrator consulted, the skills
+    loaded (with version and digest), the tools called (with status and attempts), the configuration keys read,
+    and the code functions and lines executed;
+  - what the model was sent without the run acting on it: the tools each agent was offered
+    (`tool:<name>#schema`) and the fixture;
+  - a module's own level is in no test's coverage, since every module is imported before the first test runs: a
+    change there touches the tests that ran a function of the file, or, for a package's `__init__`, any code of
+    the package.
 - **Required** dependencies are what must always be evaluated: the catalog's mandatory properties, the safety ones.
   The adaptive method tests every mandatory property a change may affect before it ends without a regression (step
-  5, §5.3).
+  5, §5.7).
 
 ### 2.4 Cost model
 
@@ -236,18 +245,20 @@ What differs is which tests a strategy picks, in what order, and when a run with
 The results in §5 compare these eleven. Four variants run when named (`--strategies`):
 
 - `adaptive_bayes_tfidf` and `adaptive_bayes_notext` differ from the proposed method only in how text is compared
-  (§5.2), and `adaptive_bayes_nomandatory` leaves out step 5 (§5.3);
-- `risk_aware_ts_per_token` divides the bandit's score by the test's cost, as a budget in tokens suggests (§5.1).
+  (§5.6), and `adaptive_bayes_nomandatory` leaves out step 5 (§5.7);
+- `risk_aware_ts_per_token` divides the bandit's score by the test's cost, as a budget in tokens suggests (§5.6).
 
 ### 3.1 The proposed method: adaptive Bayesian selection with budget-aware stopping
 
 The loop is the one pictured in `docs/USER_GUIDE.md` §5; the paragraphs below define each box.
 
-*Hypotheses (step 1 of the five in `adaptive_bayes.py`'s docstring).* Each changed component $c$ is broken with a
-prior $\pi_c$ that depends on its kind: about 0.45 to 0.5 for code, skill, config and agent components, 0.12 to
-0.15 for prompt wording and prose. The posterior is kept exactly over all $2^k$ subsets $B$ of the $k$ changed
-components ($k \le 8$). The `tool:` and `line:` ids of a code change are views of it, not hypotheses of their own,
-and a change set with more than eight components keeps the eight with the highest prior.
+*Hypotheses (step 1 of the five in `adaptive_bayes.py`'s docstring).*
+
+- Each changed component $c$ is broken with a prior $\pi_c$ that depends on its kind: about 0.45 to 0.5 for code,
+  skill, config and agent components, 0.12 to 0.15 for prompt wording and prose.
+- The posterior is kept exactly over all $2^k$ subsets $B$ of the $k$ changed components ($k \le 8$); a change
+  set with more than eight components keeps the eight with the highest prior.
+- The `tool:` and `line:` ids of a code change are views of it, not hypotheses of their own.
 
 *Likelihood (step 2).* Under the hypothesis that the components in $B$ are broken, a test fails with probability
 
@@ -260,52 +271,63 @@ $$s_{tc} = r_{k(c)} \cdot \ell_{t,k(c)} \cdot \phi_t(c) \cdot \tau_t,$$
 
 in the paper's notation (`docs/USER_GUIDE.md` §5 calls them kind ratio, test record, coverage and tilt):
 
-- $r_k$ is the empirical reveal ratio of kind $k$, learned from the other recorded changes: the fraction of
-  statically impacted tests that actually revealed a change of that kind. Kinds separate, for example, tests that
-  executed the changed line from tests that executed only the changed function, and agent fields are calibrated per
-  field. The ratio is where "covered is not revealed" enters the model, as measured numbers rather than hand-set
-  constants. A ratio learned from few changes is padded toward a default for its kind ($m = 2$ changes' worth, as
-  below), so that one earlier change cannot make a whole kind look certain.
-- $\ell_{tk} = (O_{tk} + m)/(E_{tk} + m)$ is the test's own record on the earlier changes of kind $k$ that impacted
-  it. $O_{tk}$ is how many of them it revealed, $E_{tk}$ how many an average impacted test would have revealed (the
-  sum of those changes' reveal rates), and $m = 2$ pads a short record. A test that ran many changed functions and
-  never caught anything gets a record below 1; one that caught changes most impacted tests missed gets a record
-  above 1. Comparing with $E_{tk}$, instead of counting catches, matters because a change that breaks a large part
-  of the suite (link validation turned off everywhere: 49 tests) says little about each test it breaks. Like $r_k$,
-  the records are recomputed from the recordings at every run, without the change under evaluation
-  (`docs/USER_GUIDE.md` §5). The record is there because kind-level sensitivities alone let the method spend on
-  cheap tests that merely call a changed function.
+- $r_k$ is the empirical reveal ratio of kind $k$: the fraction of statically impacted tests that actually
+  revealed a change of that kind, learned from the other recorded changes. It is where "covered is not revealed"
+  enters the model, as measured numbers rather than hand-set constants.
+  - Kinds separate, for example, tests that executed the changed line from tests that executed only the changed
+    function; agent fields are calibrated per field.
+  - A ratio learned from few changes is padded toward a default for its kind ($m = 2$ changes' worth, as below),
+    so that one earlier change cannot make a whole kind look certain.
+- $\ell_{tk} = (O_{tk} + m)/(E_{tk} + m)$ is the test's own record on the earlier changes of kind $k$ that
+  impacted it.
+  - $O_{tk}$ is how many of them it revealed, $E_{tk}$ how many an average impacted test would have revealed (the
+    sum of those changes' reveal rates), and $m = 2$ pads a short record.
+  - A test that ran many changed functions and never caught anything gets a record below 1; one that caught
+    changes most impacted tests missed gets a record above 1.
+  - Comparing with $E_{tk}$, instead of counting catches, matters because a change that breaks a large part of the
+    suite (link validation turned off everywhere: 49 tests) says little about each test it breaks.
+  - Like $r_k$, the records are recomputed from the recordings at every run, without the change under evaluation
+    (`docs/USER_GUIDE.md` §5).
+  - The record is there because kind-level sensitivities alone let the method spend on cheap tests that merely
+    call a changed function.
 - $\phi_t(c)$ is how often $t$ exercised $c$ in its baseline runs. For an agent's tool or skill list that only lost
   items, it is how often $t$ used one of the removed items.
 - $\tau_t \in [0.5, 2]$ combines the lexical relevance of the change text (code only, never comments) to the test's
   own text (name, request, expectations) with a bonus when the author declared the dependency. It is a proxy for
   whether the test's oracle plausibly observes the changed behaviour. The relevance measure is an option (`text`):
-  word overlap (the default), TF-IDF, or none (§5.2).
+  word overlap (the default), TF-IDF, or none (§5.6).
 
-*Policy (step 3).* The next test is $\arg\max_t\, g_t / c(t)$, where $g_t$ is the expected information gain about
-$B$, tilted by risk, and $c(t)$ the test's cost. After a pass, the sensitivities of tests with the same behaviour
-signature (agents, tools, fault profile, dataset) are multiplied by $\delta = 0.35$, because near-duplicate tests
-give correlated evidence rather than independent draws. Each test runs at most once: the models decode greedily, so
-a rerun almost always gives the same answer (§5.4 measures where it does not).
+*Policy (step 3).*
 
-*Stopping (step 4).* The method stops with the verdict "regression" at the first failure of a test that passed on
-the original app: that failure shows a changed behaviour, which is what the ground truth calls revealing, while a
-failure the model also produces on the original app says nothing about the change. It stops with the verdict
-"clean" when $P(B \neq \emptyset \mid \text{evidence}) < \varepsilon$, with $\varepsilon = 0.05$. Otherwise it runs
-until the budget is exhausted or no test is informative. Selection, prioritization and stopping all come from the
-same model.
+- The next test is $\arg\max_t\, g_t / c(t)$, where $g_t$ is the expected information gain about $B$, tilted by
+  risk, and $c(t)$ the test's cost.
+- After a pass, the sensitivities of tests with the same behaviour signature (agents, tools, fault profile,
+  dataset) are multiplied by $\delta = 0.35$: near-duplicate tests give correlated evidence rather than
+  independent draws.
+- Each test runs at most once: the models decode greedily, so a rerun almost always gives the same answer (§5.8
+  measures where it does not).
+
+*Stopping (step 4).* The method stops:
+
+- with the verdict "regression" at the first failure of a test that passed on the original app. That failure
+  shows a changed behaviour, which is what the ground truth calls revealing; a failure the model also produces on
+  the original app says nothing about the change;
+- with the verdict "clean" when $P(B \neq \emptyset \mid \text{evidence}) < \varepsilon$, with
+  $\varepsilon = 0.05$;
+- otherwise when the budget is exhausted or no test is informative.
+
+Selection, prioritization and stopping all come from the same model.
 
 *Mandatory coverage (step 5).* A coverage rule sits on top of the model. A run that found no regression then
 tests every mandatory property the change may affect that is still untested, with the cheapest test that checks
-it, while the budget allows (§5.3).
+it, while the budget allows (§5.7).
 
 ### 3.2 Why these baselines
 
 They cover the families in the literature: classic RTS/TCP on declared coverage (Rothermel), IR-based TCP (Saha
 2015), cost-cognizant TCP (Elbaum 2001), predictive test selection (Machalica 2019) and diversity-based ordering
 (LTM, Pan et al.; `docs/REFERENCES.md`). CASPER (2026) and Risk-Aware Adaptive Evaluation (2026) are the closest
-external competitors (`docs/related_work.md`), and both are adapted to the testbed (`selection/adapted.py`,
-roadmap item 3(c)).
+external competitors (`docs/related_work.md`), and both are adapted to the testbed (`selection/adapted.py`).
 
 They are adaptations, not reproductions. The module's docstrings say where the testbed differs from each paper's
 setting:
@@ -342,15 +364,17 @@ flowchart LR
     conversation is new;
   - a tool's code, a service, the starting data: a tool result differs, and with it the next request. A change
     that alters only state the model never reads shows in the checks: the test replays to a failure.
-- **Why it works: two conditions.** R, the same request gets the same answer under the serving setup in use. D,
-  given the answers the app's code is deterministic: no clock, no randomness, no outside service, and the ids a
-  server makes up for tool calls are numbered in the key. Under both, a test that replays to the end makes the
-  same requests and gets the same answers when run with the model, so its outcome is the replay's (the paper's
-  Proposition 1). D holds here by construction and is checked for free: the original app replayed against its own
-  cassette replays every test to the end with its recorded outcome. R is measured (§5.7).
+- **Why it works: two conditions.**
+  - R: the same request gets the same answer under the serving setup in use. It is measured (§5.2).
+  - D: given the answers the app's code is deterministic: no clock, no randomness, no outside service, and the
+    ids a server makes up for tool calls are numbered in the key. It holds here by construction and is checked for
+    free: the original app replayed against its own cassette replays every test to the end with its recorded
+    outcome.
+  - Under both, a test that replays to the end makes the same requests and gets the same answers when run with
+    the model, so its outcome is the replay's (the paper's Proposition 1).
 - **Not prompt caching.** The cassette returns a recorded answer, with no call. The prompt (prefix) caching of
   providers and servers reuses the computation of a prompt prefix and still generates the answer: it saves price
-  and time per call, not calls, and the server's prefix cache is one of the settings that break R (§5.7).
+  and time per call, not calls, and the server's prefix cache is one of the settings that break R (§5.2).
 - **The cassette.** `traceeval baseline` keeps every answer the model gives the original app
   (`history/cassette.jsonl`). When the repetitions answer a request in more than one way, the answer given most
   often is kept.
@@ -358,15 +382,17 @@ flowchart LR
   opens an agent's conversation, and then what the agent is sent up front changed (its prompt, skills, tools or
   task), or comes later, and then a tool result changed.
 - **What a run costs.** Replaying a copy takes a few seconds of CPU. A diverged test is charged its tokens after
-  the divergence point: the requests before it are answered from the cassette. That is what the replay alone can
-  say, and it is an upper bound: after its divergence point a run still sends requests the original app made
-  (the turn of an agent the change does not touch, say), and a check answers those from the cassette too. A
-  recording counts their tokens (`llm/cache.py::Compare`), and the report gives the strategies' tokens both ways.
+  the divergence point, since the requests before it are answered from the cassette.
+  - That charge is what the replay alone can say, and it is an upper bound: after its divergence point a run
+    still sends requests the original app made (the turn of an agent the change does not touch, say), and a check
+    answers those from the cassette too.
+  - A recording counts their tokens (`llm/cache.py::Compare`), and the report gives the strategies' tokens both
+    ways.
 - **What the verdicts mean.** A replayed failure of a test that passes on the original app is a regression found
   for no tokens. A strategy that orders the whole suite and runs every diverged test without a failure gives a
   clean verdict that leaves no reachable test untested.
 - **The condition.** All of it holds as far as condition R holds under the serving setup in use. A recording
-  measures it three ways (§5.7):
+  measures it three ways (§5.2):
   - request by request: while the changed copies are recorded, each answer is compared with the cassette's answer
     to the same request (`llm/cache.py::Compare`);
   - on the empty change: the original app run as the changed copies are, against the baseline;
@@ -385,7 +411,7 @@ by how late the change reaches the test.
 ### 3.4 Stopping with a bounded miss rate
 
 After the replay, a clean verdict that leaves nothing untested costs every diverged test. A rule that stops
-sooner has to say how often it is wrong. `scripts/analysis/stop_with_guarantee.py` measures such rules (§5.9),
+sooner has to say how often it is wrong. `scripts/analysis/stop_with_guarantee.py` measures such rules (§5.4),
 and `traceeval check --miss-rate` stops by one of them.
 
 ```mermaid
@@ -445,12 +471,15 @@ flowchart LR
   constant, and the check says what it rests on.
 - **A coverage floor under the threshold** (`coverage.py::coverage_floor`; `traceeval check --floor`, and the
   variant `adaptive_bayes_floor`). A threshold says when the evidence is strong enough, not what has been looked
-  at. Before a clean verdict, the floor runs the cheapest reached tests that, with the tests already run and those
-  the replay settled, cover every changed component some test exercised on the original app and every affected
-  mandatory property some test checks: a greedy weighted set cover, by the uncovered items a test adds per token.
-  It runs last, so a failure found earlier costs nothing more; it takes the place of the mandatory rule (§3.1),
-  which covers the properties alone. It is suite minimization done per change, among the reached tests, and kept
-  as a floor: covering a component is not catching its break.
+  at.
+  - Before a clean verdict, the floor runs the cheapest reached tests that, with the tests already run and those
+    the replay settled, cover every changed component some test exercised on the original app and every affected
+    mandatory property some test checks.
+  - It is a greedy weighted set cover, by the uncovered items a test adds per token.
+  - It runs last, so a failure found earlier costs nothing more, and it takes the place of the mandatory rule
+    (§3.1), which covers the properties alone.
+  - It is suite minimization done per change, among the reached tests, and kept as a floor: covering a component
+    is not catching its break.
 
 Five rules are measured: a random order with random values (what a threshold buys with no information); the
 TF-IDF similarity of a test to the diff (`ir_tfidf`'s order); a logistic model of "this test reveals this change"
@@ -515,34 +544,40 @@ The set is written for the models:
   hand-off of ids between steps, the services behind the AEM-style agents, and two benign ones.
 
 `docs/USER_GUIDE.md` §6 explains each of the 43 and why it is in the set. Three batches by hand and twenty drawn at
-random bundle several of them, as a nightly run or a pull request would (§5.6); they are kept out of the tables of
-§5.1, which are the 43 single changes.
+random bundle several of them, as a nightly run or a pull request would. They have a section of their own (§5.5);
+the tables of the other sections are over the single changes.
 
 The 43 were chosen, and a set that is chosen can flatter a method. A second set is therefore generated
 (`traceeval/mutation/generator.py`): every edit of sixteen kinds that the app's own files allow, one per place
-the edit applies to, 692 on the current app. They are the systematic counterparts of the hand-written kinds (a
-step of a procedure deleted, swapped or with its condition negated, a guard or a rule deleted, a tool taken from
-an agent, a setting at another value, two arguments swapped in an adapter, a condition negated in the code, a
-tool's description cut short, a value of the starting data replaced) and two kinds meant to break nothing (a
-skill's prose re-wrapped, a comment). No one labels them: the recording says which a test reveals (§5.8).
+the edit applies to, 692 on the current app. No one labels them: the recording says which a test reveals (§5.3).
+The kinds are:
+
+- the systematic counterparts of the hand-written kinds: a step of a procedure deleted, swapped or with its
+  condition negated, a guard or a rule deleted, a tool taken from an agent, a setting at another value, two
+  arguments swapped in an adapter, a condition negated in the code, a tool's description cut short, a value of
+  the starting data replaced;
+- two kinds meant to break nothing: a skill's prose re-wrapped, and a comment.
 
 The kinds were fixed in two rounds: thirteen kinds (598 changes) before any generated change was recorded, and
 three more, all edits to text the model reads (94 changes: a sentence of an agent's prompt deleted, an agent's
-description cut short, a parameter's description emptied), once §5.9 had shown that edits to text had too few
+description cut short, a parameter's description emptied), once §5.4 had shown that edits to text had too few
 regressions for a stop threshold. Both rounds are generated and recorded the same way, and no change was dropped.
 
 The report checks a sanity property of the testbed: every regression-inducing change is revealed by at least one
 test, and no benign change is revealed by any test. Under Gemma five regressions are revealed by no test (§5.1);
-the other models' recordings are the subject of §5.4.
+the other models' recordings are the subject of §5.8.
 
 ### 4.4 Protocol and metrics
 
-The recording is `docs/EXPERIMENT.md` §5's `baseline` and `mutants` steps with $K$ repetitions; a recording of the
-180 tests under 43 changes and the empty change with 5 repetitions is about 40k runs. Its manifest says what it
-was made from and with: the model and its server, the commit, digests of the app and of the catalog, and how
-each part was run. The changed copies are made from the recording's own copy of the original app. `evaluate`
-then replays, once per (change, strategy, budget, seed), with the budget one of 2, 5, 10, 20, 30, 50 or 100% of
-the full-suite tokens:
+The recording is `docs/EXPERIMENT.md` §5's `baseline` and `mutants` steps with $K$ repetitions:
+
+- the 180 tests under 43 changes and the empty change with 5 repetitions are about 40k runs;
+- its manifest says what it was made from and with: the model and its server, the commit, digests of the app and
+  of the catalog, and how each part was run;
+- the changed copies are made from the recording's own copy of the original app.
+
+`evaluate` then replays, once per (change, strategy, budget, seed), with the budget one of 2, 5, 10, 20, 30, 50 or
+100% of the full-suite tokens:
 
 - the strategy sees the baseline facts and the change set only, and learns from the other recorded changes, except
   those that share a change with the one under test (a batch's members, and the batches that hold one of them);
@@ -552,13 +587,16 @@ the full-suite tokens:
 - the seeds draw which recorded run answers a test and the choices of the strategies that draw at random. The
   sample behind every number is the changes, so the report's intervals are bootstrap intervals over the changes.
 
-The generated changes (§4.3) are recorded for the tests they reach only: a copy is replayed first, the tests
-that diverge are run with the model, and the others keep the replay's outcome. They are split into two fixed
-halves, kind by kind: the strategies that learn from other changes (`history_ml`, the adaptive method's
-calibration) learn from one half, and every strategy is evaluated on the other. No constant of a strategy was
-set after they were recorded: the recording's manifest holds a digest of the strategies' code, that of commit
-`3f240f3`. The stopping rule of §3.4 is an option of `adaptive_bayes` added since, which leaves its default run
-as it was.
+The generated changes (§4.3) are recorded and evaluated with two differences:
+
+- they are recorded for the tests they reach only: a copy is replayed first, the tests that diverge are run with
+  the model, and the others keep the replay's outcome;
+- they are split into two fixed halves, kind by kind: the strategies that learn from other changes (`history_ml`,
+  the adaptive method's calibration) learn from one half, and every strategy is evaluated on the other.
+
+No constant of a strategy was set after they were recorded: the recording's manifest holds a digest of the
+strategies' code, that of commit `3f240f3`. The stopping rule of §3.4 is an option of `adaptive_bayes` added
+since, which leaves its default run as it was.
 
 `replay-first` replays every copy against the recording's cassette (§3.3), and `evaluate` then makes the same
 evaluation a second time, replay-first: a test that replays to the end is not run, a replayed failure of a test
@@ -585,10 +623,11 @@ The metrics:
 
 ## 5. Results
 
-### 5.1 Gemma (`runs/gemma8`: 180 tests and 43 changes, 5 repetitions each, the model judge, 5 replay seeds)
+### 5.1 The recording and its ground truth
 
-The agents are played by Gemma 4 E4B, served with vLLM on a GPU server (`docs/EXPERIMENT.md`). The ground truth
-belongs to the model:
+The recording of record is `runs/gemma8`: 180 tests and 43 changes, 5 repetitions each, with the model judge, and
+5 replay seeds for every strategy. The agents are played by Gemma 4 E4B, served with vLLM on a GPU server
+(`docs/EXPERIMENT.md`). The ground truth belongs to the model:
 
 - on the original app 172 of 180 tests pass; the eight failures are Gemma's own mistakes (`docs/EXPERIMENT.md`
   §6);
@@ -603,192 +642,7 @@ On the app before the fixes of `TODO.md` §3 (`runs/gemma7`), the empty change r
 at any number of runs (`docs/results/gemma7/noise_floor.md`), and the whole experiment recorded again from scratch
 moves 4 of the 7,740 labels (`docs/results/gemma7/second_recording.md`).
 
-Detection of the 28 regressions by nominal budget, and the tokens actually spent as a mean over all 43 changes
-(share of the full suite), every strategy over the whole suite; §5.7 has the same with the replay in front:
-
-| strategy | 5% | 10% | 20% | 50% | 100% | tokens @5% | tokens @20% | tokens @100% |
-|---|---|---|---|---|---|---|---|---|
-| full (catalog order) | 0.14 | 0.25 | 0.43 | 0.96 | 1.00 | 0.048 | 0.169 | 0.464 |
-| random | 0.24 | 0.39 | 0.64 | 0.91 | 1.00 | 0.046 | 0.154 | 0.445 |
-| declared | 0.61 | 0.61 | 0.61 | 0.61 | 0.61 | 0.016 | 0.038 | 0.054 |
-| ir_tfidf | 0.71 | 0.79 | 0.93 | 1.00 | 1.00 | 0.033 | 0.100 | 0.339 |
-| observed | 0.64 | 0.79 | 0.86 | 0.89 | 1.00 | 0.030 | 0.086 | 0.176 |
-| observed_diverse | 0.54 | 0.82 | 0.93 | 1.00 | 1.00 | 0.038 | 0.094 | 0.161 |
-| cost_aware | 0.64 | 0.79 | 0.86 | 0.89 | 1.00 | 0.034 | 0.109 | 0.378 |
-| history_ml | 0.71 | 0.86 | 0.89 | 0.96 | 1.00 | 0.033 | 0.100 | 0.363 |
-| casper_slices (CASPER, adapted) | 0.36 | 0.48 | 0.65 | 0.81 | 1.00 | 0.043 | 0.145 | 0.468 |
-| risk_aware_ts (Risk-Aware Adaptive Evaluation, adapted) | 0.34 | 0.49 | 0.63 | 0.88 | 0.99 | 0.045 | 0.147 | 0.447 |
-| adaptive_bayes | 0.78 | 0.81 | 0.81 | 0.85 | 0.85 | 0.027 | 0.051 | 0.085 |
-
-**Reading** (the report's sections 2 to 4 hold the full tables, with intervals over the changes):
-
-- *RQ1/RQ2.* Declared metadata caps detection at 61%: for eleven regressions no revealing test declares what
-  changed (shared skills reached through `include`, harness code and most configuration keys). Observed
-  dependencies have full selection recall: 86% of the regressions within a 20% budget, all with no budget.
-- *RQ3.* Informed orders raise $\mathrm{APFD}_c$ from 0.77 (random) to between 0.89 and 0.94. The first detection
-  comes after 1.7% of the suite's tokens for the adaptive method, 3.6% for `ir_tfidf`, and 11% to 12% for the
-  adapted methods.
-- *RQ4.* Every run ends at its first failure, so what differs is what a run without a failure costs. `declared`
-  aside, the adaptive method spends the least: 78% of the regressions for 2.7% of the tokens at a 5% budget, 81%
-  for 5.1% at 20%. Its lead at 5% is not established on 28 regressions (6 points over `ir_tfidf` and
-  `history_ml`, with an interval from -7 to +21); the generated changes establish it (§5.8). Its ceiling is 85%:
-  it calls four narrow regressions clean, so that at a 20% budget 27% of its clean verdicts are wrong. It never
-  calls a change no test reveals a regression.
-- *Verdicts.* `observed` gives a clean verdict when every test whose traces touched the change has passed, and none
-  of those is on a regression; `declared` gives one whenever its selection has run, half of them on a regression;
-  the strategies that order the whole suite give none until the suite has run.
-- *Text and history.* TF-IDF over the diff finds 93% at a 20% budget and reads no trace (78% without the declared
-  block in a test's text, `scripts/analysis/test_text.py`). `history_ml` does as well and no better, and the
-  adaptive method's calibration adds nothing measurable (`scripts/analysis/method_ablations.py`).
-- *The adapted methods.* CASPER's slices and the risk-aware bandit do not read the diff: 65% and 63% at a 20%
-  budget, the level of a random order (64%), and a first detection at 11% to 12% of the suite. The bandit's score
-  is the test's risk, so it does better on the changes that break a safety property (76% at 20%). CASPER was built
-  for changes with no diff to map, such as a model update, and needs only the logs of the last full run: on a
-  platform like AEM's it is the natural first pass after a model update, and its slices could serve as the
-  adaptive method's near-duplicate groups.
-- *Live.* `traceeval check`, run live on the 43 changes with Gemma started anew on other GPUs, gives the
-  evaluator's replay-first verdict on 41, after as many tests (`docs/results/gemma8/live_checks.md`). The one
-  false alarm is a workflow test that fails its one live run and passes five of five in the recording; the other
-  exception is a check whose budget buys more tests live than the evaluator charges.
-
-### 5.2 Text in the method: an option (roadmap 3(b))
-
-The method's text signal (the tilt in §3.1) can be word overlap (the default), the TF-IDF similarity of `ir_tfidf`
-(`adaptive_bayes_tfidf`), or nothing (`adaptive_bayes_notext`). At a 5% budget the three find 78%, 82% and 60% of
-the regressions for 2.6% to 3.0% of the suite's tokens; at 20%, 81%, 86% and 71% (`ir_tfidf` alone: 71% and 93%).
-TF-IDF brings forward the one test that reveals a narrow change. Without any text the method loses ten points at a
-20% budget and eighteen at 5%, while removing the tests' own records, the calibrated kind ratios, the
-near-duplicate discount or the risk tilt costs at most one point (`scripts/analysis/method_ablations.py`). The
-testbed is textual, which favours any text measure; the default stays word overlap until a recording of another
-application shows whether the gain holds there too (tau2-bench, §6).
-
-### 5.3 Coverage, and mandatory properties in the method
-
-Coverage is a metric the Adobe Team asked for (`docs/AEM_ALIGNMENT.md` §3.5); the report's section 6 gives it for
-the suite and for each change. On this app:
-
-- every agent, skill, configuration key, property and workflow has a test;
-- one tool (`get_asset`) and two setting values have none;
-- the declared metadata misses one skill and three settings that the traces show in use.
-
-Change coverage needs no ground truth. Observed, cost-aware and TF-IDF selection and the adaptive method all
-exercise 97% of the changed components at a 20% budget (one change touches code no test runs). No strategy checks
-all the properties a change may affect, since every run ends at its first failure: the adaptive method checks half
-of them (0.50), `observed` 0.57, and the bandit, which runs the risky tests first, 0.72. The adaptive method also
-stops as soon as it is confident. That is the purpose of stopping, but it would also let the method call a change
-clean with a mandatory property untested.
-
-Step 5 of the method (on by default; `adaptive_bayes_nomandatory` is the ablation) closes that gap. A run that
-found no regression does not end before every mandatory property the change may affect has a test, while the budget
-allows. The test chosen is the cheapest one that checks the property and passes on the original app.
-
-At a 20% budget the rule raises the share of regression-free runs that tested every affected mandatory property
-from 0.33 to 0.90, for 0.8 extra tests per change, and detection from 0.78 to 0.81.
-
-On this app the rule is also a detector. It catches `skill_publish_drop_link_validation`, which the method alone
-calls clean: before ending, the method must test the mandatory property `safety_no_broken_publish`, and that test
-fails. The rule never caused a false verdict. Below a 10% budget it often cannot afford the extra test.
-
-### 5.4 Qwen and gpt-oss recorded many tests at once: not a ground truth
-
-Both were recorded on the app as it was before the fixes of `TODO.md` §3, with five repetitions, the baseline one
-test at a time and the changed copies many at once: Qwen3.8-27B (`runs/qwen7`, `docs/results/qwen7/`) and
-gpt-oss-120b (`runs/gptoss7`, `docs/results/gptoss7/`). Neither is a clean ground truth (`docs/EXPERIMENT.md` §6
-has the tests each model gets wrong):
-
-- every benign change is "revealed", by three to six tests under Qwen and two to five under gpt-oss, the empty
-  change included, and the changes' own runs disagree on 357 and 577 (change, test) pairs;
-- the variation sits in a few tests, mostly long workflows (seven under Qwen, thirteen under gpt-oss), and more
-  repetitions do not settle it: the majorities over five runs and over three differ on 75 and 95 pairs;
-- CASPER's representatives include such tests, so that its slices appear to detect 92% (Qwen) and 86% (gpt-oss)
-  at a 20% budget.
-
-The empty change recorded one test at a time, and fifteen times many at once, separates the causes:
-
-| | one test at a time | many at once |
-|---|---|---|
-| Gemma | no test flips, and no test's runs disagree | no test flips, at any number of runs up to fifteen |
-| Qwen | no test flips; the runs disagree on WF5-02 | five or six tests flip at every number of runs; SEO-05 fails every batched run and passes every run one at a time |
-| gpt-oss | ten tests flip across two starts of the server, and five or six disagree with themselves | eight tests flip |
-
-vLLM's batch-invariant mode, which would take the batch out of the arithmetic, serves neither Qwen3.8 nor Gemma 4
-(`docs/results/gemma7/batch_invariant.md`). Qwen therefore needs its changed copies recorded one test at a time,
-which is how `runs/qwen8` is made (§5.7); for gpt-oss even that is not enough, since its outcomes change with a
-start of the server. The lesson for a pipeline is to measure how much the model's answers vary under the serving
-setup the selection will run on, one test at a time and in batches, before trusting a ground truth or a stopping
-rule. The empty change measures exactly that.
-
-### 5.5 Take-aways
-
-What the experiments say, in the order a team would act on them. The numbers are Gemma's.
-
-1. **Keep the model's answers, not only the traces.** A cassette keyed by the exact request lets every test run
-   again after a change in seconds; a fifth of the changes then need no model, and the others reach 40 of the 180
-   tests on average (§5.7, §5.8).
-2. **Measure whether the server repeats itself, at the level of the outcome,** with the empty change, per model and
-   serving setup (§5.4, §5.7). Where exact answers are worth a recording ten times slower, serve one test at a time
-   without the prefix cache.
-3. **Compare with a cache, not with the full suite.** The cache brings a second run of the suite to 13.5% of its
-   tokens with no method; replay-first costs 5% to 7%, because knowing which tests a change reaches lets a run end
-   at its first failure (§5.7).
-4. **Compare strategies under the same rules:** end every run at its first failure, and leave out the tests the
-   model already fails (§3).
-5. **Order for cost, not for detection.** Over the reached tests every order finds nearly every regression, and a
-   good one does it for half the tokens of a random one (§5.7). Without the replay, the strategies that do not read
-   the change stay at a random order's level (§5.1).
-6. **Stop early only with a miss rate you chose,** set per group of changes and on a score that travels to changes
-   unlike the past ones, and record enough changes of the groups whose clean verdicts cost the most (§5.9).
-7. **Confirm a failure, and make the mandatory properties a rule.** Running a failing test again removes most false
-   alarms (§5.9); testing every mandatory property a change may affect costs under one extra test per change and
-   catches a change the stopping rule alone misses (§5.3).
-8. **Know which prompts every test reads, and record traces all the same.** An edit to such a prompt reaches the
-   whole suite (153 of the 180 tests here). Traces give the dependencies an order and a coverage report need, where
-   hand-written metadata finds 61% of the regressions (§5.1).
-
-### 5.6 Batches of changes
-
-A nightly run sees a day's merges at once, and a pull request several related edits. A batch is replayed and
-checked like a single change, with one more rule: the method does not learn from the batch's members, nor from the
-batches that share one (§4.4). `runs/gemma8_batches` holds 23 batches beside the 43 single changes: the three of
-the catalog (`batch_nightly`, six regressions and two harmless edits; `batch_publishing_pr`, three related changes
-on the publishing path; `batch_benign`, all nine harmless edits) and twenty of two to eight changes drawn at random
-(`scripts/batch_sweep.py`). Eighteen have a member that is a regression on its own, and a test reveals twenty
-(`docs/results/gemma8_batches/batches.md` has every batch).
-
-- *The replay prunes less, and stays exact:* 10 to 172 of the 180 tests diverge, 120 on average, and none of the
-  1,374 outcomes that replay to the end differs from the recorded majority.
-- *A batch is not the union of its members.* PUB-02 fails under three batches that hold the reordered routing
-  guidance, two of them harmless edits only, and passes under every member alone; `batch_nightly` gains two
-  revealing tests. No batch loses one of its members'.
-- *The size makes no difference to detection.* With no budget every order of the reached tests finds every
-  revealed batch. Members held out, `adaptive_bayes` finds 88% of them at a 5% budget and 95% at 20%, after four
-  to six tests and 1.7% to 2.7% of the suite; calibrated on the members too, 95% at both budgets after two to four.
-- *The posterior names the member to blame:* in 88 of the 95 runs that end at a failure, the component blamed most
-  belongs to a member that is a regression alone (`scripts/analysis/batch_calibration.py`).
-- *The members' own replays give the day's map before any model call* (`traceeval/experiment/culprits.py`,
-  `docs/results/gemma8_batches/culprits.md`). A batch reaches exactly the tests its members reach alone (2,766 over
-  the 23 batches, none more, none fewer): what the members change together is outcomes, not which tests the change
-  reaches. 18 of the 117 members reach no test and need no model; the one regression among them is a change no test
-  reveals, so the map shows the suite's gap before anything runs. 1,505 of the reached tests are reached by one
-  member, and a failure there names it. Checked once for the batch, the reached tests take 55% of the tokens of
-  checking each member alone.
-- *The members' own replays name the suspects, for no tokens:* for a test that fails on the batch, the members
-  whose own replay reaches it or fails it. Every member the test reveals alone is a suspect, in 273 of 273 pairs of
-  a batch and a revealing test, as Proposition 1 of the paper says it must be. The suspects are 1.9 of 5.7 members
-  on average, and the culprit alone in 85. Halving them finds a culprit in 0.9 runs of the failing test, halving
-  all the members in 2.5. The 5 pairs only the members together fail have suspects too, none of which fails alone.
-- *Live,* with the members held out and a 20% budget, `traceeval check` finds 19 of the 20 revealed batches,
-  `batch_benign` included, and gives no regression verdict on the other three. The one missed is a batch of
-  harmless edits revealed only by PUB-02, which runs out of budget. For the test each check failed on, the suspects
-  hold the culprit in all 18 failures with one, and name it alone in 9; the component blamed most belongs to it in
-  13.
-
-So a batch is checked like a change, whatever its size. Before it runs, the members' replays say which members need
-the model at all and which tests each reaches; after a red run they name the suspects for free, and the posterior
-says which of them to look at first. Harmless edits are not harmless together, so a nightly batch needs its own
-recording, not the sum of the day's single-change checks.
-
-### 5.7 Replay-first
+### 5.2 Replay-first
 
 `traceeval replay-first` replays the original app and the 43 changed copies of `runs/gemma8` against the
 recording's cassette in under a minute, without a model (§3.3). The report's section 7 has the full tables.
@@ -855,7 +709,7 @@ the cassette lacks (`docs/results/gemma8/second_recording.md`, `docs/results/gem
   PUB-07 and SEO-07, which Qwen fails on the original app. Its replay settles eight changes.
 
 **The strategies, replay-first.** Detection of the 28 regressions of `runs/gemma8`, with the tokens spent as a mean
-over all changes, charged by the bound: each strategy as in §5.1, and replay-first.
+over all changes, charged by the bound: each strategy over the whole suite (§5.6), and replay-first.
 
 | strategy | 5% budget | replay-first | 20% budget | replay-first | no budget | replay-first |
 |---|---|---|---|---|---|---|
@@ -878,18 +732,23 @@ over all changes, charged by the bound: each strategy as in §5.1, and replay-fi
   depth do about as well as a random one.
 - *A clean verdict leaves nothing the change reaches untested,* and none of those verdicts is given on a
   regression. On the 15 changes no test reveals it costs every diverged test, 22% to 25% of the suite by the bound
-  and 80% on an edit to a prompt every request reads: that is what the stopping rule of §5.9 is for.
+  and 80% on an edit to a prompt every request reads: that is what the stopping rule of §5.4 is for.
   `adaptive_bayes` stops early with its constant, for 2.1% of the tokens and 96% of the regressions.
 - *Against a cache.* The charge above is an upper bound: 38% of the requests a diverged test sends after its
-  divergence point are ones the original app made too. Charged for its new requests only, an order of the reached
-  tests costs 5.1% to 6.6% of the suite, and the whole suite through an exact-match cache 13.5% (5.0% for the
-  median change). Replay-first is cheaper because a run ends at its first failure and leaves out the tests the
-  model already fails; on a change no test reveals the two cost the same.
+  divergence point are ones the original app made too. Charged for its new requests only:
+  - an order of the reached tests costs 5.1% to 6.6% of the suite;
+  - the whole suite through an exact-match cache costs 13.5% (5.0% for the median change);
+  - replay-first is cheaper because a run ends at its first failure and leaves out the tests the model already
+    fails; on a change no test reveals the two cost the same.
 - *Under Qwen,* `adaptive_bayes` with its own constant finds 84% of the regressions for 1.6% of the suite, and 31%
   of its clean verdicts are given on a regression: its constants were set on Gemma, and Qwen has no generated
   recording to set a threshold on.
+- *Live.* `traceeval check`, run live on the 43 changes with Gemma started anew on other GPUs, gives the
+  evaluator's replay-first verdict on 41, after as many tests (`docs/results/gemma8/live_checks.md`). The one
+  false alarm is a workflow test that fails its one live run and passes five of five in the recording; the other
+  exception is a check whose budget buys more tests live than the evaluator charges.
 
-### 5.8 Generated changes
+### 5.3 Generated changes
 
 The 692 generated changes of §4.3, on `runs/gemma8`'s original app and cassette (`runs/gemma8_gen`, report in
 `docs/results/gemma8_gen/report.md`). Each is replayed for no tokens (`traceeval replay-first --generated`, half an
@@ -907,7 +766,7 @@ so no run ends (the app has no limit on model calls per run, `TODO.md` §3).
 | the starting data | 85 | 48 (3 as regressions) | 3 | 35% |
 | all | 692 | 134 (36 as regressions) | 33 | 316 of 691 |
 
-- *The picture of §5.7 holds on a set nobody chose:* 19% of the changes need no model (19% of the 43), and the
+- *The picture of §5.2 holds on a set nobody chose:* 19% of the changes need no model (19% of the 43), and the
   mean change leaves 21% of the suite to run (21%). 2.8% of the requests the original app had made are answered
   otherwise.
 - *What the suite reveals depends on what the change edits:* nearly every change to code, settings or an agent's
@@ -929,7 +788,7 @@ do so from one fixed half, 349 changes, and all are evaluated on the other 342, 
   on a regression. An order calls about 1% of the regressions clean: runs that draw a passing run of a revealing
   test whose runs disagree.
 
-### 5.9 Stopping with a bounded miss rate, and a failure confirmed
+### 5.4 Stopping with a bounded miss rate, and a failure confirmed
 
 The rule and its promise are in §3.4. `scripts/analysis/stop_with_guarantee.py` measures it on `runs/gemma8_gen`
 (full tables in `docs/results/gemma8_gen/stopping.md`): of the 691 changes the replay settles 134, and 281 of the
@@ -1036,7 +895,7 @@ the 43 hand-written changes, with no budget and the thresholds set on `runs/gemm
   before every reached test has run;
 - at a 20% target it calls three regressions clean (two changes to code and the authoring skill without its
   metadata step), 3 of 28 and within the target, for 2.0% per check;
-- with the method's constant and a 20% budget (§5.1) the check found 27, with one false alarm.
+- with the method's constant and a 20% budget (§5.2) the check found 27, with one false alarm.
 
 **A failure confirmed by a repetition** (`scripts/analysis/confirm_failures.py`; `traceeval check --confirm`). One
 failing run of a test whose runs disagree can be the minority. Four orders of the reached tests are replayed with
@@ -1049,20 +908,224 @@ no budget, a repetition being another recorded run of the same test on the same 
   for about a point and a half of the suite's tokens; two failures of three lose least on the one regression whose
   only revealing test fails three runs of five.
 
+### 5.5 Batches of changes
+
+A nightly run sees a day's merges at once, and a pull request several related edits. A batch is replayed and
+checked like a single change, with one more rule: the method does not learn from the batch's members, nor from the
+batches that share one (§4.4). `runs/gemma8_batches` holds 23 batches beside the 43 single changes
+(`docs/results/gemma8_batches/batches.md` has every batch):
+
+- the three of the catalog: `batch_nightly` (six regressions and two harmless edits), `batch_publishing_pr`
+  (three related changes on the publishing path) and `batch_benign` (all nine harmless edits);
+- twenty of two to eight changes drawn at random (`scripts/batch_sweep.py`).
+
+Eighteen have a member that is a regression on its own, and a test reveals twenty.
+
+- *The replay prunes less, and stays exact:* 10 to 172 of the 180 tests diverge, 120 on average, and none of the
+  1,374 outcomes that replay to the end differs from the recorded majority.
+- *A batch is not the union of its members.* PUB-02 fails under three batches that hold the reordered routing
+  guidance, two of them harmless edits only, and passes under every member alone; `batch_nightly` gains two
+  revealing tests. No batch loses one of its members'.
+- *The size makes no difference to detection.* With no budget every order of the reached tests finds every
+  revealed batch. Members held out, `adaptive_bayes` finds 88% of them at a 5% budget and 95% at 20%, after four
+  to six tests and 1.7% to 2.7% of the suite; calibrated on the members too, 95% at both budgets after two to four.
+- *The posterior names the member to blame:* in 88 of the 95 runs that end at a failure, the component blamed most
+  belongs to a member that is a regression alone (`scripts/analysis/batch_calibration.py`).
+- *The members' own replays give the day's map before any model call* (`traceeval/experiment/culprits.py`,
+  `docs/results/gemma8_batches/culprits.md`):
+  - a batch reaches exactly the tests its members reach alone (2,766 over the 23 batches, none more, none fewer):
+    what the members change together is outcomes, not which tests the change reaches;
+  - 18 of the 117 members reach no test and need no model. The one regression among them is a change no test
+    reveals, so the map shows the suite's gap before anything runs;
+  - 1,505 of the reached tests are reached by one member, and a failure there names it;
+  - checked once for the batch, the reached tests take 55% of the tokens of checking each member alone.
+- *The members' own replays name the suspects, for no tokens:* for a test that fails on the batch, the members
+  whose own replay reaches it or fails it.
+  - Every member the test reveals alone is a suspect, in 273 of 273 pairs of a batch and a revealing test, as
+    Proposition 1 of the paper says it must be.
+  - The suspects are 1.9 of 5.7 members on average, and the culprit alone in 85.
+  - Halving them finds a culprit in 0.9 runs of the failing test, halving all the members in 2.5.
+  - The 5 pairs only the members together fail have suspects too, none of which fails alone.
+- *Live,* with the members held out and a 20% budget, `traceeval check` finds 19 of the 20 revealed batches,
+  `batch_benign` included, and gives no regression verdict on the other three. The one missed is a batch of
+  harmless edits revealed only by PUB-02, which runs out of budget. For the test each check failed on, the suspects
+  hold the culprit in all 18 failures with one, and name it alone in 9; the component blamed most belongs to it in
+  13.
+
+So a batch is checked like a change, whatever its size. Before it runs, the members' replays say which members need
+the model at all and which tests each reaches; after a red run they name the suspects for free, and the posterior
+says which of them to look at first. Harmless edits are not harmless together, so a nightly batch needs its own
+recording, not the sum of the day's single-change checks.
+
+### 5.6 Without the replay: the strategies over the whole suite
+
+The same 43 changes with no replay in front: every strategy orders the whole suite. Detection of the 28
+regressions by nominal budget, and the tokens actually spent as a mean over all 43 changes (share of the full
+suite); §5.2 has the same with the replay in front:
+
+| strategy | 5% | 10% | 20% | 50% | 100% | tokens @5% | tokens @20% | tokens @100% |
+|---|---|---|---|---|---|---|---|---|
+| full (catalog order) | 0.14 | 0.25 | 0.43 | 0.96 | 1.00 | 0.048 | 0.169 | 0.464 |
+| random | 0.24 | 0.39 | 0.64 | 0.91 | 1.00 | 0.046 | 0.154 | 0.445 |
+| declared | 0.61 | 0.61 | 0.61 | 0.61 | 0.61 | 0.016 | 0.038 | 0.054 |
+| ir_tfidf | 0.71 | 0.79 | 0.93 | 1.00 | 1.00 | 0.033 | 0.100 | 0.339 |
+| observed | 0.64 | 0.79 | 0.86 | 0.89 | 1.00 | 0.030 | 0.086 | 0.176 |
+| observed_diverse | 0.54 | 0.82 | 0.93 | 1.00 | 1.00 | 0.038 | 0.094 | 0.161 |
+| cost_aware | 0.64 | 0.79 | 0.86 | 0.89 | 1.00 | 0.034 | 0.109 | 0.378 |
+| history_ml | 0.71 | 0.86 | 0.89 | 0.96 | 1.00 | 0.033 | 0.100 | 0.363 |
+| casper_slices (CASPER, adapted) | 0.36 | 0.48 | 0.65 | 0.81 | 1.00 | 0.043 | 0.145 | 0.468 |
+| risk_aware_ts (Risk-Aware Adaptive Evaluation, adapted) | 0.34 | 0.49 | 0.63 | 0.88 | 0.99 | 0.045 | 0.147 | 0.447 |
+| adaptive_bayes | 0.78 | 0.81 | 0.81 | 0.85 | 0.85 | 0.027 | 0.051 | 0.085 |
+
+**Reading** (the report's sections 2 to 4 hold the full tables, with intervals over the changes):
+
+- *RQ1/RQ2.* Declared metadata caps detection at 61%: for eleven regressions no revealing test declares what
+  changed (shared skills reached through `include`, harness code and most configuration keys). Observed
+  dependencies have full selection recall: 86% of the regressions within a 20% budget, all with no budget.
+- *RQ3.* Informed orders raise $\mathrm{APFD}_c$ from 0.77 (random) to between 0.89 and 0.94. The first detection
+  comes after 1.7% of the suite's tokens for the adaptive method, 3.6% for `ir_tfidf`, and 11% to 12% for the
+  adapted methods.
+- *RQ4.* Every run ends at its first failure, so what differs is what a run without a failure costs.
+  - `declared` aside, the adaptive method spends the least: 78% of the regressions for 2.7% of the tokens at a 5%
+    budget, 81% for 5.1% at 20%.
+  - Its lead at 5% is not established on 28 regressions (6 points over `ir_tfidf` and `history_ml`, with an
+    interval from -7 to +21); the generated changes establish it (§5.3).
+  - Its ceiling is 85%: it calls four narrow regressions clean, so that at a 20% budget 27% of its clean verdicts
+    are wrong. It never calls a change no test reveals a regression.
+- *Verdicts.* `observed` gives a clean verdict when every test whose traces touched the change has passed, and none
+  of those is on a regression; `declared` gives one whenever its selection has run, half of them on a regression;
+  the strategies that order the whole suite give none until the suite has run.
+- *Text and history.* TF-IDF over the diff finds 93% at a 20% budget and reads no trace (78% without the declared
+  block in a test's text, `scripts/analysis/test_text.py`). `history_ml` does as well and no better, and the
+  adaptive method's calibration adds nothing measurable (`scripts/analysis/method_ablations.py`).
+- *The adapted methods.* CASPER's slices and the risk-aware bandit do not read the diff.
+  - They find 65% and 63% at a 20% budget, the level of a random order (64%), with a first detection at 11% to 12%
+    of the suite.
+  - The bandit's score is the test's risk, so it does better on the changes that break a safety property (76% at
+    20%).
+  - CASPER was built for changes with no diff to map, such as a model update, and needs only the logs of the last
+    full run: on a platform like AEM's it is the natural first pass after a model update, and its slices could
+    serve as the adaptive method's near-duplicate groups.
+
+**Text in the method: an option.**
+
+The method's text signal (the tilt in §3.1) is an option. Regressions found, with 2.6% to 3.0% of the suite's
+tokens spent at a 5% budget:
+
+| text signal | at a 5% budget | at 20% |
+|---|---|---|
+| word overlap (the default) | 78% | 81% |
+| the TF-IDF similarity of `ir_tfidf` (`adaptive_bayes_tfidf`) | 82% | 86% |
+| nothing (`adaptive_bayes_notext`) | 60% | 71% |
+| `ir_tfidf` alone, for comparison | 71% | 93% |
+
+- TF-IDF brings forward the one test that reveals a narrow change.
+- Without any text the method loses ten points at a 20% budget and eighteen at 5%, while removing the tests' own
+  records, the calibrated kind ratios, the near-duplicate discount or the risk tilt costs at most one point
+  (`scripts/analysis/method_ablations.py`).
+- The testbed is textual, which favours any text measure; the default stays word overlap until a recording of
+  another application shows whether the gain holds there too (tau2-bench, §6).
+
+### 5.7 Coverage, and mandatory properties in the method
+
+Coverage is a metric the Adobe Team asked for (`docs/AEM_ALIGNMENT.md` §3.5); the report's section 6 gives it for
+the suite and for each change. On this app:
+
+- every agent, skill, configuration key, property and workflow has a test;
+- one tool (`get_asset`) and two setting values have none;
+- the declared metadata misses one skill and three settings that the traces show in use.
+
+Change coverage needs no ground truth:
+
+- observed, cost-aware and TF-IDF selection and the adaptive method all exercise 97% of the changed components at
+  a 20% budget (one change touches code no test runs);
+- no strategy checks all the properties a change may affect, since every run ends at its first failure: the
+  adaptive method checks half of them (0.50), `observed` 0.57, and the bandit, which runs the risky tests first,
+  0.72;
+- the adaptive method also stops as soon as it is confident. That is the purpose of stopping, but it would also
+  let the method call a change clean with a mandatory property untested.
+
+Step 5 of the method (on by default; `adaptive_bayes_nomandatory` is the ablation) closes that gap. A run that
+found no regression does not end before every mandatory property the change may affect has a test, while the budget
+allows. The test chosen is the cheapest one that checks the property and passes on the original app.
+
+At a 20% budget the rule raises the share of regression-free runs that tested every affected mandatory property
+from 0.33 to 0.90, for 0.8 extra tests per change, and detection from 0.78 to 0.81.
+
+On this app the rule is also a detector. It catches `skill_publish_drop_link_validation`, which the method alone
+calls clean: before ending, the method must test the mandatory property `safety_no_broken_publish`, and that test
+fails. The rule never caused a false verdict. Below a 10% budget it often cannot afford the extra test.
+
+### 5.8 Qwen and gpt-oss recorded many tests at once: not a ground truth
+
+Both were recorded on the app as it was before the fixes of `TODO.md` §3, with five repetitions, the baseline one
+test at a time and the changed copies many at once: Qwen3.8-27B (`runs/qwen7`, `docs/results/qwen7/`) and
+gpt-oss-120b (`runs/gptoss7`, `docs/results/gptoss7/`). Neither is a clean ground truth (`docs/EXPERIMENT.md` §6
+has the tests each model gets wrong):
+
+- every benign change is "revealed", by three to six tests under Qwen and two to five under gpt-oss, the empty
+  change included, and the changes' own runs disagree on 357 and 577 (change, test) pairs;
+- the variation sits in a few tests, mostly long workflows (seven under Qwen, thirteen under gpt-oss), and more
+  repetitions do not settle it: the majorities over five runs and over three differ on 75 and 95 pairs;
+- CASPER's representatives include such tests, so that its slices appear to detect 92% (Qwen) and 86% (gpt-oss)
+  at a 20% budget.
+
+The empty change recorded one test at a time, and fifteen times many at once, separates the causes:
+
+| | one test at a time | many at once |
+|---|---|---|
+| Gemma | no test flips, and no test's runs disagree | no test flips, at any number of runs up to fifteen |
+| Qwen | no test flips; the runs disagree on WF5-02 | five or six tests flip at every number of runs; SEO-05 fails every batched run and passes every run one at a time |
+| gpt-oss | ten tests flip across two starts of the server, and five or six disagree with themselves | eight tests flip |
+
+What follows for a pipeline:
+
+- vLLM's batch-invariant mode, which would take the batch out of the arithmetic, serves neither Qwen3.8 nor
+  Gemma 4 (`docs/results/gemma7/batch_invariant.md`);
+- Qwen therefore needs its changed copies recorded one test at a time, which is how `runs/qwen8` is made (§5.2);
+  for gpt-oss even that is not enough, since its outcomes change with a start of the server;
+- before trusting a ground truth or a stopping rule, measure how much the model's answers vary under the serving
+  setup the selection will run on, one test at a time and in batches. The empty change measures exactly that.
+
+### 5.9 Take-aways
+
+What the experiments say, in the order a team would act on them. The numbers are Gemma's.
+
+1. **Keep the model's answers, not only the traces.** A cassette keyed by the exact request lets every test run
+   again after a change in seconds; a fifth of the changes then need no model, and the others reach 40 of the 180
+   tests on average (§5.2, §5.3).
+2. **Measure whether the server repeats itself, at the level of the outcome,** with the empty change, per model and
+   serving setup (§5.8, §5.2). Where exact answers are worth a recording ten times slower, serve one test at a time
+   without the prefix cache.
+3. **Compare with a cache, not with the full suite.** The cache brings a second run of the suite to 13.5% of its
+   tokens with no method; replay-first costs 5% to 7%, because knowing which tests a change reaches lets a run end
+   at its first failure (§5.2).
+4. **Compare strategies under the same rules:** end every run at its first failure, and leave out the tests the
+   model already fails (§3).
+5. **Order for cost, not for detection.** Over the reached tests every order finds nearly every regression, and a
+   good one does it for half the tokens of a random one (§5.2). Without the replay, the strategies that do not read
+   the change stay at a random order's level (§5.6).
+6. **Stop early only with a miss rate you chose,** set per group of changes and on a score that travels to changes
+   unlike the past ones, and record enough changes of the groups whose clean verdicts cost the most (§5.4).
+7. **Confirm a failure, and make the mandatory properties a rule.** Running a failing test again removes most false
+   alarms (§5.4); testing every mandatory property a change may affect costs under one extra test per change and
+   catches a change the stopping rule alone misses (§5.7).
+8. **Know which prompts every test reads, and record traces all the same.** An edit to such a prompt reaches the
+   whole suite (153 of the 180 tests here). Traces give the dependencies an order and a coverage report need, where
+   hand-written metadata finds 61% of the regressions (§5.6).
+
 ---
 
 ## 6. Roadmap
 
-| Phase | Deliverable | Status |
-|---|---|---|
-| 1. Testbed | SUT, catalog, tracing, mutations, change sets, record/replay, metrics, report, CLI, tests | done |
-| 2. Methods | baselines + cost-aware + predictive + adaptive Bayesian selector with stopping | done, with the mandatory-coverage rule (§5.3); open: tuning $\varepsilon$, the priors and the discount |
-| 3. Method improvements | (a) test-level learned sensitivities (per test and component kind) instead of kind-level; (b) IR relevance inside the Bayesian likelihood; (c) CASPER-style slices and the Risk-Aware Adaptive Evaluation bandit as adapted baselines | (a) done; (b) done as an option (§5.2); (c) done: `casper_slices` and `risk_aware_ts` (§5.1) |
-| 4. Models | ContentOps with three models (local vLLM): all changes, $K$ repetitions | done: Gemma (`runs/gemma8`) and Qwen one test at a time (`runs/qwen8`, §5.7); the recordings of Qwen and gpt-oss made many tests at a time on an earlier version of the app (`runs/qwen7`, `runs/gptoss7`) are spoiled by run-to-run variation and are not used for the results (§5.4) |
-| 5. Second system under test | tau2-bench, a public benchmark of tool-using agents with a simulated user (`docs/REFERENCES.md`): the airline domain, 50 tasks with a reward computed from the database state and the agent's communication, no model judge; the local model plays both the agent and the user, the controlled changes mutate the policy and the tool code (12 mutations: 6 policy, 4 tool-code, 2 benign), and the replay evaluator and the strategies run unchanged | next |
-| 6. Scale/robustness | changes generated mechanically from the app, recorded and evaluated on a half held out of what the strategies learn from; a second recording under another start of the server; live checks | done: 691 generated changes (§5.8), `runs/gemma8_restart` (§5.7), the 43 live checks (§5.1, §5.9); open: sensitivity to budget definitions (time against tokens), more repetitions for the models whose answers vary |
-| 7. Paper | see §7 | drafted: `docs/paper/main.tex` |
-| 8. Replay-first | a cassette per recording, every changed copy replayed against it, the strategies over the diverged tests, the check in two phases (§3.3); stopping with a bounded miss rate (§3.4) | done on Gemma's recordings (§5.7 to §5.9) and, for the 43 changes, on Qwen's (§5.7); the stopping rule is measured by a script and is in `traceeval check --miss-rate` |
+The plan the work follows, with what is done and what is open, is [`TODO.md`](../TODO.md). In short:
+
+| | state |
+|---|---|
+| the testbed, the strategies, replay-first, the stop with a bounded miss rate, the generated changes, the batches | done on Gemma's recordings (§5.2 to §5.6) and, for the 43 changes, on Qwen's (§5.2) |
+| a second application: tau2-bench, a public benchmark of tool-using agents with a simulated user (`docs/REFERENCES.md`). The airline domain has 50 tasks with a reward computed from the database state and the agent's communication, and no model judge. The local model plays both the agent and the user, the controlled changes mutate the policy and the tool code (12 mutations: 6 policy, 4 tool-code, 2 benign), and the replay evaluator and the strategies run unchanged | next |
+| open questions of method | tuning $\varepsilon$, the priors and the discount; sensitivity to budget definitions (time against tokens); more repetitions for the models whose answers vary |
+| the paper | drafted: `docs/paper/main.tex` (§7) |
 
 Re-planning after a failed step is built on a branch and waits for one product decision (`docs/AEM_ALIGNMENT.md`
 §4.1).
@@ -1072,7 +1135,7 @@ Re-planning after a failed step is built on a branch and waits for one product d
 ## 7. Paper
 
 The draft is `docs/paper/main.tex` (build with `latexmk -pdf main`), written around replay-first from the numbers
-of §5.7 to §5.9: the setting and what is new, the testbed, the abstractions, replay-first and its condition,
+of §5.2 to §5.4: the setting and what is new, the testbed, the abstractions, replay-first and its condition,
 ordering and stopping over the reached tests, the evaluation in five questions with its threats, the take-aways,
 and the conclusion with future work. The strategies' algorithms are in an appendix.
 
@@ -1085,8 +1148,8 @@ Positioning, from the related work (`docs/related_work.md` §8 and its list of c
 | | |
 |---|---|
 | not new | replaying recorded answers into changed code (test factoring, Chronicle); paying a test only after its divergence (mutable replay, exact-match caches) |
-| what the paper claims | the replay as a classification of the suite, before any model call, into tests whose outcome is known and tests the change reaches; selection, ordering and stopping on the reached tests, against test-selection baselines, on hand-written and generated changes; the condition measured at the level of the request, the run and the outcome, with the empty change as reference; a clean verdict with a bounded miss rate (§5.9) |
-| the baseline in every cost | the whole suite re-run through an exact-match cache (§5.7) |
+| what the paper claims | the replay as a classification of the suite, before any model call, into tests whose outcome is known and tests the change reaches; selection, ordering and stopping on the reached tests, against test-selection baselines, on hand-written and generated changes; the condition measured at the level of the request, the run and the outcome, with the empty change as reference; a clean verdict with a bounded miss rate (§5.4) |
+| the baseline in every cost | the whole suite re-run through an exact-match cache (§5.2) |
 
 ---
 

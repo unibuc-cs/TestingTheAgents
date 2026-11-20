@@ -79,7 +79,7 @@ Passing runs of five, for every (change, test) pair whose runs disagree in at le
 
 Four pairs disagree in `runs/gemma7`, seven in the second recording, three in both; no test on the original app
 disagrees in either. DS-INTENTS/i20 and WF4-01, the two pairs at the majority line in `runs/gemma7`
-(`docs/RESEARCH_PLAN.md` §5.4), sit at it again, with other runs passing.
+(`docs/RESEARCH_PLAN.md` §5.8), sit at it again, with other runs passing.
 
 ## 5. Detection at a 20% budget
 

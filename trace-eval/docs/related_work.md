@@ -24,7 +24,7 @@ of §8, on replaying recorded answers, were read at their sources unless marked 
   changed in a skill, prompt or harness to tests. It also reports no APFD-style metric, has no ground truth from
   mutations or injected faults, covers a single application domain and has no stopping rule. Its strength is the
   case this testbed does not cover: a change with no diff to map, such as a model upgrade, where only the logs of
-  the last full run exist (RESEARCH_PLAN §5.1 says where it fits beside the change-aware strategies).
+  the last full run exist (RESEARCH_PLAN §5.6 says where it fits beside the change-aware strategies).
 - **(Why) Is My Prompt Getting Worse? Rethinking Regression Testing for Evolving LLM APIs.** Ma, Yang, Kästner
   (CMU), arXiv 2311.11123. A case study of silent updates to LLM APIs. It identifies three obstacles to classic
   regression testing (no crisp oracle, brittle prompts, nondeterminism) and recommends slicing the suites.
@@ -206,7 +206,7 @@ Fault-injection work that can generate a ground truth or serve as a contrast:
   2025, arXiv 2506.09501. Under greedy decoding, the batch size, the number of GPUs or the GPU type change the
   output, through non-associative floating-point arithmetic at limited precision. It explains why about 2% of the
   requests of a recording are answered otherwise when sent again, and why the condition of replay-first has to be
-  measured per serving setup. Measured here (`RESEARCH_PLAN.md` §5.7): the batch and the server's prefix cache
+  measured per serving setup. Measured here (`RESEARCH_PLAN.md` §5.2): the batch and the server's prefix cache
   account for all of it, and with neither every request gets its recorded answer again, across a restart too,
   under Gemma and under Qwen.
 - **Non-Determinism of "Deterministic" LLM Settings.** Atil et al., arXiv 2408.04667 (Eval4NLP 2025). Identical
@@ -278,7 +278,7 @@ For LLM applications and agents:
 - **Exact-match caches in evaluation frameworks** (promptfoo, Inspect AI, DSPy, a recording proxy in another
   open-source project). With such a cache on, re-running the whole suite after a change pays only for the changed
   requests. That is the baseline replay-first has to beat: on this testbed it costs at most 21% of the suite's
-  tokens per change (RESEARCH_PLAN §5.7). None of them returns "replayed" or "diverged" per test, or orders or
+  tokens per change (RESEARCH_PLAN §5.2). None of them returns "replayed" or "diverged" per test, or orders or
   stops over the diverged tests.
 - **Cassette tooling** (VCR.py, LangChain's and LangSmith's test caches, session recording in agent tools).
   A request the cassette lacks is a failure to fix or a reason to re-record. VCR.py does not match the request

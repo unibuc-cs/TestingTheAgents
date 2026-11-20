@@ -41,8 +41,8 @@ Agent Orchestrator deck and Adobe's public documentation:
 | coverage over the requirements' dimensions, declared, observed and required | yes: suite coverage per dimension and change coverage per strategy in the report and in `traceeval check`; the method tests every mandatory property a change may affect (§3.5) | none |
 | per-test metadata (agents, skills, tools, workflow, risk, cost, history) | yes (declared + observed + history; a workflow test names its workflow) | none |
 | trace assertions | yes: final state, required and forbidden tools, attempts, audit, step limit, termination, agent order and tool order (`agents_in_order`, `tools_in_order`) | none |
-| budgets and early stopping | yes: a change is replayed first, which settles the tests it cannot reach (`traceeval replay-first`; [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7); the method then stops within a budget (`adaptive_bayes`, `traceeval check`) | none |
-| a day's changes checked at once, with the culprit named | yes: batches of changes, three by hand and twenty drawn at random ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.6); the check replays each member alone first, with no model: which tests each reaches and which members need no model at all; for a failing test it prints the suspects, the members whose own replay reaches it, which held every culprit, and the components the method blames | none |
+| budgets and early stopping | yes: a change is replayed first, which settles the tests it cannot reach (`traceeval replay-first`; [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.2); the method then stops within a budget (`adaptive_bayes`, `traceeval check`) | none |
+| a day's changes checked at once, with the culprit named | yes: batches of changes, three by hand and twenty drawn at random ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.5); the check replays each member alone first, with no model: which tests each reaches and which members need no model at all; for a failing test it prints the suspects, the members whose own replay reaches it, which held every culprit, and the components the method blames | none |
 | OpenTelemetry | yes: `traceeval run --otel` exports a run as OTLP JSON spans, with the plan, the routing decisions and the approvals as span events (§3.6) | pushing to a collector, if wanted |
 | environment failures kept apart | yes: such a run is `INFRA_INVALID` and left out of pass rates, the ground truth and the replays ([USER_GUIDE.md](USER_GUIDE.md) §8) | none |
 | agents like AEM's | yes: authoring, publishing, assets (with asset search), SEO, translation, governance, maintenance, and brand governance, data insights, site optimization | none |
@@ -275,7 +275,7 @@ report section 5).
 
 **3. Coverage in the method.** The mandatory flag is also a stopping rule (the `mandatory` row of §3.4): the method
 tests every affected mandatory property before it calls a change clean, for under one extra test per change
-([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.3); `adaptive_bayes_nomandatory` is the method without it.
+([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7); `adaptive_bayes_nomandatory` is the method without it.
 
 ### 3.6 OpenTelemetry export
 
@@ -361,7 +361,7 @@ What the recordings show:
 The branch is merged once that decision is made. Gemma's known mistakes change with it, and the replay answers are
 recorded again.
 
-gpt-oss-120b varies more from run to run than the other two models ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4),
+gpt-oss-120b varies more from run to run than the other two models ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.8),
 so its column is the least firm.
 
 ### 4.2 Order
@@ -379,7 +379,7 @@ Three limits go with the results:
   they cannot reveal a change; WF2-03 among them, which replays in the demo ([DEMO.md](DEMO.md) §3);
 - a one-off difference between runs can make a benign change look revealed or a regression look invisible, which
   the report's sanity line shows as VIOLATED; several repetitions and the majority vote absorb most of it
-  ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4);
+  ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.8);
 - the ground truth belongs to the model: Qwen gets some of Gemma's cases right and makes mistakes of its own.
 
 Sources: [Overview of agents in AEM](https://experienceleague.adobe.com/en/docs/experience-manager-cloud-service/content/ai-in-aem/agents/overview),

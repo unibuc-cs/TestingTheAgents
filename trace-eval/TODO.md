@@ -41,7 +41,7 @@ Order of work: sections 1 to 3 are done; 4 and 5 are done for Gemma, with what i
 
 ## 1. Fair tables (replay only): done
 
-The numbers and their reading are in `docs/RESEARCH_PLAN.md` §5.1 and §5.6.
+The numbers and their reading are in `docs/RESEARCH_PLAN.md` §5.6 and §5.5.
 
 - [x] The same two rules for every strategy (`selection/base.py`): a test the model already fails on the original
       app is not run, and a run ends at its first failure.
@@ -64,7 +64,7 @@ The numbers and their reading are in `docs/RESEARCH_PLAN.md` §5.1 and §5.6.
 
 ## 2. Replay-first in the testbed: done
 
-The numbers and their reading are in `docs/RESEARCH_PLAN.md` §3.3 and §5.7.
+The numbers and their reading are in `docs/RESEARCH_PLAN.md` §3.3 and §5.2.
 
 - [x] `traceeval/experiment/replay_first.py` and `traceeval replay-first`: per change and test, replayed or
       diverged, the outcome, and the divergence point (the requests and tokens replayed before it, and whether the
@@ -131,13 +131,13 @@ The app and the tests:
 ## 4. More evidence (GPU)
 
 - [x] A generator of changes (`mutation/generator.py`): 692 on the current app, in sixteen kinds, without
-      labels. All of them replayed for no tokens (`docs/RESEARCH_PLAN.md` §5.8): 98 settled as clean, 36 as
+      labels. All of them replayed for no tokens (`docs/RESEARCH_PLAN.md` §5.3): 98 settled as clean, 36 as
       regressions, 558 left for the model.
 - [x] The generated changes recorded for the tests they reach only (`runs/gemma8_gen`, five repetitions, 114,230
       runs): 691 of the 692, of which a test reveals 316. The strategies evaluated on the half held out of what
       they learn from (`traceeval evaluate --held-out`, `docs/results/gemma8_gen/report.md`): the picture of the
       43 holds, and `adaptive_bayes`'s lead at a 5% budget without the replay is established there
-      (`docs/RESEARCH_PLAN.md` §5.8). The recording's manifest holds the digest of `traceeval/selection` as it
+      (`docs/RESEARCH_PLAN.md` §5.3). The recording's manifest holds the digest of `traceeval/selection` as it
       was when the first of these changes was recorded.
 - [x] A second recording on the current app, under another start of the server (`runs/gemma8_restart`,
       `docs/results/gemma8/second_recording.md`): the empty change flips no test, 2 of 1,442 labels on the reached
@@ -150,17 +150,17 @@ The app and the tests:
       budget.
 - [ ] Model updates as changes without a diff: the three baselines already give six (`model_updates.py`).
 - [x] A second model with its own cassette, baseline and changed copies recorded the same way (`runs/qwen8`,
-      one test at a time; `docs/results/qwen8/`, `docs/RESEARCH_PLAN.md` §5.7): the empty change flips no test,
+      one test at a time; `docs/results/qwen8/`, `docs/RESEARCH_PLAN.md` §5.2): the empty change flips no test,
       the five runs disagree on 2 of 1,448 reached pairs, the replay settles 8 of the 43 changes, and every
       order of the reached tests finds all 32 of Qwen's regressions for 3.6% to 5.4% of the suite, where the
       cache pays 14.2%. Three changes meant as harmless are regressions under Qwen.
 - [ ] gpt-oss's baseline recorded again, with its cassette.
 - [ ] Generated changes and stop thresholds for Qwen: `adaptive_bayes` with its own constant gives 31% of its
       clean verdicts on a regression there.
-- [x] The condition of replay-first on Gemma's serving setup (`runs/gemma8`; `docs/RESEARCH_PLAN.md` §5.7): the
+- [x] The condition of replay-first on Gemma's serving setup (`runs/gemma8`; `docs/RESEARCH_PLAN.md` §5.2): the
       empty change flips no test, every recorded run of a pair that replays ends like the replay, and about 2%
       of the requests sent again are answered otherwise.
-- [x] Where the requests answered otherwise come from (`docs/RESEARCH_PLAN.md` §5.7): many tests at a time
+- [x] Where the requests answered otherwise come from (`docs/RESEARCH_PLAN.md` §5.2): many tests at a time
       makes a test's runs differ from each other, and the server's prefix cache makes an answer depend on what
       the server was sent before. With neither (`runs/gemma8_exact`: `--workers 1`, and
       `--no-enable-prefix-caching` through `TRACEEVAL_VLLM_ARGS`), no request of 11,010 is answered otherwise,
@@ -208,7 +208,7 @@ The app and the tests:
 
 - [x] A "clean" verdict with a bounded miss rate, before every diverged test has run: a stop threshold set on
       past changes by split conformal prediction, measured on the generated changes
-      (`scripts/analysis/stop_with_guarantee.py`; `docs/RESEARCH_PLAN.md` §3.4 and §5.9):
+      (`scripts/analysis/stop_with_guarantee.py`; `docs/RESEARCH_PLAN.md` §3.4 and §5.4):
       - the miss rate is at its target on average, for every rule; a learned score makes a clean verdict cost
         7.8% of the suite at a 10% target instead of 20.1%;
       - with one threshold the misses pile up in one group of changes (with the learned score, 87% of the
@@ -246,7 +246,7 @@ The app and the tests:
       0.9% of the suite and `ir_tfidf` 1.4%, a random order 2.6% (the 43); on the held-out generated changes
       `adaptive_bayes` 2.6%, `ir_tfidf` 3.5%, a random order 4.7%. Cost and divergence depth add nothing.
 - [x] Replayed outcomes as evidence in `adaptive_bayes`: teaching it on the tests each past change reaches,
-      instead of every test whose traces touch the change, makes its clean verdicts more expensive (§5.9). A
+      instead of every test whose traces touch the change, makes its clean verdicts more expensive (§5.4). A
       replayed pass stays out of its posterior: the floor on every test's sensitivity would let a hundred free
       passes call any change clean.
 
@@ -318,7 +318,7 @@ The daily pipeline:
        group, every clean verdict then covers what the change touches (93% to 98% without), for a few tenths of
        a point of the suite; it catches 25 instead of 31 regressions missed of a kind never seen at a 20% target,
        2 instead of 3 of the hand-written ones. Run first instead of last it costs more on a regression. A fixed
-       minimal set of 15 tests misses 13 of the 25 hand-written regressions (`docs/RESEARCH_PLAN.md` §5.9).
+       minimal set of 15 tests misses 13 of the 25 hand-written regressions (`docs/RESEARCH_PLAN.md` §5.4).
 3. [x] The floor with the adaptive order, until the calibrated threshold:
        `traceeval check --miss-rate 0.1 --floor`.
 4. [x] On a failure of the merged day, the suspects are the CLs whose own replay reaches the failing test or fails

@@ -36,20 +36,20 @@ flowchart TD
 ## What else is in this folder
 
 - `results/`: one folder per recording, each with the report and its figures. `gemma8` is the recording of the
-  current app, with the replay-first section ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7), and beside its report:
+  current app, with the replay-first section ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.2), and beside its report:
   - `gemma8/second_recording.md`: its changed copies recorded again under another start of the server, and what
     a reached test costs when the cassette answers every request it knows;
   - `gemma8/live_checks.md`: `traceeval check` live on each of the 43 changes, against the evaluator.
 
   `gemma8_exact` is the same app and changes recorded with the server set so that every answer repeats, and
-  `qwen8` is Qwen's recording of them, one test at a time ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7).
+  `qwen8` is Qwen's recording of them, one test at a time ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.2).
   `gemma8_batches` adds 23 batches of changes beside them, with `batches.md`: every batch, replayed, evaluated and
   checked live, and `culprits.md`: the members' own replays, which tests each reaches and the suspects of each
-  batch failure among them (§5.6).
+  batch failure among them (§5.5).
 
-  `gemma8_gen` is the recording of the changes generated from the app ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.8),
+  `gemma8_gen` is the recording of the changes generated from the app ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.3),
   evaluated on the half the strategies did not learn from, and beside its report:
-  - `gemma8_gen/stopping.md`: the full tables of the stopping rule with a bounded miss rate (§5.9);
+  - `gemma8_gen/stopping.md`: the full tables of the stopping rule with a bounded miss rate (§5.4);
   - `gemma8_gen/live_checks_miss_rate.md`: `traceeval check --miss-rate` live on each of the 43 changes.
 
   `gemma7`, `qwen7` and `gptoss7` are of the app before the fixes of [TODO.md](../TODO.md) §3, with their

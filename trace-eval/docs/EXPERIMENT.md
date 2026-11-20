@@ -144,7 +144,7 @@ PC gets in through one SSH tunnel per model, which uses the same key you log in 
 
 Runs are repeatable, with one caveat. Decoding is greedy (temperature 0), so the same prompt gives the same answer;
 on vLLM nearly rather than bit-exactly. Two settings of the server enter the arithmetic, and once in a while flip a
-token and with it the rest of the run ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7):
+token and with it the rest of the run ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.2):
 
 | setting | what it does to an answer | how to take it out |
 |---|---|---|
@@ -157,7 +157,7 @@ no request is answered otherwise, of 11,010 for Gemma (`runs/gemma8_exact`) and 
 instead of 16 with Qwen, which was recorded one test at a time already.
 
 How much the default setting matters depends on the model. A change that alters nothing, recorded again and again
-against the baseline, measures it ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4 has the numbers):
+against the baseline, measures it ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.8 has the numbers):
 
 - Gemma: the outcomes agree, one test at a time and in batches;
 - Qwen: they agree one test at a time, not in batches;
@@ -381,7 +381,7 @@ traceeval report --workdir runs/gemma8_gen
 `--reps 1` is good for a first look. For a ground truth you'll rely on, `--reps 3` is enough for Gemma (section 7);
 the recording the results come from used 5. The majority vote over the repetitions absorbs the one-off differences
 of section 3; for a model whose answers vary more, no number of repetitions settles it
-([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4). Served so that every answer repeats (section 3), one run is the ground
+([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.8). Served so that every answer repeats (section 3), one run is the ground
 truth: Qwen's generated changes are recorded with `--reps 1`.
 
 The work folder is git-ignored ([USER_GUIDE.md](USER_GUIDE.md) §1 shows its layout); to keep a run, copy its
@@ -425,7 +425,7 @@ traceeval check skill_seo_drop_length_guard --history runs/gemma8_gen --miss-rat
 `--confirm` is for the test whose runs disagree: one failing run of a long test can be the minority of its runs.
 A test that fails is run again, and a third time when the second run passes; two failures of three end the check,
 and a failure that does not repeat counts as a pass. On the recordings it takes the false regression verdicts
-from 6% to 8% of the runs to under 2% ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.9).
+from 6% to 8% of the runs to under 2% ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4).
 
 `--miss-rate` says how often a regression may be called clean. Without it the method stops when its probability
 that something broke is under a constant, which promises nothing. With it the threshold comes from the
@@ -595,12 +595,12 @@ judge. The first is the recording of record. The others start from its baseline 
 |---|---|---|---|
 | `runs/gemma8`, report in `docs/results/gemma8/` | Gemma | fmi0's GPU0 | about two hours: 30 minutes for the baseline, one test at a time, and under two minutes per changed copy, 32 tests at a time (`--workers`); then a minute for the replay and six for the evaluation |
 | `runs/gemma8_restart`, written up in `docs/results/gemma8/second_recording.md` | Gemma, started anew | two cluster GPUs | 33 minutes: the empty change, and the 43 changes for the tests each reaches (`--reached-only`), from `runs/gemma8`'s baseline and cassette |
-| `runs/gemma8_pc0_w32`, `_pc0_w1`, `_pc1_w32`, `_pc1_w1` ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7) | Gemma, started anew with its prefix cache off (`pc0`) and on (`pc1`) | fmi0's GPU0 | two to three minutes 32 tests at a time (`w32`), 30 minutes one at a time (`w1`): the empty change only, from `runs/gemma8`'s baseline and cassette |
-| `runs/gemma8_exact`, `runs/gemma8_exact_restart` ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7) | Gemma without its prefix cache, two starts | fmi0's GPU0 | 33 minutes for the baseline, 30 for each empty change and six hours for the 43 changes (the tests each reaches), one test at a time: a baseline and cassette of its own, the empty change under the same start and under another from a copy of that baseline, then the changed copies; report in `docs/results/gemma8_exact/` |
+| `runs/gemma8_pc0_w32`, `_pc0_w1`, `_pc1_w32`, `_pc1_w1` ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.2) | Gemma, started anew with its prefix cache off (`pc0`) and on (`pc1`) | fmi0's GPU0 | two to three minutes 32 tests at a time (`w32`), 30 minutes one at a time (`w1`): the empty change only, from `runs/gemma8`'s baseline and cassette |
+| `runs/gemma8_exact`, `runs/gemma8_exact_restart` ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.2) | Gemma without its prefix cache, two starts | fmi0's GPU0 | 33 minutes for the baseline, 30 for each empty change and six hours for the 43 changes (the tests each reaches), one test at a time: a baseline and cassette of its own, the empty change under the same start and under another from a copy of that baseline, then the changed copies; report in `docs/results/gemma8_exact/` |
 | `runs/gemma8_gen`, report in `docs/results/gemma8_gen/` | Gemma, started anew | fmi0's GPU0 | a little over six hours: 691 of the 692 generated changes for the tests each reaches, 114,230 runs, from `runs/gemma8`'s baseline and cassette; then half an hour for the held-out evaluation on ten processes |
 | `runs/gemma8_batches`, in `docs/results/gemma8_batches/` | Gemma, started anew | fmi0's GPU0 | 40 minutes for the 23 batches beside a copy of `runs/gemma8`, the whole suite on each, 32 tests at a time; then 12 minutes for their live checks (`scripts/batch_sweep.py`) |
 | `runs/qwen8`, report in `docs/results/qwen8/` | Qwen | fmi0's GPU1 | seventeen hours, one test at a time throughout: 78 minutes for the baseline, 77 for the empty change, and fifteen hours for the 43 changes (the tests each reaches) |
-| `runs/qwen8_exact`, `runs/qwen8_exact_restart` ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7) | Qwen without its prefix cache, two starts | fmi0's GPU1 | five hours, one test at a time: 100 minutes for the baseline, with a cassette of its own, and 100 for each empty change, under the same start and under another from a copy of that baseline |
+| `runs/qwen8_exact`, `runs/qwen8_exact_restart` ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.2) | Qwen without its prefix cache, two starts | fmi0's GPU1 | five hours, one test at a time: 100 minutes for the baseline, with a cassette of its own, and 100 for each empty change, under the same start and under another from a copy of that baseline |
 
 On the original app 172 of 180 tests pass, 28 of the 34 regressions are revealed and no benign change is, so the
 report's sanity line says VIOLATED for the six changes below. They stay in the set:
@@ -614,7 +614,7 @@ report's sanity line says VIOLATED for the six changes below. They stay in the s
 
 The ground truth holds up: the empty change flips none of the 180 tests, the five runs of a (change, test) pair
 disagree on four pairs only, and no replayed outcome differs from the recorded one
-([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.1 and §5.7). Recorded again under another start of the server, the empty
+([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.1 and §5.2). Recorded again under another start of the server, the empty
 change still flips none, and 2 of the 1,442 labels on the tests the changes reach differ: `runs/gemma8_restart`
 counts 29 revealed regressions, with `skill_routing_drop_brand_gate` among them.
 
@@ -634,7 +634,7 @@ The recordings below are of the app as it was before the harness and test fixes 
 | `runs/gptoss7_w1` | the empty change one test at a time, three repetitions | gpt-oss, both of fmi0's GPUs | `results/gptoss7/one_at_a_time.md` |
 
 These recordings of Qwen and gpt-oss, made many tests at a time, are not clean ground truths
-([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4). The 116 baseline runs of `runs/qwen7` that a dropped tunnel broke are
+([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.8). The 116 baseline runs of `runs/qwen7` that a dropped tunnel broke are
 left out, so about 110 of its tests have four valid baseline runs instead of five. The models are taken as they
 are served, with no re-runs or filtering to make them agree with themselves. So the results are Gemma's, and
 Qwen's come from `runs/qwen8`, which was recorded one test at a time.

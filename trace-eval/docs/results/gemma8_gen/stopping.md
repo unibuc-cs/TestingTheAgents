@@ -1,7 +1,7 @@
 # Stopping with a bounded miss rate: the full tables
 
 The output of `scripts/analysis/stop_with_guarantee.py runs/gemma8_gen runs/gemma8`, as it prints it. The method is
-in [RESEARCH_PLAN.md](../../RESEARCH_PLAN.md) §3.4 and the reading of these tables in its §5.9.
+in [RESEARCH_PLAN.md](../../RESEARCH_PLAN.md) §3.4 and the reading of these tables in its §5.4.
 
 - A rule orders the tests a change reaches and gives each a value; the run stops with a clean verdict at the first
   value under a threshold, set on past regressions for a target miss rate.

@@ -234,7 +234,7 @@ flowchart LR
 | kind ratio | over the other recorded changes of this kind (code, skill, prompt or config; §6), the share of the tests a change touched that caught it, averaged; padded with two changes' worth of the kind's default, so a ratio learned from one or two changes stays near it | code changes: tests that ran a changed line caught the change 19% of the time on average (6 of the 12 that ran the changed line of the link check caught `code_links_external_lenient`, 5 of the 180 that ran the changed line of the agent loop caught `code_termination_off_by_six`); tests that only called a changed function caught none, the 1% floor |
 | test record | the other changes of this kind that touched the test and that it caught, over the number an average touched test would have caught, both padded with 2 (`prior_strength`) | AUT-02 caught 3 where an average test would have caught 1.03: $(3 + 2)/(1.03 + 2) = 1.65$; AUT-13 caught none: $(0 + 2)/(1.03 + 2) = 0.66$ |
 | coverage | how often the test ran the changed code in its runs on the original app, 0 to 1; when an agent loses a tool or a skill, how often the test used it | PUB-12 runs the changed line of `harness/retry.py` in every run: 1.0 |
-| tilt | the text similarity between the test and the diff (0.5 to 1.5), plus 0.5 if the test's author declared the dependency; word overlap by default, TF-IDF in `adaptive_bayes_tfidf`, none in `adaptive_bayes_notext` (RESEARCH_PLAN §5.2) | a test whose request mentions publishing gets more weight for a change to the publishing skill |
+| tilt | the text similarity between the test and the diff (0.5 to 1.5), plus 0.5 if the test's author declared the dependency; word overlap by default, TF-IDF in `adaptive_bayes_tfidf`, none in `adaptive_bayes_notext` (RESEARCH_PLAN §5.6) | a test whose request mentions publishing gets more weight for a change to the publishing skill |
 
 A test with no known link to the changed part gets a small fixed sensitivity (`indirect`, 0.02).
 
@@ -265,7 +265,7 @@ How the second one is set, for a change under check:
    runs.
 
 With such a threshold the method also keeps going when no test is informative any more: the cheapest reached test
-runs next (`exhaustive`), so that a low threshold can still be reached. RESEARCH_PLAN §5.9 has the measurements,
+runs next (`exhaustive`), so that a low threshold can still be reached. RESEARCH_PLAN §5.4 has the measurements,
 group by group.
 
 ### Mandatory properties
@@ -273,7 +273,7 @@ group by group.
 A run that found no regression does not end until every mandatory property the change may affect has a test: for
 each one still unchecked, the cheapest test that checks it and passes on the original app, while the budget allows.
 A failure there is a regression, as usual. The rule turns the catalog's mandatory flag into a guarantee at almost
-no cost (RESEARCH_PLAN §5.3); `adaptive_bayes_nomandatory` is the ablation without it.
+no cost (RESEARCH_PLAN §5.7); `adaptive_bayes_nomandatory` is the ablation without it.
 
 ### The coverage floor
 
@@ -283,13 +283,13 @@ already run and those the replay settled, covers every changed component some te
 and every affected mandatory property some test checks (`experiment/coverage.py::coverage_floor`). The set is
 chosen greedily, by the uncovered items a test adds per token. It runs last, so a regression found earlier costs
 nothing more. It is a coverage guarantee, not a detection one: a set chosen only to cover misses most regressions
-on its own (RESEARCH_PLAN §5.9).
+on its own (RESEARCH_PLAN §5.4).
 
 ### Weights
 
 `prior_strength` sets how far a short record can move a test, the tilt has a fixed range and `indirect` sets the
 floor. The factors are not weighted against each other: with a few dozen changes, extra weights would mostly fit
-noise. Only the text factor has been ablated (RESEARCH_PLAN §5.2).
+noise. Only the text factor has been ablated (RESEARCH_PLAN §5.6).
 
 ### Where the records come from
 
@@ -310,7 +310,7 @@ editing the app's code.
 
 The 43 changes (`mutation/catalog.py`): what each does, why it is in the set (a kind of change, a reach, or a trap
 for selection), and the number of tests that reveal it in `runs/gemma8`. The other models' recordings are not clean
-ground truths ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4), so they have no column.
+ground truths ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.8), so they have no column.
 
 | change | what it does | why it is in the set | revealing tests (Gemma) |
 |---|---|---|---|
@@ -395,7 +395,7 @@ half of them at a time; none means the members fail it only together.
 | `batch_publishing_pr` | one pull request on the publishing path: the skill drops its link validation, the link check lets external URLs through, taking a page down needs no approval token | 9 |
 | `batch_benign` | all nine benign changes at once | 1: two of the prompt edits, harmless alone, change the orchestrator's answer together |
 
-RESEARCH_PLAN §5.6 has what the strategies make of them, with twenty more batches of two to eight changes drawn at
+RESEARCH_PLAN §5.5 has what the strategies make of them, with twenty more batches of two to eight changes drawn at
 random by `scripts/batch_sweep.py`, and [results/gemma8_batches/batches.md](results/gemma8_batches/batches.md)
 every batch.
 

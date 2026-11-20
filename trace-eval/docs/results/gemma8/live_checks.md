@@ -77,7 +77,7 @@ one suite's tokens for the 43 verdicts together.
   skips the approval). No test reveals this change in the recording, where WF3-03 passes its five runs; in the
   second recording it passes four of five (`second_recording.md`). A check reads one run of a test and the ground
   truth reads five, so on a test whose runs disagree one run can be the minority. `traceeval check --confirm`
-  runs a failing test again before its failure counts ([RESEARCH_PLAN.md](../../RESEARCH_PLAN.md) §5.9).
+  runs a failing test again before its failure counts ([RESEARCH_PLAN.md](../../RESEARCH_PLAN.md) §5.4).
 - On `config_require_review_false` the live check ends clean after 34 tests where the evaluator's budget ends
   the run after 30. The evaluator charges a test everything after its divergence point; the live check pays for
   the requests the cassette lacks, wherever they come in the run, so the same budget buys more tests: 1.6% of

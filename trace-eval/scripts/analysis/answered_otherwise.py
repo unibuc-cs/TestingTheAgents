@@ -9,7 +9,7 @@ Per recording, this script says how many there are and how they fall over the te
   the cassette: the server is not in the state it was in when the cassette was recorded (its prefix cache, or a
   setting that was changed).
 
-It prints one markdown row per recording: the table of ``docs/RESEARCH_PLAN.md`` §5.7.
+It prints one markdown row per recording: the table of ``docs/RESEARCH_PLAN.md`` §5.2.
 
     python scripts/analysis/answered_otherwise.py runs/gemma8 runs/gemma8_pc1_w1 runs/gemma8_exact ...
 """

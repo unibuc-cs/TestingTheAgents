@@ -194,7 +194,7 @@ replay: 113 of 180 tests replay to the end, for no tokens, in 2 s; 67 diverge an
 
 Live, the check finds it with the first test it runs, for 0.4% of the suite's tokens, and blames the SEO agent's
 lost tool; the other members stay near their prior of one half, untested
-([results/gemma8_batches/batches.md](results/gemma8_batches/batches.md)). [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.6
+([results/gemma8_batches/batches.md](results/gemma8_batches/batches.md)). [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.5
 has the 23 batches, including the harmless edits that break a test together: the size makes no difference, and the
 blame falls on a member that is a regression on its own in most runs.
 
@@ -204,7 +204,7 @@ recording and without a replay phase, since those recordings keep no answers of 
 | check | Qwen | gpt-oss |
 |---|---|---|
 | the routing skill without its approval rule | regression: WF3-03, after 2 tests, 1% of the suite | regression: WF3-03, after 3 tests, 2% |
-| the publishing skill's prose reflowed (harmless) | clean after 7 tests, 3% | a false alarm: PUB-22 fails after 6 tests; its runs disagree under gpt-oss ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4) |
+| the publishing skill's prose reflowed (harmless) | clean after 7 tests, 3% | a false alarm: PUB-22 fails after 6 tests; its runs disagree under gpt-oss ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.8) |
 
 Each model runs the tests its own recording ranks first; the verdicts agree with Gemma's except on the harmless
 change under gpt-oss, where a single live run of an unstable test is a false alarm that the recording's majority
@@ -238,9 +238,9 @@ app ([USER_GUIDE.md](USER_GUIDE.md) §4 says how to read it):
   suite's tokens. Put the two figures side by side: every line moves up and to the left. Then the table of the
   condition: about 2% of the model's calls are answered otherwise when made again, and no outcome moves.
 
-Mention the finding of [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.3: the mandatory rule is what catches the publishing
-skill without its link check. Its §5.1 goes through the results by research question, §5.7 has replay-first, and
-§5.5 the take-aways.
+Mention the finding of [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7: the mandatory rule is what catches the publishing
+skill without its link check. Its §5.2 has replay-first, §5.6 goes through the strategies by research question,
+and §5.9 has the take-aways.
 
 ## 6. The catalog of properties, drafted by a model (1 minute)
 
@@ -279,9 +279,9 @@ cases:
   optimization of section 3 (WF2-03); [EXPERIMENT.md](EXPERIMENT.md) §6 lists them. A test the model already fails
   cannot reveal a change, which is why no strategy runs it.
 - *Why only Gemma's numbers?* Qwen's and gpt-oss's recordings of the same app are not clean ground truths
-  ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4): recorded many tests at once, a change that alters nothing appears to
+  ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.8): recorded many tests at once, a change that alters nothing appears to
   break a few tests. One test at a time Qwen is as repeatable as Gemma, and its recording made that way gives
-  the same picture ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7); gpt-oss is not, and its outcomes change
+  the same picture ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.2); gpt-oss is not, and its outcomes change
   with a restart of the server. A larger model does not give a cleaner ground truth by itself, so the lesson for
   Adobe is to measure first how much the answers vary under the real serving setup. The harmless change of section
   4, checked with gpt-oss from its cassette, is a false alarm on PUB-22, a test whose runs disagree under that
@@ -292,7 +292,7 @@ cases:
   and the catalog of properties maps onto the metrics of DeepEval, the evaluation library the Adobe Team uses.
 - *Can recorded answers stand in for the model?* As far as a model call is a function of its request. Under
   Gemma as served here, all 31,490 recorded runs of the tests that replay to the end finish like their replay
-  ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7). Under a serving setup where answers vary with the batch
+  ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.2). Under a serving setup where answers vary with the batch
   (Qwen's, gpt-oss's), that has to be measured first.
 - *Does the offline evaluation predict the live run?* Yes: the check, run live on all 43 changes, gave the
   evaluator's verdict on 41, after as many tests. One exception is a live false alarm on a benign change, on a
@@ -302,7 +302,7 @@ cases:
   With `--miss-rate 0.1` the stop threshold is set on recorded changes that edit the same kind of thing, so that
   at most one regression in ten is called clean, and the check says what the threshold rests on. Run that way on
   the 43 changes, it found all 28 regressions with no false alarm, for 2.8% of the suite's tokens per check
-  ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.9).
+  ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4).
 - *What is next?* Re-planning after a failed step is built on a branch and recorded with three models. It waits for
   one decision: whether a single publication with a broken link is repaired or refused
   ([AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) §4.1). Then tau2-bench, a public agent benchmark, as a second application.
