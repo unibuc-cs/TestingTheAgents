@@ -6,6 +6,7 @@
 \usepackage{amsmath,amssymb,amsthm}
 \usepackage{booktabs}
 \usepackage{array}
+\usepackage{longtable}
 \usepackage{enumitem}
 \usepackage{tikz}
 \usetikzlibrary{positioning,arrows.meta,calc}
@@ -24,6 +25,7 @@
 \newcommand{\Dobs}{D^{\mathrm{obs}}_t}
 \newcommand{\Trep}{T^{\mathrm{rep}}(\Delta)}
 \newcommand{\Tdiv}{T^{\mathrm{div}}(\Delta)}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
 
 \title{Replay first: which evals to run after a change,\\ in what order, and when to stop}
 \date{}
@@ -32,35 +34,66 @@
 \maketitle
 \vspace{-1.5cm}
 
+\begin{abstract}
+\noindent Every eval of an LLM agent system calls the model, so rerunning the suite after each change costs the
+whole suite in tokens. \emph{Replay first} records the model's answers once. After a change it reruns every test
+on those answers, without the model: a test that asks the model nothing new gets its outcome for free, and only
+the other tests are run, in an order that brings a failure early and with a stopping rule that bounds how often a
+regression is missed. These pages give the method, its guarantee and the conditions the guarantee needs. The
+measurements are in the paper.
+\end{abstract}
+
 \section{The problem}
+\label{sec:problem}
 
 An LLM agent system is made of agents (a model with a prompt, skills and tools), the harness code that runs them,
 and configuration. A \emph{test}, or eval, sends the system a request and checks what it did: the final state, the
 tool calls and the answer. Every test calls the model, so every test costs tokens.
 
-A \emph{change} $\Delta$ turns the current version $V_0$ into a new version $V_1$: an edited prompt or skill, a tool
-that works differently, a new setting. Because a model produces the outcome, we run each test $K$ times on $V_0$
-and call $f_t$ the share of those runs that fail. A test \emph{reveals} $\Delta$ when it passes on $V_0$ and fails
-on $V_1$; $\mathrm{Rev}(\Delta)$ is the set of such tests, and $\Delta$ is a \emph{regression} when that set is not
-empty. Two rules apply to every run of tests after a change:
+The question is which tests to run after a change, in what order, and when to stop, so that we catch regressions
+while paying as few tokens as possible.
+
+\paragraph{The words we use.}
 \begin{itemize}
-  \item a test with $f_t \ge \frac12$, one the model already fails, is not run: it cannot reveal anything;
-  \item the run stops at the first failure, since a test that passed on $V_0$ and fails on $V_1$ means a regression.
+  \item A \emph{change} $\Delta$ turns the current version $V_0$ into a new version $V_1$: an edited prompt or
+        skill, a tool that works differently, a new setting.
+  \item A model produces the outcome of a test, so we run each test several times on $V_0$; $f_t$ is the share of
+        the runs of test $t$ that fail. The test \emph{passes on $V_0$} when $f_t < \frac12$.
+  \item A test \emph{reveals} $\Delta$ when it passes on $V_0$ and fails on $V_1$; $\mathrm{Rev}(\Delta)$ is the
+        set of such tests.
+  \item $\Delta$ is a \emph{regression} when some test reveals it. The verdict on a change is \textsc{regression}
+        or \textsc{clean}.
 \end{itemize}
 
-The question is which tests to run, in what order, and when to stop, so that we catch regressions while paying as
-few tokens as possible. Our answer has three steps (Figure~\ref{fig:flow}):
+\paragraph{Two rules for every run.} Whatever the method, a run of tests after a change follows two rules:
 \begin{itemize}
-  \item \textbf{Replay.} We record the model's answers on $V_0$ once. After a change, we rerun every test with those
-        recorded answers in place of the model. A test that never asks the model anything new gets its outcome for
-        free. A test that does ask something new is one the change reaches, and only those need the model.
-  \item \textbf{Order.} A strategy puts the reached tests in an order.
-  \item \textbf{Stop.} A stopping rule may call the change clean before every reached test has run, with a
-        threshold set on past changes so that the share of missed regressions stays under a target we choose. A
-        coverage floor makes sure a clean verdict leaves no changed component and no release blocker untested.
+  \item a test the model already fails on $V_0$ ($f_t \ge \frac12$) is not run: it cannot reveal anything;
+  \item the run stops at the first failure, since a test that passed on $V_0$ and fails on $V_1$ means a
+        regression.
+\end{itemize}
+
+\paragraph{The answer, in three steps} (Figure~\ref{fig:flow}).
+\begin{itemize}
+  \item \textbf{Replay} (Sections~\ref{sec:replay} to~\ref{sec:gives}). We record the model's answers on $V_0$
+        once. After a change, we rerun every test with those recorded answers in place of the model. A test that
+        never asks the model anything new gets its outcome for free. A test that does ask something new is one
+        the change \emph{reaches}, and only those need the model.
+  \item \textbf{Order} (Section~\ref{sec:order}). A strategy puts the reached tests in an order, the likeliest to
+        fail first.
+  \item \textbf{Stop} (Section~\ref{sec:stop}). A stopping rule may call the change clean before every reached
+        test has run, with a threshold set on past changes so that the share of missed regressions stays under a
+        target we choose. A coverage floor makes sure a clean verdict leaves no changed component and no release
+        blocker untested.
 \end{itemize}
 A day's changes can also be tested together, as one batch; the replay then narrows a failure down to the changes
 that can have caused it (Section~\ref{sec:day}).
+
+\paragraph{An example.} Suppose a change edits the code of one tool. The replay reruns every test on $V_1$ without
+the model. A test that never calls the tool, or calls it where it behaves as before, sends the same requests as on
+$V_0$: it replays to the end and costs nothing. A test in which the tool now returns something else sends a
+request that was never recorded: the change reaches it. The reached tests then run with the model, in a strategy's
+order. The first failure ends the run with a regression; if all pass, or the stopping rule stops the run, the
+change is clean.
 
 \begin{figure}[h]
 \centering
@@ -96,26 +129,32 @@ that can have caused it (Section~\ref{sec:day}).
 \section{How the replay works}
 \label{sec:replay}
 
-\paragraph{A run, written down.} A run of test $t$ on version $V$ alternates calls to the model $M$ with code. By
-\emph{code} we mean everything that is not the model: the harness, the tools and the services behind them, the
-starting data, and the test's checks. Each call sends a \emph{request} $q_i$ and gets an \emph{answer} $a_i$:
+\paragraph{A run, written down.} A run of a test is a conversation between the model and code. By \emph{code} we
+mean everything that is not the model: the harness, the tools and the services behind them, the starting data, and
+the test's checks. The code builds a \emph{request}, the model returns an \emph{answer}, the code acts on it (it
+runs the tool the model asked for, say) and builds the next request, until the test's checks give the outcome.
+For test $t$ on version $V$, with model $M$:
 \[
   q_1 = g^t_V(), \qquad a_i = M(q_i), \qquad q_{i+1} = g^t_V(a_1, \dots, a_i), \qquad
   X_t(V) = h^t_V(a_1, \dots, a_n).
 \]
 \begin{itemize}
-  \item A request is everything the model sees in that call: the system prompt, the messages so far including
-        every tool result, the tools on offer, and the decoding settings. Calls to a judge model that grades the
-        answer are requests too.
-  \item $g^t_V$ runs the code of $V$ up to the next call. $h^t_V$ runs it to the end and applies the test's checks;
-        $X_t(V)$ is the outcome, pass or fail.
+  \item A request $q_i$ is everything the model sees in that call: the system prompt, the messages so far
+        including every tool result, the tools on offer, and the decoding settings. Calls to a judge model that
+        grades the answer are requests too.
+  \item $g^t_V$ is the code of $V$ running up to the next call, and $h^t_V$ the code running to the end and
+        applying the test's checks.
+  \item $X_t(V)$ is the outcome, pass or fail.
 \end{itemize}
 
-\paragraph{The cassette.} We run the suite on $V_0$ and keep every answer under the request that produced it.
-$Q_0$ is the set of those requests and $A_0(q)$ the answer stored for $q$; when repeated runs disagree, we keep the
-most frequent answer. We call this store the \emph{cassette}. A request is looked up by a hash of all of it, so two
-requests match only if they are identical; tool-call ids that a server makes up are numbered by order of appearance
-first, so that they do not break the match.
+\paragraph{The cassette.} We run the suite on $V_0$ and keep every answer under the request that produced it. This
+store is the \emph{cassette}: $Q_0$ is the set of requests it holds and $A_0(q)$ the answer kept for $q$.
+\begin{itemize}
+  \item A request is looked up by a hash of all of it, so two requests match only if they are identical.
+  \item When repeated runs gave one request different answers, the most frequent is kept.
+  \item Tool-call ids that a server makes up are first numbered by order of appearance, so that they do not break
+        the match.
+\end{itemize}
 
 \paragraph{Replaying a test.} To replay test $t$ on $V_1$, we run it with $A_0$ in place of $M$. The code is the
 code of $V_1$ and runs as it is; only the model's answers come from the cassette (Figure~\ref{fig:run}). One of two
@@ -158,23 +197,22 @@ diverge.}
 \end{figure}
 
 \paragraph{Where a change shows.} Since $g$ and $h$ are the code of $V_1$, a change shows wherever it alters what
-the model sees or what the code does with the answers:
+the model sees or what the code does with the answers. By what the change alters:
 \begin{itemize}
-  \item a change to what an agent gets up front (its prompt, its skills, its tools and their descriptions, its
-        task) alters the first request of that agent's conversation, and the test diverges there;
-  \item a change to a tool's code, a service, the starting data or a setting the code reads alters a tool result
+  \item \textbf{what an agent gets up front} (its prompt, its skills, its tools and their descriptions, its task):
+        the first request of that agent's conversation is new, and the test diverges there;
+  \item \textbf{a tool's code, a service, the starting data, or a setting the code reads:} a tool result differs
         whenever the test's call hits the changed behaviour. The next request is then new, and the test diverges
-        there. Tools are never replayed from the recording; they always run the new code;
-  \item a change that only alters state the model never reads is caught by the checks in $h$: the test replays to
-        the end and fails;
-  \item a change that alters none of this leaves the run as it was on $V_0$, and the test replays to its recorded
-        outcome.
+        there;
+  \item \textbf{only state the model never reads:} the test replays to the end, and its checks fail it;
+  \item \textbf{none of this:} the run is as it was on $V_0$, and the test replays to its recorded outcome.
 \end{itemize}
+Tools are never answered from the cassette: they always run the new code.
 
-\paragraph{Not prompt caching.} Model providers and servers offer \emph{prompt caching}, also called prefix
-caching: they keep the computation for a prompt prefix they have seen before, and still generate a new answer.
-That makes a call cheaper and faster, but every call is still made. A request the cassette holds makes no call at
-all.
+\paragraph{This is not prompt caching.} Model providers and servers offer \emph{prompt caching}, also called
+prefix caching: they keep the computation for a prompt prefix they have seen before, and still generate a new
+answer. That makes a call cheaper and faster, but every call is still made. A request the cassette holds makes no
+call at all.
 
 \section{When the replayed outcome is the real one}
 \label{sec:conditions}
@@ -210,17 +248,27 @@ $\mathrm{Rev}(\Delta) \subseteq \Tdiv \cup \{t \in \Trep : \hat{X}_t(V_1) = \tex
 A test in $\Trep$ that reveals the change fails on $V_1$, and by the proposition its replay has the same outcome.
 \end{proof}
 
-Neither condition is assumed. We check both:
+Neither condition is taken on trust.
+
+\paragraph{Checking D.} D is a property of the system under test: its services are simulated or recorded, it reads
+no clock and draws no random numbers, and it derives its keys from the operation. The check is free: replayed
+against its own cassette, $V_0$ must reach the end of every test with the recorded outcome.
+
+\paragraph{Checking R.} R is a property of the model and of the way it is served. Even with deterministic decoding
+(temperature 0, always the most likely token), a GPU server is not exact to the bit: the batch a request shares
+with other requests, and the server's prefix cache, change the floating-point arithmetic and now and then a token.
+We measure R with the \emph{empty change}: $V_0$ run again exactly the way a changed version is run, and compared
+with the cassette at three levels:
 \begin{itemize}
-  \item \textbf{D} belongs to the system under test: services simulated or recorded, no clock, no randomness,
-        keys derived from the operation. It is checked for free: replayed against its own cassette, $V_0$ must
-        reach the end of every test with the recorded outcome.
-  \item \textbf{R} belongs to the model and the way it is served. Even with deterministic decoding (temperature 0,
-        always the most likely token), a GPU server is not exact to the bit: the batch a request shares with other
-        requests, and the server's prefix cache, change the floating-point arithmetic and now and then a token. We
-        measure R with the \emph{empty change}: $V_0$ run again exactly the way a changed version is run, compared
-        with the cassette request by request, run by run, and outcome by outcome. Replay first needs only the last
-        of the three.
+  \item \emph{requests}: how many get an answer other than the cassette's;
+  \item \emph{runs}: how many tests have a run that differs from the recorded one;
+  \item \emph{outcomes}: how many tests pass or fail otherwise.
+\end{itemize}
+An answer can be worded differently without the run taking another path, and a run can differ without its outcome
+changing. What the replay claims is a test's outcome, so the third level is the one it needs.
+
+\paragraph{In practice.}
+\begin{itemize}
   \item When exact answers matter, serve the model without its prefix cache and with one test at a time per
         server, and confirm it with the empty change.
   \item A cassette is valid only for the model and the serving setup it was recorded with. A hosted model can
@@ -230,19 +278,23 @@ Neither condition is assumed. We check both:
 \section{What the replay gives}
 \label{sec:gives}
 
-Under R and D:
+Under R and D, the replay settles part of the verdict before any model call, and says which tests the rest needs:
 
 \begin{center}
-\begin{tabular}{p{7.2cm}p{8.4cm}}
+\begin{tabular}{@{}L{7.4cm}L{8.6cm}@{}}
 \toprule
 the replay finds & so \\
 \midrule
 $t \in \Trep$ passes & $t$ passes on $V_1$; no need to run it \\
-$t \in \Trep$ fails, and $f_t < \tfrac12$ & regression, before any model call \\
+\addlinespace
+$t \in \Trep$ fails, and $t$ passes on $V_0$ & regression, before any model call \\
+\addlinespace
 $\Tdiv$ is empty, and no such failure & clean: no test can tell $V_1$ from $V_0$ \\
+\addlinespace
 $t \in \Tdiv$ & $t$ needs the model, for its requests outside $Q_0$ \\
-every $t \in \Tdiv$ with $f_t < \tfrac12$ is run and passes & clean, with nothing the change reaches left untested
-  \\
+\addlinespace
+every $t \in \Tdiv$ that passes on $V_0$ is run, and passes & clean, with nothing the change reaches left
+  untested \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -252,107 +304,147 @@ in $Q_0$ is answered from the cassette, and only new requests go to the model. I
 \[
   c_\Delta(t) = \sum_{q \,\in\, \mathrm{run}(t, V_1),\ q \notin Q_0} \mathrm{tokens}(q).
 \]
-Before any model call, the replay bounds it from above by the tokens of $t$ after its divergence point. The bound is
-loose because, after that point, a run may still send requests that are in $Q_0$, such as the turn of an agent the
-change does not touch. Strategies plan with the bound.
+Before any model call, the replay bounds it from above by the tokens of $t$ after its divergence point. The bound
+is loose because, after that point, a run may still send requests that are in $Q_0$, such as the turn of an agent
+the change does not touch. Strategies plan with the bound.
 
-\paragraph{Compared with a plain answer cache.} A cache of answers in front of the model would give the same saving
-to any rerun of the suite. What the replay adds is knowing, before any call, which tests the change reaches. With
-the two rules of Section~1, that buys three more savings:
+\paragraph{Compared with a plain answer cache.} A cache of answers in front of the model gives the same saving to
+any rerun of the suite, with no method at all: the whole suite, rerun through the cache, pays only for the new
+requests and finds every regression. That is the cost to beat. Replay first can pay less in three ways:
 \begin{itemize}
-  \item the tests the model already fails are skipped;
-  \item a run ends at its first failure, so the order of the reached tests decides what a regression costs;
-  \item a stopping rule decides what a change that breaks nothing costs.
+  \item the tests the model already fails are not run;
+  \item a run ends at its first failure, so the order of the reached tests decides what a regression costs
+        (Section~\ref{sec:order});
+  \item a stopping rule ends a run before every reached test has run, which decides what a change that breaks
+        nothing costs (Section~\ref{sec:stop}).
 \end{itemize}
 
 \section{Ordering the reached tests}
 \label{sec:order}
 
-This is classic test prioritization on a smaller suite. The strategies differ in what they read. A
-\emph{component} is a part of the system a change can touch: a function or line of code, a tool and its
-description, a skill's procedure or text, a field of an agent, a setting, the starting data. $C(\Delta)$ is the set
-of components the change touches. For each test we know:
+The reached tests are a small suite, and putting them in order is classic test prioritization. A good order brings
+a revealing test early, because the run ends at the first failure. The strategies differ in what they read.
+
+\paragraph{What a strategy can read.} A \emph{component} is a part of the system a change can touch: a function or
+line of code, a tool and its description, a skill's procedure or text, a field of an agent, a setting, the
+starting data. $C(\Delta)$ is the set of components the change touches. For each test $t$ we know:
 \begin{itemize}
   \item $c(t)$, its cost in tokens on $V_0$, and $\rho_t$, a risk weight its author gave it;
   \item $\Ddecl$, the components its author declared it depends on;
   \item $\Dobs$, the components its runs on $V_0$ actually exercised, from traces and code coverage, and
-        $\phi_t(d)$, the share of its runs that exercised component $d$.
+        $\phi_t(c)$, the share of its runs that exercised component $c$.
 \end{itemize}
 A component matches a test by one rule used everywhere: a changed function or line matches the tests that ran it, a
 skill the tests that loaded it, a tool the tests it was offered to, a setting the tests that read it.
 
-\begin{itemize}
-  \item \strat{random}: a random permutation, as a reference.
-  \item \strat{declared}, classic selection on declared dependencies: take $S = \{t : \Ddecl \cap C(\Delta) \neq
-        \emptyset\}$ and $a_t = |\Ddecl \cap C(\Delta)|$, sorted by $\rho_t$, then $a_t$, both descending, then by
-        $c(t)$ ascending.
-  \item \strat{observed}, the same on observed dependencies: take $S = \{t : \Dobs \cap C(\Delta) \neq
-        \emptyset\}$, with $a_t = \sum_{c \in C(\Delta) \cap \Dobs} \phi_t(c)$, sorted by $a_t\, \rho_t / c(t)$,
-        descending.
-  \item \strat{cost\_aware} sorts the whole suite by $\rho_t\, (\beta_0 + a_t + e_t)\, (1 + f_t) / c(t)$, where
-        $e_t = 1$ if $t$ ran a changed line and $\beta_0$ is a small constant.
-  \item \strat{ir\_tfidf} sorts by text similarity. TF-IDF turns a text into word weights, where a word counts more
-        when it is frequent in this text and rare across the tests. The score is the cosine between the weights of
-        the diff and those of the test's text (name, request, expected outcome).
-  \item \strat{history\_ml} learns from past changes. A logistic regression, a linear model that outputs a
-        probability, is fitted on pairs (past change, test) labelled ``this test revealed this change'', with
-        features such as the change's static impact on the test by kind of component, and the test's cost, risk
-        and shape. With $p_t$ its probability, tests are sorted by $p_t\, \rho_t / c(t)$.
-  \item \strat{adaptive\_bayes}, our method, recomputes the order after every test:
-  \begin{itemize}
-    \item a hypothesis $h \in \{0,1\}^{C(\Delta)}$ says which changed components are broken. Each component
-          starts with a prior probability $\pi_c$ that depends on its kind: higher for code, skill procedures,
-          settings and agent fields, lower for prompt wording, skill prose and tool descriptions;
-    \item a test passes only if it would pass on $V_0$ and no broken component makes it fail:
-          $P(t \text{ fails} \mid h) = 1 - (1 - f_t) \prod_{c:\, h_c = 1} (1 - s_{tc})$;
-    \item the \emph{sensitivity} $s_{tc}$, the chance that $t$ fails when $c$ is broken, is learned from past
-          changes: $s_{tc} = \mathrm{clip}(r_k\, \ell_{tk}\, \phi_t(c)\, \tau_t,\ s_{\min},\ s_{\max})$, where $k$
-          is the kind of $c$, $r_k$ is how often tests that touched past changes of kind $k$ revealed them,
-          $\ell_{tk}$ is how much better than average $t$ did on that kind, and $\tau_t$ is a bonus when the test's
-          text is close to the diff or its author declared the dependency;
-    \item after each result, Bayes' rule gives the \emph{posterior}, the probability of each hypothesis given the
-          results so far. Its \emph{entropy} $H(h)$ measures how unsure we still are about what is broken. The
-          next test is the one whose result is expected to lower that uncertainty the most per token, tilted by
-          risk: $\arg\max_t \frac{H(h) - \mathbb{E}[H(h \mid X_t)]}{c(t)}\, (1 + \gamma(\rho_t - 1))$;
-    \item after a test passes, the sensitivity of near-duplicates of that test is multiplied by $\delta < 1$,
-          since their passing would add little.
-  \end{itemize}
-  \item \strat{casper\_slices}, adapted from CASPER: it groups the tests with k-means (clusters of tests whose
-        behaviour on $V_0$ looks alike: turns, tool calls, skills loaded, pass rate), runs a few representatives
-        of each group on $V_1$, and then runs the groups whose failure rate moved the most.
-  \item \strat{risk\_aware\_ts}, adapted from Risk-Aware Adaptive Evaluation: a bandit with Thompson sampling.
-        At each step, a logistic regression on the results so far gives each test an estimate $\mu_t$; we draw a
-        plausible failure probability $\theta_t \sim \mathrm{Beta}(1 + \alpha\mu_t + k_t,\ 1 + \alpha(1 - \mu_t) +
-        n_t - k_t)$, where $n_t$ and $k_t$ count the runs and failures seen for $t$, and run the test with the
-        largest $\rho_t\, \theta_t$.
-  \item two orders that need nothing but the replay: \strat{cheapest}, by the cost bound, ascending, and
-        \strat{late\_divergence}, by how late the change reaches the test, latest first.
-\end{itemize}
+\paragraph{The baselines.} The table lists them by what they read. Two scores recur in it: the \emph{overlap} $a_t$
+of a test with the change, and $e_t$, which is 1 when $t$ ran a changed line and 0 otherwise.
+
+{\small
+\begin{longtable}{@{}L{2.5cm}L{2.9cm}L{10.3cm}@{}}
+\toprule
+it reads & strategy & the order \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+nothing & \strat{random} & a random permutation, as a reference \\
+\addlinespace
+declared dependencies & \strat{declared} &
+  classic selection: the tests with $\Ddecl \cap C(\Delta) \neq \emptyset$, by $\rho_t$, then by the overlap
+  $a_t = |\Ddecl \cap C(\Delta)|$, both descending, then cheapest first \\
+\addlinespace
+observed dependencies & \strat{observed} &
+  the tests with $\Dobs \cap C(\Delta) \neq \emptyset$, by $a_t\, \rho_t / c(t)$ descending, where the overlap
+  is $a_t = \sum_{c \in C(\Delta) \cap \Dobs} \phi_t(c)$ \\
+\addlinespace
+ & \strat{cost\_aware} &
+  the whole suite, by $\rho_t\, (\beta_0 + a_t + e_t)\, (1 + f_t) / c(t)$ descending; the small constant $\beta_0$
+  keeps the tests the change does not touch in the order \\
+\addlinespace
+the text of the diff and of the test & \strat{ir\_tfidf} &
+  by the TF-IDF similarity of the diff and the test's text (name, request, expected outcome): two texts are close
+  when they share words that are rare across the tests \\
+\addlinespace
+past changes & \strat{history\_ml} &
+  by $p_t\, \rho_t / c(t)$ descending, where $p_t$ is the probability that $t$ reveals the change, from a logistic
+  regression (a linear model that outputs a probability) fitted on pairs (past change, test); its features are
+  the change's impact on the test by kind of component, and the test's cost, risk and shape \\
+\addlinespace
+the results so far & \strat{casper\_slices} &
+  adapted from CASPER: it groups the tests that behave alike on $V_0$ with k-means, runs a few representatives of
+  each group on $V_1$, then runs the groups whose failure rate moved the most \\
+\addlinespace
+ & \strat{risk\_aware\_ts} &
+  adapted from Risk-Aware Adaptive Evaluation, a bandit with Thompson sampling: a logistic regression on the
+  results so far estimates each test's chance to fail, a value $\theta_t$ is drawn at random around the estimate,
+  and the test with the largest $\rho_t\, \theta_t$ runs next \\
+\addlinespace
+the replay only & \strat{cheapest} & by the cost bound of Section~\ref{sec:gives}, ascending \\
+\addlinespace
+ & \strat{late\_divergence} & by how late the change reaches the test, latest first \\
+\end{longtable}
+}
+
+\paragraph{Our method, \strat{adaptive\_bayes}.} It keeps a probability for what the change broke, and recomputes
+the order after every result.
+\begin{enumerate}
+  \item \textbf{Hypotheses.} A hypothesis $h \in \{0,1\}^{C(\Delta)}$ says which changed components are broken.
+        Each component $c$ starts with a prior probability $\pi_c$ that depends on its kind: higher for code,
+        skill procedures, settings and agent fields, lower for prompt wording, skill prose and tool descriptions.
+  \item \textbf{What a result says.} A test passes only if it would pass on $V_0$ and no broken component makes it
+        fail:
+        \[ P(t \text{ fails} \mid h) = 1 - (1 - f_t) \prod_{c:\, h_c = 1} (1 - s_{tc}). \]
+  \item \textbf{Sensitivity.} $s_{tc}$ is the chance that $t$ fails when $c$ is broken. Exercising a component is
+        weak evidence by itself, so $s_{tc}$ is a product of four factors, kept between a floor and a ceiling.
+        With $k$ the kind of $c$:
+        \[ s_{tc} = \mathrm{clip}\big(r_k \cdot \ell_{tk} \cdot \phi_t(c) \cdot \mathrm{bonus}_t,\ s_{\min},\
+           s_{\max}\big). \]
+        \begin{itemize}
+          \item $r_k$: how often the tests that touched past changes of kind $k$ revealed them;
+          \item $\ell_{tk}$: how much better than the average test $t$ did on that kind;
+          \item $\phi_t(c)$: how often the runs of $t$ on $V_0$ exercised $c$;
+          \item $\mathrm{bonus}_t$: larger when the test's text is close to the diff, or its author declared the
+                dependency.
+        \end{itemize}
+        The first two are learned from past changes, never from the change under test.
+  \item \textbf{The next test.} After each result, Bayes' rule gives the \emph{posterior}, the probability of each
+        hypothesis given the results so far. Its \emph{entropy} $H(h)$ measures how unsure we still are about
+        what is broken. The next test is the one whose result is expected to lower that uncertainty the most per
+        token, tilted by risk:
+        \[ \arg\max_t\ \frac{H(h) - \mathbb{E}[H(h \mid X_t)]}{c(t)}\, \big(1 + \gamma(\rho_t - 1)\big). \]
+  \item \textbf{Near-duplicates.} After a test passes, the sensitivity of the tests that behave just like it is
+        multiplied by $\delta < 1$, since their passing would add little.
+\end{enumerate}
+The posterior also gives $P(\text{something is broken}) = 1 - P(h = \mathbf{0} \mid \text{results so far})$, which
+is what the stopping rule of the next section reads.
 
 \section{When to stop}
 \label{sec:stop}
 
-The expensive verdict is \emph{clean}: without a stopping rule, giving it means running every reached test. A
-stopping rule saves exactly there, but it has to say how often it is wrong.
+Without a stopping rule, \emph{clean} is the expensive verdict: giving it means running every reached test. A
+stopping rule saves exactly there, and in exchange it has to say how often it is wrong.
 
-\paragraph{The rule.} A stopping rule gives each test in its plan a value $v_1 \ge v_2 \ge \dots$, how much reason
-is left to keep going, and stops with ``clean'' at the first value below a threshold $\tau$. For
-\strat{adaptive\_bayes} the value before a test is $P(\text{something is broken}) = 1 - P(h = \mathbf{0} \mid
-\text{results so far})$.
+\paragraph{The rule.} A stopping rule gives each test in its plan a value, $v_1 \ge v_2 \ge \dots$: how much
+reason is left to keep going when that test's turn comes. The run stops with ``clean'' at the first value below a
+threshold $\tau$. For \strat{adaptive\_bayes} the value is $P(\text{something is broken})$ before the test.
 
 \paragraph{Setting the threshold.} We set $\tau$ on past regressions, with \emph{split conformal prediction}, a
-technique that turns the ranks of past scores into a bound on the error rate. For a past regression $\Delta$, let
-$s(\Delta)$ be the value at the first test in the plan that reveals it. With $n$ past regressions and a target miss
-rate $\alpha$,
-\[
-  \tau = s_{(k)}, \qquad k = \lfloor \alpha (n + 1) \rfloor ,
-\]
-the $k$-th smallest of those values (Figure~\ref{fig:stop}). A new regression is then called clean with
-probability at most $\alpha$, as long as past and new changes are \emph{exchangeable}, that is, drawn alike from
-the same pool of changes.
+technique that turns the ranks of past scores into a bound on the error rate (Figure~\ref{fig:stop}).
 \begin{itemize}
-  \item The bound holds on average, over changes and over the sets of past regressions, and only for changes like
-        the past ones.
+  \item The \emph{score} $s(\Delta)$ of a past regression $\Delta$ is the value at the first test in the plan
+        that reveals it. A threshold above the score would have stopped before that test and called $\Delta$
+        clean.
+  \item With $n$ past regressions and a target miss rate $\alpha$, the threshold is the $k$-th smallest score:
+        \[ \tau = s_{(k)}, \qquad k = \lfloor \alpha (n + 1) \rfloor . \]
+  \item A new regression is then called clean with probability at most $\alpha$, as long as past and new changes
+        are \emph{exchangeable}, that is, drawn alike from the same pool of changes.
+\end{itemize}
+
+\paragraph{What the bound covers.}
+\begin{itemize}
+  \item It holds on average, over changes and over the sets of past regressions, and only for changes like the
+        past ones.
   \item We set one threshold per group of changes: a skill's steps, text the model reads, an agent's tools and
         skills, the settings, the starting data, the code. A single threshold for all changes can meet the target
         on average while missing most regressions of one group.
@@ -361,9 +453,9 @@ the same pool of changes.
 \begin{figure}[h]
 \centering
 \begin{tikzpicture}[font=\footnotesize]
-  % left: the values of past regressions, and the threshold
+  % left: the scores of past regressions, and the threshold
   \draw[-{Stealth[length=2mm]}] (0,0) -- (6.4,0);
-  \node[below, align=center] at (3.1,-0.15) {value at the first test that reveals a past regression};
+  \node[below, align=center] at (3.1,-0.15) {score: the value at the first test that reveals a past regression};
   \foreach \x in {0.5,1.0} \draw[thick] (\x,0.3) circle (2pt);
   \foreach \x in {1.6,2.3,2.9,3.4,4.0,4.7,5.3,5.9} \fill (\x,0.3) circle (2pt);
   \draw[dashed] (1.6,0) -- (1.6,1.9);
@@ -384,10 +476,10 @@ the same pool of changes.
     \node[align=center] at (2.6,2.55) {a failure before that:\\\textsc{regression}};
   \end{scope}
 \end{tikzpicture}
-\caption{Setting and using the threshold. Left: each dot is a past regression of one group, placed at the value
-its plan had at its first revealing test; $\tau$ is the $k$-th smallest, and the regressions to its left are the
-ones the threshold would have called clean. Right: on a new change, the run stops with clean at the first test
-whose value is below $\tau$, unless a test fails first.}
+\caption{Setting and using the threshold. Left: each dot is a past regression of one group, placed at its score;
+$\tau$ is the $k$-th smallest, and the regressions to its left are the ones the threshold would have called clean.
+Right: on a new change, the run stops with clean at the first test whose value is below $\tau$, unless a test
+fails first.}
 \label{fig:stop}
 \end{figure}
 
@@ -405,9 +497,13 @@ the floor is a cheapest set
   F(\Delta) \subseteq \Tdiv \qquad \text{such that} \qquad \bigcup_{t \in F(\Delta) \cup K} U_t = \bigcup_{t \in
   \Tdiv \cup K} U_t ,
 \]
-found greedily, by the most uncovered items per token. The floor runs just before a clean verdict, not first, so it
-costs nothing when a regression shows up earlier. It guarantees coverage, not detection: covering is not catching
-(Section~\ref{sec:minimal}), so it complements the stopping rule and does not replace it.
+found greedily, by the most uncovered items per token.
+\begin{itemize}
+  \item The floor runs just before a clean verdict, not first, so it costs nothing when a regression shows up
+        earlier.
+  \item It guarantees coverage, not detection: covering is not catching (Section~\ref{sec:minimal}). It goes
+        under the stopping rule and does not replace it.
+\end{itemize}
 
 \section{Why not a fixed minimal set}
 \label{sec:minimal}
@@ -433,33 +529,38 @@ Such a set misses regressions for two reasons:
 Choosing per change avoids both. The replay picks, for each change, the tests through which it can reach the model,
 and by Corollary~\ref{cor:safe}, running all of $\Tdiv$ and reading the outcomes of the others from the replay
 misses no test that reveals the change. The coverage floor is the minimal set done per change: chosen among the
-reached tests after the replay, and used as a floor under the stopping rule rather than as the whole selection.
+reached tests after the replay, and used as a floor under the stopping rule, not as the whole selection.
 
 \section{A day of changes}
 \label{sec:day}
 
 A team merges many changes a day. Testing each one alone repeats the tests they share, and misses failures that
 appear only when changes meet. Testing the day's changes together, as one \emph{batch}, avoids both, but a failing
-test then does not say which change broke it. The replay helps before and after the batch runs, for free:
+test then does not say which change broke it. The replay helps at three moments.
+
+\paragraph{Before any model call: the day's map.} Every change of the day is replayed alone, and so is the batch.
+This gives the day's \emph{map}, which tests each change reaches, and it settles some changes at once:
 \begin{itemize}
-  \item every change of the day is replayed alone, as well as the batch, without the model. This gives the day's
-        \emph{map}: which tests each change reaches;
   \item a change that reaches no test and fails none in its replay needs no model at all, since no test can reveal
         it (Corollary~\ref{cor:safe}). If it was meant to change what the application does, the suite has no test
         for it, and the map shows that gap before anything runs;
-  \item a change whose own replay fails a test that passes on the original application is a regression, found
-        with its culprit before any model call;
-  \item the tests the batch reaches run once for the whole day, so a test that several changes reach is paid for
-        once, not once per change;
-  \item when a test fails on the batch, the \emph{suspects} are the changes whose own replay reaches that test or
-        fails it. A change whose own replay runs the test to the end and passes cannot make it fail on its own;
-  \item a single suspect is the culprit, with no further run. Several are told apart by halving: run the failing
-        test with half of them, keep the half that still fails, and repeat, about $\log_2$ of their number of runs;
-  \item no suspect, or halving that ends with no single change that fails the test, means the failure needs the
+  \item a change whose own replay fails a test that passes on $V_0$ is a regression, found with its culprit.
+\end{itemize}
+
+\paragraph{The run: once for the whole day.} The tests the batch reaches run once, with the model. A test that
+several changes reach is paid for once, not once per change.
+
+\paragraph{After a failure: the suspects.} When a test fails on the batch, the \emph{suspects} are the changes
+whose own replay reaches that test or fails it. A change whose own replay runs the test to the end and passes
+cannot make it fail on its own, and a change that makes the test fail by itself is always a suspect: that is
+Corollary~\ref{cor:safe} applied to the change alone.
+\begin{itemize}
+  \item \textbf{One suspect:} it is the culprit, with no further run.
+  \item \textbf{Several:} they are told apart by halving. Run the failing test with half of them, keep the half
+        that still fails, and repeat: about $\log_2$ of their number of runs.
+  \item \textbf{None,} or a halving that ends with no single change that fails the test: the failure needs the
         changes together, an \emph{interaction} that only the batch shows.
 \end{itemize}
-A change that makes the test fail by itself is always a suspect: that is Corollary~\ref{cor:safe} applied to the
-change alone.
 
 \section{Limits}
 
@@ -474,18 +575,20 @@ Besides conditions R and D:
 
 \section{Where it lives in the code}
 
+In the order of these pages:
 \begin{itemize}
-  \item checking one change live: \texttt{traceeval check <change> -{}-history <recording>}, with
-        \texttt{-{}-miss-rate} for the threshold and \texttt{-{}-floor} for the coverage floor,
-        \texttt{traceeval/experiment/check.py}; for a batch, the check also prints the day's map and the suspects
-        of a failing test (\texttt{traceeval/experiment/culprits.py});
-  \item the coverage floor: \texttt{traceeval/experiment/coverage.py::coverage\_floor};
-  \item the replay: \texttt{traceeval/experiment/replay\_first.py}; the cassette and the clients that answer from
-        it: \texttt{traceeval/llm/cache.py};
+  \item the replay: \texttt{traceeval replay-first}, \texttt{traceeval/experiment/replay\_first.py}; the cassette
+        and the clients that answer from it: \texttt{traceeval/llm/cache.py};
   \item recording changes on the reached tests only: \texttt{traceeval mutants -{}-reached-only},
         \texttt{traceeval/experiment/runner.py::record\_mutants};
-  \item the strategies: \texttt{traceeval/selection/}; the stopping threshold:
-        \texttt{traceeval/experiment/stopping.py}.
+  \item the strategies: \texttt{traceeval/selection/};
+  \item the stopping threshold: \texttt{traceeval/experiment/stopping.py};
+  \item the coverage floor: \texttt{traceeval/experiment/coverage.py::coverage\_floor};
+  \item checking one change live: \texttt{traceeval check <change> -{}-history <recording>}, with
+        \texttt{-{}-miss-rate} for the threshold and \texttt{-{}-floor} for the coverage floor,
+        \texttt{traceeval/experiment/check.py};
+  \item a batch: the same check also prints the day's map and the suspects of a failing test,
+        \texttt{traceeval/experiment/culprits.py}.
 \end{itemize}
 
 \end{document}
