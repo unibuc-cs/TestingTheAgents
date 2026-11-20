@@ -176,15 +176,15 @@ What the recordings say, with the section of [docs/RESEARCH_PLAN.md](docs/RESEAR
 | A stop with a miss rate you choose | a threshold per group of changes, set on past changes: at a 10% target `adaptive_bayes` misses none of the 25 regressions the replay leaves open, for 15% of the suite instead of 37%. One threshold for all changes misses 87% of the regressions among edits to prompts and prose | §5.4 |
 | A coverage floor under the threshold | every clean verdict covers what the change touches, for a few tenths of a point of the suite. A fixed minimal set of 15 tests covers as much and misses 13 of the 25 regressions: covering is not catching | §5.4 |
 | It holds live | `traceeval check --miss-rate 0.1 --confirm` finds all 28 regressions and raises no false alarm, for 2.8% of the suite per check | §5.4 |
-| It holds on changes nobody chose, and for a second model | the same on 342 generated changes the strategies never learned from; with Qwen, recorded one test at a time, every order of the reached tests finds all 32 of its regressions for 4% to 5% of the suite | §5.3, §5.2 |
+| It holds on changes nobody chose, and for a second model | the same on 342 generated changes the strategies never learned from; with Qwen, recorded one test at a time, every order of the reached tests finds all 32 of its regressions for 4% to 5% of the suite, and with thresholds set on its own generated changes the live check finds all 32 with no false alarm, for 2.8% of the suite per check | §5.3, §5.2, §5.4 |
 | A day's changes can be checked as one batch | live checks find 19 of the 20 batches a test reveals, with no false alarm. The members' own replays say which tests each member reaches (one member in seven reaches none) and name a failing test's suspects: two members of six on average, always with the member that fails it alone | §5.5 |
 | Without the replay, reading the change pays | an order by the traces, by the diff's text or by a model trained on the other changes finds 86% to 93% of the regressions within a 20% budget, hand-written dependencies 61%, and the two adapted methods stay at a random order's level | §5.6 |
 | Many tests at once is not a clean ground truth for every model | the answers of Qwen and gpt-oss vary with the batch | §5.8 |
 
 The full tables, with intervals over the changes, are in the reports of the recordings
 ([hand-written](docs/results/gemma8/report.md), [generated](docs/results/gemma8_gen/report.md),
-[Qwen](docs/results/qwen8/report.md)). The take-aways are in [RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.9, and
-what follows from them is the plan in [TODO.md](TODO.md).
+[Qwen](docs/results/qwen8/report.md), [Qwen's generated](docs/results/qwen8_gen/report.md)). The take-aways are in
+[RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §5.9, and what follows from them is the plan in [TODO.md](TODO.md).
 
 ## Built for the Adobe Team
 

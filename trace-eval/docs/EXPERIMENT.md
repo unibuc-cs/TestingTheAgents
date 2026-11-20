@@ -597,7 +597,8 @@ changes have no revealing test (section 7).
 
 The recordings of the current app, with 180 tests, 43 changes, the empty change, five repetitions and the model
 judge. The first is the recording of record. The others start from its baseline and cassette, except
-`runs/gemma8_exact`, `runs/qwen8` and `runs/qwen8_exact`, which have a baseline and a cassette of their own:
+`runs/gemma8_exact`, `runs/qwen8` and `runs/qwen8_exact`, which have a baseline and a cassette of their own, and
+`runs/qwen8_gen`, which starts from `runs/qwen8_exact`'s:
 
 | recording | model | where | time |
 |---|---|---|---|
@@ -608,7 +609,8 @@ judge. The first is the recording of record. The others start from its baseline 
 | `runs/gemma8_gen`, report in `docs/results/gemma8_gen/` | Gemma, started anew | fmi0's GPU0 | a little over six hours: 691 of the 692 generated changes for the tests each reaches, 114,230 runs, from `runs/gemma8`'s baseline and cassette; then half an hour for the held-out evaluation on ten processes |
 | `runs/gemma8_batches`, in `docs/results/gemma8_batches/` | Gemma, started anew | fmi0's GPU0 | 40 minutes for the 23 batches beside a copy of `runs/gemma8`, the whole suite on each, 32 tests at a time; then 12 minutes for their live checks (`scripts/batch_sweep.py`) |
 | `runs/qwen8`, report in `docs/results/qwen8/` | Qwen | fmi0's GPU1 | seventeen hours, one test at a time throughout: 78 minutes for the baseline, 77 for the empty change, and fifteen hours for the 43 changes (the tests each reaches) |
-| `runs/qwen8_exact`, `runs/qwen8_exact_restart` ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.2) | Qwen without its prefix cache, two starts | fmi0's GPU1 | five hours, one test at a time: 100 minutes for the baseline, with a cassette of its own, and 100 for each empty change, under the same start and under another from a copy of that baseline |
+| `runs/qwen8_exact`, `runs/qwen8_exact_restart`, report in `docs/results/qwen8_exact/` | Qwen without its prefix cache, two starts | fmi0's GPU1, then both of its GPUs for the changes | five hours, one test at a time: 100 minutes for the baseline, with a cassette of its own, and 100 for each empty change, under the same start and under another from a copy of that baseline; then two hours for the 43 changes (the tests each reaches, one run each), a server on each GPU and one test at a time on each |
+| `runs/qwen8_gen`, report in `docs/results/qwen8_gen/` | Qwen without its prefix cache, a server on each GPU | both of fmi0's GPUs | seven hours: 691 of the 692 generated changes for the tests each reaches, one run each, 22,763 runs, one test at a time on each GPU, from `runs/qwen8_exact`'s baseline and cassette; then half an hour for the 86 live checks |
 
 On the original app 172 of 180 tests pass, 28 of the 34 regressions are revealed and no benign change is, so the
 report's sanity line says VIOLATED for the six changes below. They stay in the set:

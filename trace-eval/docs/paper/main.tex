@@ -697,7 +697,8 @@ $G'$ & the baseline and cassette of $G$; the empty change and, for each of the 4
 $G_{\mathrm{gen}}$ & the baseline and cassette of $G$; for each generated change, the tests it reaches. A test that replays to the end is not run: under condition R its outcome is the replay's \\
 $X$ & Gemma served without its prefix cache, one test at a time: a baseline and cassette of its own, the empty change under the baseline's start of the server and under another, and the 43 changes for the tests each reaches: 9,910 runs \\
 $Q$ & Qwen, a second model, one test at a time: its own baseline and cassette, the empty change, and the 43 changes for the tests each reaches: 9,040 runs \\
-$X_Q$ & Qwen served as in $X$: its own baseline and cassette, and the empty change under the baseline's start of the server and under another: 2,700 runs \\
+$X_Q$ & Qwen served as in $X$: its own baseline and cassette, the empty change under the baseline's start of the server and under another, and the 43 changes for the tests each reaches, one run each: 4,127 runs \\
+$Q_{\mathrm{gen}}$ & the baseline and cassette of $X_Q$, served the same way; for each generated change, the tests it reaches, one run each: 22,763 runs \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -778,7 +779,9 @@ changes with a revealing test, of 43 & 28 & 29 & 30 & 32 \\
         baseline's start of the server or under another, and the five runs of every reached pair are one run.
         Five passes of the suite then take half an hour instead of two to three minutes. Qwen served the same way
         ($X_Q$) answers none of its 5,310 requests otherwise either, under two starts, where $Q$ had 0.4\%; its
-        five passes take 100 minutes instead of 78. Three of the 1,442 labels differ between $G$ and $X$, and five
+        five passes take 100 minutes instead of 78. Nor is any of the 5,049 and 69,368 requests of its hand-written
+        and generated changes that the baseline had sent ($X_Q$, $Q_{\mathrm{gen}}$). Three of the 1,442 labels
+        differ between $G$ and $X$, and five
         of Qwen's 180 tests pass or fail on the current version otherwise than in $Q$: a label belongs to a model
         and to the way it is served.
   \item \emph{Condition D holds on every recording.} Replayed against its own cassette, $V_0$ replays all 180 tests
@@ -864,8 +867,9 @@ so Equation~\ref{eq:cost} can be evaluated exactly.
         can be trusted is RQ4.
   \item \emph{The picture holds under the setup whose answers repeat, and for a second model.} Every order of the
         reached tests finds all 30 regressions of $X$ for 4.8\% to 6.1\% of the suite (the cache: 12.8\%), and all
-        32 of $Q$ for 3.6\% to 5.4\% (the cache: 14.2\%). Under Qwen \strat{adaptive\_bayes}, whose constants were
-        set on Gemma, finds 84\% and gives 31\% of its clean verdicts on a regression.
+        32 of $Q$ for 3.6\% to 5.4\% (the cache: 14.2\%) and of $X_Q$ for 3.0\% to 5.8\% (14.0\%). Under Qwen
+        \strat{adaptive\_bayes}, whose constants were set on Gemma, finds 84\% and gives 31\% of its clean
+        verdicts on a regression; RQ4 sets its threshold on Qwen's own changes.
 \end{itemize}
 
 \paragraph{On changes the strategies never learned from.} The 691 generated changes of $G_{\mathrm{gen}}$ are split
@@ -877,7 +881,10 @@ which 165 are regressions. The picture of the hand-written changes holds:
         budget an order of the reached tests finds 78\% to 86\%, and the declared dependencies 50\%;
   \item over the whole suite \strat{adaptive\_bayes} leads at a 5\% budget, and here the lead is established: it
         finds 0.73 against 0.65 for \strat{ir\_tfidf}, a difference of 8 points with a 95\% bootstrap interval from
-        1 to 15.
+        1 to 15;
+  \item under Qwen ($Q_{\mathrm{gen}}$) a test reveals 357 of the 691 changes, against 316 under Gemma: Qwen
+        notices more of the edits to text, 38\% against 17\%. On its 342 held-out changes an order of the reached
+        tests finds every regression for 7.0\% to 9.3\% of the suite.
 \end{itemize}
 
 \subsection{RQ4: stopping with a bounded miss rate}
@@ -1014,6 +1021,12 @@ adaptive, with its constant $\varepsilon$ & \multicolumn{3}{c}{7.5\%} & \multico
   \item \emph{Covering is not catching.} The 15 tests that cover all that the suite covers (14\% of it), run on
         every change, miss 13 of the 25 hand-written regressions, although their clean verdicts cover everything
         the changes touch. The floor alone misses 18, for 0.5\% of the suite: it is a floor, not a selection.
+  \item \emph{A second model gives the same answer.} With rules and thresholds set on Qwen's own generated
+        changes ($Q_{\mathrm{gen}}$: 553 open changes, 321 of them regressions), the adaptive rule with a threshold
+        per group misses 4.4\% of the regressions at a 10\% target, both within the population and on a kind it
+        never saw, and one of the 28 open hand-written regressions of $X_Q$, for 5.3\% of the suite where every
+        reached test costs 11.0\%. With one threshold the misses pile up among the edits to text again (44\% for
+        the learned rule), and the learned rule misses five to ten of the 28 at every target.
   \item \emph{The second set is small:} 25 regressions, so one miss is four points.
 \end{itemize}
 The answer to RQ4 is yes, with two qualifications. What makes a rule cheap inside the population can make it wrong
@@ -1058,6 +1071,10 @@ tokens per check, per cent of the suite & 1.6 & 2.8 & 2.0 \\
   \item \emph{With a target miss rate of 10\% the check finds every regression and raises no false alarm,} for
         2.8\% of the suite's tokens per check. An edit to a prompt every request reads, which reaches 145 runnable
         tests, is cleared after 54 to 57 of them. At 20\% three regressions are called clean, within the target.
+  \item \emph{The same for a second model.} With Qwen served as in $X_Q$ and its thresholds set on
+        $Q_{\mathrm{gen}}$, the check at a 10\% target finds all 32 regressions and raises no false alarm on the
+        other 11 changes, for 2.8\% of the suite per check, and every failure repeats when the test is run again.
+        At 20\% four regressions are called clean, within the target.
 \end{itemize}
 
 \subsection{Other serving setups, and batches}
@@ -1097,9 +1114,9 @@ belongs to it in 13.
   \item \emph{One application, built for the purpose,} with a suite written by the authors; its tests and changes
         share vocabulary, which favours the strategies that read text. Where every request carries one long policy,
         an edit to the policy reaches every test and the replay prunes nothing.
-  \item \emph{Two models, one server software, one kind of GPU.} The generated changes and the stopping thresholds
-        were tried with Gemma only, and the setup under which condition R holds exactly with Gemma and, on the
-        empty change, Qwen. A hosted model can change
+  \item \emph{Two models, one server software, one kind of GPU.} Both were tried on the generated changes, with
+        the stopping thresholds and under the setup in which condition R holds exactly; Qwen's changed copies were
+        run once each, on the strength of that setup. A hosted model can change
         without notice, which invalidates a cassette silently unless the empty change is recorded again.
   \item \emph{The ground truth is a majority of five runs,} and seven of the 28 regressions rest on a single test.
   \item \emph{The stopping rule's guarantee is marginal and assumes exchangeability:} over the changes of a group,

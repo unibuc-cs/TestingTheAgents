@@ -27,7 +27,8 @@ University of Bucharest / ILDS. The results are in `docs/results/gemma8/report.m
   - A threshold per group of changes keeps the miss rate of a clean verdict at its target, also on changes unlike
     the past ones. Live at a 10% target, `traceeval check` finds all 28 regressions with no false alarm, for 2.8%
     of the suite per check.
-  - Qwen, recorded one test at a time, gives the same picture.
+  - Qwen gives the same picture, its stop thresholds included: live at a 10% target, all 32 of its regressions
+    are found with no false alarm, for 2.8% of the suite per check.
 - **What is not new (§7).** Replaying recorded answers into changed code is test factoring's mechanism (2005), and
   a cache of answers already pays only for changed requests; the cache is the baseline every cost is given against.
 - **Next.** `TODO.md`: a second application (tau2-bench, §6), the serving setup in which every answer repeats for
@@ -700,6 +701,10 @@ the cassette lacks (`docs/results/gemma8/second_recording.md`, `docs/results/gem
 - *Qwen served the same way repeats exactly too* (`runs/qwen8_exact`: a baseline of its own, and the empty change
   under its start of the server and under another): none of 5,310 requests is answered otherwise, against 20 of
   5,580 with the cache on (`runs/qwen8`). Five passes take 100 minutes instead of 78.
+- *So do its 43 changes,* recorded that way with one run per reached test (`docs/results/qwen8_exact/`): none of
+  the 5,049 requests the baseline had sent is answered otherwise. 32 changes have a revealing test, the replay
+  settles nine, and every order of the reached tests finds all 32 for 3.0% to 5.8% of the suite, where the cache
+  pays 14.0%.
 - *The ground truth moves a little with the setup:* 3 of the 1,442 labels differ between `runs/gemma8` and
   `runs/gemma8_exact`, and 5 of the 180 tests pass or fail on the original app under Qwen otherwise than in
   `runs/qwen8`, each with all five runs on one side. A label is a fact about a model and the way it is served.
@@ -741,8 +746,8 @@ over all changes, charged by the bound: each strategy over the whole suite (§5.
   - replay-first is cheaper because a run ends at its first failure and leaves out the tests the model already
     fails; on a change no test reveals the two cost the same.
 - *Under Qwen,* `adaptive_bayes` with its own constant finds 84% of the regressions for 1.6% of the suite, and 31%
-  of its clean verdicts are given on a regression: its constants were set on Gemma, and Qwen has no generated
-  recording to set a threshold on.
+  of its clean verdicts are given on a regression: its constants were set on Gemma. A threshold set on Qwen's own
+  generated changes takes the constant's place (§5.4).
 - *Live.* `traceeval check`, run live on the 43 changes with Gemma started anew on other GPUs, gives the
   evaluator's replay-first verdict on 41, after as many tests (`docs/results/gemma8/live_checks.md`). The one
   false alarm is a workflow test that fails its one live run and passes five of five in the recording; the other
@@ -756,15 +761,15 @@ hour of CPU for all), and recorded for the tests it reaches, five times with Gem
 the environment. One change is left out: it negates the condition that nudges an agent once after an empty answer,
 so no run ends (the app has no limit on model calls per run, `TODO.md` §3).
 
-| what the change edits | changes | settled by the replay | tests reached, mean | revealed by a test |
-|---|---|---|---|---|
-| a skill's steps | 171 | 0 | 25 | 26% |
-| text the model reads | 157 | 1 | 58 | 17% |
-| an agent's tools and skills | 50 | 0 | 28 | 92% |
-| the configuration | 65 | 12 (3 as regressions) | 33 | 80% |
-| code | 164 | 73 (30 as regressions) | 36 | 89%, comments aside |
-| the starting data | 85 | 48 (3 as regressions) | 3 | 35% |
-| all | 692 | 134 (36 as regressions) | 33 | 316 of 691 |
+| what the change edits | changes | settled by the replay | tests reached, mean | revealed by a test | under Qwen |
+|---|---|---|---|---|---|
+| a skill's steps | 171 | 0 | 25 | 26% | 32% |
+| text the model reads | 157 | 1 | 58 | 17% | 38% |
+| an agent's tools and skills | 50 | 0 | 28 | 92% | 90% |
+| the configuration | 65 | 12 (3 as regressions) | 33 | 80% | 77% |
+| code | 164 | 73 (30 as regressions) | 36 | 89%, comments aside | 91%, comments aside |
+| the starting data | 85 | 48 (3 as regressions) | 3 | 35% | 33% |
+| all | 692 | 134 (36 as regressions) | 33 | 316 of 691 | 357 of 691 |
 
 - *The picture of §5.2 holds on a set nobody chose:* 19% of the changes need no model (19% of the 43), and the
   mean change leaves 21% of the suite to run (21%). 2.8% of the requests the original app had made are answered
@@ -787,6 +792,24 @@ do so from one fixed half, 349 changes, and all are evaluated on the other 342, 
   change no test reveals. `adaptive_bayes` stops early, at 2.6% and 11.6%, and 4% of its clean verdicts are given
   on a regression. An order calls about 1% of the regressions clean: runs that draw a passing run of a revealing
   test whose runs disagree.
+
+**Under Qwen** (`runs/qwen8_gen`, report in `docs/results/qwen8_gen/report.md`): the same 691 changes on Qwen's
+original app and cassette, served one test at a time and without the prefix cache, one run per reached test.
+
+- *Every answer repeats:* in 22,763 runs, none broken by the environment, none of the 69,368 requests the original
+  app had made is answered otherwise.
+- *The replay settles the same share:* 134 of the 692, and the mean change leaves 21% of the suite to run.
+- *Qwen notices more of the edits to text:* 38% of them are revealed, against 17% under Gemma, and 357 changes of
+  the 691 in all (the last column of the table above).
+- *On the 342 held-out changes,* of which 186 are regressions:
+  - with no budget an order of the reached tests finds every regression for 7.0% to 9.3% of the suite, where the
+    strategies that find as many without the replay spend 23% to 57%; within a 5% budget an order of the reached
+    tests finds 70% to 77%, and the hand-written dependencies 42%;
+  - without the replay `adaptive_bayes` finds the most at a 5% budget, 0.68 against 0.63 for `ir_tfidf`, a
+    difference of 5 points that is not established (a 95% interval from -2 to +13);
+  - replay-first and with no budget, an order spends 4.7% to 8.8% of the suite on a regression and 9.9% on a
+    change no test reveals. `adaptive_bayes` stops early, at 3.2% and 9.6%, and 6% of its clean verdicts are given
+    on a regression. No order calls a regression clean: with every answer repeating, no test's runs disagree.
 
 ### 5.4 Stopping with a bounded miss rate, and a failure confirmed
 
@@ -896,6 +919,32 @@ the 43 hand-written changes, with no budget and the thresholds set on `runs/gemm
 - at a 20% target it calls three regressions clean (two changes to code and the authoring skill without its
   metadata step), 3 of 28 and within the target, for 2.0% per check;
 - with the method's constant and a 20% budget (§5.2) the check found 27, with one false alarm.
+
+**The same under Qwen** (`runs/qwen8_gen` and, for the 43 hand-written changes, `runs/qwen8_exact`; full tables in
+`docs/results/qwen8_gen/stopping.md`, the live checks in `docs/results/qwen8_gen/live_checks_miss_rate.md`). Of the
+691 changes the replay leaves 553 open, 321 of them regressions, and running every reached test costs 15.0% of the
+suite on a change no test reveals. With `adaptive_bayes` unless a row says otherwise:
+
+| | Gemma | Qwen |
+|---|---|---|
+| within the generated changes, a threshold per group, 10% target: regressions missed, and what a clean verdict costs | 5.3%, 17.5% | 4.4%, 11.6% |
+| one threshold, 10% target: missed among the edits to text, by the learned rule and by `adaptive_bayes` | 87%, 31% | 44%, 18% |
+| a kind never seen, a threshold per group: missed at a 5%, 10% and 20% target | 0.4%, 3.2%, 11.0% | 4.4%, 4.4%, 17.1% |
+| the hand-written regressions the replay leaves open, per group: missed at 5%, 10%, 20% | 0, 0, 3 of 25 | 1, 1, 5 of 28 |
+| on those changes, a clean verdict at a 10% target, against every reached test | 15.3%, 37.0% | 5.3%, 11.0% |
+| the learned rule on them, per group: missed at 5%, 10%, 20% | 5, 5, 6 of 25 | 5, 6, 10 of 28 |
+| the method's own constant on them | 2 of 25 missed, for 19.2% | 2 of 28 missed, for 7.4% |
+| with the coverage floor, at a 20% target: missed, and what a clean verdict covers | 2 of 25, 100% | 4 of 28, 100% |
+| a fixed minimal set: its tests, and the regressions it misses | 15 tests, 13 of 25 | 16 tests, 16 of 28 |
+| live at a 10% target: regressions found, false alarms, tokens per check | 28 of 28, none, 2.8% | 32 of 32, none, 2.8% |
+| live at a 20% target: regressions called clean | 3 of 28 | 4 of 32 |
+
+- *The promise holds for a second model,* within the generated changes, on a kind never seen and on the
+  hand-written changes, with a threshold per group. With one threshold the misses pile up among the edits to text
+  again.
+- *The learned rule travels badly again:* it misses its target on the hand-written changes at every target.
+- *Live, every failure repeats when the test is run again:* 28 failures at a 10% target, none taken back. Served
+  one test at a time and without the prefix cache, a second run says what the first said.
 
 **A failure confirmed by a repetition** (`scripts/analysis/confirm_failures.py`; `traceeval check --confirm`). One
 failing run of a test whose runs disagree can be the minority. Four orders of the reached tests are replayed with
@@ -1122,7 +1171,7 @@ The plan the work follows, with what is done and what is open, is [`TODO.md`](..
 
 | | state |
 |---|---|
-| the testbed, the strategies, replay-first, the stop with a bounded miss rate, the generated changes, the batches | done on Gemma's recordings (§5.2 to §5.6) and, for the 43 changes, on Qwen's (§5.2) |
+| the testbed, the strategies, replay-first, the stop with a bounded miss rate, the generated changes, the batches | done on Gemma's recordings (§5.2 to §5.6) and on Qwen's (§5.2 to §5.4) |
 | a second application: tau2-bench, a public benchmark of tool-using agents with a simulated user (`docs/REFERENCES.md`). The airline domain has 50 tasks with a reward computed from the database state and the agent's communication, and no model judge. The local model plays both the agent and the user, the controlled changes mutate the policy and the tool code (12 mutations: 6 policy, 4 tool-code, 2 benign), and the replay evaluator and the strategies run unchanged | next |
 | open questions of method | tuning $\varepsilon$, the priors and the discount; sensitivity to budget definitions (time against tokens); more repetitions for the models whose answers vary |
 | the paper | drafted: `docs/paper/main.tex` (§7) |

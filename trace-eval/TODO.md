@@ -13,12 +13,11 @@ its §5.9.
 
 | | what | state |
 |---|---|---|
-| 1 | Qwen's stop thresholds, set on generated changes recorded with Qwen: the write-up | recorded, without the prefix cache and one test at a time on each of fmi0's GPUs: the 43 changes in `runs/qwen8_exact`, the generated ones in `runs/qwen8_gen`, the live checks at a 10% and a 20% target in `runs/live_checkq8_miss0.1` and `runs/live_checkq8_miss0.2`; the docs and the paper do not have them yet |
-| 2 | The replay's stand-ins checked live: a random sample of the (change, test) pairs a generated-change recording did not run, because they replay to the end, run with the model and compared with the replay | next: fmi0's GPUs are free |
-| 3 | A day of changelists, the open steps: halving live, the rolling cassette, a live sample to watch R, and the adaptive method for a day's many components | §9 |
-| 4 | Exact serving for gpt-oss: the prefix cache off, one test at a time, a baseline and the empty change under two starts of the server | later: it needs both of fmi0's GPUs |
-| 5 | A second application, tau2-bench's airline domain | later: waits for the go-ahead to install and run its code (§4) |
-| 6 | The paper in the venue's format | later: the venue and its page limit are still to choose (§6) |
+| 1 | The replay's stand-ins checked live: a random sample of the (change, test) pairs a generated-change recording did not run, because they replay to the end, run with the model and compared with the replay | next: fmi0's GPUs are free |
+| 2 | A day of changelists, the open steps: halving live, the rolling cassette, a live sample to watch R, and the adaptive method for a day's many components | §9 |
+| 3 | Exact serving for gpt-oss: the prefix cache off, one test at a time, a baseline and the empty change under two starts of the server | later: it needs both of fmi0's GPUs |
+| 4 | A second application, tau2-bench's airline domain | later: waits for the go-ahead to install and run its code (§4) |
+| 5 | The paper in the venue's format | later: the venue and its page limit are still to choose (§6) |
 
 ## 1. Fair tables (replay only): done
 
@@ -65,6 +64,7 @@ Done, with the results in `docs/RESEARCH_PLAN.md`:
 | a second recording, under another start of the server | `runs/gemma8_restart` | §5.2 |
 | exact serving, no prefix cache and one test at a time, for Gemma and Qwen | `runs/gemma8_exact`, `runs/qwen8_exact` | §5.2 |
 | a second model, with its own cassette | `runs/qwen8` | §5.2 |
+| the second model's 43 changes with every answer repeating, its generated changes, its stop thresholds and their live checks | `runs/qwen8_exact`, `runs/qwen8_gen` | §5.2, §5.3, §5.4 |
 | the batches on the current app: replayed, evaluated, checked live | `runs/gemma8_batches` | §5.5 |
 | `traceeval check` live on the 43 changes | `docs/results/gemma8/live_checks.md` | §5.2 |
 
