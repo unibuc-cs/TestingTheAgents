@@ -4,6 +4,7 @@
 them over the 691 changes, has no run: the test replays to the end on the changed copy, and its replayed run stands
 in for it. Under conditions R and D the live outcome is the replay's
 ([RESEARCH_PLAN.md](../../RESEARCH_PLAN.md) §3.3). This page checks that on a sample, with the model.
+[Qwen's page](../qwen8_gen/stand_ins_live.md) does the same for `runs/qwen8_gen`.
 
 `python scripts/analysis/stand_ins_live.py runs/gemma8_gen --backend vllm --workers 32 --changes 100 --tests 30`
 draws 100 changes at random and 30 replayed tests of each (27 for nine changes that have no more), makes each

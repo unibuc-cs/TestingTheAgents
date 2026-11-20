@@ -806,6 +806,10 @@ original app and cassette, served one test at a time and without the prefix cach
 - *The replay settles the same share:* 134 of the 692, and the mean change leaves 21% of the suite to run.
 - *Qwen notices more of the edits to text:* 38% of them are revealed, against 17% under Gemma, and 357 changes of
   the 691 in all (the last column of the table above).
+- *The pairs the recording did not run end as their replay says, answer for answer*
+  (`docs/results/qwen8_gen/stand_ins_live.md`). Of the 101,617 pairs taken from the replay, 1,000 drawn at random
+  over 100 changes were run with the model: all 1,000 end like their stand-in, the 83 replayed failures included,
+  and all are the same conversation. None of their 4,846 requests is answered otherwise.
 - *On the 342 held-out changes,* of which 186 are regressions:
   - with no budget an order of the reached tests finds every regression for 7.0% to 9.3% of the suite, where the
     strategies that find as many without the replay spend 23% to 57%; within a 5% budget an order of the reached

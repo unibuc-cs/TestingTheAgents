@@ -66,7 +66,7 @@ Done, with the results in `docs/RESEARCH_PLAN.md`:
 | the second model's 43 changes with every answer repeating, its generated changes, its stop thresholds and their live checks | `runs/qwen8_exact`, `runs/qwen8_gen` | §5.2, §5.3, §5.4 |
 | the batches on the current app: replayed, evaluated, checked live | `runs/gemma8_batches` | §5.5 |
 | `traceeval check` live on the 43 changes | `docs/results/gemma8/live_checks.md` | §5.2 |
-| the replay's stand-ins checked live: a sample of the pairs a recording took from the replay, run with the model | `docs/results/gemma8_gen/stand_ins_live.md` | §5.3 |
+| the replay's stand-ins checked live: a sample of the pairs a recording took from the replay, run with the model, for Gemma and Qwen | `docs/results/gemma8_gen/stand_ins_live.md`, `docs/results/qwen8_gen/stand_ins_live.md` | §5.3 |
 
 Open:
 

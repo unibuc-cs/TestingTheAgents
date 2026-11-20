@@ -44,7 +44,7 @@ flowchart TD
   `gemma8_exact` is the same app and changes recorded with the server set so that every answer repeats, and
   `qwen8` is Qwen's recording of them, one test at a time ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.2).
   `qwen8_exact` is Qwen's with every answer repeating, and `qwen8_gen` its generated changes, with
-  `stopping.md` and `live_checks_miss_rate.md` as for Gemma (§5.3, §5.4).
+  `stopping.md`, `live_checks_miss_rate.md` and `stand_ins_live.md` as for Gemma (§5.3, §5.4).
   `gemma8_batches` adds 23 batches of changes beside them, with `batches.md`: every batch, replayed, evaluated and
   checked live, and `culprits.md`: the members' own replays, which tests each reaches and the suspects of each
   batch failure among them (§5.5).
