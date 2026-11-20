@@ -612,11 +612,10 @@ report's sanity line says VIOLATED for the six changes below. They stay in the s
 | `skill_linkval_ignore_assets` | it stops at a broken asset reference even when the skill says it does not block |
 | `skill_routing_drop_brand_gate` | at the majority line: in four runs of five it stops the plan at the failed brand check without being told to, so WF1-02, the one test that can see the change, fails once |
 
-The ground truth holds up: the empty change flips none of the 180 tests, the five runs of a (change, test) pair
-disagree on four pairs only, and no replayed outcome differs from the recorded one
-([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.1 and §5.2). Recorded again under another start of the server, the empty
-change still flips none, and 2 of the 1,442 labels on the tests the changes reach differ: `runs/gemma8_restart`
-counts 29 revealed regressions, with `skill_routing_drop_brand_gate` among them.
+How well this ground truth holds up (the empty change, the runs of a pair that disagree, the replayed outcomes
+against the recorded ones, a second recording under another start of the server) is measured in
+[RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.1 and §5.2. Under the other start, `runs/gemma8_restart`,
+`skill_routing_drop_brand_gate` is revealed too.
 
 The recordings below are of the app as it was before the harness and test fixes of [TODO.md](../TODO.md) §3.
 `traceeval check` refuses them, and what they measured stands as measured on that version:
