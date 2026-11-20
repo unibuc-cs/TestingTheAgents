@@ -268,7 +268,7 @@ $$P(t \text{ fails} \mid B) = 1 - (1 - f_t) \prod_{c \in B} (1 - s_{tc}),$$
 where $f_t$ is the test's fail rate on the original app and $s_{tc}$, the sensitivity of test $t$ to component $c$,
 is the product of four factors,
 
-$$s_{tc} = r_{k(c)} \cdot \ell_{t,k(c)} \cdot \phi_t(c) \cdot \tau_t,$$
+$$s_{tc} = r_{k(c)} \cdot \ell_{t,k(c)} \cdot \phi_t(c) \cdot \mathrm{bonus}_t,$$
 
 in the paper's notation (`docs/USER_GUIDE.md` §5 calls them kind ratio, test record, coverage and tilt):
 
@@ -293,10 +293,10 @@ in the paper's notation (`docs/USER_GUIDE.md` §5 calls them kind ratio, test re
     call a changed function.
 - $\phi_t(c)$ is how often $t$ exercised $c$ in its baseline runs. For an agent's tool or skill list that only lost
   items, it is how often $t$ used one of the removed items.
-- $\tau_t \in [0.5, 2]$ combines the lexical relevance of the change text (code only, never comments) to the test's
-  own text (name, request, expectations) with a bonus when the author declared the dependency. It is a proxy for
-  whether the test's oracle plausibly observes the changed behaviour. The relevance measure is an option (`text`):
-  word overlap (the default), TF-IDF, or none (§5.6).
+- $\mathrm{bonus}_t \in [0.5, 2]$ combines the lexical relevance of the change text (code only, never comments) to
+  the test's own text (name, request, expectations) with a bonus when the author declared the dependency. It is a
+  proxy for whether the test's oracle plausibly observes the changed behaviour. The relevance measure is an option
+  (`text`): word overlap (the default), TF-IDF, or none (§5.6).
 
 *Policy (step 3).*
 
@@ -1193,9 +1193,18 @@ Re-planning after a failed step is built on a branch and waits for one product d
 ## 7. Paper
 
 The draft is `docs/paper/main.tex` (build with `latexmk -pdf main`), written around replay-first from the numbers
-of §5.2 to §5.4: the setting and what is new, the testbed, the abstractions, replay-first and its condition,
-ordering and stopping over the reached tests, the evaluation in five questions with its threats, the take-aways,
-and the conclusion with future work. The strategies' algorithms are in an appendix.
+of §5.2 to §5.4. Its sections, in order:
+
+1. the setting, what is new, and how to read the paper;
+2. the terms and the notation;
+3. replay-first: the mechanism, its two conditions, what a reached test costs;
+4. ordering and stopping over the reached tests, a failure confirmed by a repetition, a batch of changes;
+5. the testbed: the application, the tests, the changes, the models and the recordings;
+6. the evaluation in five questions, each opening with its answer, and its threats;
+7. the take-aways;
+8. the conclusion with future work.
+
+The strategies' constants and algorithms are in an appendix.
 
 The venues are ASE, ISSTA or ICST, with a software-engineering framing: regression test selection for LLM-based
 systems, a mutation-based ground truth, a stopping rule with a guarantee. The alternative is NeurIPS D&B or

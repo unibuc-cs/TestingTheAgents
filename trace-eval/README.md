@@ -90,7 +90,7 @@ services and the test's checks. A test then either *replays* to the end, with it
 | nothing the test's run touches | every request is one the original app made | replays to its recorded outcome |
 
 The replayed outcome is the live one under two conditions ([docs/RESEARCH_PLAN.md](docs/RESEARCH_PLAN.md) §3.3,
-[the paper](docs/paper/main.tex) §4):
+[the paper](docs/paper/main.tex) §3):
 
 - **R**: the model as served gives the same request the same answer. The empty change measures it for a model and
   its server.

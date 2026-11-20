@@ -119,7 +119,7 @@ Open:
 
 Done: `docs/paper/main.tex`, `README.md` and `docs/RESEARCH_PLAN.md` are written around replay-first, with the
 related work verified at its sources (`docs/related_work.md` §8) and every cost given against the whole suite
-re-run through an exact-match cache. The paper has 13 tables and 18 pages of text.
+re-run through an exact-match cache. The paper has 13 tables and 25 pages of text before its references.
 
 Open:
 
