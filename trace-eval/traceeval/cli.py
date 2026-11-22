@@ -307,7 +307,7 @@ def cmd_sdd_draft(args):
     # The product model (tools, settings, functions, cases the draft may name) comes from a baseline recording;
     # the default replay backend gives one without a model.
     sut_dir, runs, deps = record_baseline(Path(args.workdir), catalog, backend=args.backend)
-    out = Path(args.out) if args.out else Path("traceeval/specs") / f"{args.id}.draft.yaml"
+    out = Path(args.out) if args.out else Path("openspec/specs") / args.id.lower() / "spec.draft.md"
     result = draft(
         Path(args.request),
         args.id,
@@ -317,7 +317,7 @@ def cmd_sdd_draft(args):
         replay=Path(args.replay) if args.replay else None,
         save_response=Path(args.save_response) if args.save_response else None,
     )
-    print(f"draft: {result['draft']}\nrendering: {result['rendering']}")
+    print(f"draft: {result['draft']}")
     for n in result["problems"] + result["validation"]:
         print(f"  {n}")
 
@@ -417,7 +417,7 @@ def main(argv=None):
     sd = sub.add_parser("sdd")
     sd.add_argument("action", nargs="?", default="run", choices=["run", "draft"])
     sd.add_argument("--workdir", default="runs/sdd")
-    sd.add_argument("--specs", nargs="*", help="run: spec ids (default: all)")
+    sd.add_argument("--specs", nargs="*", help="run: spec ids (default: the change requests of the demo)")
     sd.add_argument("--out", default=None, help="run: report directory (default: the workdir); draft: the draft file")
     sd.add_argument("--request", help="draft: the change request (markdown or text)")
     sd.add_argument("--id", default="FS-0106", help="draft: id of the new spec")

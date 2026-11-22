@@ -25,6 +25,7 @@ import yaml
 
 from traceeval.mutation.changeset import _flatten, _skill_parts
 from traceeval.spec.draft import parse_answer
+from traceeval.spec.model import load_spec
 from traceeval.sut import SUT_ROOT
 
 from .loader import CATALOG_ROOT, load_catalog, load_properties
@@ -64,13 +65,13 @@ def requirements(sut: Path = SUT_ROOT, specs: Path | None = None) -> tuple[str, 
     config = (sut / "config" / "runtime.yaml").read_text(encoding="utf-8")
     parts.append(f"## Configuration (config/runtime.yaml)\n{config.strip()}")
     ids += [f"config:{k}" for k in _flatten(yaml.safe_load(config))]
-    # Each spec's intent and the kinds of clause it holds, not the clauses themselves: the model reads
-    # requirements, not checks.
-    for path in sorted(specs.glob("FS-*.yaml")):
-        spec = yaml.safe_load(path.read_text(encoding="utf-8"))
-        uses = ", ".join(sorted({c.get("use", "?") for c in spec.get("clauses", [])}))
-        parts.append(f"## Spec {spec['id']}: {spec['title']}\n{spec['intent'].strip()}\nClause kinds: {uses}")
-        ids.append(f"spec:{spec['id']}")
+    # Each change request's intent and the kinds of clause it holds, not the clauses themselves: the model reads
+    # requirements, not checks. The as-built specs (FS-02xx) and the testbed-* capabilities are left out.
+    for path in sorted(specs.glob("fs-01*/spec.md")):
+        spec = load_spec(path)
+        uses = ", ".join(sorted({c.template or "?" for c in spec.clauses}))
+        parts.append(f"## Spec {spec.id}: {spec.title}\n{spec.intent}\nClause kinds: {uses}")
+        ids.append(f"spec:{spec.id}")
     return "\n\n".join(parts), ids
 
 

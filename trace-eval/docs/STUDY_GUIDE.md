@@ -52,7 +52,7 @@ The testbed provides the raw material for most of it:
 
 | what the note asks for | the testbed provides | the SDD layer adds |
 |---|---|---|
-| a spec that machines can check | none | `specs/FS-*.yaml`: prose intent plus clauses of five kinds; `spec/checks/` holds one checker per kind |
+| a spec that machines can check | none | `openspec/specs/*/spec.md`: prose intent plus clauses of five kinds; `spec/checks/` holds one checker per kind |
 | an up-to-date product model | files, functions, the tool registry, skill procedures and config (static); traces (dynamic) | `spec/product.py` puts both behind queries: `locate(tools)`, `cases_calling(tools)`, `status_setters()`, `skill_write_tools(skill)` |
 | generation of only the needed code, in the right place | the mutation machinery: a PR is a set of file edits applied to a copy of the app | `spec/prs.py`, 25 PRs with expected verdicts |
 | an evidence record | the `observed` strategy on a change set, as the regression line of every record | `spec/runner.py` (evidence record and agent brief), `spec/report.py` |
@@ -86,7 +86,7 @@ requests, one of each kind of change"). The verdicts are in `docs/sdd/report.md`
 
 ### 3.1 FS-0101 in detail
 
-`specs/FS-0101.yaml` has ten clauses written against the clause catalog. Each one names a template
+`openspec/specs/fs-0101-approval-validity/spec.md` has ten clauses written against the clause catalog. Each one names a template
 (`use: <template>`) and fills its slots (`with: {slots}`); the clause ids and texts are generated. The first
 section of `spec/prs.py` holds the correct PR, four wrong ones, and one that is correct but written
 with a branch. In the matrix below, taken from `docs/sdd/report.md`, each wrong PR fails a different
@@ -154,7 +154,7 @@ To extend the layer:
    the printed verdict, and the trace as spans in `trace.json`.
 2. (30 min) `docs/SDD_DEMO.md`, then `docs/sdd/report.md`: the verdict table, the resources table, and
    FS-0101's section in full, with the brief and the six PR records.
-3. (60 min) The code in the order of section 4, with `specs/FS-0101.yaml` next to `checks/contracts.py`
-   and `checks/traces.py`; then `specs/FS-0105.yaml` next to the behavioural `forall` branch.
+3. (60 min) The code in the order of section 4, with `openspec/specs/fs-0101-approval-validity/spec.md` next to `checks/contracts.py`
+   and `checks/traces.py`; then `openspec/specs/fs-0105-idempotent-retries/spec.md` next to the behavioural `forall` branch.
 4. (30 min) The design decisions of §2.3 and [SDD_GUIDE.md](SDD_GUIDE.md) §8, and "What is not here yet" in
    [SDD_DEMO.md](SDD_DEMO.md).

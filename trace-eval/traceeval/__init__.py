@@ -17,7 +17,7 @@ Package layout
 - ``traceeval.experiment`` recording, replay-first, the offline evaluation, the live check, metrics and the
                            report.
 - ``traceeval.spec``       spec-driven development layer (clause catalog, checkers, demo PRs); the specs
-                           themselves are in ``traceeval/specs``.
+                           themselves are in ``openspec/specs`` (linked as ``traceeval/specs``).
 - ``traceeval.cli``        the ``traceeval`` command.
 """
 

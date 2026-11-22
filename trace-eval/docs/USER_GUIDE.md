@@ -495,7 +495,7 @@ generated changes and lets them learn from the other half only ([EXPERIMENT.md](
   - Any other error fails the test as `tool_error:<tool>` unless a later call of the same tool succeeded.
   - A crash in tool or service code (any exception other than a `ToolError`) fails it as `crash:<tool>`. Both are
     classified `TOOL_ERROR`.
-  - `tool_errors: "*"` allows any error, and a scenario added by a spec in `specs/`
+  - `tool_errors: "*"` allows any error, and a scenario added by a spec in `openspec/specs/`
     ([SDD_GUIDE.md](SDD_GUIDE.md)) that writes its own `expect` gets it by default.
 - **Change**: add a `Mutation(...)` to the table in `mutation/catalog.py`, with `replace`, `delete_line`,
   `delete_block` or `append` edits. Anchors are literal text, so reformatting `sut/` breaks them and the operators

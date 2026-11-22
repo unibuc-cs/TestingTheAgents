@@ -34,7 +34,7 @@ link-mode = "copy"
 include = ["traceeval*"]
 
 [tool.setuptools.package-data]
-traceeval = ["sut/**/*.md", "sut/**/*.yaml", "sut/**/*.json", "catalog/**/*.yaml", "specs/*.yaml", "spec/*.yaml"]
+traceeval = ["sut/**/*.md", "sut/**/*.yaml", "sut/**/*.json", "catalog/**/*.yaml", "specs/*/spec.md", "spec/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

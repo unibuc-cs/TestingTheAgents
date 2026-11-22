@@ -203,7 +203,8 @@ and its §4 has the next steps.
 ## Spec-driven development on the same testbed
 
 `traceeval sdd` checks 25 pull requests against five change requests written as machine-checkable specs
-([`traceeval/specs/`](traceeval/specs/)) and writes an evidence report: which clause failed and with what
+([`openspec/specs/`](openspec/specs/), in the OpenSpec format) and writes an evidence report: which clause failed and with what
 counterexample, and the level of assurance reached, from example-tested up to proven. `traceeval sdd draft` has a
-model draft a spec from a prose request, for a person to confirm. [docs/SDD_GUIDE.md](docs/SDD_GUIDE.md) explains
+model draft a spec from a prose request, for a person to confirm. The same folder also holds specs of ContentOps
+as it is today (`fs-02*`, executable) and of the testbed itself (`testbed-*`, prose). [docs/SDD_GUIDE.md](docs/SDD_GUIDE.md) explains
 the layer and [docs/SDD_DEMO.md](docs/SDD_DEMO.md) has the results.

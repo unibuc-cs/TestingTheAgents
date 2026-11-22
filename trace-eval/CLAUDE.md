@@ -24,9 +24,11 @@ traceeval check <change> --history runs/gemma8_gen --miss-rate 0.1 --confirm   #
 traceeval coverage --history runs/gemma8                            # coverage of the suite, per dimension and component
 traceeval run --test PUB-01 --backend replay --otel trace.json   # one case; its trace as OpenTelemetry spans
 traceeval sdd --workdir runs/sdd                                 # spec-driven development demo, replayed
+traceeval sdd --workdir runs/sdd --specs FS-0203                 # one spec, as-built ones included
 traceeval properties draft [--fresh] | apply                     # a model drafts the catalog of properties; you edit
 TRACEEVAL_BACKEND=vllm pytest -q    # record the answers the cassette lacks (Gemma up on the GPU server)
 traceeval sdd draft --request r.md --id FS-0106 [--replay a.json]  # draft a spec with a model
+openspec validate --specs --strict                               # structure of the specs (Node tool, npm i -g @fission-ai/openspec)
 scripts/gpu_remote.sh up [gemma|qwen|qwen2|gptoss] | status | down   # models on the GPU server; docs/EXPERIMENT.md
 TRACEEVAL_SITE=hpc scripts/gpu_remote.sh up qwen        # the same on the SLURM cluster (2 GPUs, port + 10)
 TRACEEVAL_VLLM_ARGS="--no-enable-prefix-caching" scripts/gpu_remote.sh up gemma   # with --workers 1: every answer repeats
@@ -64,7 +66,13 @@ TRACEEVAL_VLLM_ARGS="--no-enable-prefix-caching" scripts/gpu_remote.sh up gemma 
   replays them, `Compare` counts the requests a changed copy's recording gets answered otherwise).
 - `traceeval/spec/` — spec-driven development layer: clause catalog (`catalog.yaml`) and model, one checker per
   clause kind (`checks/`), product model, demo PRs, runner, report, drafting with a model (`draft.py`).
-  Specs live in `traceeval/specs/FS-*.yaml` as catalog templates + slots (see `docs/SDD_GUIDE.md`).
+  Specs live in `openspec/specs/<capability>/spec.md` (OpenSpec format; `traceeval/specs` is a symlink to them so
+  they ship in the package): each `#### Scenario:` carries one fenced clause, catalog template + slots (see
+  `docs/SDD_GUIDE.md`). Only the fenced clauses are checked; the WHEN/THEN prose must be kept true to them by hand.
+  FS-01xx are the demo's change requests; FS-02xx describe ContentOps as it is, must pass on the baseline and must
+  be rejected by their own clauses under the changes listed in `AS_BUILT` (`spec/prs.py`); a change whose verdict
+  needs answers the cassette lacks is skipped until they are recorded. `testbed-*` capabilities
+  are prose about this repository: nothing executes them, so changing the code they describe means changing them.
 - `tests/` — pytest; `runs/` — experiment outputs (git-ignored); `docs/` — guide, plan, related work, references,
   results, the paper draft (`docs/paper/`, LaTeX) and its short summary without results (`docs/summary/`).
 - `scripts/` — `gpu_remote.sh` (the model servers), `batch_sweep.py`, and `analysis/`: offline checks of the

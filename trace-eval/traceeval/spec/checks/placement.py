@@ -7,6 +7,9 @@
       - forbid_literal: {value: 60, in: [tools, skills/seo-metadata/SKILL.md]}   literal not written there
       - skill_order: {skill: publishing-workflow, first: {include: link-validation}, then: {call: publish_page}}
             in the skill's procedure, the step matching `first` comes before the step matching `then`
+      - skill_text: {skill: routing, contains: "call `request_approval`"}
+            the skill's text states the sentence (runs of whitespace count as one space): a rule that lives in
+            a skill's prose is in the prompt, which says nothing about whether the model follows it
 `in` is a file or a directory prefix (list allowed). Python files are inspected via their AST; other
 files textually.
 """
@@ -108,10 +111,17 @@ def _skill_order(spec, model) -> list[str]:
     return [] if first < then else [f"skill {spec['skill']}: {spec['first']} comes after {spec['then']}"]
 
 
+def _skill_text(spec, model) -> list[str]:
+    text = " ".join(model.files.get(f"skills/{spec['skill']}/SKILL.md", "").split())
+    wanted = " ".join(str(spec["contains"]).split())
+    return [] if wanted in text else [f"skill {spec['skill']} does not state: {wanted}"]
+
+
 _RULES = {
     "define": _define,
     "forbid_import": _forbid_import,
     "forbid_name": _forbid_name,
     "forbid_literal": _forbid_literal,
     "skill_order": _skill_order,
+    "skill_text": _skill_text,
 }

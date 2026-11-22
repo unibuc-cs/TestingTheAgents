@@ -1,13 +1,18 @@
 """Spec and clause data model, the clause catalog, and the clause result type.
 
-A spec file (``traceeval/specs/FS-*.yaml``) is prose intent plus clauses. A clause is normally written
-against the catalog (``catalog.yaml``)::
+A spec is an OpenSpec capability (``openspec/specs/<capability>/spec.md``, reached from the package through
+the ``traceeval/specs`` link): ``# <id>: <title>``, an optional ``**Owner:** <owner>`` line, the prose intent
+as ``## Purpose``, and requirements whose every ``#### Scenario:`` carries one clause in a fenced block. A
+clause is normally written against the catalog (``catalog.yaml``)::
 
-    - use: setting_in_range
-      with: {key: publishing.review_max_age_days, min: 1, max: 365, value: 30}
-      require: L4            # optional; the template has a default
+    ```yaml clause
+    use: setting_in_range
+    with: {key: publishing.review_max_age_days, min: 1, max: 365, value: 30}
+    require: L4            # optional; the template has a default
+    ```
 
-``load_spec`` expands it into the fields the checker of that kind understands, generates its id
+Only the heading, the purpose and the fenced clauses are read; the owner and the WHEN/THEN prose are for people.
+``load_spec`` expands a clause into the fields the checker of that kind understands, generates its id
 (``<template>:<first slot value>``) and its one-line text (the template's gloss). A clause may also be
 written in expanded form (``kind: ...`` plus the checker fields), which is what the catalog produces.
 ``validate_spec`` checks slot values against the product model before anything runs.
@@ -15,6 +20,7 @@ written in expanded form (``kind: ...`` plus the checker fields), which is what 
 
 import ast
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -68,7 +74,7 @@ class Spec:
     title: str
     intent: str
     clauses: list[Clause]
-    path: Path | None = None  # the YAML file; the agent brief searches its text for tool names
+    path: Path | None = None  # the spec.md file
 
 
 @dataclass
@@ -175,6 +181,22 @@ def _gloss(gloss: str, slots: dict) -> str:
 
 
 # ---------------------------------------------------------------------------- loading
+_HEADING = re.compile(r"^# (\S+): (.+)$", re.M)
+_PURPOSE = re.compile(r"^## Purpose$(.*?)(?=^## |\Z)", re.M | re.S)
+_SCENARIO = re.compile(r"^#### Scenario:.*$", re.M)
+_CLAUSE = re.compile(r"^```yaml clause$(.*?)^```$", re.M | re.S)
+
+
+def _clause_blocks(text: str) -> list[dict]:
+    """The fenced clauses in document order; a scenario without exactly one would silently go unchecked."""
+    before, *scenarios = _SCENARIO.split(text)
+    if _CLAUSE.search(before):
+        raise ValueError("a clause block outside a scenario")
+    if any(len(_CLAUSE.findall(s)) != 1 for s in scenarios):
+        raise ValueError("every scenario must carry exactly one ```yaml clause block")
+    return [yaml.safe_load(_CLAUSE.search(s).group(1)) for s in scenarios]
+
+
 def number_duplicates(clauses: list[Clause]) -> list[Clause]:
     """Two clauses from the same template with the same first slot get the same id: the second becomes <id>#2."""
     seen: dict[str, int] = {}
@@ -186,22 +208,24 @@ def number_duplicates(clauses: list[Clause]) -> list[Clause]:
 
 
 def load_spec(path: Path | str, catalog: dict | None = None) -> Spec:
-    """Load and expand one spec file. Other top-level keys (``owner``) are for human readers."""
+    """Load and expand one spec file. The ``**Owner:**`` line and the WHEN/THEN prose are for human readers."""
     path = Path(path)
     catalog = catalog or load_catalog()
-    raw = yaml.safe_load(path.read_text())
-    clauses = []
-    for c in raw.get("clauses", []):
-        try:
-            clauses.append(expand_clause(c, catalog))
-        except ValueError as exc:
-            raise ValueError(f"{path.name}: {exc}") from None
-    return Spec(raw["id"], raw["title"], raw.get("intent", "").strip(), number_duplicates(clauses), path)
+    text = path.read_text()
+    heading, purpose = _HEADING.search(text), _PURPOSE.search(text)
+    if not heading or not purpose:
+        raise ValueError(f"{path}: a spec needs a '# <id>: <title>' heading and a '## Purpose' section")
+    try:
+        clauses = [expand_clause(c, catalog) for c in _clause_blocks(text)]
+    except ValueError as exc:
+        raise ValueError(f"{path}: {exc}") from None
+    return Spec(heading[1], heading[2], purpose[1].strip(), number_duplicates(clauses), path)
 
 
 def load_specs(ids: list[str] | None = None) -> list[Spec]:
     catalog = load_catalog()
-    specs = [load_spec(p, catalog) for p in sorted(SPECS_ROOT.glob("FS-*.yaml"))]
+    # fs-* only: the testbed-* capabilities next to them are prose about this repository, with no clauses to check
+    specs = [load_spec(p, catalog) for p in sorted(SPECS_ROOT.glob("fs-*/spec.md"))]
     if ids:
         specs = [s for s in specs if s.id in ids]
     return specs

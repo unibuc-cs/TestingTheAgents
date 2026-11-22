@@ -9,7 +9,7 @@ This prototype asks two questions:
 
 It adds a spec layer (`traceeval/spec/`) on top of the ContentOps testbed:
 
-- five change requests written as specs (`traceeval/specs/FS-010x.yaml`), with clauses picked from the
+- five change requests written as specs (`openspec/specs/fs-010x-*/spec.md`), with clauses picked from the
   template catalog `traceeval/spec/catalog.yaml`;
 - 25 pull requests with known verdicts (`traceeval/spec/prs.py`); every correct PR is a code change of 1 to 4
   files;
@@ -23,7 +23,7 @@ application.
 pip install -e ".[dev]"                 # adds hypothesis + z3-solver
 traceeval sdd --workdir runs/sdd        # ~1 min, replays Gemma's recorded answers  ->  runs/sdd/report.md
 traceeval sdd draft --request docs/sdd/draft_example/request.md --id FS-0101 \
-    --replay docs/sdd/draft_example/answer.json --out /tmp/FS-0101.draft.yaml   # draft a spec (offline example)
+    --replay docs/sdd/draft_example/answer.json --out /tmp/FS-0101/spec.draft.md   # draft a spec (offline example)
 ```
 
 A copy of the report is in [`docs/sdd/report.md`](sdd/report.md).

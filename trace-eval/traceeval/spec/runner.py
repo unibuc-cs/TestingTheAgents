@@ -25,7 +25,7 @@ from .checks.traces import cases_in_scope
 from .context import CheckContext
 from .model import ClauseResult, Spec, load_specs, validate_spec
 from .product import ProductModel
-from .prs import PR, prs_for
+from .prs import PR, PRS, prs_for
 from .report import write_report
 
 
@@ -79,7 +79,8 @@ def agent_brief(spec: Spec, model: ProductModel, catalog: dict) -> dict:
             checks.append({"clause": c.id, "kind": c.kind, "runs": 0})
     # locate: the tools the spec talks about -> their adapters, the services behind them, the skills calling them;
     # plus files named by placement rules and the configuration keys of setting clauses
-    text = spec.path.read_text() if spec.path else ""
+    # (title, intent and clauses, not the raw file: rewording a WHEN/THEN line must not change what gets read)
+    text = "\n".join([spec.title, spec.intent, *(str(c.slots or c.data) for c in spec.clauses)])
     static_tools = model.tools_static()
     tools = {t for t in static_tools if re.search(rf"\b{re.escape(t)}\b", text)}
     for c in spec.clauses:  # a clause quantifying over a set of tools makes all of their sites relevant
@@ -218,7 +219,8 @@ def run_demo(
     sut_dir, baseline_runs, baseline_deps = record_baseline(workdir, catalog, backend=backend)
     _log(f"[sdd] baseline: {len(catalog)} runs with coverage in {time.time() - t0:.1f}s")
     base_model = ProductModel(sut_dir, baseline_runs, baseline_deps)
-    specs = load_specs(ids=spec_ids)
+    # by default the change requests of the demo; the as-built specs run when named (and in the tests)
+    specs = load_specs(ids=spec_ids or sorted({p.spec_id for p in PRS}))
     briefs, evidence = {}, []
     (workdir / "evidence").mkdir(parents=True, exist_ok=True)
     for stale in (workdir / "evidence").glob("*.json"):

@@ -45,7 +45,7 @@ place, and an evidence record. The testbed already had the raw material for thre
 | the note wants | trace-eval already had | the SDD layer adds |
 |---|---|---|
 | an up-to-date product model | static: files, functions (AST), tool registry, skill procedures, config; dynamic: traces = which runs exercise which tool / function | `spec/product.py` puts both behind queries: `locate(tools)`, `cases_calling(tools)`, `status_setters()`, `skill_write_tools(skill)` |
-| a formal-enough spec | — | `specs/FS-*.yaml`: prose intent + clauses of five kinds; `spec/checks/` = one checker per kind |
+| a formal-enough spec | — | `openspec/specs/*/spec.md`: prose intent + clauses of five kinds; `spec/checks/` = one checker per kind |
 | run only what a change touches (Q12) | the `observed` strategy on a change set | reused as the regression line of every evidence record |
 | generate only the needed code, in the right place, passing tests | the mutation machinery: a PR is a set of file edits applied to a copy of the app | `spec/prs.py` (24 PRs with expected verdicts), `spec/runner.py` (evidence record + agent brief), `spec/report.py` |
 
@@ -90,7 +90,7 @@ production traces unchanged: they only need the event format.
 
 ### 3.1 FS-0101 in detail — read this one fully
 
-`traceeval/specs/FS-0101.yaml` has ten clauses written against the catalog (`use: <template>`,
+`openspec/specs/fs-0101-approval-validity/spec.md` has ten clauses written against the catalog (`use: <template>`,
 `with: {slots}`; ids and texts are generated); `traceeval/spec/prs.py` (first section) has the correct
 PR, four wrong ones and one correct-but-branchy one. The matrix below is the heart of the demo: every
 wrong PR fails a *different kind* of clause (clause ids shortened).
@@ -121,7 +121,7 @@ not translated — the clause then stays at L2 and the record says so.
 | file | lines | role |
 |---|---|---|
 | `traceeval/spec/catalog.yaml` + `model.py` | 110 + 230 | the clause templates; `Spec`, `Clause`, `ClauseResult`; expansion of `use/with` clauses, generated ids and texts; `validate_spec` against the product model |
-| `traceeval/spec/draft.py` | 220 | `traceeval sdd draft`: product-model slice + catalog → prompt → model answer → expanded, validated draft spec and its plain-language rendering |
+| `traceeval/spec/draft.py` | 220 | `traceeval sdd draft`: product-model slice + catalog → prompt → model answer → expanded, validated draft spec with a plain-language reading of each clause |
 | `traceeval/spec/product.py` | 182 | the product model: files and token counts, functions (AST), tool registry (from decorators), skill procedures, config; queries `locate`, `cases_calling`, `status_setters`, `skill_write_tools`, `model_set` |
 | `traceeval/spec/context.py` | 181 | `CheckContext`: runs cases on the variant with cost accounting, resolves scopes, builds the expression environment; the helpers usable in clauses (`config`, `approval_age`, `expected_broken`, `audit_count`, `applied`, `token_owner`, `title_of_length`, `first_case_calling`, `baseline_run`) |
 | `traceeval/spec/checks/settings.py` | 47 | schema check |
@@ -150,8 +150,8 @@ now carries a required rung next to the reached one.
    dispatcher open side by side; run `traceeval run --test PUB-01` and look at the printed trace.
 2. (30 min) `docs/SDD_DEMO.md`, then `docs/sdd/report.md`: the verdict table, the resources table, and
    FS-0101's section fully (brief + the five PR records).
-3. (60 min) The code in the order of section 4, with `specs/FS-0101.yaml` next to `checks/contracts.py`
-   and `checks/traces.py`; then `specs/FS-0105.yaml` next to the behavioural `forall` branch.
+3. (60 min) The code in the order of section 4, with `openspec/specs/fs-0101-approval-validity/spec.md` next to `checks/contracts.py`
+   and `checks/traces.py`; then `openspec/specs/fs-0105-idempotent-retries/spec.md` next to the behavioural `forall` branch.
 4. (30 min) The questions to expect: what counts as "formal" here; why no Dafny/TLA+ yet; what the proof
    proves (a pure function, within `assume`) and what it does not (that the function is called); what a
    monitor needs to run on production traces (the event format); what is missing (the generation and

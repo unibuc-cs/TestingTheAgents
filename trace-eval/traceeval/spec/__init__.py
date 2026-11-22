@@ -1,6 +1,6 @@
 """Spec-driven development layer: machine-checkable specification clauses for the ContentOps SUT.
 
-A *spec* (``traceeval/specs/FS-*.yaml``) is one change request written as prose intent plus a list of
+A *spec* (``openspec/specs/<capability>/spec.md``) is one change request written as prose intent plus a list of
 clauses. Every clause has a kind, and every kind has exactly one checker that turns it into evidence:
 
     setting    a typed constraint on a configuration key            -> static check           (L4)
