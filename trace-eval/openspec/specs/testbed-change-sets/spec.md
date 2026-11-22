@@ -10,13 +10,20 @@ no probability can depend on a comment. Code: `traceeval/mutation/`.
 
 ### Requirement: A change is a real edit with a stated expectation
 
-A controlled change SHALL be applied as real file edits to a copy of the application and MUST state whether at least
-one test is expected to reveal it. An edit whose anchor is not found MUST raise rather than do nothing.
+A controlled change SHALL be applied as real file edits to a copy of the application. A hand-written change MUST
+state whether at least one test is expected to reveal it; a generated change (`g_<kind>_...`,
+`testbed-replay-first`) has no label, and its recording decides. An edit whose anchor is not found MUST raise rather
+than do nothing.
 
 #### Scenario: A missing anchor raises
 
 - **WHEN** a `replace` edit's text does not occur in the file, or occurs a different number of times than expected
 - **THEN** `PatchError` is raised and no silent no-op results
+
+#### Scenario: An edit by line number
+
+- **WHEN** a `lines` edit names a line whose text is not the text it expects there
+- **THEN** `PatchError` is raised, so that an edit generated from one version of the app cannot apply to another
 
 #### Scenario: Materialising a change records it
 
@@ -77,6 +84,17 @@ Each kind of file SHALL produce its own components, and these MUST use the same 
 - **WHEN** a Python function's normalised AST changes
 - **THEN** the change set has `code:<file>::<function>` and `line:<file>:<n>` components, and `tool:<name>` when the function is a registered adapter
 
+#### Scenario: What the model is told about a tool changes
+
+- **WHEN** a tool adapter's description or parameters change
+- **THEN** the change set has `tool:<name>#schema` of kind `tool-schema`, since the schema reaches every agent offered
+  the tool, whether it calls it or not
+
+#### Scenario: An orchestrator is shown other specialists
+
+- **WHEN** a specialist's agent definition is added or taken away
+- **THEN** the change set has `agent:<orchestrator>.specialists` for each orchestrator
+
 #### Scenario: Module-level code changes
 
 - **WHEN** code outside any function changes
@@ -90,7 +108,8 @@ Each kind of file SHALL produce its own components, and these MUST use the same 
 #### Scenario: A skill changes
 
 - **WHEN** a `SKILL.md` changes in its procedure, its prose or its front matter
-- **THEN** the component is `skill:<name>#procedure`, `#prose` or `#meta`, and a whitespace-only change gives none
+- **THEN** the component is `skill:<name>#procedure`, `#prose` or `#meta`; a change of the procedure block's
+  comments or layout gives none, while re-wrapped prose is another prompt and gives `#prose`
 
 #### Scenario: An agent definition changes
 
@@ -116,17 +135,30 @@ Each kind of file SHALL produce its own components, and these MUST use the same 
 
 ### Requirement: Skill text counts word for word
 
-Skill prose MUST count as a change, because the model reads a skill's whole text word for word.
+What the model is sent MUST count as it is sent. A skill's front matter and prose go into the prompt word for word, so
+they SHALL be compared as text, line breaks included. Its procedure is shown as numbered steps written from the parsed
+YAML, so it SHALL be compared parsed: the order of the steps and of each call's arguments counts, the order of a step's
+keys does not.
 
 #### Scenario: Prose is reworded
 
 - **WHEN** a skill's prose changes and its procedure does not
 - **THEN** the change set has `skill:<name>#prose` with kind `skill-prose`
 
+#### Scenario: A step's keys are reordered
+
+- **WHEN** only the order of a procedure step's keys changes
+- **THEN** the change set is empty, since the model is shown the step the same way
+
+#### Scenario: A call's arguments are reordered
+
+- **WHEN** only the order of a call's arguments in a step changes
+- **THEN** the change set has `skill:<name>#procedure`, since the arguments are shown in the order they are written
+
 ### Requirement: The catalogue of changes is sound
 
-Every change expected to be a regression MUST be revealed by at least one test under at least one model, and no benign
-change MUST be revealed by any test.
+Every hand-written change expected to be a regression MUST be revealed by at least one test under at least one model,
+and no benign change MUST be revealed by any test. Generated changes have no label and are left out of this check.
 
 #### Scenario: The report checks the expectation
 

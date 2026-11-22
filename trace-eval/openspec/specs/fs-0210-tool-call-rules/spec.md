@@ -7,8 +7,11 @@
 Agents act on the world only through tool calls, and every call passes through the dispatcher, whatever the agent
 or the backend. Each agent has a budget of steps (its tool calls and delegations), and the whole request has a
 larger one shared by all its agents, so that a plan over several specialists fits while no single agent loops for
-long. Tools can be switched off by configuration, and an unexpected exception in a tool is a defect to be reported,
-never a normal outcome. The code is layered: backends do not touch tools directly, adapters do not depend on the
+long. The dispatcher's first gates (an unknown tool, a tool switched off by configuration, a tool the agent's
+definition does not list) are one method, `Dispatcher.gate`, which the runtime also asks before a delegation. An
+unexpected exception in a tool is a defect to be reported as a crash, never a normal outcome; a tool that raised on
+a value of the wrong type from the agent (a word where the schema asks for a number) is the agent's mistake
+instead, refused as `invalid_arguments` like a call that does not fit the signature. The code is layered: backends do not touch tools directly, adapters do not depend on the
 harness, and services know neither. This describes the system as it is today, with Gemma's recorded answers.
 
 ## Requirements
@@ -137,7 +140,19 @@ with:
 
 ### Requirement: No tool crashes on a recorded request
 
-A tool MUST NOT raise an unexpected exception on any request of the catalog.
+A tool MUST NOT raise an unexpected exception on any request of the catalog. A value of the wrong type from the
+agent MUST be refused as `invalid_arguments`, not counted as a crash, and the dispatcher MUST tell the two apart.
+
+#### Scenario: The dispatcher tells the agent's wrong types from defects
+
+- **WHEN** the code is inspected
+- **THEN** `_type_error`, which finds an argument whose value does not have the type of the tool's schema, is defined
+  in `harness/dispatcher.py`
+
+```yaml clause
+use: function_in_layer
+with: {function: _type_error, file: harness/dispatcher.py}
+```
 
 #### Scenario: No call in the catalog crashes
 

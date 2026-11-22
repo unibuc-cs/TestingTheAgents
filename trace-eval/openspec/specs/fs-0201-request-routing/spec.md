@@ -10,8 +10,13 @@ exactly once; a request no specialist owns goes to the configured default agent.
 specialists gets a plan: the orchestrator writes it down once with `make_plan`, delegates its steps one at a time,
 asks a person with `request_approval` before a step that publishes, schedules or takes pages down, and stops when
 the person refuses. The orchestrator never touches content itself, and only the orchestrator delegates. The
-delegation itself is carried out by the runtime. This describes the system as it is today, with Gemma's recorded
-answers; the six multi-agent workflows have specs of their own (FS-0212 to FS-0217).
+delegation itself is carried out by the runtime, which first asks the dispatcher's gates, as for any tool call: an
+agent whose definition does not list `route_to_agent`, or a platform that switched it off in `tools.disabled`, gets
+the delegation refused. The runtime also carries who asks and the approval a person gave: the values a delegation
+passes on cannot set `user_id` or `approval_token` (`HARNESS_SLOTS` in `harness/runtime.py`), nor any harness
+switch whose name starts with an underscore. No clause of the catalog can check that last rule, since a trace does
+not show the token a call was made with. This describes the system as it is today, with Gemma's recorded answers;
+the six multi-agent workflows have specs of their own (FS-0212 to FS-0217).
 
 ## Requirements
 
@@ -214,8 +219,8 @@ with:
 
 ### Requirement: Delegation is carried out by the runtime
 
-The runtime MUST carry out every delegation in `harness/runtime.py`, and tools and services MUST NOT reach the
-runtime.
+The runtime MUST carry out every delegation in `harness/runtime.py`, after the same gates of the dispatcher that
+every tool call passes, and tools and services MUST NOT reach the runtime.
 
 #### Scenario: Delegation is in the runtime
 
@@ -225,6 +230,16 @@ runtime.
 ```yaml clause
 use: function_in_layer
 with: {function: Runtime._delegate, file: harness/runtime.py}
+```
+
+#### Scenario: A delegation passes the dispatcher's gates
+
+- **WHEN** the code is inspected
+- **THEN** `Dispatcher.gate`, the gates the runtime asks before a delegation, is defined in `harness/dispatcher.py`
+
+```yaml clause
+use: function_in_layer
+with: {function: Dispatcher.gate, file: harness/dispatcher.py}
 ```
 
 #### Scenario: Tools and services do not reach the runtime

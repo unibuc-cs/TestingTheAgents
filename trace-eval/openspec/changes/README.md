@@ -51,12 +51,14 @@ a different kind of reason.
    live or down in a plan without an approval") requires an approved `request_approval` before every successful
    `unpublish_page` in a run with a plan. Below the specs, the dispatcher refuses a guarded tool without a token,
    bob has none, and the only thing that puts the approver's token into the request is an approved
-   `request_approval` (`Runtime._run_agent`, `governance.request_approval`).
+   `request_approval` (`Runtime._run_agent`, `governance.request_approval`): a delegation cannot pass one on, since
+   the runtime drops `approval_token` from the values it passes (`HARNESS_SLOTS`).
 3. **Hand-over between specialists against FS-0201 (delegation topology).** FS-0303 requires a successful
    `agent.route` from publishing to translation. FS-0201 requires that only the orchestrator delegates: its clause
    "A request without a plan is delegated once" demands `e.source == 'orchestrator'` for every delegation of a run
    in which `get_page`, `check_permission` or `validate_links` succeeds, and FS-0202 has publishing check the
-   permission before `unpublish_page`. Only the orchestrator's definition lists `route_to_agent`.
+   permission before `unpublish_page`. Only the orchestrator's definition lists `route_to_agent`, and the runtime
+   refuses a delegation from an agent whose definition does not (`Dispatcher.gate`, asked by `Runtime._delegate`).
 4. **Two contracts on one function (no implementation satisfies both).** `function_contract:bulk_size_ok` requires
    `result == (1 <= n <= limit)` for `limit >= 1`, and `function_contract:bulk_size_ok#2` requires `result == True`
    for `n == 0 and limit >= 1`. At `n = 0` the first gives false and the second true. This one needs no knowledge of

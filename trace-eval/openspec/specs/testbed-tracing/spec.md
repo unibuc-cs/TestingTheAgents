@@ -31,11 +31,28 @@ configuration read, delegation and model call.
 - **WHEN** a request's context has a key starting with an underscore, such as `_route_only`
 - **THEN** the `run.start` event leaves that key out
 
+#### Scenario: An agent's start records the tools it is offered
+
+- **WHEN** an agent starts
+- **THEN** its `agent.start` event lists the tools of its definition that the registry knows, whose schemas are in
+  its requests
+
+#### Scenario: A delegation the gates refuse is traced
+
+- **WHEN** the dispatcher's gates refuse a delegation, or its arguments are not an object
+- **THEN** an `agent.route` event records the source, no target, the status `error` and the reason
+
 ### Requirement: A trace reduces to observed components
 
 The executor SHALL turn a trace into component identifiers: `agent:<name>`, `skill:<name>`, `tool:<name>`,
-`config:<key>`, the agent fields the orchestrator consulted, and the code functions and lines that ran. No parallel
-identifier scheme MUST be introduced.
+`config:<key>`, the agent fields the orchestrator consulted, `tool:<name>#schema` for every tool an agent was offered,
+`fixture:<name>` for the case's starting data, and the code functions and lines that ran. No parallel identifier
+scheme MUST be introduced.
+
+#### Scenario: A run depends on the tools it is offered
+
+- **WHEN** an agent is offered a tool it never calls
+- **THEN** the run still depends on `tool:<name>#schema`, since the model read what the schema says
 
 #### Scenario: The orchestrator depends on every specialist's routing fields
 
@@ -44,7 +61,7 @@ identifier scheme MUST be introduced.
 
 #### Scenario: Only accepted delegations are routes
 
-- **WHEN** a delegation is refused, because the target is unknown or the depth limit is reached
+- **WHEN** a delegation is refused, because the gates refuse it, the target is unknown or the depth limit is reached
 - **THEN** it is left out of the trace's routes
 
 ### Requirement: Coverage is attributed per test

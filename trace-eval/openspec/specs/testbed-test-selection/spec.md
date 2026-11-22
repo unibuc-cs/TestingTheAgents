@@ -4,9 +4,27 @@
 
 After a change, a strategy decides which tests run and in what order under a token budget. Strategies are compared by
 replay, so what each may know has to be strict: otherwise a result could come from information a real selector would
-not have. Code: `traceeval/selection/`.
+not have. Every run follows the same two rules, so that strategies are compared like for like. Code:
+`traceeval/selection/` (`base.py` the interface and the two rules, `strategies.py` the baselines, `adaptive_bayes.py`
+the proposed method, `adapted.py` two methods from the literature, `extras.py` two more baselines).
 
 ## Requirements
+
+### Requirement: Every run follows the same two rules
+
+A test the model already fails on the original app MUST NOT be run, since it cannot reveal a change, and a run MUST
+end at its first failure with the stop reason `regression`. With replay-first, the tests whose outcome the replay gave
+MUST NOT be run either, and a test MUST cost only what is left of it after the requests that replay.
+
+#### Scenario: A test that fails on the original app
+
+- **WHEN** a test's baseline pass rate is below 0.5
+- **THEN** no strategy runs it
+
+#### Scenario: The first failure
+
+- **WHEN** a test that passes on the original app fails on the changed one
+- **THEN** the run stops at once with `regression`, whatever the strategy
 
 ### Requirement: A strategy uses only what is known before running
 
@@ -45,10 +63,12 @@ dependencies. A module-level code change MUST touch a test that used any functio
 
 ### Requirement: Each strategy has its own defined behaviour
 
-The default comparison MUST hold `full`, `random`, `declared`, `ir_tfidf`, `observed`, `cost_aware`, the two
-reproduced published methods `casper_slices` and `risk_aware_ts`, and `adaptive_bayes`. `observed_diverse`,
-`history_ml` and the variants of the proposed method (`adaptive_bayes_tfidf`, `adaptive_bayes_notext`,
-`adaptive_bayes_nomandatory`) SHALL be optional and run only with `--strategies all` or by name.
+The default comparison MUST hold `full`, `random`, `declared`, `ir_tfidf`, `observed`, `observed_diverse`,
+`cost_aware`, `history_ml`, the two methods from the literature adapted as baselines `casper_slices` and
+`risk_aware_ts`, and `adaptive_bayes`. The replay-first comparison SHALL add `cheapest` and `late_divergence`
+(`testbed-replay-first`). The variants of the proposed method (`adaptive_bayes_tfidf`, `adaptive_bayes_notext`,
+`adaptive_bayes_nomandatory`, `adaptive_bayes_floor`) and of the bandit (`risk_aware_ts_per_token`) SHALL be
+optional and run only with `--strategies all` or by name.
 
 #### Scenario: Reference order
 
@@ -64,6 +84,17 @@ reproduced published methods `casper_slices` and `risk_aware_ts`, and `adaptive_
 
 - **WHEN** `observed` orders the tests
 - **THEN** it keeps only tests whose baseline traces touch the change, by affinity times severity divided by cost
+
+#### Scenario: Observed dependencies, spread over behaviours
+
+- **WHEN** `observed_diverse` orders the tests
+- **THEN** it takes the tests `observed` would select one group of behaviour (agents, tools, faulty or not) at a
+  time, so that the budget covers many behaviours before it repeats one
+
+#### Scenario: The cheapest first
+
+- **WHEN** `cheapest` orders the tests
+- **THEN** it returns the whole suite by cost, the cheapest first
 
 #### Scenario: Text similarity ranks everything
 
@@ -85,7 +116,18 @@ reproduced published methods `casper_slices` and `risk_aware_ts`, and `adaptive_
 
 - **WHEN** `risk_aware_ts` runs
 - **THEN** it runs, one test at a time and each at most once, the test whose sampled failure probability times its
-  risk weight is highest, until no unrun test fits the budget, without looking at the diff and without a verdict
+  risk weight is highest, until no unrun test fits the budget or a test fails, without looking at the diff
+
+#### Scenario: Adaptations, not reproductions
+
+- **WHEN** `casper_slices` or `risk_aware_ts` is read
+- **THEN** its docstring says where the testbed differs from the paper's setting and what was done about it
+
+#### Scenario: Prediction learns from the other changes
+
+- **WHEN** `history_ml` orders the tests
+- **THEN** it ranks them by a balanced logistic regression trained on the outcomes of the other changes, fitted
+  in-house without scikit-learn, the one baseline that learns from the same history as the proposed method
 
 #### Scenario: Prediction falls back when it cannot learn
 
@@ -94,8 +136,8 @@ reproduced published methods `casper_slices` and `risk_aware_ts`, and `adaptive_
 
 ### Requirement: A non-adaptive strategy is run greedily within the budget
 
-The default run SHALL execute a strategy's order, skip a test whose expected cost does not fit what remains, and stop
-when the budget is spent.
+The default run SHALL execute a strategy's order without the tests that fail on the original app, skip a test whose
+expected cost does not fit what remains, and stop at the first failure or when the budget is spent.
 
 #### Scenario: A test that does not fit is skipped
 

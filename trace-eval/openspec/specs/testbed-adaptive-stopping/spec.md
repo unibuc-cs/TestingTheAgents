@@ -6,8 +6,8 @@
 keep a probability over which changed components are broken, run the test with the best expected information per
 token, update, and stop when the evidence is good enough. The models decode greedily, so a test that passed on the
 original app and fails on the changed one shows a changed behaviour, and a test the model already fails on the
-original app tells nothing either way. The rules here are what the published results rest on. Code:
-`traceeval/selection/adaptive_bayes.py`.
+original app tells nothing either way and is not run. The rules here are what the published results rest on. Code:
+`traceeval/selection/adaptive_bayes.py`, and `traceeval/experiment/stopping.py` for a threshold set for a miss rate.
 
 ## Requirements
 
@@ -24,7 +24,7 @@ facets of the code component.
 
 #### Scenario: Prior by kind
 
-- **WHEN** a component's kind is code or skill; config or agent; fixture; agent prompt; or skill prose
+- **WHEN** a component's kind is code or skill; config or agent; fixture; agent prompt or tool schema; or skill prose
 - **THEN** its prior is 0.5; 0.45; 0.3; 0.15; or 0.12
 
 ### Requirement: Sensitivities are calibrated from other changes
@@ -68,10 +68,10 @@ declared dependency. Calibration MUST use only the training variants.
 
 ### Requirement: The next test is the best information per token
 
-The next test SHALL maximise expected information gain, tilted by risk, per token, among tests that fit the remaining
-budget. Each test MUST run at most once, because a rerun would give the same answer.
+The next test SHALL maximise expected information gain, tilted by risk, per token, among the tests that can be run
+and fit the remaining budget. Each test MUST run at most once, because a rerun would give the same answer.
 
-#### Scenario: A test the model already fails is weak evidence
+#### Scenario: A test's own failure rate is part of its likelihood
 
 - **WHEN** a test's failure probability is computed under a hypothesis
 - **THEN** its baseline failure rate is part of it, floored at 0.01, so that no single outcome rules a hypothesis out
@@ -88,18 +88,29 @@ the original app.
 
 #### Scenario: Stop clean
 
-- **WHEN** the probability that anything is broken falls below 0.05
+- **WHEN** the probability that anything is broken falls below `eps_clean`, 0.05 unless a check set it for a miss rate
 - **THEN** the method stops with reason `clean`
 
 #### Scenario: Stop regression
 
 - **WHEN** a test that passes on the original app fails on the changed one
-- **THEN** the method stops at once with reason `regression`
+- **THEN** the method stops at once with reason `regression`, as every strategy does
 
-#### Scenario: A test the model already fails does not stop the run
+#### Scenario: A test the model already fails is not run
 
-- **WHEN** a test that fails on the original app fails again
-- **THEN** the posterior is updated and the run goes on
+- **WHEN** a test fails on the original app, or with replay-first its outcome on the copy is already known
+- **THEN** the method never chooses it
+
+#### Scenario: Every test that can run has passed
+
+- **WHEN** no test that can be run is left unrun, and all have passed
+- **THEN** the method stops with reason `exhausted`
+
+#### Scenario: A threshold set for a miss rate runs every reached test
+
+- **WHEN** the clean threshold was set for a miss rate (`exhaustive`)
+- **THEN** the tests that can no longer move the probability run too, the cheapest first, so that `exhausted` means
+  every test the change reaches has run
 
 #### Scenario: Nothing left to learn or afford
 
@@ -118,13 +129,20 @@ cheapest unrun one that checks it and passes on the original app, while the budg
 
 #### Scenario: A mandatory property is still unchecked
 
-- **WHEN** a run ends clean, on budget or uninformative, and a mandatory property the change may affect has no test yet
-- **THEN** the cheapest affordable test that checks it runs, and a failure there stops the run with `regression`
+- **WHEN** a run ends without a regression, and a mandatory property the change may affect has no test yet
+- **THEN** the cheapest affordable test that checks it and can be run runs, and a failure there stops the run with
+  `regression`; with replay-first, a test whose passing outcome the replay gave already checks its properties
 
 #### Scenario: The rule switched off
 
 - **WHEN** `adaptive_bayes_nomandatory` runs
 - **THEN** it is the same method without this rule, to measure what the rule costs and adds
+
+#### Scenario: The coverage floor instead
+
+- **WHEN** `adaptive_bayes_floor` runs, or `traceeval check --floor`
+- **THEN** the rule is the coverage floor (`testbed-replay-first`): the cheapest set of tests that also covers every
+  changed component, with the tests already run and those the replay settled counting as covering
 
 ### Requirement: The order can be read without running anything
 

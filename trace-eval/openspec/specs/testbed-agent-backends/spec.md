@@ -26,11 +26,27 @@ the dispatcher and the step budgets, for every engine.
 - **WHEN** a run names no backend and `TRACEEVAL_BACKEND` is not set
 - **THEN** it runs on `replay`, answering from the test suite's cassette `tests/cassettes/gemma.jsonl`
 
+#### Scenario: Several servers of one model
+
+- **WHEN** `TRACEEVAL_VLLM_URL` or `TRACEEVAL_LLM_BASE_URL` lists several comma-separated URLs
+- **THEN** each thread keeps to one server, the next in turn at its first call, so that all the calls of a test, the
+  judge's included, go to the same server
+
 ### Requirement: The prompt holds the agent, its skills and the request
 
 The system prompt SHALL be the agent's own prompt, then for the orchestrator every specialist with its description and
 triggers and the default agent, then the agent's intents, then its skills, then a few operating rules. The first user
-message SHALL be the request and its context as JSON.
+message SHALL be the request and its context as JSON, without the harness's switches.
+
+#### Scenario: The harness's switches stay out of the prompt
+
+- **WHEN** the context has a slot whose name starts with an underscore, such as `_route_only`
+- **THEN** the model is not shown it
+
+#### Scenario: A delegation cannot set who asks or the approval
+
+- **WHEN** a delegation passes `user_id`, `approval_token` or a slot starting with an underscore
+- **THEN** the runtime drops them, and the next agent gets the request's own values and those of an approval
 
 #### Scenario: The orchestrator sees every specialist
 

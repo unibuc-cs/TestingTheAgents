@@ -115,13 +115,19 @@ succeeded, and a crash MUST always fail it.
 
 ### Requirement: Expectations look at what took effect
 
-`tools_required` and `tools_forbidden` SHALL be judged on successful calls only, and a response check MUST ignore case
-and compare typographic hyphens, spaces and quotes as the plain ones.
+`tools_required` and `tools_forbidden` SHALL be judged on successful calls only, and `tools_attempted` on every call,
+refused ones included. A response check MUST ignore case and compare typographic hyphens, spaces and quotes as the
+plain ones.
 
 #### Scenario: A refused call does not break a forbidden tool
 
 - **WHEN** a forbidden tool is attempted and refused
 - **THEN** the `tools_forbidden` check still passes, because the call took no effect
+
+#### Scenario: A case that expects an attempt
+
+- **WHEN** a case lists a tool in `tools_attempted`, or a list of tools of which any will do
+- **THEN** the check `attempted:<tool>` passes when the run called one of them, even if the call was refused
 
 #### Scenario: Only the first delegation counts for routing
 
@@ -152,3 +158,8 @@ charged to the run. The judge is the model `TRACEEVAL_JUDGE` names, by default t
 
 - **WHEN** the deterministic checks pass and the answer leaves out something the rubric requires
 - **THEN** the record is classified `AGENT_FAILURE`
+
+#### Scenario: A judge that gives no verdict
+
+- **WHEN** the judge's answer is empty or does not open with PASS or FAIL
+- **THEN** the run says nothing about the agent: it is classified `INFRA_INVALID` and left out of pass rates
