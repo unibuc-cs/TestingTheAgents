@@ -1,7 +1,7 @@
 """Eval catalog: scenario tests (``tests/*.yaml``) and dataset-style evals (``datasets/*.yaml``).
 
 Every item becomes an ``EvalCase``. Dataset items inherit the dataset's agent, context, declared
-dependencies, risk and properties, and carry ``dataset`` = the dataset id so that selectors can
+dependencies, risk and properties, and carry ``dataset`` = the dataset id so that strategies can
 reason about "subsets of eval datasets". The properties a case checks must be in the catalog of properties
 (``properties.yaml``), loaded as ``Property``; the workflow a case runs end to end (``workflow: W1``) must be in
 ``workflows.yaml``, loaded as ``Workflow``. The features of the application, the unit of coverage the Adobe Team
@@ -65,7 +65,8 @@ class EvalCase:
         return out
 
     def text(self) -> str:
-        """Textual representation for IR-based strategies."""
+        """The test as text, for the strategies that compare it with the text of a change: its id, name, request,
+        context, properties, workflow and declared dependencies."""
         return " ".join(
             [
                 self.id,

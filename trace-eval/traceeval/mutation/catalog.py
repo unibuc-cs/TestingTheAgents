@@ -1,7 +1,7 @@
 """The 43 controlled changes ("mutations"), written as data, and the batches that bundle several of them.
 
 A mutation is a controlled change to the system under test, applied as a real file edit. The
-experiment never shows the selectors the mutation label - only the diff. ``regression`` says whether
+experiment never shows the strategies the mutation label - only the diff. ``regression`` says whether
 we *expect* at least one test to reveal it; the report checks that expectation (sanity line).
 
 Each entry: id, category, description, regression?, edits. An edit is one of
@@ -42,8 +42,10 @@ class Mutation:
     id: str  # "skill_publish_drop_link_validation": the kind of part changed, then what the change does
     category: str  # code, runtime, skill, prompt, config, combined, benign; batch for a bundle of changes
     description: str  # what the change does, for people and for the report
-    expected_regression: bool  # the label: at least one test should reveal it (True) or none should (False)
-    edits: list[tuple]  # (op, file, ...) with op one of replace, delete_line, delete_block, append
+    # the label: at least one test should reveal it (True) or none should (False); None for a generated change
+    # (generator.py), which has no label: the recording says whether a test reveals it
+    expected_regression: bool | None
+    edits: list[tuple]  # (op, file, ...) with op one of replace, delete_line, delete_block, append, lines, custom
     members: list[str] = field(default_factory=list)  # for a batch, the ids of the changes it bundles
 
     def apply(self, sut_dir: Path):
@@ -57,6 +59,8 @@ class Mutation:
                 op.delete_block(sut_dir, *args)
             elif kind == "append":
                 op.append(sut_dir, *args)
+            elif kind == "lines":
+                op.replace_lines(sut_dir, *args)
             elif kind == "custom":
                 args[0](sut_dir)
             else:
@@ -215,7 +219,7 @@ MUTATIONS: list[Mutation] = [
 
 
 def batch(bid: str, description: str, member_ids: list[str]) -> Mutation:
-    """A batch: the members' edits applied in order to one copy. The members must edit disjoint files, so that
+    """A batch: the members' edits applied one after another to one copy. The members must edit disjoint files, so that
     every anchor is still there when its edit comes; ``tests/test_mutation_and_selection.py`` checks it."""
     members = [get_mutation(m) for m in member_ids]
     return Mutation(
@@ -229,7 +233,11 @@ def batch(bid: str, description: str, member_ids: list[str]) -> Mutation:
 
 
 def get_mutation(mid: str) -> Mutation:
-    """A change or a batch by id."""
+    """A change or a batch by id; an id that starts with ``g_`` is a generated change (``generator.py``)."""
+    if mid.startswith("g_"):
+        from .generator import generated  # the generator builds on this module
+
+        return generated()[mid]
     for m in [*MUTATIONS, *BATCHES]:
         if m.id == mid:
             return m

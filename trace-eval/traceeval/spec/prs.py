@@ -2,7 +2,7 @@
 
 A PR is a ``Mutation`` (real file edits applied to a copy of the baseline) plus the verdict we expect
 the spec to give. "Wrong" PRs are either hand-written mistakes a coding agent could plausibly make or
-existing entries of the mutation catalogue. The spec layer never sees ``expected``; the report compares.
+existing entries of the mutation catalog. The spec layer never sees ``expected``; the report compares.
 """
 
 from dataclasses import dataclass

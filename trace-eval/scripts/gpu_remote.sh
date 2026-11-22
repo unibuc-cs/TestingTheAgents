@@ -10,6 +10,9 @@
 # MODEL is a preset (default: gemma). Gemma and Qwen use different GPUs and ports, so both can run at once:
 #   gemma   google/gemma-4-E4B-it  GPU 0     port 18100  then: traceeval ... --backend vllm
 #   qwen    Qwen/Qwen3.8-27B-FP8   GPU 1     port 18101  then: traceeval ... --backend llm
+#   qwen2   Qwen/Qwen3.8-27B-FP8   GPU 0     port 18103  a second Qwen beside qwen, for a run over both GPUs:
+#           TRACEEVAL_LLM_BASE_URL=http://127.0.0.1:18101/v1,http://127.0.0.1:18103/v1 and --workers 2, so
+#           that each server answers one test at a time
 #   gptoss  openai/gpt-oss-120b    GPUs 0,1  port 18102  one copy split over both GPUs (tensor parallel), so it
 #           needs both alone; then: TRACEEVAL_LLM_BASE_URL=http://127.0.0.1:18102/v1
 #           TRACEEVAL_LLM_MODEL=openai/gpt-oss-120b traceeval ... --backend llm
@@ -24,13 +27,15 @@
 #   TRACEEVAL_HF_MODEL   the gemma preset's model (the vllm backend reads the same variable)
 #   TRACEEVAL_VLLM_ENV   extra settings for the server, e.g. "VLLM_BATCH_INVARIANT=1" (greedy answers that do not
 #                        depend on how requests are batched together)
+#   TRACEEVAL_VLLM_ARGS  extra flags for 'vllm serve', after the script's own, so that they win over them:
+#                        "--no-enable-prefix-caching" serves without the prefix cache
 #
 # TRACEEVAL_SITE=hpc runs the same commands on the SLURM cluster (login ciprian.paduraru@hpc-ctrl01.acc-ub.local).
 # 'up' submits a job for 2 GPUs (at most 8 hours, SLURM's limit) whose server listens on the GPU node's localhost,
 # and opens the tunnel through the controller; 'down' cancels the job. The first job also creates the vLLM
 # environment and downloads the model. The ports are the presets' plus 10 (gemma 18110, qwen 18111), so both
 # sites can serve at once; list both URLs, comma-separated, in TRACEEVAL_VLLM_URL (gemma) or
-# TRACEEVAL_LLM_BASE_URL (qwen), and a run sends its requests to the servers in turn.
+# TRACEEVAL_LLM_BASE_URL (qwen), and each thread of a run keeps to one of the servers, given in turn.
 set -euo pipefail
 
 SITE=${TRACEEVAL_SITE:-fmi0}
@@ -41,7 +46,7 @@ case "$SITE" in
 esac
 VERSION=0.31.0  # the vLLM release setup installs
 RDIR=traceeval-vllm  # folder in the server home: environment, and per model its log and pid
-PRESETS="gemma qwen gptoss"
+PRESETS="gemma qwen qwen2 gptoss"
 
 # Sets the variables of one preset: model, GPUs, port, extra vLLM flags, and where its pid and log live.
 preset() {
@@ -51,8 +56,9 @@ preset() {
   case "$NAME" in
     gemma)  # we build Gemma's prompts and parse its answers ourselves (traceeval/llm/chat.py)
       MODEL=${TRACEEVAL_HF_MODEL:-google/gemma-4-E4B-it}; GPUS=0; PORT=18100; EXTRA="" ;;
-    qwen)  # vLLM applies Qwen's chat template and parses its tool calls; thinking and images are off
+    qwen|qwen2)  # vLLM applies Qwen's chat template and parses its tool calls; thinking and images are off
       MODEL=Qwen/Qwen3.8-27B-FP8; GPUS=1; PORT=18101
+      if [ "$NAME" = qwen2 ]; then GPUS=0; PORT=18103; fi  # the second server, on the other GPU
       EXTRA="--enable-auto-tool-choice --tool-call-parser qwen3_coder --reasoning-parser qwen3"
       EXTRA="$EXTRA --default-chat-template-kwargs '{\"enable_thinking\": false}'"
       EXTRA="$EXTRA --limit-mm-per-prompt '{\"image\": 0, \"video\": 0}'" ;;
@@ -95,7 +101,8 @@ server_alive() {
 SERVE_ENV="VLLM_USE_FLASHINFER_SAMPLER=0 VLLM_USE_DEEP_GEMM=0 ${TRACEEVAL_VLLM_ENV:-}"
 serve_cmd() {
   echo ".venv/bin/vllm serve $MODEL --host 127.0.0.1 --port $PORT --data-parallel-size $COPIES --tensor-parallel-size $TP \
-    --max-model-len 32768 --max-num-seqs 128 --enable-prefix-caching --gpu-memory-utilization 0.85 --seed 0 $EXTRA"
+    --max-model-len 32768 --max-num-seqs 128 --enable-prefix-caching --gpu-memory-utilization 0.85 --seed 0 $EXTRA \
+    ${TRACEEVAL_VLLM_ARGS:-}"
 }
 
 # On hpc: submit the job that serves the model. It stops at once on a GPU that is already in use (SLURM does not
@@ -257,5 +264,5 @@ case "${1:-}" in
   status) cmd_status ;;
   logs) cmd_logs "${2:-}" ;;
   down) cmd_down "${2:-}" ;;
-  *) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

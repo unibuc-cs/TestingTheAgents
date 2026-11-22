@@ -3,16 +3,18 @@
 | you want to                                                                                                                                              | read |
 |----------------------------------------------------------------------------------------------------------------------------------------------------------|---|
 | understand the goals, the pieces and the main results                                                                                                    | [README](../README.md) |
+| a short summary of replay-first for colleagues: the method and its guarantee, without results                                                            | [summary/summary.pdf](summary/summary.pdf) |
 | see the application the tests exercise: its users, agents, skills, tools and rules                                                                       | [CONTENTOPS.md](CONTENTOPS.md) |
 | Adobe's platform, what the Adobe Team asked for, the features built for it, the next steps                                                                 | [AEM_ALIGNMENT.md](AEM_ALIGNMENT.md) |
 | the research: the problem, the abstractions, the methods, the results, the take-aways, the roadmap                                                       | [RESEARCH_PLAN.md](RESEARCH_PLAN.md) |
 | work in the repository: the vocabulary, how to read a report, how the method weighs a test, the controlled changes, how to add a test, a change or a strategy | [USER_GUIDE.md](USER_GUIDE.md) |
 | record with a model: a local GPU server, the commands, recording and replay, what the recordings show, what the models get wrong                         | [EXPERIMENT.md](EXPERIMENT.md) |
 | give or follow the demo for the Adobe Team, command by command                                                                                             | [DEMO.md](DEMO.md) |
-| the full results of a recording: tables and figures                                                                                                      | [results/gemma7/report.md](results/gemma7/report.md), the results the README quotes; [results/qwen7/](results/qwen7/report.md) and [results/gptoss7/](results/gptoss7/report.md), the other two models |
+| the full results of a recording: tables and figures                                                                                                      | [results/gemma8/report.md](results/gemma8/report.md), the results the README quotes; [results/qwen7/](results/qwen7/report.md) and [results/gptoss7/](results/gptoss7/report.md), the other two models |
 | spec-driven development: what a spec is, how a pull request is judged against it, the assurance rungs                                                    | [SDD_GUIDE.md](SDD_GUIDE.md), then [SDD_DEMO.md](SDD_DEMO.md) for the results and [sdd/report.md](sdd/report.md) for the full report |
 | read the code of the spec-driven development layer, with diagrams, in two to three hours                                                                 | [STUDY_GUIDE.md](STUDY_GUIDE.md) |
 | the literature, the references and the paper                                                                                                             | [related_work.md](related_work.md), [REFERENCES.md](REFERENCES.md), `paper/main.tex` (build with `latexmk -pdf main`) |
+| the plan the work follows, and the offline checks of the results behind it                                                                               | [TODO.md](../TODO.md), [scripts/analysis/README.md](../scripts/analysis/README.md) |
 
 ## Reading order
 
@@ -33,14 +35,32 @@ flowchart TD
 
 ## What else is in this folder
 
-- `results/`: one folder per recording (`gemma7`, `qwen7`, `gptoss7`), each with the report and its three figures,
-  and the follow-up experiments:
-  - `gemma7/live_vs_replay.md`: the live check against the replay, change by change;
+- `results/`: one folder per recording, each with the report and its figures. `gemma8` is the recording of the
+  current app, with the replay-first section ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.2), and beside its report:
+  - `gemma8/second_recording.md`: its changed copies recorded again under another start of the server, and what
+    a reached test costs when the cassette answers every request it knows;
+  - `gemma8/live_checks.md`: `traceeval check` live on each of the 43 changes, against the evaluator.
+
+  `gemma8_exact` is the same app and changes recorded with the server set so that every answer repeats, and
+  `qwen8` is Qwen's recording of them, one test at a time ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.2).
+  `qwen8_exact` is Qwen's with every answer repeating, and `qwen8_gen` its generated changes, with
+  `stopping.md`, `live_checks_miss_rate.md` and `stand_ins_live.md` as for Gemma (§5.3, §5.4).
+  `gemma8_batches` adds 23 batches of changes beside them, with `batches.md`: every batch, replayed, evaluated and
+  checked live, and `culprits.md`: the members' own replays, which tests each reaches and the suspects of each
+  batch failure among them (§5.5).
+
+  `gemma8_gen` is the recording of the changes generated from the app ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.3),
+  evaluated on the half the strategies did not learn from, and beside its report:
+  - `gemma8_gen/stopping.md`: the full tables of the stopping rule with a bounded miss rate (§5.4);
+  - `gemma8_gen/live_checks_miss_rate.md`: `traceeval check --miss-rate` live on each of the 43 changes;
+  - `gemma8_gen/stand_ins_live.md`: a sample of the pairs the recording took from the replay, run live.
+
+  `gemma7`, `qwen7` and `gptoss7` are of the app before the fixes of [TODO.md](../TODO.md) §3, with their
+  follow-up experiments:
+  - `gemma7/live_vs_replay.md`: the method run live, without the replay phase, against the evaluator;
   - `gemma7/false_alarm_one_at_a_time.md`: the change behind the one live false alarm, recorded one test at a time;
   - `gemma7/noise_floor.md`: the empty change recorded fifteen times, against the number of runs;
   - `gemma7/batch_invariant.md`: why Gemma 4 cannot be served in vLLM's batch-invariant mode;
-  - `gemma7/batches.md`: the three batches of changes, replayed and checked live;
-  - `gemma7/batch_sweep.md`: twenty batches of two to eight changes drawn at random, replayed and checked live;
   - `gemma7/second_recording.md`: the whole experiment recorded a second time, on other GPUs, against
     `runs/gemma7`;
   - `qwen7/one_at_a_time.md`: Qwen's empty change recorded one test at a time, against its batched recording;
@@ -53,4 +73,6 @@ flowchart TD
   answers, so the draft can be replayed without a GPU.
 - `diagrams/` and `figures/`: the Mermaid sources and the rendered images the guides use.
 - `paper/`: the LaTeX paper, its bibliography and the overview figure.
+- `summary/`: the short summary of replay-first in LaTeX and PDF, general and without results.
+- `papers/`: a copy of a paper the related work cites (SABER, arXiv 2512.07850).
 - `experiments/`: the author's working files, not part of the testbed.

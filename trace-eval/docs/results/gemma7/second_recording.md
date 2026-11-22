@@ -79,34 +79,38 @@ Passing runs of five, for every (change, test) pair whose runs disagree in at le
 
 Four pairs disagree in `runs/gemma7`, seven in the second recording, three in both; no test on the original app
 disagrees in either. DS-INTENTS/i20 and WF4-01, the two pairs at the majority line in `runs/gemma7`
-(`docs/RESEARCH_PLAN.md` §5.4), sit at it again, with other runs passing.
+(`docs/RESEARCH_PLAN.md` §5.8), sit at it again, with other runs passing.
 
 ## 5. Detection at a 20% budget
 
 From each recording's `results/report.md` §2: the share of the changes counted as regressions that a strategy
-detects (29 in each, 28 of them shared, §3), over five replay seeds, and the tokens it spends on them, as a share
-of the full suite.
+detects (29 in each, 28 of them shared, §3), over five replay seeds, and the tokens it spends, as a mean over all
+43 changes and a share of the full suite.
 
 | strategy | detection, `runs/gemma7` | detection, `runs/gemma7_second` | tokens, `runs/gemma7` | tokens, `runs/gemma7_second` |
 |---|---|---|---|---|
-| full | 0.34 | 0.34 | 0.200 | 0.200 |
-| random | 0.56 | 0.56 | 0.200 | 0.200 |
-| declared | 0.62 | 0.59 | 0.068 | 0.068 |
-| ir_tfidf | 0.93 | 0.90 | 0.200 | 0.200 |
-| observed | 0.86 | 0.86 | 0.154 | 0.153 |
-| cost_aware | 0.86 | 0.86 | 0.199 | 0.199 |
-| casper_slices | 0.59 | 0.48 | 0.200 | 0.200 |
-| risk_aware_ts | 0.57 | 0.59 | 0.200 | 0.200 |
-| adaptive_bayes | 0.78 | 0.78 | 0.029 | 0.028 |
+| full | 0.41 | 0.41 | 0.169 | 0.169 |
+| random | 0.63 | 0.62 | 0.152 | 0.152 |
+| declared | 0.62 | 0.59 | 0.033 | 0.036 |
+| ir_tfidf | 0.93 | 0.90 | 0.099 | 0.099 |
+| observed | 0.85 | 0.86 | 0.084 | 0.083 |
+| observed_diverse | 0.94 | 0.92 | 0.092 | 0.092 |
+| cost_aware | 0.85 | 0.86 | 0.106 | 0.104 |
+| history_ml | 0.90 | 0.86 | 0.098 | 0.096 |
+| casper_slices | 0.65 | 0.54 | 0.144 | 0.151 |
+| risk_aware_ts | 0.63 | 0.64 | 0.145 | 0.144 |
+| adaptive_bayes | 0.78 | 0.78 | 0.051 | 0.049 |
 
-- `declared` and `ir_tfidf` lose one change each: both detect `skill_routing_drop_brand_gate`, a regression in
-  `runs/gemma7` only, and neither detects `benign_routing_guidance_reordered`, a regression in the second recording
-  only. `observed` and `adaptive_bayes` detect neither, so their rates do not move.
-- `risk_aware_ts` moves by one or two seeds of five on six of the shared regressions, in both directions.
-- `casper_slices` falls from 0.59 to 0.48: of the shared regressions it loses four and gains two. Its slices come
-  from behavioural signals averaged over the baseline runs, the runs' size in tokens among them, and those of 37
-  tests differ slightly between the recordings; k-means then draws other slices, and 3 of the 12 slices and 15 of
-  the 24 representatives are the same in both. Its $\mathrm{APFD}_c$ falls from 0.525 to 0.482.
+- `declared`, `ir_tfidf`, `observed_diverse` and `history_ml` lose one change each: all four detect
+  `skill_routing_drop_brand_gate`, a regression in `runs/gemma7` only, and none detects
+  `benign_routing_guidance_reordered`, a regression in the second recording only. `observed`, `cost_aware` and
+  `adaptive_bayes` detect neither, so their rates move by one seed at most.
+- `risk_aware_ts` moves by one to three seeds of five on five of the shared regressions, in both directions, and
+  `random` by one seed on three.
+- `casper_slices` falls from 0.65 to 0.54: of the shared regressions it moves on nine, down on six and up on
+  three. Its slices come from behavioural signals averaged over the baseline runs, the runs' size in tokens among
+  them, and those of 37 tests differ slightly between the recordings; k-means then draws other slices, and 3 of the
+  12 slices and 13 of the 22 representatives are the same in both. Its $\mathrm{APFD}_c$ falls from 0.81 to 0.72.
 
 Gemma's ground truth holds up to a second recording: the original app is the same run for run, 4 of 7,740 labels
 move, and the set of changes counted as regressions trades one change for another. What moves rests on one test: a

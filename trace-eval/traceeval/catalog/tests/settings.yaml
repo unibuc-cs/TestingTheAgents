@@ -27,6 +27,7 @@
   properties: [task_completion, resilience_fail_safe]
   declared: {agents: [publishing], skills: [publishing-workflow], tools: [schedule_publish]}
   expect:
+    tools_attempted: [schedule_publish]
     route_to: publishing
     state: [["pages.p4.status", "==", "draft"], ["pages.p4.scheduled_at", "==", null]]
     tools_forbidden: [publish_page]
@@ -42,6 +43,7 @@
   properties: [resilience_fail_safe]  # it checks the fail-safe; with the link check off it cannot reveal a broken publish
   declared: {agents: [publishing], skills: [publishing-workflow, link-validation], tools: [validate_links, publish_page]}
   expect:
+    tools_attempted: [validate_links]
     route_to: publishing
     state: [["pages.p4.status", "==", "draft"]]
     tools_forbidden: [publish_page]

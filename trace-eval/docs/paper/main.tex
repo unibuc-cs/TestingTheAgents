@@ -1,5 +1,5 @@
 % TRACE-Eval: the paper draft. Build with: latexmk -pdf main   (MiKTeX or TeX Live; pdflatex + bibtex)
-% The numbers are those of docs/results/gemma7/report.md; the plotted figure of section 5 is that report's.
+% The numbers are those of docs/results/gemma8/ and of the scripts in scripts/analysis/.
 \documentclass[11pt,a4paper]{article}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
@@ -7,7 +7,13 @@
 \usepackage[margin=25mm]{geometry}
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
+\usepackage{array}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
 \usepackage{graphicx}
+\usepackage{float}   % [H]: a table stays where its text is
+\usepackage{flafter} % no float above the place that introduces it
 \usepackage{algorithm}
 \usepackage{algpseudocode}
 \usepackage{tikz}
@@ -27,11 +33,13 @@
 \newcommand{\clean}{\textsc{clean}}
 \newcommand{\regression}{\textsc{regression}}
 \newcommand{\budget}{\textsc{budget}}
+% the short answer a research question opens with
+\newcommand{\answer}[1]{\noindent\textbf{Answer.} #1\par\smallskip}
 \algrenewcommand\algorithmicrequire{\textbf{Input:}}
 \algrenewcommand\algorithmicensure{\textbf{Output:}}
 \algnewcommand{\Phase}[1]{\Statex \textit{#1}}
 
-\title{TRACE-Eval: change-aware, cost-bounded regression test selection\\for LLM agent systems}
+\title{TRACE-Eval: replay-first regression testing of LLM agent systems}
 \author{University of Bucharest / ILDS}
 \date{}
 
@@ -39,139 +47,723 @@
 \maketitle
 
 \begin{abstract}
-An LLM agent system is assembled from skills, prompts, tools, harness code and configuration, and verified by a
-suite $T$ of tests whose cost $c(t)$ is dominated by tokens. After a change $\Delta$, a team either reruns all of
-$T$ or guesses. We formulate selection, prioritization and stopping as one problem: choose tests from $T$, one at a
-time, under a budget $B$, so that the regressions $\Delta$ introduces are found with high probability at low cost.
-The change becomes a set of components $C(\Delta)$ (code lines and functions, skill procedures and prose, agent
-fields, configuration keys), each broken with a prior probability $\pi_c$. A test's sensitivity $s_{tc} = P(t\
-\text{fails} \mid c\ \text{broken})$ is calibrated from the dependencies observed in execution traces and from the
-record of earlier changes, and a test that already fails on the unchanged system, with rate $f_t$, is discounted.
-The posterior over which subset of the components is broken is kept exactly; the next test maximizes the expected
-information gain per token; the run stops with \regression{} at the first failure of a test that used to pass, with
-\clean{} when $P(\text{some component broken} \mid \text{outcomes}) < \varepsilon$, and never before every
-mandatory property that $\Delta$ may affect has had a test. We evaluate on a testbed: a multi-agent
-content-operations application whose agents are played by an open model (Gemma~4 E4B), 180 tests, 43 controlled
-changes applied as file edits, and a ground truth measured per model by majority over five runs. Dependencies the
-test authors declared by hand miss 38\% of the regressions; dependencies observed in traces find 86\% within 20\%
-of the full-suite tokens; two published methods reproduced on the testbed, CASPER's slices and a risk-aware bandit,
-find 59\% and 57\% because neither reads the change; the proposed method finds 78\% for 3\% of the tokens, 84\% of
-the changes that break a safety property, and gives no false verdict on the 14 changes no test reveals.
+Every test of an LLM agent system calls the model, so running the whole suite after each change costs the whole
+suite in tokens. We study \emph{replay first} as regression test selection for such systems. The answers the model
+gave on the current version are recorded once. After a change, every test first runs again with its model calls
+answered from that record. A test that sends only requests made before replays to the end, and its outcome is
+known for no tokens. A test that sends a new request is one the change reaches, and only those tests need the
+model. The mechanism is that of test factoring and of exact-match caches. We add three things: its use as test
+selection, a protocol that measures the condition it rests on, and a rule that stops before every reached test has
+run, with a miss rate bounded by a threshold set on past changes.
+
+We evaluate on a multi-agent application played by an open model, with 180 tests, 43 hand-written changes and 692
+changes generated from the application. We find that:
+\begin{enumerate}[label=(\roman*), leftmargin=2.2em]
+  \item a fifth of the changes need no model, and the others reach 40 of the 180 tests on average;
+  \item served by default, about one request in fifty is answered otherwise when it is sent again, yet no test
+        ends otherwise; served one test at a time without a prefix cache, every request gets its recorded answer
+        again;
+  \item an order of the reached tests, stopped at its first failure, finds 98\% to 100\% of the regressions for
+        5\% to 7\% of the suite's tokens, under half of what the whole suite costs through a cache of answers;
+  \item a stop threshold set per group of changes keeps the miss rate of a clean verdict at its target, also on
+        changes unlike those it was set on, where one threshold for all changes or a learned score does not. A
+        coverage floor under it makes every clean verdict cover what the change touches, for a fraction of a
+        point;
+  \item checked live at a 10\% target miss rate, all 28 regressions are found with no false alarm, for 2.8\% of
+        the suite's tokens per check;
+  \item when a batch of changes is tested together, the members' own replays say, for no tokens, which tests each
+        member reaches and which members need no model, and they name the suspects of a failure, which hold every
+        culprit.
+\end{enumerate}
+A second model gives the same picture.
 \end{abstract}
 
-\section{What a team needs}
-\label{sec:features}
+
+\section{Introduction}
+\label{sec:intro}
 
 \subsection{The setting}
 
-A platform such as the agent layer of Adobe Experience Manager (AEM) ships dozens of agents. Each is a bundle of a
-system prompt, a list of tools, a list of skills (prompt files with a procedure the model follows), and settings,
-running on a shared harness that dispatches tool calls, retries, enforces approvals and delegates between agents.
-One prompt may cross several agents, through a plan the orchestrator writes (Section~\ref{sec:setup}). The platform
-is verified by scenario tests, which run a request end to end and check the final state and the trace, and by
-datasets of prompts with expected routings or tool calls. Every test is a run of a model. It costs tokens and
-seconds, and the cost varies by a factor of ten to a hundred between a one-shot routing item and a workflow across
-five agents.
+A platform such as the agent layer of Adobe Experience Manager (AEM) ships dozens of agents. Each is a system
+prompt, a list of tools, skills (prompt files with a procedure the model follows) and settings, on a shared harness
+that dispatches tool calls, enforces approvals and delegates between agents. The platform is verified by scenario
+tests, which run a request end to end, and by datasets of prompts with expected routings or tool calls. Every test
+is a run of a model, and the cost of a test varies by a factor of ten to a hundred.
 
 After a change, the question is the one regression testing has always asked \cite{yoo2012regression}: which tests
-to run (selection), in what order (prioritization), and when to stop. Three things make the classic answers
-\cite{rothermel1997safe,rothermel2001prioritizing} hard to transfer:
+to run, in what order, and when to stop. The classic answers \cite{rothermel1997safe,rothermel2001prioritizing}
+do not transfer directly: much of the ``code'' is natural language, the outcome of a test is a model's behaviour
+and can vary from run to run, and tests do not cost one unit each.
+
+\subsection{Replay first}
+
+What makes a test expensive is the model. The harness, the tools and the services behind them are ordinary code
+that runs in milliseconds, and a change can affect a test in two ways only: it changes what the model is sent, or
+what the code does with the model's answers.
+
+So every test can first be run once more without the model (Figure~\ref{fig:replay}). The answers the model gave
+the current version are kept, each under the exact request that got it, and on the changed version every model
+call is answered from that record. A test whose every request was made before \emph{replays to the end}, and its
+outcome is known for no tokens. A test that sends a request the record lacks \emph{diverges}: there the change
+reaches the model, and from there on the test needs it. A strategy then orders the tests the change reaches.
+
+\begin{figure}[!htbp]
+  \centering
+  \resizebox{\textwidth}{!}{\input{replay}}
+  \caption{Replay first. The grey boxes call no model. A test either replays to the end or diverges at the first
+  request the current version never made; only the tests that diverge go to a strategy and to the model.}
+  \label{fig:replay}
+\end{figure}
+
+Take a change to the code of one tool. A test that never calls the tool sends the model exactly what it sent
+before, so it replays to the end, to the outcome it had. A test whose call now returns something else sends a next
+request the record lacks, and diverges there: it is one of the few tests that need the model.
+
+Two questions remain:
 \begin{itemize}
-  \item much of the ``code'' is natural language, so coverage of a skill or a prompt is not a line of a
-        control-flow graph;
-  \item the outcome of a test is the behaviour of a model, so it is not a function of the code alone and can vary
-        from run to run;
-  \item the cost of a test is not one unit, so an order that finds a fault after three tests can still have spent
-        a third of the budget.
+  \item \emph{Can the record be trusted?} The replay rests on the model answering a request as it did before.
+        Greedy decoding on a GPU server is not exactly repeatable \cite{yuan2025numerical}, so we measure it.
+  \item \emph{What stays expensive?} A change that reaches most of the suite and breaks nothing costs every test
+        it reaches, and a rule that stops sooner has to say how often it calls a regression clean.
 \end{itemize}
 
-\subsection{The desired features}
+\subsection{What exists, and what is new}
 
-The Adobe Team, asked what they lack and want in a prototype, listed the following. Each is built into the testbed;
-the section in parentheses shows it.
+Replaying recorded answers into changed code is not new, and we do not claim it (Table~\ref{tab:related}):
 \begin{itemize}
-  \item \textbf{Selection, prioritization and stopping under a budget}, with a verdict a developer can act on
-        (Section~\ref{sec:method}).
-  \item \textbf{A catalog of properties}, the behavioural requirements the tests check, drafted by a model and
-        edited by people (Section~\ref{sec:setup}).
-  \item \textbf{Coverage of each change}: the share of what it touches that the selected tests exercised
-        (Section~\ref{sec:abstractions}).
-  \item \textbf{Per-test metadata}, declared by the author and observed in traces
-        (Section~\ref{sec:abstractions}).
-  \item \textbf{Trace assertions} on the final state, the tools and the order of agents (Section~\ref{sec:setup}).
-  \item \textbf{Workflows} across several agents as a unit of testing and of coverage (Section~\ref{sec:setup}).
-  \item \textbf{Environment failures kept apart} from the agent's failures (Section~\ref{sec:abstractions}).
-  \item \textbf{OpenTelemetry traces} with the plan, the routing and the approvals as events \cite{otel2026genai}
-        (Section~\ref{sec:setup}).
+  \item test factoring \cite{saff2005factoring} replays the calls between code and an expensive environment; a
+        factored test passes, fails, or cannot be replayed, which are the three outcomes above with the model as
+        the environment;
+  \item mutable replay and patch-based auditing \cite{viennot2013dora,kim2012poirot} let a replayed execution go
+        live where the changed program diverges, which is the reuse of a test's prefix;
+  \item Chronicle \cite{chawla2026chronicle} replays model and tool answers into changed agent code at boundaries
+        a developer annotates, and selects no tests;
+  \item an exact-match cache in front of the model already makes a second run of a suite pay only for the
+        requests that changed.
 \end{itemize}
+What these leave open is the replay as \emph{test selection}: a partition of the suite, before any model call, into
+tests whose outcome is known and tests the change reaches; ordering and stopping over the reached tests; and
+knowing when the partition can be trusted. The cache, not the full suite, is the baseline every cost below is
+given against.
 
-\subsection{What exists, and what is missing}
-
-Table~\ref{tab:related} places this paper in the literature. The two closest methods, CASPER and risk-aware
-adaptive evaluation, do not read the diff. This paper's claim is that the diff, mapped to the tests through
-execution traces, is worth a lot, and that a sequential Bayesian treatment of the outcomes turns selection,
-prioritization and stopping into one decision.
-
-\begin{table}[t]
+\begin{table}[!htbp]
 \centering\small
-\caption{Related work and why it does not transfer as it is.}
+\caption{Related work, and how it relates to this paper.}
 \label{tab:related}
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{p{44mm}p{50mm}p{56mm}}
 \toprule
 line of work & what it does & here \\
 \midrule
-regression test selection and prioritization \cite{yoo2012regression,rothermel1997safe,rothermel2001prioritizing,elbaum2002family,elbaum2001incorporating,malishevsky2006cost} & safe selection on control-flow graphs; orders scored by APFD and its cost-cognizant form & much of the ``code'' is prose and the outcome is a model's; the metrics carry over (Section~\ref{sec:abstractions}) \\
-information retrieval over the diff \cite{saha2015ir} & ranks tests by text similarity to the change & reproduced as \strat{ir\_tfidf} \\
-history and time windows in continuous integration \cite{elbaum2014techniques,memon2017taming}; learned selection \cite{machalica2019predictive,spieker2017reinforcement}; black-box diversity \cite{pan2024ltm} & ranks by past failures, a learned model or the diversity of the tests & assume unit costs and deterministic outcomes; the history factor returns in \strat{cost\_aware} \\
+regression test selection and prioritization \cite{yoo2012regression,rothermel1997safe,rothermel2001prioritizing,elbaum2002family,elbaum2001incorporating,malishevsky2006cost,gligoric2015ekstazi} & safe selection from control flow or file dependencies; orders scored by APFD and its cost-cognizant form & much of the ``code'' is prose, the outcome is a model's, and tests differ in cost by orders of magnitude \\
+information retrieval over the diff \cite{saha2015ir} & ranks tests by text similarity to the change & compared as \strat{ir\_tfidf} \\
+history and learned selection in continuous integration \cite{elbaum2014techniques,memon2017taming,machalica2019predictive,spieker2017reinforcement,pan2024ltm} & ranks by past failures or a model trained on them & compared as \strat{history\_ml}; assume unit costs and deterministic outcomes \\
 regression testing of LLM applications \cite{ma2024prompt} & names the obstacles: no crisp oracle, brittle prompts, nondeterminism & a diagnosis, not a selector \\
 efficient evaluation of language models \cite{polo2024tinybenchmarks,li2025atlas,ndzomga2026efficient,wu2026faq} & picks the subset of a benchmark that reproduces a score & selects once, for all models, not after a change \\
-GBV-PD \cite{cho2026gbvpd} & ranks tests from a parameter update & needs gradients the models here do not expose \\
-fault injection for agents \cite{tan2026agentchaos,seyedghorban2026llmmas} & perturbs the runtime & the testbed mutates the artefacts under change instead \\
-CASPER \cite{muse2026casper} & slices the suite by behaviour, probes representatives of each slice on the new version, ranks the slices by drift & change-aware only through drift; reproduced as \strat{casper\_slices} \\
-risk-aware adaptive evaluation \cite{maji2026risk} & a bandit allocates runs by impact and by the outcomes seen so far & does not read the diff; reproduced as \strat{risk\_aware\_ts} \\
+mutation and fault injection for agents \cite{kahani2026mutation,tan2026agentchaos,seyedghorban2026llmmas} & mutates workflows or perturbs the runtime, to measure a suite's adequacy & we mutate the artefacts under change to measure a selector \\
+CASPER \cite{muse2026casper}; risk-aware adaptive evaluation \cite{maji2026risk} & slices a suite by behaviour and ranks slices by drift; a bandit allocates runs by impact & neither reads the change; adapted as \strat{casper\_slices} and \strat{risk\_aware\_ts} \\
+nondeterminism of greedy decoding \cite{yuan2025numerical,atil2024nondeterminism} & batch and hardware change the output of ``deterministic'' inference & why the replay's condition is measured, per serving setup (Section~\ref{sec:evaluation}) \\
+conformal risk control \cite{angelopoulos2024conformal,angelopoulos2025ltt} & a threshold calibrated on held-out data bounds an expected loss & the stop threshold over the reached tests (Section~\ref{sec:stopping}) \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The contributions are:
+Our contributions are:
 \begin{enumerate}
-  \item a formulation of change-aware, cost-bounded testing of agent systems, with the metrics of regression
-        testing adapted to token costs (Section~\ref{sec:abstractions});
-  \item a method that extracts a change set at the granularity of code lines, skill procedures, agent fields and
-        configuration keys, maps it to tests through dependencies observed in traces, ranks tests by expected
-        information per token in a Bayesian model calibrated from history, and stops with a verdict
-        (Section~\ref{sec:method});
-  \item a testbed: a multi-agent application, 180 tests, 43 controlled changes and a mutation-based ground truth
-        derived per model, on which strategies are compared by offline replay (Sections~\ref{sec:setup}
-        and~\ref{sec:evaluation});
-  \item an evaluation against six baseline strategies and two published methods reproduced on the testbed
-        (Section~\ref{sec:evaluation}).
+  \item \textbf{replay first as test selection} for agent systems, the condition it rests on
+        (Section~\ref{sec:replay}), and its use on a batch of changes, where the members' own replays map which
+        tests each member reaches and name the suspects of a failure (Section~\ref{sec:suspects});
+  \item \textbf{a protocol that measures the condition} at the level of the request, the run and the outcome,
+        with an \emph{empty change} as the reference, and the two settings of a server that the differing answers
+        come from (Section~\ref{sec:evaluation});
+  \item \textbf{a stopping rule with a bounded miss rate}: a threshold calibrated per group of past changes by
+        split conformal prediction, with a coverage floor that keeps a clean verdict from leaving a changed
+        component or a release blocker untested (Section~\ref{sec:stopping});
+  \item \textbf{a testbed and an evaluation}: a multi-agent application, 180 tests, 43 hand-written and 692
+        generated changes, eleven strategies under the same rules with and without the replay, offline and live,
+        for two models (Sections~\ref{sec:setup} and~\ref{sec:evaluation}).
 \end{enumerate}
 
-\section{How we built the testbed}
+\subsection{How to read this paper}
+
+\begin{itemize}
+  \item Section~\ref{sec:abstractions} defines the terms and fixes the notation.
+  \item Section~\ref{sec:replay} gives the replay: how it works, the two conditions it rests on, what it
+        guarantees and what a reached test costs.
+  \item Section~\ref{sec:method} covers the reached tests: the strategies that order them, the rule that stops
+        with a bounded miss rate, a failure confirmed by a repetition, and a batch of changes.
+  \item Section~\ref{sec:setup} describes the testbed, and Section~\ref{sec:evaluation} answers five research
+        questions on it.
+  \item Section~\ref{sec:takeaways} lists what a team can take away, and Appendix~\ref{sec:appendix} gives every
+        strategy's algorithm and constants.
+\end{itemize}
+
+\section{Terms and notation}
+\label{sec:abstractions}
+
+The terms come in the order the paper needs them. Table~\ref{tab:notation}, at the end of the section, collects
+the symbols.
+
+\paragraph{Versions, tests and runs.} $V_0$ is the current version of the system, and $V_1 = V_0 + \Delta$ the
+version after a change $\Delta$. The suite $T$ holds the tests and eval items. A \emph{run} of a test on a
+version ends in pass or fail and costs tokens, prompt and completion over every model call it makes. Two sets of
+runs describe the current version:
+\begin{itemize}
+  \item the \emph{baseline}: $K$ traced runs of every test on $V_0$. It gives each test its cost $c(t)$, its
+        fail rate $f_t$ and the components its runs exercised;
+  \item the \emph{empty change}: $K$ more runs of $V_0$, made the way a changed version is run. It shows what
+        differs when nothing changed.
+\end{itemize}
+
+\paragraph{Outcomes.} A model produces the outcome of a run, so it can vary from one run to the next, and a test
+is judged by the majority of its $K$ runs. A test with $f_t \ge \tfrac12$ is one the model already fails, and it
+cannot reveal anything. A test \emph{reveals} $\Delta$ when it passes on $V_0$ and under the empty change, and
+fails on $V_1$. $\Rev(\Delta)$ is the set of those tests, and $\Delta$ is a \emph{regression} when the set is not
+empty. The ground truth therefore belongs to the model: a change the model cannot see, because it ignores the rule
+with and without the change, is revealed by no test under that model.
+
+\paragraph{Components and dependencies.} A \emph{component} is a part of the system that a change can touch and a
+run can exercise. Change sets and dependencies name components in one vocabulary: a function or a line of code, a
+tool and what the model is told about it, the procedure, prose and front matter of a skill, a field of an agent
+definition, a setting, the starting data. Comments and formatting add no component. What the model is sent counts
+as it is sent: a skill's procedure as its steps in their order, a tool's description and parameters, the
+specialists an orchestrator lists.
+\begin{itemize}
+  \item The \emph{change set} $C(\Delta)$ is the components the diff of $V_0$ and $V_1$ touches.
+  \item The \emph{observed dependencies} $D^{\mathrm{obs}}_t$ of a test are the components its baseline runs
+        exercised: what the runs were sent as well as what they did. $\phi_t(c)$ is the share of those runs that
+        exercised component $c$.
+  \item The \emph{declared dependencies} $D^{\mathrm{decl}}_t$ are those the test's author wrote down, beside a
+        risk weight $\rho_t$ from 1 to 4.
+\end{itemize}
+
+\paragraph{Strategies, and the two rules of a run.} A strategy sees $C(\Delta)$, the baseline facts about every
+test ($D^{\mathrm{obs}}_t$, $\phi_t$, $c(t)$, $f_t$, $\rho_t$, $D^{\mathrm{decl}}_t$ and the test's text), and the
+outcomes of \emph{other} changes, on which it may learn, but never $\Rev(\Delta)$. It chooses a test, observes its
+outcome and cost on $V_1$, and either chooses again or stops, within a budget $B$ of tokens. Every strategy is
+run under the same two rules, so that they compare like for like:
+\begin{itemize}
+  \item a test the model already fails on $V_0$ ($f_t \ge \tfrac12$) is not run: it fails on $V_1$ too, whatever
+        the change;
+  \item a run ends at its first failure: a test that passed on $V_0$ now fails, which is a regression verdict.
+\end{itemize}
+A run thus ends in one of three ways: \regression{}; \clean{}, when the strategy has nothing left to run or
+decides to stop; or \budget{}, when the budget ends it first.
+
+\paragraph{Metrics.}
+\begin{itemize}
+  \item \emph{Detection}: $\Delta$ is a regression, and a test of $\Rev(\Delta)$ was run and failed.
+  \item \emph{A miss}: $\Delta$ is a regression, and the run ends \clean{}.
+  \item \emph{A false alarm}: the run ends \regression{} on a test outside $\Rev(\Delta)$.
+  \item \emph{Tokens}: the cost of the tests run, as a share of the full suite. It is always a mean over
+        \emph{all} changes, since a strategy does not know whether it is given a regression.
+\end{itemize}
+
+\begin{table}[H]
+\centering\small
+\caption{Notation. The last three rows are defined in Section~\ref{sec:replay}.}
+\label{tab:notation}
+\begin{tabular}{lp{104mm}}
+\toprule
+symbol & meaning \\
+\midrule
+$V_0$, $V_1 = V_0 + \Delta$ & the current version and the changed version \\
+$T$, $c(t)$ & the suite of tests and eval items; the cost of $t$ in tokens, prompt and completion over every model call it makes \\
+$X_t(V)$, $f_t$ & the outcome of $t$ on $V$, pass or fail, random because a model produces it; $t$'s fail rate over $K$ runs on $V_0$ \\
+$\rho_t$, $D^{\mathrm{decl}}_t$ & the risk weight of $t$, from 1 to 4; the dependencies $t$'s author declared \\
+$C(\Delta)$ & the change set: the components the diff of $V_0$ and $V_1$ touches \\
+$\phi_t(c)$, $D^{\mathrm{obs}}_t$ & the share of $t$'s traced runs on $V_0$ that exercised component $c$; the components with $\phi_t(c) > 0$ \\
+$\Rev(\Delta)$ & the tests that reveal $\Delta$: a majority of their $K$ runs pass on $V_0$, and under the empty change, and fail on $V_1$; $\Delta$ is a regression when $\Rev(\Delta) \neq \emptyset$ \\
+$B$ & the budget in tokens, given as a share of $\sum_{t \in T} c(t)$ \\
+\midrule
+$Q_0$, $A_0$ & the requests the model was sent during the $K$ runs on $V_0$; the cassette, which maps each to the answer it got most often \\
+$T^{\mathrm{rep}}(\Delta)$, $T^{\mathrm{div}}(\Delta)$ & the tests that replay to the end on $V_1$, and those that diverge: the tests the change reaches \\
+$c_\Delta(t)$ & what $t$ costs on $V_1$ behind the cassette: the tokens of its requests that are not in $Q_0$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Replay first}
+\label{sec:replay}
+
+Before any model call and for no tokens, the replay answers three questions a selection needs: which tests a
+change can affect through the model, which outcomes the change already determines, and what each remaining test
+will cost at most.
+
+\subsection{The mechanism}
+
+A run of a test $t$ on a version $V$ alternates model calls with code. The code is everything but the model: the
+harness that drives the agents, the tools and the services behind them, the starting data, and the checks of the
+test. Written out,
+\begin{equation}
+  q_1 = g^t_V(), \qquad a_i = M(q_i), \qquad q_{i+1} = g^t_V(a_1, \dots, a_i), \qquad
+  X_t(V) = h^t_V(a_1, \dots, a_n),
+  \label{eq:run}
+\end{equation}
+where $M$ is the model, and:
+\begin{itemize}
+  \item $q_i$ is the $i$-th \emph{request}, the whole input of a call: the system prompt, the messages so far with
+        every tool result, the tools on offer and the decoding settings. A judge's calls are among them;
+  \item $g^t_V$ runs the code of $V$ up to the next call;
+  \item $h^t_V$ runs it to the end and applies the test's checks to the final state, the tool calls and the
+        answer.
+\end{itemize}
+
+\paragraph{The cassette.} Let $Q_0$ be the requests the $K$ baseline runs of the suite made on $V_0$. The
+\emph{cassette} $A_0$ gives each request of $Q_0$ the answer it got, the most frequent one when the runs disagree.
+A request is stored under a hash of all of it, so two requests match only when they are equal.
+
+\paragraph{Replaying a test.} To \emph{replay} a test $t$ on $V_1$ is to run Equation~\ref{eq:run} with $M$
+replaced by $A_0$: the code is that of $V_1$ and runs as it is, and only the answers come from the cassette. One
+of two things happens:
+\begin{itemize}
+  \item every request of the run is in $Q_0$. The run ends without the model; $t$ \emph{replays to the end}, with
+        an outcome $\hat{X}_t(V_1)$;
+  \item the run reaches a request $q \notin Q_0$, its \emph{divergence point}. The cassette has no answer and the
+        replay of $t$ stops there; $t$ \emph{diverges}.
+\end{itemize}
+The replay splits the suite into $T^{\mathrm{rep}}(\Delta)$ and $T^{\mathrm{div}}(\Delta)$ in seconds of processor
+time and for no tokens. A test of $T^{\mathrm{div}}(\Delta)$ is one the change \emph{reaches}: it puts before the
+model something the model was not sent on $V_0$.
+
+\paragraph{Where a change shows.} Since $g$ and $h$ are the code of $V_1$, a change shows wherever it alters what
+the model is sent or what the code does with the answers. By what the change edits:
+\begin{itemize}
+  \item \emph{what an agent is sent up front} (its prompt, its skills, the tools it is offered and their
+        descriptions, its task): the first request of the agent's conversation differs, and the test diverges
+        there;
+  \item \emph{a tool's code, a service, the starting data or a setting the code reads}: a tool result differs
+        when the test's call meets the changed behaviour. The next request then differs, and the test diverges
+        there;
+  \item \emph{only state the model never reads}: every request is one $V_0$ made, $h$ sees the new state, and the
+        test replays to the end, to a failure if the change broke what it checks;
+  \item \emph{nothing the run touches}: the run is as it was on $V_0$, and the test replays to its recorded
+        outcome.
+\end{itemize}
+Tools are never answered from the cassette: they always run the code of $V_1$.
+
+\subsection{The two conditions it rests on}
+
+The outcome of a replay is the outcome of a run with the model under two conditions.
+
+\begin{quote}
+\textbf{Condition R.} Under the serving setup in use, the answer to a request is a function of the request: $M(q)
+= A_0(q)$ for every $q \in Q_0$.
+
+\textbf{Condition D.} Given the answers, the code of a version is deterministic: $g^t_V$ and $h^t_V$ read no
+clock, draw no random number and ask no outside service whose answer can change.
+\end{quote}
+
+\begin{proposition}
+\label{prop:replay}
+Under R and D, a test of $T^{\mathrm{rep}}(\Delta)$ run on $V_1$ with the model makes the requests of its replay
+and gets its answers, so $X_t(V_1) = \hat{X}_t(V_1)$. A test of $T^{\mathrm{div}}(\Delta)$ run on $V_1$ agrees with
+its replay up to its divergence point.
+\end{proposition}
+
+\noindent\emph{Proof.} By induction on $i$ in Equation~\ref{eq:run}. The first requests are equal, since both runs
+execute the code of $V_1$, which D makes deterministic. If the $i$-th requests are equal and in $Q_0$, the model
+answers $M(q_i) = A_0(q_i)$ by R, so the $i$-th answers are equal, and by D so are the next requests. A test of
+$T^{\mathrm{rep}}(\Delta)$ ends with equal answers, to which $h^t_{V_1}$ gives one outcome; a test of
+$T^{\mathrm{div}}(\Delta)$ keeps equal requests and answers up to its first request outside $Q_0$.
+\hfill$\square$
+
+\begin{corollary}
+\label{cor:safe}
+Under R and D, every test that reveals $\Delta$ either diverges or fails in the replay:
+$\Rev(\Delta) \subseteq T^{\mathrm{div}}(\Delta) \cup \{t \in T^{\mathrm{rep}}(\Delta) : \hat{X}_t(V_1) =
+\text{fail}\}$.
+\end{corollary}
+
+\noindent\emph{Proof.} A test of $T^{\mathrm{rep}}(\Delta)$ that reveals $\Delta$ fails on $V_1$, and by
+Proposition~\ref{prop:replay} its replay has the same outcome. \hfill$\square$
+
+\medskip
+So running the reached tests, and reading the outcomes of the others off the replay, misses no regression the
+suite can reveal. Table~\ref{tab:replayfirst} lists what the replay gives, case by case. The last row is the
+verdict a strategy that runs every reached test can give: it is \clean{} with nothing the change reaches left
+untested, which no selection by dependencies can say without trusting the dependencies to be complete.
+
+\begin{table}[H]
+\centering\small
+\caption{What a replay gives, under conditions R and D.}
+\label{tab:replayfirst}
+\begin{tabular}{p{56mm}p{92mm}}
+\toprule
+what the replay finds & what follows \\
+\midrule
+$t \in T^{\mathrm{rep}}(\Delta)$ passes & $t$ passes on $V_1$; it need not be run \\
+$t \in T^{\mathrm{rep}}(\Delta)$ fails, and $f_t < \tfrac12$ & \regression{}, before any model call \\
+$T^{\mathrm{div}}(\Delta) = \emptyset$, and no such failure & \clean{}: no test can tell $V_1$ from $V_0$ \\
+$t \in T^{\mathrm{div}}(\Delta)$ & $t$ needs the model, for the requests of its run that are not in $Q_0$ \\
+every $t \in T^{\mathrm{div}}(\Delta)$ with $f_t < \tfrac12$ is run and passes & \clean{}, with no test the change reaches left untested \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Neither condition is taken on trust.
+
+\paragraph{Checking D.} Condition D belongs to the system under test, and it is checked for free: $V_0$ replayed
+against its own cassette must replay every test to the end, with its recorded outcome. A system whose tools ask
+outside services meets D by recording or simulating those services too.
+
+\paragraph{Checking R.} Condition R is an assumption about a serving stack, not a theorem. Greedy decoding on a
+GPU server is not bit-exact: the batch a request lands in, and what the server has cached, change the
+floating-point arithmetic \cite{yuan2025numerical}, and once in a while a token. So a recording measures R, at
+three levels:
+\begin{itemize}
+  \item \emph{the request}: while the changed copies are recorded, each answer to a request of $Q_0$ is compared
+        with $A_0$;
+  \item \emph{the run}: every recorded run of a pair $(\Delta, t)$ with $t \in T^{\mathrm{rep}}(\Delta)$ is
+        compared with the replay of $t$, call by call;
+  \item \emph{the outcome}: the same runs are compared with the replay by how they end, and the empty change is
+        compared with the baseline.
+\end{itemize}
+What the replay claims is a test's outcome, so the method needs the last level only. The first two say how far a
+serving setup is from it, and the empty change is what a pipeline would record to know where its own model and
+server stand.
+
+\subsection{What a reached test costs}
+
+A reached test is run with the model \emph{behind} the cassette: a request of $Q_0$ is answered from $A_0$
+wherever it comes in the run, and only the others reach the model. The cost of $t$ on $V_1$ is then
+\begin{equation}
+  c_\Delta(t) = \sum_{q \,\in\, \mathrm{run}(t, V_1),\ q \notin Q_0} \mathrm{tokens}(q),
+  \label{eq:cost}
+\end{equation}
+Before any model call the replay bounds this cost from above, by the tokens of $t$ after its divergence point. The
+bound is not tight: after its divergence point a run still sends requests of $Q_0$, the turn of an agent the
+change does not touch, say. Strategies plan with the bound; the evaluation reports both.
+
+\subsection{The baseline it has to beat}
+
+An exact-match cache in front of the model gives the saving of Equation~\ref{eq:cost} to any second run of a
+suite, with no method at all: the whole suite re-run through the cache pays $\sum_{t \in T} c_\Delta(t)$ and finds
+every regression. Replay first can cost less than that in three ways:
+\begin{itemize}
+  \item the tests the model already fails are not run;
+  \item a run ends at its first failure and does not pay for the tests after it, so the order of the reached
+        tests decides what a regression costs;
+  \item a rule that stops before every reached test has run does not pay for the rest, which decides what a
+        change that breaks nothing costs.
+\end{itemize}
+The first two are the rules of Section~\ref{sec:abstractions}. The third is the subject of
+Section~\ref{sec:stopping}, and it is where most of the remaining tokens are.
+
+\paragraph{Not prompt caching.} The cassette is an exact-match cache of answers: a request it holds makes no call.
+The prompt caching of model providers and servers, the prefix cache of vLLM among them, is another thing: it keeps
+the computation of a prompt prefix seen before and still generates the answer, so it lowers the price and the
+latency of a call but saves no call. On a GPU server it is also one of the settings under which the same request
+can get another answer (Section~\ref{sec:rq2}).
+
+\section{Ordering and stopping over the reached tests}
+\label{sec:method}
+
+The replay leaves $T^{\mathrm{div}}(\Delta)$. What remains is the classic question on a smaller suite: in what
+order to run the reached tests, and when to stop. A strategy meets the replay through the two calls it already
+makes: a test of $T^{\mathrm{rep}}(\Delta)$ is not runnable, and the cost of a test is the bound on
+$c_\Delta(t)$. No strategy reads the replay itself, so each can be run with and without it.
+
+\subsection{The strategies compared}
+
+Table~\ref{tab:strategies} lists the strategies, and Appendix~\ref{sec:appendix} gives their algorithms and
+constants. They fall into four families:
+\begin{itemize}
+  \item \emph{two references}: \strat{full} and \strat{random};
+  \item \emph{those that read the change}: \strat{declared} and \strat{observed} select the tests whose declared
+        or observed dependencies match $C(\Delta)$, and \strat{observed\_diverse} and \strat{cost\_aware} order by
+        the observed dependencies in other ways; \strat{ir\_tfidf} orders by the text of the diff;
+        \strat{history\_ml} learns from the other changes which tests reveal a change like this one;
+        \strat{adaptive\_bayes} keeps a posterior over which changed components are broken;
+  \item \emph{two published methods that do not read the change}, adapted to the testbed:
+        \strat{casper\_slices} and \strat{risk\_aware\_ts};
+  \item \emph{two orders that use nothing but the replay}: \strat{cheapest} and \strat{late\_divergence}.
+\end{itemize}
+
+\begin{table}[!htbp]
+\centering\small
+\caption{The strategies compared. Each is run under the two rules of Section~\ref{sec:abstractions}; only
+\strat{adaptive\_bayes} stops of its own accord.}
+\label{tab:strategies}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{L{30mm}p{38mm}p{54mm}L{22mm}}
+\toprule
+strategy & reads & does & after \\
+\midrule
+\strat{full}, \strat{random} & nothing & the suite in catalog order; a random permutation & reference \\
+\strat{declared} & $C(\Delta)$; $D^{\mathrm{decl}}_t$, $\rho_t$, $c(t)$ & selects the tests whose declared dependencies match & \cite{rothermel1997safe} \\
+\strat{ir\_tfidf} & the diff's text; the tests' text & orders the suite by TF-IDF similarity to the diff & \cite{saha2015ir} \\
+\strat{observed}, \strat{observed\_diverse} & $C(\Delta)$; $D^{\mathrm{obs}}_t$, $\phi_t$, $\rho_t$, $c(t)$ & selects the tests whose traces touched the change; the second takes them one behaviour (agents, tools, fault profile) at a time & this paper \\
+\strat{cost\_aware} & the same, and $f_t$ & orders the suite by affinity, risk and cost & \cite{elbaum2001incorporating,memon2017taming} \\
+\strat{history\_ml} & features of the change and of each test; the other changes with their outcomes & a logistic model of ``this test reveals this change'', ranked by probability, risk and cost & \cite{machalica2019predictive} \\
+\strat{casper\_slices} & baseline behaviour signals, pass rates, $c(t)$ & probes representatives of behavioural slices, then runs the slices by drift & \cite{muse2026casper}, adapted \\
+\strat{risk\_aware\_ts} & a context vector and an impact per test, $c(t)$ & a contextual bandit, one test per round & \cite{maji2026risk}, adapted \\
+\strat{adaptive\_bayes} & $C(\Delta)$ with kinds; every baseline fact; the other changes with their outcomes & the most information per token; stops with a verdict & this paper \\
+\strat{cheapest}, \strat{late\_divergence} & the replay only & the reached tests by what is left of them; by how late the change reaches them & this paper \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{The adaptive order: \strat{adaptive\_bayes}}
+\label{sec:adaptive}
+
+The idea: treat every changed component as possibly broken, run next the test whose outcome says the most per
+token about which ones are, and stop when little doubt is left (Figure~\ref{fig:overview}). The method keeps that
+doubt as a probability, and the stopping rule of Section~\ref{sec:stopping} calibrates it. It works in five steps;
+Appendix~\ref{sec:appendix} has the algorithm.
+
+\begin{figure}[!htbp]
+  \centering
+  \resizebox{0.9\textwidth}{!}{\input{overview}}
+  \caption{The adaptive order, from a diff to a verdict. The three inputs on the left exist before the
+  change is tested: the diff, a traced run of the current version, and other changes with their known
+  outcomes. The loop on the right runs one test at a time on the changed version.}
+  \label{fig:overview}
+\end{figure}
+
+\paragraph{1. Hypotheses.} Each changed component $c \in C(\Delta)$ is broken with a prior $\pi_c$ that depends on
+its kind: high for code, skill procedures, configuration and agent fields, low for prompt wording, skill prose and
+tool descriptions. A hypothesis $h \in \{0,1\}^{C(\Delta)}$ says which components are broken, and $h = \mathbf{0}$
+that none is. The posterior is kept exactly over all hypotheses, for at most eight components.
+
+\paragraph{2. What an outcome says.} A test passes only if it would pass on the current version and none of the
+broken components makes it fail. Under a hypothesis $h$ it fails with probability
+\begin{equation}
+  p_t(h) = P(t\ \text{fails} \mid h) = 1 - (1 - f_t) \prod_{c:\, h_c = 1} (1 - s_{tc}),
+  \label{eq:likelihood}
+\end{equation}
+and each outcome updates the posterior by Bayes' rule.
+
+\paragraph{3. Sensitivity.} Covering a component is weak evidence by itself: most tests that execute a changed
+function do not fail when it breaks. The sensitivity $s_{tc} = P(t\ \text{fails} \mid c\ \text{broken})$ is a
+product of four factors, learned from the other changes, never from the change under test:
+\begin{equation}
+  s_{tc} = \mathrm{clip}\big(r_{k(c)} \cdot \ell_{t,k(c)} \cdot \phi_t(c) \cdot \mathrm{bonus}_t,\ 0.02,\
+  0.9\big).
+  \label{eq:sens}
+\end{equation}
+\begin{itemize}
+  \item $r_k$ is the reveal ratio of the component's kind $k$: among the tests that looked impacted by other
+        changes of that kind, the share that revealed them, padded toward a default;
+  \item $\ell_{tk}$ is the test's own lift on that kind: the changes of kind $k$ it revealed over the number an
+        average impacted test would have revealed, padded so that a short record moves it little;
+  \item $\phi_t(c)$ is how often the baseline runs exercised the component;
+  \item $\mathrm{bonus}_t \in [0.5, 2]$ is larger for a test whose text shares vocabulary with the diff and for
+        one whose author declared the dependency.
+\end{itemize}
+
+\paragraph{4. The next test.} The next test is the one with the largest expected reduction of the posterior's
+entropy \cite{lindley1956measure} per token, tilted by risk. After a pass, near-duplicates of the test that passed
+are discounted.
+
+\paragraph{5. When it stops.} The run ends with \regression{} at the first failure of a test that passed on
+$V_0$, and with \clean{} when the probability that something is broken is small:
+\begin{equation}
+  1 - P(h = \mathbf{0} \mid \text{outcomes}) < \varepsilon ,
+  \label{eq:clean}
+\end{equation}
+with $\varepsilon = 0.05$ a constant. Two details complete the rule:
+\begin{itemize}
+  \item \emph{the mandatory rule}: before a run ends without a regression, every mandatory property the change
+        may affect that has no test yet gets its cheapest one, while the budget allows;
+  \item \emph{with the replay}, a test that replays to the end is not run, and its pass is not entered as
+        evidence: every sensitivity has a floor, and a hundred free passes would otherwise call any change clean.
+\end{itemize}
+
+\subsection{A clean verdict with a bounded miss rate}
+\label{sec:stopping}
+
+Running every reached test is what a change that reaches most of the suite and breaks nothing costs. A rule that
+stops sooner must say how often it calls a regression clean. The constant of Equation~\ref{eq:clean} does not: it
+is a threshold on a probability whose calibration nothing guarantees. This section replaces it with a threshold
+set on past changes, for a miss rate chosen in advance.
+
+\paragraph{Rules.} A \emph{rule} maps a change to a plan: an order $t_1, \dots, t_m$ of the runnable tests of
+$T^{\mathrm{div}}(\Delta)$ and values $v_1 \ge \dots \ge v_m$, where $v_j$ says how much reason is left to go on
+before test $t_j$. Given a threshold $\tau$, the run takes the tests in order while $v_j \ge \tau$; it ends with
+\regression{} at the first failure and with \clean{} otherwise. Any strategy that scores tests gives a rule. We
+measure five:
+\begin{itemize}
+  \item \emph{random}: a random order with random values, which shows what a threshold buys with no information;
+  \item \emph{text}: the TF-IDF similarity of a test to the diff;
+  \item \emph{learned}: a logistic model of ``this reached test reveals this change'' on the features of
+        \strat{history\_ml};
+  \item \emph{learned, with the replay}: the same model, with where the change reaches the test among its
+        features;
+  \item \emph{adaptive}: the order of \strat{adaptive\_bayes} while every test passes, valued by
+        $1 - P(h = \mathbf{0})$ before each test, the left side of Equation~\ref{eq:clean}.
+\end{itemize}
+
+\paragraph{The threshold.} Call a change an \emph{open regression} when the replay does not settle it and one of
+its runnable reached tests reveals it. The \emph{score} $s(\Delta)$ of an open regression is the value $v_j$ at
+its first revealing test in the plan. The rule calls $\Delta$ clean exactly when $s(\Delta) < \tau$, so a
+threshold under most past scores misses few regressions. Given $n$ past open regressions whose reached tests were
+all run, with scores $s_{(1)} \le \dots \le s_{(n)}$, and a target miss rate $\alpha$, take
+\begin{equation}
+  \hat\tau = s_{(k)}, \qquad k = \lfloor \alpha\,(n + 1) \rfloor ,
+  \label{eq:threshold}
+\end{equation}
+and $\hat\tau = -\infty$, every reached test runs, when $k = 0$. This is split conformal prediction, the case of
+conformal risk control \cite{angelopoulos2024conformal} whose loss is ``the regression was called clean''.
+
+\begin{proposition}
+\label{prop:miss}
+Let the $n$ past open regressions and a new one, $\Delta$, be exchangeable, and let the rule be fixed without
+them. Then the run on $\Delta$ with the threshold of Equation~\ref{eq:threshold} ends \clean{} with probability at
+most $k/(n+1) \le \alpha$.
+\end{proposition}
+\noindent\emph{Proof.} The run ends clean exactly when $s(\Delta) < s_{(k)}$, which requires that fewer than $k$
+of the $n$ past scores lie below $s(\Delta)$, so that $s(\Delta)$ is among the $k$ smallest of the $n + 1$ scores.
+By exchangeability each of the $n + 1$ is equally likely to hold any rank, and ties can only lower the
+probability. \hfill$\square$
+
+\medskip
+The bound holds whatever the rule: a better rule does not make the verdict safer, it makes it cheaper. The bound
+is also about regressions. A bound over all changes, ``at most $\alpha$ of the changes are regressions called
+clean'', is weaker: where one change in ten breaks something, running no test keeps it at $\alpha = 0.1$.
+
+\paragraph{What the bound does not say.} Four limits follow from the statement, and
+Section~\ref{sec:evaluation} measures each:
+\begin{enumerate}
+  \item the bound is over the changes together, not for each kind of change;
+  \item it assumes the changes to come are like the past ones;
+  \item it is an average over the sets of past regressions too: for the set at hand the miss rate can be above
+        $\alpha$;
+  \item it needs past changes whose reached tests were all run, which a nightly run of the whole suite provides
+        for the day's changes, and with fewer than $1/\alpha - 1$ past regressions no threshold is safe.
+\end{enumerate}
+The first and the third have a remedy.
+
+\paragraph{A threshold per group, for the first limit.} Partition the changes by something that is known before
+any test runs, and set one threshold per part on the past regressions of that part. The bound of
+Proposition~\ref{prop:miss} then holds within each part. We take as \emph{groups} what a change edits, read off
+the change set:
+\begin{itemize}
+  \item a skill's steps;
+  \item text the model reads: a skill's prose, an agent's prompt, a tool's description;
+  \item the tools and skills an agent is given;
+  \item the configuration;
+  \item the starting data;
+  \item code.
+\end{itemize}
+These are the kinds of component to which \strat{adaptive\_bayes} gives different priors. The price is fewer past
+regressions behind each threshold, and a group with fewer than $1/\alpha - 1$ of them runs every reached test.
+
+\paragraph{A threshold for the set at hand, for the third limit.} A team has one set of past regressions, not the
+average over all the sets it could have had. When the regressions are independent draws from one population, a
+lower threshold covers that: $s_{(k)}$ for the largest $k$ with
+\begin{equation}
+  P(\mathrm{Bin}(n, \alpha) \ge k) \ge 1 - \delta .
+  \label{eq:atHand}
+\end{equation}
+The miss rate is then at most $\alpha$ for a share $1 - \delta$ of the sets of past regressions, the form of
+guarantee of \cite{angelopoulos2025ltt}. The reason: as a function of the past regressions, the miss rate of the
+threshold $s_{(k)}$ is at most the $k$-th smallest of $n$ uniform draws, which is at most $\alpha$ exactly when at
+least $k$ of the draws are. The price is a later stop and more past regressions: 22 for $\alpha = \delta = 0.1$,
+where the bound on average needs 9.
+
+\paragraph{In the prototype.} The check of one change (Section~\ref{sec:evaluation}, RQ5) takes a target miss
+rate.
+\begin{itemize}
+  \item The recorded changes are split in two fixed halves: \strat{adaptive\_bayes} learns from one, and the
+        regressions of the other give the scores.
+  \item The threshold of the change's own group replaces $\varepsilon$ in Equation~\ref{eq:clean}.
+  \item Where the method would have no informative test left, the cheapest reached test runs next, so that a low
+        threshold can be reached.
+  \item The check states what its threshold rests on, or that the group has too few past regressions for one.
+\end{itemize}
+
+\paragraph{A coverage floor.} A threshold decides when the evidence is strong enough, not what has been looked at.
+The \emph{coverage floor} adds that. A run does not end \clean{} before two kinds of item are covered, by a test
+it ran or by one whose outcome the replay gave:
+\begin{itemize}
+  \item every changed component that some test exercised on $V_0$;
+  \item every affected mandatory property that some test checks.
+\end{itemize}
+Let $T^{\mathrm{known}}$ be the tests whose outcome is known, those of $T^{\mathrm{rep}}(\Delta)$ that pass on
+$V_0$ and those already run, and $U_t$ the items test $t$ covers. The floor is a cheapest
+\begin{equation}
+  F(\Delta) \subseteq T^{\mathrm{div}}(\Delta) \quad \text{with} \quad
+  \bigcup_{t \in F(\Delta) \cup T^{\mathrm{known}}} U_t =
+  \bigcup_{t \in T^{\mathrm{div}}(\Delta) \cup T^{\mathrm{known}}} U_t ,
+  \label{eq:floor}
+\end{equation}
+found greedily, by the most uncovered items per token.
+\begin{itemize}
+  \item It runs just before a clean verdict, so it costs nothing when a failure ends the run earlier.
+  \item It replaces the mandatory rule of Section~\ref{sec:adaptive}, which covers the properties alone.
+  \item It is the minimal covering set of test-suite minimization \cite{yoo2012regression}, computed per change
+        among the reached tests and used as a floor under the threshold, not as the selection.
+\end{itemize}
+
+\subsection{A failure confirmed by a repetition}
+\label{sec:confirm}
+
+The second rule of a run reads one failing run as a regression. That is right when a test's runs agree. When a
+change makes a test unstable, so that it fails in one run of five, a single run can be the minority, and the
+verdict is a false alarm. The remedy costs a test, not a suite: after a failure the test is run again, and a third
+time when the second run passes; two failures of three end the run, and a failure that does not repeat counts as a
+pass. A repetition is paid like any run, behind the cassette.
+
+\subsection{A batch: the day's map, and the suspects of a failure}
+\label{sec:suspects}
+
+A nightly run tests a day's changes $\Delta_1, \dots, \Delta_m$ together, as one change: the reached tests run once
+for all of them, and a failure that appears only when the changes meet shows. Each member can also be replayed
+alone, for no tokens. These replays do two jobs.
+
+\paragraph{Before any test runs: the day's map.} The \emph{map} is $T^{\mathrm{div}}(\Delta_j)$ for every member.
+It says three things:
+\begin{itemize}
+  \item a member that reaches no test and fails none in its replay needs no model at all
+        (Corollary~\ref{cor:safe});
+  \item a member whose replay fails a test that passes on $V_0$ is a regression whose culprit is known;
+  \item each reached test has the members that reach it.
+\end{itemize}
+
+\paragraph{After a failure: the suspects.} A failing test $t$ has to be traced to a member. The \emph{suspects}
+of $t$ are the members whose own replay reaches it or fails it:
+\begin{equation}
+  \mathrm{Sus}(t) = \{\Delta_j : t \in T^{\mathrm{div}}(\Delta_j) \ \text{or} \ \hat{X}_t(V_0 + \Delta_j) =
+  \text{fail}\}.
+  \label{eq:suspects}
+\end{equation}
+By Proposition~\ref{prop:replay}, a member whose own replay runs $t$ to the end and passes makes $t$ pass when it
+is applied alone, so under R and D every member that makes $t$ fail by itself is a suspect.
+\begin{itemize}
+  \item \emph{One suspect} is the culprit, with no further run.
+  \item \emph{Several} are told apart by halving, in about $\lceil \log_2 |\mathrm{Sus}(t)| \rceil$ runs of $t$
+        instead of $\lceil \log_2 m \rceil$.
+  \item \emph{No suspect}, or halving that leaves none failing alone, means that the members fail $t$ only
+        together.
+\end{itemize}
+
+\section{The testbed}
 \label{sec:setup}
 
-\paragraph{The application.}
-We wanted an application small enough to read in an afternoon and shaped like the platforms the question comes
-from. ContentOps (Figure~\ref{fig:app}) is a content-operations platform in the style of a web content manager:
-pages with versions, assets, publishing with reviews and schedules, link validation, SEO metadata, translation,
-governance with consent and approval tokens, rollback, brand rules, analytics and a site audit. An orchestrator and
-ten specialists, three of them (brand governance, data insights, site optimization) modelled on Adobe's, run on a
-shared harness. Each specialist follows a skill: a Markdown file with prose rules and a machine-readable procedure
-that the model reads as numbered steps, with the skills it includes written out and every setting shown with its
-value. Thirteen skills, 32 tools over deterministic in-memory services and one configuration file make up the
-rest. The orchestrator delegates a request to one specialist or, when it needs several, writes a plan, hands each
-step its own instruction and the ids earlier steps reported, and asks a person before any step that publishes,
-schedules or takes pages down; the approver's answer is fixture data, so a run is repeatable.
+The testbed is one application, its suite of tests, two sets of changes, and the recordings every measurement is
+read from.
 
-The structure is deliberate: components with a wide blast radius (the shared skills, the permission check most
-specialists may call, the retry helper around every tool call) beside narrow ones (the approval gate matters to one
-test), and rules that live only in a skill (publish only with permission) beside rules a tool or a service also
-enforces (approval tokens, roles). That is what makes selection hard, and what lets us discuss defence in depth:
-when a change removes a check from a skill, usually nothing below the skill catches the mistake.
+\paragraph{The application.} ContentOps (Figure~\ref{fig:app}) is a content-operations platform in the style of a
+web content manager, small enough to read in an afternoon: pages with versions, assets, publishing with reviews and
+schedules, link validation, SEO metadata, translation, governance, rollback, brand rules, analytics and a site
+audit.
+\begin{itemize}
+  \item \emph{Its parts.} An orchestrator and ten specialists run on a shared harness, with thirteen skills, 32
+        tools over deterministic in-memory services and one configuration file. A skill is a Markdown file with
+        prose rules and a procedure the model reads as numbered steps.
+  \item \emph{A request.} The orchestrator delegates a request to one specialist or writes a plan across several,
+        and asks a person before any step that publishes, schedules or takes pages down.
+  \item \emph{What makes selection hard.} Components with a wide blast radius (shared skills, the permission
+        check, the retry helper) sit beside narrow ones, and some rules live only in a skill while a service also
+        enforces others.
+  \item \emph{Condition D holds by construction.} The application has no clock and no randomness: given the
+        model's answers, a run is a function of the code, the configuration and the starting data. Its services
+        run in process, idempotency keys and seeds are derived from the operation and from names, and the ids a
+        server makes up for tool calls are numbered by order of appearance in the request's key.
+\end{itemize}
 
-\begin{figure}[t]
+\begin{figure}[!htbp]
   \centering
   \resizebox{0.92\textwidth}{!}{\input{app}}
   \caption{ContentOps, one request from top to bottom. Grey: shared by many agents, so a change there has a wide
@@ -179,255 +771,689 @@ when a change removes a check from a skill, usually nothing below the skill catc
   \label{fig:app}
 \end{figure}
 
-\paragraph{The tests.} We wrote the tests the way a team would write them for the application, before and
-independently of the changes (Table~\ref{tab:suite}). Every test names its risk level, the properties it checks,
-and the components its author declares it depends on. We check facts, not wording: a check that the answer
-contains ``broken'' would fail a model that says ``invalid''. Two cases with a rubric also have their answer judged
-by a model, after the deterministic checks pass. The declared block is incomplete on purpose, as it is in
-practice: nobody declares the shared skill reached through an include, the harness code or the configuration keys.
-
-\begin{table}[t]
-\centering\small
-\caption{The suite of 180 tests.}
-\label{tab:suite}
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{lrp{52mm}p{56mm}}
-\toprule
-kind & count & gives & checks \\
-\midrule
-scenario test & 91 & an entry agent; a request in plain language (``Please publish the welcome page''); a context (the user the agent acts for, the ids the request is about, any approval token); a fixture (the platform's starting data); a fault profile (healthy, one transient failure of a tool, one lost acknowledgement, or a tool permanently down) & the final state (the page is published, the audit log has one entry); the tools required and forbidden; attempt counts; facts the answer must report (a job id, which link is broken); a step limit \\
-workflow test & 15 & the same, for one of six multi-agent workflows: a campaign launch across five specialists, a site optimization across four, a legal takedown, a localized price update, the rollback of a broken release, a privacy request; each with a variant where a step must stop the plan & the same, and the order of agents and of tools \\
-routing item & 50 & a prompt & the expected delegation \\
-tool-call item & 24 & a prompt & the expected tool call \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\paragraph{The properties.} The Adobe Team wanted ``prompt, properties and threshold'', with categories.
-Table~\ref{tab:properties} is the catalog; each property also has a description and the components that state it,
-its sources, and the mandatory ones are release blockers. Each test lists the properties it checks. A model can
-draft the same catalog from the skills' rules, the agent definitions and the configuration guards, and tag the
-tests, for a person to edit: its catalog is good and traces every property to the component that states it; its
-tags of the tests need the person's review.
-
-\begin{table}[t]
-\centering\small
-\caption{The catalog of properties: the threshold is on the pass rate of a property's tests.}
-\label{tab:properties}
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{lp{62mm}p{22mm}cc}
-\toprule
-category & properties & checked by & threshold & mandatory \\
-\midrule
-correctness & task completion; correct routing; tool trajectory & state; trace, dataset & 0.95 & no \\
-safety & authorization; guarded mutation; no broken publish; privacy; human approval; brand compliance & state, trace & 1.0 & yes \\
-resilience & retry; idempotency; fail safe & state, trace & 0.95 & no \\
-orchestration & workflow completion & state, trace & 0.95 & no \\
-efficiency & efficiency & trace & 0.9 & no \\
-quality & answer quality & judge & 0.9 & no \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\paragraph{The environment.} An open model plays the agents: Gemma~4 E4B, served with vLLM and decoding greedily,
-so that the same prompt gives the same answer up to the arithmetic of batching. Qwen3.8-27B and gpt-oss-120b are
-second and third models, used as they are served, without sampling. Every run is traced (Table~\ref{tab:trace})
-and exports as OpenTelemetry spans. A run the environment broke, because the server or the network did not answer,
-is marked and left out, as if it had not been made. The whole suite runs $K = 5$ times on the current version and
-on every changed copy; the strategies are compared afterwards by replaying the recorded outcomes
-(Section~\ref{sec:evaluation}).
-
-\begin{table}[t]
-\centering\small
-\caption{What a trace records, and what each record feeds.}
-\label{tab:trace}
-\begin{tabular}{p{62mm}p{86mm}}
-\toprule
-record & feeds \\
-\midrule
-the agents started and the skills loaded & agent and skill dependencies; coverage of agents, skills and workflows \\
-the tools called, with their status & tool dependencies; the tool error paths covered; the trace assertions \\
-the configuration keys read & configuration dependencies \\
-the code functions and lines executed, each line attributed to the test and repetition that ran it & code dependencies at line level; the reveal ratios of Section~\ref{sec:adaptive} \\
-the plan, the delegations and the approvals, as span events & the order of agents, the hand-offs of ids and the approvals the workflow tests check \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\paragraph{The changes.} We wrote 43 controlled changes as file edits, in the spirit of mutation analysis
-\cite{demillo1978hints,jia2011analysis}, each to resemble a regression a team would ship (Table~\ref{tab:changes}).
-Two rules shaped the set:
+\paragraph{The tests.} The 180 tests were written before and independently of the changes:
 \begin{itemize}
-  \item a change meant to break something touches an input the model acts on; a keyword weight or the order of an
-        agent's intents is not one;
-  \item a removed step goes from both the procedure and the prose of a skill, or the model does the step anyway.
+  \item 91 scenario tests, which run a request end to end and check the final state, the tools called and the
+        facts in the answer;
+  \item 15 tests of six multi-agent workflows, which also check the order of the agents;
+  \item 50 routing items and 24 tool-call items.
 \end{itemize}
-We left out what told nothing about selection: twins of other changes, crashes, and a change that broke most of the
-suite. Ten of the changes aim at the workflows. Three batches by hand, and twenty drawn at random, bundle two to
-nine of the changes, as a nightly run or a pull request would (Section~\ref{sec:evaluation}); the members of a
-batch edit disjoint files, so the edits compose. Which test reveals which change was measured afterwards, never
-designed, and no strategy is told.
+Each test names the properties it checks, six of them safety properties that block a release, and the components
+its author declares it depends on. The declared lists are incomplete on purpose, as they are in practice.
 
-\begin{table}[t]
+\paragraph{The changes.} Changes are applied as file edits, in the spirit of mutation analysis
+\cite{demillo1978hints,jia2011analysis} (Table~\ref{tab:changes}).
+\begin{itemize}
+  \item \emph{Hand-written:} 43, each written to resemble a regression a team would ship or an edit that should
+        break nothing. Which test reveals which was measured afterwards, and no strategy is told.
+  \item \emph{Generated:} since 43 chosen changes are few, a generator also makes changes mechanically from the
+        application, one per place an edit of its kind applies to: 692 of sixteen kinds, without labels.
+\end{itemize}
+
+\begin{table}[!htbp]
 \centering\small
-\caption{The 43 controlled changes.}
+\caption{The changes: 43 written by hand, by category, and 692 generated, by what they edit.}
 \label{tab:changes}
-\begin{tabular}{lrp{98mm}}
+\begin{tabular}{lrp{96mm}}
 \toprule
-category & count & examples \\
+ & count & examples, or kinds of edit \\
 \midrule
-code & 10 & argument swap in a tool adapter; retries drop idempotency keys; approval gate bypassed; external links treated as reachable; a shared read reports the wrong review flag; ranking sorted the wrong way; case-sensitive search and brand check \\
-runtime & 3 & the agent loop stops six steps early; a delegated answer is truncated; a delegation drops the ids of earlier steps \\
-skill & 11 & publishing drops link validation or the permission check; authoring drops its metadata step; translation hard-codes a default; rollback restores the wrong version; governance drops the consent check; the routing skill stops asking for approval, or drops the brand gate \\
+\multicolumn{3}{l}{\emph{hand-written}} \\
+code & 10 & an argument swap in a tool adapter; retries drop idempotency keys; an approval gate bypassed \\
+runtime & 3 & the agent loop stops six steps early; a delegation drops the ids of earlier steps \\
+skill & 11 & publishing drops link validation or the permission check; the routing skill stops asking for approval \\
 agent definition & 2 & an agent loses a tool \\
-configuration & 7 & link validation disabled; review not required; a step budget of five; no retries; a title limit of twenty; another default agent; no approval needed to take a page down \\
+configuration & 7 & link validation disabled; no retries; another default agent \\
 combined & 1 & a keyword rule in code and a very low limit in configuration \\
-benign & 9 & prose reflowed or reworded; a comment or docstring edited; local variables renamed; configuration comments reordered; an unused tool added; prompt wording; lists reordered \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\section{Abstractions}
-\label{sec:abstractions}
-
-Table~\ref{tab:notation} fixes the notation; the paragraphs below say what the table cannot.
-
-\begin{table}[t]
-\centering\small
-\caption{Notation.}
-\label{tab:notation}
-\begin{tabular}{lp{100mm}}
-\toprule
-symbol & meaning \\
+benign & 9 & prose reflowed or reworded; a comment edited; locals renamed; an unused tool added \\
 \midrule
-$V_0$, $V_1 = V_0 + \Delta$ & the current version and the changed version \\
-$T$, $c(t)$ & the suite of tests and eval items; the cost of $t$ in tokens, prompt and completion over every model call it makes \\
-$\rho_t \in \{1, 2, 3, 4\}$ & the risk weight of $t$ \\
-$\mathrm{props}(t)$, $\mathcal{P}$ & the properties $t$ checks; the catalog of properties \\
-$D^{\mathrm{decl}}_t$ & the dependencies $t$'s author declared \\
-$X_t(V)$, $f_t$ & the outcome of $t$ on $V$, pass or fail, random because a model produces it; $t$'s fail rate over $K$ runs on $V_0$ \\
-$C(\Delta)$, $k(c)$ & the change set, the components the diff of $V_0$ and $V_1$ touches (Table~\ref{tab:components}); the kind of a component \\
-$\phi_t(d)$, $D^{\mathrm{obs}}_t$ & the share of $t$'s traced runs on $V_0$ that exercised component $d$; the components with $\phi_t(d) > 0$ \\
-$\Rev(\Delta)$ & the tests that reveal $\Delta$: a majority of their $K$ runs pass on $V_0$ and fail on $V_1$; $\Delta$ is a regression when $\Rev(\Delta) \neq \emptyset$ \\
-$\mathcal{P}(\Delta)$ & the affected properties: $C(\Delta)$ touches one of their sources, or a test that checks them exercised a changed component on $V_0$ \\
-$B$ & the budget in tokens, given as a share of $\sum_{t \in T} c(t)$ \\
+\multicolumn{3}{l}{\emph{generated}} \\
+a skill's steps & 171 & a step deleted (76), two steps swapped (63), a step's condition negated (28) or its guard deleted (4) \\
+text the model reads & 157 & a rule deleted from a skill's prose (18) or the prose re-wrapped (13); a tool's description cut short (32) or a parameter's emptied (53); a sentence of an agent's prompt deleted (30); an agent's description cut short (11) \\
+an agent's tools and skills & 50 & a tool taken from an agent \\
+the configuration & 65 & a setting at another value \\
+code & 164 & a condition negated (120); two arguments swapped (12); a comment added (32) \\
+the starting data & 85 & a value of the fixture replaced \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\paragraph{Outcomes and the baseline.} A run the environment broke is not an outcome and is left out. A test with
-$f_t \ge \tfrac12$ is one the model already fails: a mistake of the model rather than a fault of the system. Such a
-test cannot reveal anything, so the ground truth belongs to the model: a change the model cannot see, because it
-ignores the rule with and without the change, is revealed by no test under that model, and a different model may
-give a different $\Rev(\Delta)$.
+\paragraph{The models, and how they are served.} An open model plays the agents: Gemma~4 E4B, served with vLLM
+and decoding greedily. Qwen3.8-27B is a second model. A model is served in one of three ways:
+\begin{itemize}
+  \item \emph{by default}: the server keeps its prefix cache, and the tests of a changed copy run 32 at a time;
+  \item \emph{one test at a time}, with the prefix cache;
+  \item \emph{exact}: one test at a time and no prefix cache. It is slower, and under it every answer repeats
+        (Section~\ref{sec:rq2}).
+\end{itemize}
+Every run is traced: the agents, skills and tools it used or was offered, the configuration keys it read, the code
+lines it executed, and every model call with its request and answer. A trace exports as OpenTelemetry spans
+\cite{otel2026genai}. A run the environment broke is left out.
 
-\paragraph{Components and the change set.} A component is a part of the system that a change can touch and a run
-can exercise, named in one vocabulary (Table~\ref{tab:components}). Comments, docstrings, blank lines, formatting
-and the order of configuration mappings add nothing: no component, no file and no diff line, so no strategy and no
-probability can depend on them. Skill files are prompts the model reads word for word, so all of their text counts.
+\paragraph{The recordings.} The evaluation runs on \emph{recordings}, made once, so that comparing strategies
+afterwards calls no model. A recording has five parts:
+\begin{itemize}
+  \item the \emph{baseline}: $K = 5$ runs of the suite on the current version, one test at a time, with code
+        coverage per test; it gives each test's dependencies, cost and fail rate;
+  \item the \emph{cassette}: every answer of the baseline under the exact request that got it, the most frequent
+        one when the repetitions differ;
+  \item the \emph{empty change}: $K$ more runs of the current version, made the way the changed copies are; a test
+        that fails there reveals no change;
+  \item the \emph{changed copies}: $K$ runs on each changed version, of the whole suite or of the tests the change
+        reaches, with each answer compared with the cassette's;
+  \item a \emph{manifest} of what the recording was made from and with.
+\end{itemize}
+Table~\ref{tab:protocol} lists the seven recordings. Two things are not in it:
+\begin{itemize}
+  \item where a recording ran only the tests each change reaches, a test that replays to the end has no run:
+        under condition R its outcome is the replay's. RQ2 checks a sample of those outcomes with the model;
+  \item $G'$ also counts, for every run, the tokens of its requests that the cassette knows, which RQ3 uses.
+\end{itemize}
 
-\begin{table}[t]
+\begin{table}[H]
 \centering\small
-\caption{The component vocabulary, shared by change sets and dependencies.}
-\label{tab:components}
-\begin{tabular}{lp{84mm}}
-\toprule
-component & what it names \\
-\midrule
-\texttt{code:<file>::<function>} & a function whose normalized syntax tree changed \\
-\texttt{line:<file>:<n>} & a line of code \\
-\texttt{tool:<name>} & a registered tool adapter \\
-\texttt{skill:<name>\#procedure}, \texttt{\#prose}, \texttt{\#meta} & the three parts of a skill file \\
-\texttt{agent:<name>.<field>} & a field of an agent definition; when a tool or skill list only lost items, the
-  component records which, so that only the tests that used one of them are reached \\
-\texttt{config:<key>} & an effective setting \\
-\texttt{fixture:<name>} & the platform's starting data \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\paragraph{Dependencies.} A component matches a dependency set when the set holds the component, its base
-(\texttt{skill:x} for \texttt{skill:x\#procedure}), or a function of a module changed at module level. A test's
-behaviour signature is the tuple of agents, tools, fault profile and dataset of its first baseline run; tests with
-the same signature are near-duplicates.
-
-\paragraph{Strategies.} A strategy sees $C(\Delta)$, the baseline facts about every test ($D^{\mathrm{obs}}_t$,
-$\phi_t$, $c(t)$, $f_t$, $\rho_t$, $\mathrm{props}(t)$, $D^{\mathrm{decl}}_t$ and the test's text), and the
-outcomes of earlier changes on which it may calibrate, but never $\Rev(\Delta)$. It chooses a test, observes its
-outcome and cost on $V_1$, and either chooses again or stops, within $B$. A non-adaptive strategy is an order of
-$T$ run greedily within the budget. An adaptive one may also return a verdict, \clean{} or \regression{}, and a
-probability.
-
-\paragraph{Metrics.} Table~\ref{tab:metrics}. Prioritization alone, with every test run and no stopping, is scored
-by APFD \cite{rothermel2001prioritizing}. With $n = |T|$, $m = |\Rev(\Delta)|$ and $TF_i$ the position in the
-order of the test that reveals fault $i$,
-\begin{equation}
-  \mathrm{APFD} = 1 - \frac{\sum_{i=1}^{m} TF_i}{n\,m} + \frac{1}{2n},
-\end{equation}
-which is near 1 when the first tests find every fault and near 0 when the last ones do; a random order scores
-about $\tfrac12$. Because costs differ by an order of magnitude, we also score its cost-cognizant form
-\cite{elbaum2001incorporating,malishevsky2006cost}. With $c_j$ the cost of the $j$-th test in the order,
-$C = \sum_j c_j$, and $\sigma_i$ the severity of fault $i$ (the risk weight of its revealing test),
-\begin{equation}
-  \mathrm{APFD}_c = \frac{\sum_{i=1}^{m} \sigma_i \big( C - \sum_{j < TF_i} c_j - \tfrac12 c_{TF_i} \big)}
-                         {C \sum_{i=1}^{m} \sigma_i}.
-\end{equation}
-Finding a fault after a few cheap tests costs little and scores high; finding it after the long workflows scores
-low, however few tests came before. An order can score well on APFD and poorly on $\mathrm{APFD}_c$ by putting
-the expensive tests first.
-
-\begin{table}[t]
-\centering\small
-\caption{The metrics, for one change and one run of a strategy.}
-\label{tab:metrics}
-\begin{tabular}{lp{92mm}c}
-\toprule
-metric & definition & needs $\Rev(\Delta)$ \\
-\midrule
-detection & a revealing test was run and failed & yes \\
-cost to first detection & the tokens spent up to that failure & yes \\
-tokens spent & the cost of every test run, on every change & no \\
-false alarm & a failure of a test outside $\Rev(\Delta)$; on a change no test reveals, a failure the change did not cause & yes \\
-verdict correct & the verdict agrees with $\Rev(\Delta) \neq \emptyset$ & yes \\
-change coverage & the shares of $C(\Delta)$ exercised, of $\mathcal{P}(\Delta)$ checked, and of the affected workflows and features reached; whether every mandatory property in $\mathcal{P}(\Delta)$ got a test & no \\
-APFD, $\mathrm{APFD}_c$ & how early, by position or by cost, a complete order finds each fault & yes \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\section{The strategies}
-\label{sec:method}
-
-Every strategy answers the same question, which tests to run on $V_1$ and in what order, from the inputs listed in
-Section~\ref{sec:abstractions}. Table~\ref{tab:strategies} says what each one reads and whether it stops,
-Table~\ref{tab:constants} lists every constant, and Table~\ref{tab:goodbad} what each is good and bad at. Five
-strategies are change-aware, in that they read $C(\Delta)$ or the diff; the two reproduced methods do not.
-Figure~\ref{fig:overview} follows the proposed method from the diff to a verdict. Brackets $[\cdot]$ are 1 when
-the condition inside holds and 0 otherwise.
-
-\begin{table}[t]
-\centering\small
-\caption{The strategies compared. Every non-adaptive order runs greedily within the budget and never stops.}
-\label{tab:strategies}
+\caption{The recordings. All share one application and one suite, with $K = 5$ runs of a test unless one run is
+noted. The runs include the baseline where the recording has its own. ``Twice'': under the baseline's start of
+the server and under another.}
+\label{tab:protocol}
 \setlength{\tabcolsep}{4pt}
-\begin{tabular}{lp{40mm}p{54mm}l}
+\begin{tabular}{lL{35mm}L{17mm}L{43mm}L{28mm}r}
 \toprule
-strategy & reads & does & after \\
+ & model, served & baseline, cassette & changes recorded & tests run on each & runs \\
 \midrule
-\strat{full} & nothing & the suite in catalog order & reference \\
-\strat{random} & nothing & a random permutation & reference \\
-\strat{declared} & $C(\Delta)$; $D^{\mathrm{decl}}_t$, $\rho_t$, $c(t)$ & selects the tests whose declared dependencies match & \cite{rothermel1997safe} \\
-\strat{ir\_tfidf} & the diff's text; the tests' text & orders the suite by TF-IDF similarity to the diff & REPiR \cite{saha2015ir} \\
-\strat{observed} & $C(\Delta)$; $D^{\mathrm{obs}}_t$, $\phi_t$, $\rho_t$, $c(t)$ & selects the tests whose traces reached the change & this paper \\
-\strat{cost\_aware} & $C(\Delta)$; $D^{\mathrm{obs}}_t$, $\phi_t$, $f_t$, $\rho_t$, $c(t)$ & orders the suite by affinity, risk and cost & \cite{elbaum2001incorporating,memon2017taming} \\
-\strat{casper\_slices} & baseline behaviour signals, pass rates, $c(t)$ & probes representatives of behavioural slices, then runs the slices by drift & CASPER \cite{muse2026casper} \\
-\strat{risk\_aware\_ts} & a context vector and an impact per test, $c(t)$ & a contextual bandit, one test per round & \cite{maji2026risk} \\
-\strat{adaptive\_bayes} & $C(\Delta)$ with kinds; every baseline fact; earlier changes with their outcomes & the most information per token; stops with a verdict & this paper \\
+$G$ & Gemma, by default, on one GPU & its own & the empty change; the 43 hand-written & the whole suite & 40,500 \\
+$G'$ & Gemma, by default, started anew on two other GPUs & of $G$ & the empty change; the 43 hand-written & those it reaches & 8,110 \\
+$G_{\mathrm{gen}}$ & Gemma, by default & of $G$ & 691 generated & those it reaches & 114,230 \\
+$X$ & Gemma, exact & its own & the empty change, twice; the 43 hand-written & those it reaches & 9,910 \\
+$Q$ & Qwen, one test at a time & its own & the empty change; the 43 hand-written & those it reaches & 9,040 \\
+$X_Q$ & Qwen, exact & its own & the empty change, twice; the 43 hand-written & those it reaches, one run each & 4,127 \\
+$Q_{\mathrm{gen}}$ & Qwen, exact & of $X_Q$ & 691 generated & those it reaches, one run each & 22,763 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\begin{table}[t]
+\section{Evaluation}
+\label{sec:evaluation}
+
+The evaluation answers five questions:
+\begin{itemize}
+  \item \textbf{RQ1} What does the replay settle without a model, and how much of the suite does a change reach?
+  \item \textbf{RQ2} Does condition R hold: is the outcome of a test that replays the outcome of running it?
+  \item \textbf{RQ3} What does a verdict cost, against the full suite and against a cache, and how much does the
+        order of the reached tests matter?
+  \item \textbf{RQ4} Can a run stop before every reached test has run, with a miss rate that stays under its
+        target?
+  \item \textbf{RQ5} Does the offline evaluation predict a live check, and what does a repetition after a failure
+        buy?
+\end{itemize}
+
+\paragraph{Protocol.} A strategy is evaluated offline, on the recordings of Table~\ref{tab:protocol}: it picks a
+test and is answered with the outcome and the cost of one recorded run of that test on that changed copy, drawn by
+a seed; it picks again or stops.
+\begin{itemize}
+  \item \emph{Budgets} are 2, 5, 10, 20, 30, 50 and 100\% of the full suite's tokens, and ``no budget'' below is
+        the last.
+  \item \emph{Learning.} A strategy that learns from other changes never sees the change under test. On the
+        hand-written changes it learns from the other 42. On the generated changes it learns from one fixed half,
+        drawn kind by kind by a hash of the change's name, and is evaluated on the other.
+\end{itemize}
+
+\paragraph{Ground truth.} What a suite reveals belongs to the model:
+\begin{itemize}
+  \item \emph{Gemma, the hand-written changes} ($G$). 172 of the 180 tests pass on the current version; the eight
+        failures are the model's own mistakes, and they fail on nearly every changed copy too. Of the 34 changes
+        meant as regressions, 28 are revealed by at least one test, seven of them by exactly one. The six others
+        remove a guard the model does not act on with or without the change, or rest on one test whose runs are
+        split. No benign change is revealed. The five runs of a (change, test) pair disagree on 4 of the 7,740
+        pairs.
+  \item \emph{Qwen, the hand-written changes} ($Q$). Seven tests fail on the current version, and 32 changes are
+        revealed: 29 of the 34 meant as regressions and three of the nine meant as harmless, all three edits to a
+        prompt or to a skill's prose.
+  \item \emph{Gemma, the generated changes} ($G_{\mathrm{gen}}$). Of the 692 changes, 691 were recorded, with no
+        run broken by the environment; the one left out makes every run loop without end. A test reveals 316 of
+        them, 35 of those in the replay alone. What the suite reveals depends on what the change edits: 92\% of
+        the tools taken from an agent, 89\% of the code changes other than comments, 80\% of the settings, 35\% of
+        the edits to the starting data, 26\% of the edits to a skill's steps and 17\% of the edits to text, where
+        the model often does the task anyway.
+\end{itemize}
+
+\subsection{RQ1: what the replay settles}
+
+\answer{The replay alone settles a fifth of the changes. The others reach 40 of the 180 tests on average, which
+cost a fifth of the suite's tokens.}
+
+Replaying a changed copy takes a few seconds of processor time.
+\begin{itemize}
+  \item \emph{A fifth of the changes need no model.} The replay settles eight of the 43 hand-written changes: on
+        five no test diverges, and three are caught by a test that replays to a failure. It settles 134 of the 692
+        generated changes: 98 as clean (the comments, half of the edits to the starting data, the code and settings
+        no run reaches) and 36 as regressions, mostly conditions negated in the code, whose effect shows in the
+        final state before it shows in any request. Under Qwen it settles eight of the 43.
+  \item \emph{The others reach 40 of the 180 tests on average, very unevenly.} The changes the replay leaves open
+        reach 39 to 41 tests on average and 12 to 15 at the median. An edit to a prompt every request reads (the
+        orchestrator's prompt, the routing skill, a specialist's description) makes 153 tests diverge at their
+        first request; an edit to the starting data, three on average. In both sets of changes the reached tests of
+        a change cost 21\% of the suite's tokens on average, by the bound of Section~\ref{sec:replay}.
+  \item \emph{Most changes reach the model through what an agent is sent.} Of the 1,442 diverged (change, test)
+        pairs of the hand-written changes, 1,172 diverge at the first request of an agent's conversation and 270 in
+        a tool result.
+\end{itemize}
+
+\subsection{RQ2: the condition, measured}
+\label{sec:rq2}
+
+\answer{Served by default, condition R fails for requests and holds for outcomes: about one request in fifty gets
+another answer, and no test ends otherwise. In the exact setup it holds for every request.}
+
+Table~\ref{tab:condition} measures condition R on four recordings: $G$, another start of its server ($G'$), the
+exact setup ($X$), and a second model ($Q$).
+
+\begin{table}[H]
+\centering\small
+\caption{Condition R on four recordings. Requests: those the baseline had sent, answered otherwise than the
+cassette. The empty change of $X$ was recorded under two starts of the server.}
+\label{tab:condition}
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{lcccc}
+\toprule
+ & $G$ & $G'$ & $X$ & $Q$ \\
+\midrule
+the empty change: tests whose outcome flips & 0 & 0 & 0 & 0 \\
+\quad its requests answered otherwise & 2.0\% & 2.6\% & 0 of 11,010 & 0.4\% \\
+the reached (change, test) pairs: runs that disagree & 4 of 1,442 & 13 of 1,442 & 0 of 1,442 & 2 of 1,448 \\
+\quad their requests answered otherwise & 1.8\% & 2.5\% & 0 of 31,840 & 2.3\% \\
+changes with a revealing test, of 43 & 28 & 29 & 30 & 32 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{itemize}
+  \item \emph{As served by default, a model call is not a function of its request.} About one request in fifty is
+        answered otherwise when it is sent again to the same server.
+  \item \emph{The outcome of a test is.} In $G$, which was recorded whole, 6,298 (change, test) pairs replay to the
+        end. Every one of their 31,490 recorded runs ends like its replay, and 92\% of them are the very same
+        conversation; a different answer is most often another wording of the same decision. Under another start
+        of the server ($G'$), 2 of the 1,442 labels of the reached pairs move, both on workflow tests whose runs
+        disagree.
+  \item \emph{Two settings of the server account for the answers that differ.} Run against the cassette of $G$
+        after another start of the server, the empty change has 1.9\% to 3.9\% of its requests answered otherwise
+        under four settings. Two things move the answers:
+        \begin{itemize}
+          \item \emph{how many tests run at a time}: with 32, a test's runs differ from each other. 132 or 133 of
+                the 180 tests have five identical runs, against 179 or 180 one test at a time;
+          \item \emph{the prefix cache}, which makes an answer depend on what the server was sent before: with it,
+                one test at a time, 18 tests answer otherwise than the cassette in every run.
+        \end{itemize}
+  \item \emph{With neither, condition R holds exactly} ($X$). No request is answered otherwise, under the
+        baseline's start of the server or under another, and the five runs of every reached pair are one run.
+        The price is time: five passes of the suite take half an hour instead of two to three minutes.
+  \item \emph{The same holds for Qwen} ($X_Q$, $Q_{\mathrm{gen}}$). In the exact setup none of the 5,310 requests
+        of its empty change is answered otherwise, under two starts of the server, where $Q$ had 0.4\%. Neither is
+        any request the baseline had sent among those of its changed copies: 5,049 for the hand-written changes
+        and 69,368 for the generated ones. Its five passes take 100 minutes instead of 78.
+  \item \emph{A label belongs to a model and to the way it is served.} Three of the 1,442 labels differ between
+        $G$ and $X$, and five of Qwen's 180 tests pass or fail on the current version otherwise in $X_Q$ than in
+        $Q$.
+  \item \emph{The outcomes taken from the replay hold up live.}
+        \begin{itemize}
+          \item $G_{\mathrm{gen}}$ ran only the tests each change reaches and took the other 101,534 pairs from
+                the replay. Of those, 2,973 drawn at random over 100 changes were then run with the model: all end
+                like the replay, the 146 replayed failures included, and 84\% are the same conversation.
+          \item $Q_{\mathrm{gen}}$ took 101,617 pairs from the replay. Of those, 1,000 over 100 changes were run
+                the same way, in the exact setup: all end like the replay, the 83 replayed failures included, and
+                every one is the same conversation, with none of its 4,846 requests answered otherwise.
+        \end{itemize}
+  \item \emph{Condition D holds on every recording.} Replayed against its own cassette, $V_0$ replays all 180 tests
+        to the end, each with its recorded outcome.
+  \item \emph{The replay misses nothing it could see} (Corollary~\ref{cor:safe}, measured). Of the 183 revealing
+        (change, test) pairs of $G$, 170 diverge and 13 replay to a failure; none replays to a pass.
+\end{itemize}
+A pipeline can therefore choose: a fast setup under which the claim holds for outcomes, as the empty change
+measures, or a slower one under which it is exact.
+
+\subsection{RQ3: what a verdict costs}
+
+\answer{Over the reached tests, any order finds 98\% to 100\% of the regressions, for 5\% to 7\% of the suite's
+tokens: under half of what the whole suite costs through a cache. The order decides what a regression costs,
+hardly whether it is found. What stays expensive is the change that breaks nothing.}
+
+Table~\ref{tab:cost} runs every strategy on the 43 hand-written changes of $G$ twice, under the same two rules:
+over the whole suite, and replay first. Tokens are charged by the bound of Section~\ref{sec:replay}.
+
+\begin{table}[!htbp]
+\centering\small
+\caption{Detection of the 28 regressions of $G$, with the tokens spent in parentheses (per cent of the full suite,
+a mean over all 43 changes), by nominal budget. Five seeds. One regression is 3.6 points of detection.}
+\label{tab:cost}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lcccccc}
+\toprule
+ & \multicolumn{3}{c}{over the whole suite} & \multicolumn{3}{c}{replay first} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+strategy & 5\% & 20\% & no budget & 5\% & 20\% & no budget \\
+\midrule
+\strat{full}                 & 0.14 (4.8) & 0.43 (16.9) & 1.00 (46.4) & 0.93 (1.6) & 0.93 (4.7) & 1.00 (10.2) \\
+\strat{random}               & 0.24 (4.6) & 0.64 (15.4) & 1.00 (44.5) & 0.85 (2.1) & 0.98 (4.9) & 0.99 (10.3) \\
+\strat{declared}             & 0.61 (1.6) & 0.61 (3.8) & 0.61 (5.4) & 0.68 (1.3) & 0.68 (3.0) & 0.68 (4.2) \\
+\strat{ir\_tfidf}            & 0.71 (3.3) & 0.93 (10.0) & 1.00 (33.9) & 0.89 (1.8) & 1.00 (4.2) & 1.00 (8.6) \\
+\strat{observed}             & 0.64 (3.0) & 0.86 (8.6) & 1.00 (17.6) & 0.93 (1.7) & 1.00 (4.4) & 1.00 (9.4) \\
+\strat{observed\_diverse}    & 0.54 (3.8) & 0.93 (9.4) & 1.00 (16.1) & 0.93 (2.2) & 0.96 (5.1) & 1.00 (10.5) \\
+\strat{cost\_aware}          & 0.64 (3.4) & 0.86 (10.9) & 1.00 (37.8) & 0.93 (1.7) & 1.00 (4.4) & 1.00 (9.4) \\
+\strat{history\_ml}          & 0.71 (3.3) & 0.89 (10.0) & 1.00 (36.3) & 0.96 (1.6) & 1.00 (4.0) & 1.00 (8.9) \\
+\strat{casper\_slices}       & 0.36 (4.3) & 0.65 (14.5) & 1.00 (46.8) & 0.86 (1.8) & 0.99 (4.8) & 0.99 (10.0) \\
+\strat{risk\_aware\_ts}      & 0.34 (4.5) & 0.63 (14.7) & 0.99 (44.7) & 0.90 (2.1) & 0.97 (4.8) & 1.00 (10.0) \\
+\strat{adaptive\_bayes}      & 0.78 (2.7) & 0.81 (5.1) & 0.85 (8.5) & 0.96 (1.4) & 0.96 (2.1) & 0.96 (2.1) \\
+\strat{cheapest}             &  &  &  & 0.84 (1.8) & 0.94 (4.9) & 0.98 (10.0) \\
+\strat{late\_divergence}     &  &  &  & 0.93 (2.0) & 0.96 (4.7) & 1.00 (9.8) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Over the whole suite.} Reading the change pays.
+\begin{itemize}
+  \item At a 20\% budget the orders by the traces, by the diff's text or by a model trained on the other changes
+        find 86\% to 93\% of the regressions for about a tenth of the suite's tokens.
+  \item The two adapted methods, which do not read the change, stay at the level of a random order.
+  \item Hand-written dependencies stop at 61\%.
+  \item \strat{adaptive\_bayes} finds the most at a small budget, by a margin 28 regressions do not establish, and
+        has a ceiling of 85\%: it calls four narrow regressions clean, and at a 20\% budget 27\% of its clean
+        verdicts are given on a regression.
+\end{itemize}
+
+\paragraph{Replay first.} The replay does most of the work.
+\begin{itemize}
+  \item \emph{Any order finds nearly every regression.} With no budget, any order of the reached tests finds 98\%
+        to 100\% of the regressions for about a tenth of the suite's tokens (8.6\% to 10.5\%), where an order of
+        the whole suite spends 16\% to 47\%.
+  \item \emph{The order matters much less for detection.} Within a 5\% budget a \emph{random} order of the reached
+        tests finds 85\%, more than any strategy finds over the whole suite at that budget.
+  \item \emph{The order still decides what a regression costs.} With no budget, the tokens spent on a revealed
+        regression run from 0.9\% of the suite (\strat{history\_ml}) and 1.4\% (\strat{ir\_tfidf}) to 2.6\%
+        (\strat{random}) and 2.9\% (catalog order). The two orders that use only the replay, by cost and by
+        divergence depth, do about as well as a random one.
+  \item \emph{A clean verdict holds.} A strategy that orders the whole suite ends clean only when every reached
+        test has run and passed, and in $G$ none of those verdicts is given on a regression.
+        \strat{adaptive\_bayes}, which stops early, still calls one regression clean (the authoring skill without
+        its metadata step, which one test reveals): 6\% of its clean verdicts, against 27\% without the replay.
+  \item \emph{What stays expensive is the change that breaks nothing.} On the 15 changes no test reveals, a clean
+        verdict costs 22\% to 25\% of the suite, and 80\% on an edit to a prompt every request reads.
+\end{itemize}
+
+\paragraph{Against a cache.} Recording $G'$ counted, for every run, the tokens of the requests the cassette knows,
+so Equation~\ref{eq:cost} can be evaluated exactly.
+\begin{itemize}
+  \item \emph{The bound overstates the cost by about a third:} 38\% of the requests a reached test sends after its
+        divergence point are requests the current version made too.
+  \item \emph{A cache gets most of the saving with no method at all.} The whole suite through it costs 13.5\% of
+        the suite's tokens per change, 5.0\% for the median change, and finds every regression.
+  \item \emph{Replay first costs less than half of that,} 5.1\% to 6.2\% with no budget. The difference is on the
+        regressions: a run that ends at its first failure pays 1.6\% to 3.3\% for a regression, where the cache
+        pays 12.5\%.
+  \item \emph{On a change that breaks nothing the two cost the same,} 12\% to 14\%: every reached test has to run.
+        \strat{adaptive\_bayes} stops early, at 3.7\%, and misses two of the 29 regressions. Whether such a rule
+        can be trusted is RQ4.
+  \item \emph{The picture holds in the exact setup, and for a second model.} Every order of the reached tests
+        finds all 30 regressions of $X$ for 4.8\% to 6.1\% of the suite (the cache: 12.8\%), and all 32 of $Q$ for
+        3.6\% to 5.4\% (the cache: 14.2\%) and of $X_Q$ for 3.0\% to 5.8\% (14.0\%). Under Qwen
+        \strat{adaptive\_bayes}, whose constants were set on Gemma, finds 84\% and gives 31\% of its clean
+        verdicts on a regression; RQ4 sets its threshold on Qwen's own changes.
+\end{itemize}
+
+\paragraph{On changes the strategies never learned from.} The 691 generated changes of $G_{\mathrm{gen}}$ are split
+in two fixed halves: the strategies that learn do so from 349 of them, and all are evaluated on the other 342, of
+which 165 are regressions. The picture of the hand-written changes holds:
+\begin{itemize}
+  \item \emph{With no budget,} an order of the reached tests finds 98\% or 99\% of the regressions for 9.5\% to
+        11.1\% of the suite, where the strategies that find as many without the replay spend 23\% to 58\%.
+  \item \emph{Within a 5\% budget,} an order of the reached tests finds 78\% to 86\%, and the declared
+        dependencies 50\%.
+  \item \emph{Over the whole suite,} \strat{adaptive\_bayes} leads at a 5\% budget, and here the lead is
+        established: it finds 0.73 against 0.65 for \strat{ir\_tfidf}, a difference of 8 points with a 95\%
+        bootstrap interval from 1 to 15.
+  \item \emph{Under Qwen} ($Q_{\mathrm{gen}}$), a test reveals 357 of the 691 changes, against 316 under Gemma:
+        Qwen notices more of the edits to text, 38\% against 17\%. On its 342 held-out changes an order of the
+        reached tests finds every regression for 7.0\% to 9.3\% of the suite.
+\end{itemize}
+
+\subsection{RQ4: stopping with a bounded miss rate}
+
+\answer{Yes, with the adaptive rule and a threshold per group of changes: that combination stays within its
+target everywhere we looked, also on changes unlike those it was set on. One threshold for all changes, or a
+learned score, does not.}
+
+The stopping rule is measured on the generated changes, where there are enough regressions to calibrate on. Of
+the 691, the replay settles 134; of the other 557, 281 are open regressions. Running every reached test costs
+20.1\% of the suite on a change no test reveals, by the bound.
+
+\paragraph{On changes like those the threshold was set on.} The 557 changes are split three ways, twenty times:
+a quarter is what a rule learns from, a quarter sets the threshold (64 to 75 regressions), and the rule is
+measured on the other half (Table~\ref{tab:stopping}).
+
+\begin{table}[H]
+\centering\small
+\caption{Stopping with one threshold for all changes, on the generated changes: the share of the regressions
+called clean, and what a clean verdict costs (tokens on a change no test reveals, per cent of the suite; 20.1
+when every reached test runs). Means over twenty splits. ``For nine sets in ten'' is the lower threshold of
+Section~\ref{sec:stopping} with $\delta = 0.1$.}
+\label{tab:stopping}
+\begin{tabular}{lcccccc}
+\toprule
+ & \multicolumn{2}{c}{target 5\%} & \multicolumn{2}{c}{target 10\%} & \multicolumn{2}{c}{target 20\%} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+rule & missed & cost & missed & cost & missed & cost \\
+\midrule
+random & 3.8\% & 17.2 & 7.9\% & 13.6 & 18.1\% & 8.9 \\
+text & 2.2\% & 18.5 & 9.6\% & 12.8 & 21.0\% & 7.7 \\
+learned & 4.3\% & 12.4 & 9.8\% & 7.8 & 19.5\% & 3.2 \\
+learned, with the replay & 4.4\% & 11.6 & 9.7\% & 8.0 & 21.2\% & 3.2 \\
+adaptive & 4.5\% & 18.5 & 9.9\% & 14.0 & 18.9\% & 7.9 \\
+\midrule
+learned, for nine sets in ten & 1.1\% & 17.0 & 5.4\% & 11.1 & 14.3\% & 5.1 \\
+adaptive, for nine sets in ten & 1.0\% & 19.9 & 6.1\% & 17.7 & 14.3\% & 10.5 \\
+\midrule
+adaptive, with its constant $\varepsilon$ & \multicolumn{6}{l}{no target: 7.4\% missed, at a cost of 15.6} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{itemize}
+  \item \emph{The promise holds, for every rule,} on average over the splits. For one set of some 70 past
+        regressions it can fail: the worst split misses 11\% to 22\% at a 10\% target. The threshold for nine sets
+        in ten is over its target in at most three of the twenty splits, and stops later.
+  \item \emph{The rule decides the price.} The learned rule takes a clean verdict from 20.1\% of the suite to
+        12.4\% at a 5\% target and to 7.8\% at 10\%. The method's constant $\varepsilon$ is one point on that
+        curve, and nobody chose it.
+\end{itemize}
+
+\paragraph{Group by group.} A rule can keep the bound over all changes together by missing most regressions of
+one kind and none of another. Table~\ref{tab:groups} gives the misses per group of changes
+(Section~\ref{sec:stopping}), under one threshold for all changes and under a threshold per group.
+
+\begin{table}[H]
+\centering\small
+\caption{Regressions called clean at a 10\% target, group by group: one threshold for all changes, and a
+threshold per group. Per split: the group's regressions among its changes, and what every reached test costs on
+one of its changes (per cent of the suite).}
+\label{tab:groups}
+\begin{tabular}{lcc cccc}
+\toprule
+ & & every & \multicolumn{2}{c}{learned} & \multicolumn{2}{c}{adaptive} \\
+\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+the change edits & regressions & test & one & per group & one & per group \\
+\midrule
+a skill's steps & 23 of 85 & 12.7 & 10\% & 5\% & 3\% & 6\% \\
+text the model reads & 13 of 77 & 25.2 & 87\% & 2\% & 31\% & 1\% \\
+an agent's tools and skills & 23 of 25 & 2.8 & 0\% & 6\% & 1\% & 2\% \\
+code & 43 of 45 & 3.6 & 0\% & 7\% & 20\% & 9\% \\
+the configuration & 24 of 26 & 4.3 & 0\% & 6\% & 0\% & 4\% \\
+the starting data & 13 of 18 & 1.4 & 0\% & 2\% & 1\% & 0\% \\
+\midrule
+cost of a clean verdict & & 20.1 & 7.8 & 18.1 & 14.0 & 17.5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{itemize}
+  \item \emph{One threshold misses where the suite reveals least.} The learned rule is cheap because it calls clean
+        nearly nine in ten of the regressions among edits to text, and none in four of the other groups; the
+        adaptive rule misses a third of the first and a fifth of code's. A threshold per group brings every group
+        to its target.
+  \item \emph{A group needs past regressions:} 9 for a threshold at a 10\% target, 19 at 5\%. Edits to text are the
+        most expensive group to clear, 25\% of the suite per change, and the group whose changes break least, one
+        in six. In these splits the group has six or seven past regressions; the prototype, which sets its
+        thresholds on half of the changes, has fifteen.
+  \item \emph{Where a model is sure of itself and wrong, the threshold shows it.} Four of 43 code regressions
+        have a posterior under $10^{-14}$ at their first revealing test, so the threshold for code is next to
+        zero, and a code change runs nearly every test it reaches, which is 3.6\% of the suite.
+\end{itemize}
+
+\paragraph{On changes unlike those the threshold was set on.} The bound assumes exchangeability. Two measurements
+break it on purpose (Table~\ref{tab:shift}): each kind of generated change judged with rules and thresholds that
+have seen the other kinds only, and the 43 hand-written changes judged with rules and thresholds from the
+generated ones.
+
+\begin{table}[H]
+\centering\small
+\caption{Outside the population the threshold was set on, with a threshold per group. Left: the regressions
+missed when each kind of generated change is judged from the other kinds (281 regressions, pooled). Right: the
+hand-written changes judged from the generated ones: regressions missed of the 25 the replay leaves open, and the
+cost of a clean verdict (37.0 when every reached test runs).}
+\label{tab:shift}
+\begin{tabular}{lccc ccc cc}
+\toprule
+ & \multicolumn{3}{c}{a kind never seen} & \multicolumn{3}{c}{hand-written} & \multicolumn{2}{c}{cost} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}\cmidrule(lr){8-9}
+rule, target & 5\% & 10\% & 20\% & 5\% & 10\% & 20\% & at 10\% & at 20\% \\
+\midrule
+text & 0.0\% & 1.8\% & 15.3\% & 0 & 2 & 3 & 25.2 & 22.4 \\
+learned & 0.4\% & 4.6\% & 6.4\% & 5 & 5 & 6 & 28.2 & 27.5 \\
+learned, with the replay & 0.0\% & 1.4\% & 17.4\% & 0 & 1 & 1 & 28.6 & 19.0 \\
+adaptive & 0.4\% & 3.2\% & 11.0\% & 0 & 0 & 3 & 15.3 & 9.6 \\
+adaptive, with the coverage floor & 0.4\% & 2.8\% & 8.9\% & 0 & 0 & 2 & 15.7 & 10.0 \\
+\midrule
+adaptive, with its constant $\varepsilon$ & \multicolumn{3}{c}{7.5\%} & \multicolumn{3}{c}{2} & \multicolumn{2}{c}{19.2} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{itemize}
+  \item \emph{A learned score travels badly.} The learned rule misses its target on the hand-written changes at
+        every target, five or six of 25. With the replay's features it keeps its targets per group, but a clean
+        verdict then costs nearly twice as much as with the adaptive rule, and with one threshold for all changes
+        it misses four in ten of a kind it never saw at a 20\% target.
+  \item \emph{The adaptive rule travels.} Its value is built from the change's components and each test's record,
+        not from a model of what past changes looked like. With a threshold per group it stays within its target
+        on both sets, and on the hand-written changes it is safer and cheaper than with its constant: none missed
+        for 15.3\% of the suite at a 10\% target, where the constant misses two for 19.2\%.
+  \item \emph{The coverage floor costs little, and catches some of what the threshold lets through.} With it,
+        every clean verdict covers every changed component and affected mandatory property that some test covers;
+        without it, the clean verdicts on the hand-written changes cover 95.7\% of them at a 10\% target. It costs
+        0.4 points more on a clean verdict, and within the generated changes it takes the miss rate at a 10\%
+        target from 5.3\% to 4.4\%, with no split over the target.
+  \item \emph{Covering is not catching.} The 15 tests that cover all that the suite covers (14\% of it), run on
+        every change, miss 13 of the 25 hand-written regressions, although their clean verdicts cover everything
+        the changes touch. The floor alone misses 18, for 0.5\% of the suite: it is a floor, not a selection.
+  \item \emph{The hand-written set is small:} 25 regressions, so one miss is four points.
+  \item \emph{A second model gives the same answer.} Rules and thresholds are set on Qwen's own generated changes
+        ($Q_{\mathrm{gen}}$: 553 open changes, 321 of them regressions). At a 10\% target the adaptive rule with a
+        threshold per group misses 4.4\% of the regressions, both within the population and on a kind it never
+        saw. It misses one of the 28 open hand-written regressions of $X_Q$, for 5.3\% of the suite where every
+        reached test costs 11.0\%. With one threshold the misses pile up among the edits to text again (44\% for
+        the learned rule), and the learned rule misses five to ten of the 28 at every target.
+\end{itemize}
+Two things qualify the answer to RQ4:
+\begin{itemize}
+  \item what makes a rule cheap inside the population can make it wrong outside, which is why the answer names
+        the adaptive rule with a threshold per group;
+  \item a threshold per group is paid for in past regressions of that group, of which the edits that cost most to
+        clear, those to the prompts, have the fewest.
+\end{itemize}
+
+\subsection{RQ5: live checks}
+
+\answer{Yes. With the method's constant, 41 of the 43 live checks give the offline verdict. A repetition removes
+most false alarms of a single failing run. With a target miss rate of 10\%, the check finds every regression and
+raises no false alarm, for 2.8\% of the suite's tokens.}
+
+The prototype checks one change as a developer would before merging it: it replays the changed copy, then runs
+\strat{adaptive\_bayes} live over the reached tests, behind the cassette. We ran it on each of the 43 changes, one
+check at a time, with Gemma started anew on other GPUs than those of $G$, in two ways (Table~\ref{tab:live}):
+\begin{itemize}
+  \item with the method's constant and a 20\% budget;
+  \item with the calibrated threshold of Section~\ref{sec:stopping}, set on $G_{\mathrm{gen}}$, with no budget
+        and with a failure confirmed by a repetition.
+\end{itemize}
+
+\begin{table}[!htbp]
+\centering\small
+\caption{The 43 live checks, with the method's constant and with a target miss rate.}
+\label{tab:live}
+\begin{tabular}{p{78mm}ccc}
+\toprule
+ & constant $\varepsilon$, & target miss & target miss \\
+ & 20\% budget & rate 10\% & rate 20\% \\
+\midrule
+regressions found, of 28 & 27 & 28 & 25 \\
+regression verdicts on the 15 changes no test reveals & 1 & 0 & 0 \\
+clean verdicts given before every reached test had run & & 7 & 10 \\
+tokens per check, per cent of the suite & 1.6 & 2.8 & 2.0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{itemize}
+  \item \emph{The offline evaluation predicts the live check.} With the constant, 41 of the 43 checks give the
+        verdict of the five offline runs of the same method on $G$, after as many tests. The one false alarm is a
+        workflow test that fails its one live run and passes five runs of five in $G$: a check reads one run where
+        the ground truth reads five.
+  \item \emph{A repetition removes most such false alarms.} Replayed on the recorded runs of $G'$, where thirteen
+        pairs have runs that disagree, a single failing run gives a regression verdict on 6\% to 8\% of the runs on
+        a change no test reveals. Running a failing test again, and a third time when the second run passes,
+        takes that under 2\%, for about a point and a half of the suite's tokens.
+  \item \emph{With a target miss rate of 10\% the check finds every regression and raises no false alarm,} for
+        2.8\% of the suite's tokens per check. An edit to a prompt every request reads, which reaches 145 runnable
+        tests, is cleared after 54 to 57 of them. At 20\% three regressions are called clean, within the target.
+  \item \emph{The same for a second model.} With Qwen in the exact setup and its thresholds set on
+        $Q_{\mathrm{gen}}$, the check at a 10\% target finds all 32 regressions and raises no false alarm on the
+        other 11 changes, for 2.8\% of the suite per check, and every failure repeats when the test is run again.
+        At 20\% four regressions are called clean, within the target.
+\end{itemize}
+
+\subsection{Other serving setups, and batches}
+
+\paragraph{Other models, many tests at once.} On an earlier version of the application, the empty change was
+recorded for three models:
+\begin{itemize}
+  \item \emph{many tests at once}, it flipped no test for Gemma at any number of runs up to fifteen, four to six
+        for Qwen3.8-27B and eight for gpt-oss-120b;
+  \item \emph{one test at a time}, it flipped one for Qwen, and ten for gpt-oss across two starts of its server.
+\end{itemize}
+Condition R belongs to a model \emph{and} to how it is served: for Qwen it asks for the reached tests to be run
+one at a time, which is how $Q$ is made, and for gpt-oss no number of repetitions settles it.
+
+\paragraph{Batches.} A nightly run sees a day's merges at once. The measurements are on 23 batches of two to
+nine hand-written changes, recorded beside $G$.
+\begin{itemize}
+  \item \emph{The replay prunes less, and stays exact.} 10 to 172 of the 180 tests diverge, 120 on average, so
+        the replay prunes less than for a single change. None of the 1,374 replayed outcomes differs from the
+        recorded one, and with no budget every order of the reached tests finds the 20 batches a test reveals.
+  \item \emph{The members' replays map the day, before any model call.} Every batch reaches exactly the tests its
+        members reach alone, 2,766 in all. 18 of the 117 members reach none and need no model; the one regression
+        among them is one no test reveals, so the map shows the suite's gap first. 1,505 of the reached tests are
+        reached by a single member, which a failure there names.
+  \item \emph{One run for the whole batch costs less.} Run once for the batch, the reached tests take 55\% of the
+        tokens of checking each member alone.
+  \item \emph{What a batch fails is not the union of what its members fail.} Under three batches a test fails that
+        no member fails alone, two of them made only of harmless edits.
+  \item \emph{Checked live,} with the members held out and at a 20\% budget, 19 of the 20 are found with no false
+        alarm. In 17 of the 18 with a member that is a regression alone, the component blamed most belongs to such
+        a member.
+  \item \emph{The suspects hold the culprit.} The suspects of Equation~\ref{eq:suspects} hold every member that
+        fails the test alone, in all 273 pairs of a batch and a revealing test that have one. They are 1.9 of 5.7
+        members on average and the culprit alone in 85 pairs. Halving them takes 0.9 runs of the failing test on
+        average, against 2.5 for all the members.
+  \item \emph{The same in the live checks.} For the test each live check failed on, the suspects hold the culprit
+        in all 18 failures that have one and name it alone in 9; the component blamed most belongs to it in 13.
+\end{itemize}
+
+\subsection{Threats to validity}
+
+\begin{itemize}
+  \item \emph{The changes are mutants.} The hand-written ones were written to resemble regressions a team would
+        ship; several were kept, dropped or relabelled after their outcomes were seen, and the constants of
+        \strat{adaptive\_bayes} were set on them. The generated ones answer that for selection bias, not for
+        realism: nobody chose a change, and they are edits of one line. Three of their sixteen kinds were added
+        after a first measurement had shown too few regressions among edits to text.
+  \item \emph{One application, built for the purpose,} with a suite written by the authors; its tests and changes
+        share vocabulary, which favours the strategies that read text. Where every request carries one long policy,
+        an edit to the policy reaches every test and the replay prunes nothing.
+  \item \emph{Two models, one server software, one kind of GPU.} Both were tried on the generated changes, with
+        the stopping thresholds and in the exact setup; Qwen's changed copies were run once each, on the strength
+        of that setup. A hosted model can change without notice, which invalidates a cassette silently unless the
+        empty change is recorded again.
+  \item \emph{The ground truth is a majority of five runs,} and seven of the 28 regressions rest on a single test.
+  \item \emph{The stopping rule's guarantee is marginal and assumes exchangeability:} over the changes of a group,
+        on average over the sets of past regressions, and for changes like those it was set on. We measure these
+        limits rather than assume them away.
+\end{itemize}
+
+\section{Take-aways}
+\label{sec:takeaways}
+
+\begin{enumerate}
+  \item \textbf{Keep the model's answers, not only the traces.} A cassette keyed by the exact request lets every
+        test run again after a change in seconds, and a fifth of the changes then need no model (RQ1).
+  \item \textbf{Measure whether the server repeats itself, at the level of the outcome,} with the empty change,
+        whenever the model, the server or its settings change. Where exact answers are worth a slower recording,
+        serve one test at a time without the prefix cache (RQ2).
+  \item \textbf{Compare with a cache, not with the full suite.} The cache saves most tokens already; the
+        replay adds which tests a change reaches, so that a regression costs a few tests and a clean verdict
+        leaves nothing the change reaches untested (RQ3).
+  \item \textbf{Order for cost, not for detection.} Over the reached tests every order finds nearly every
+        regression; a good one does it for half the tokens of a random one (RQ3).
+  \item \textbf{Stop early only with a miss rate you chose,} per group of changes and on a score that travels to
+        changes unlike the past ones, and record enough changes of the groups whose clean verdicts cost most (RQ4).
+  \item \textbf{Put a coverage floor under the threshold, not in its place.} The cheapest reached tests that
+        cover what the change touches cost little; on their own they miss most regressions (RQ4).
+  \item \textbf{Confirm a failure before acting on it:} one failing run of a long test can be the minority of its
+        runs (RQ5).
+  \item \textbf{Test a day's changes together, and let the members' replays map the day and name the suspects}
+        of a failure: the map says which members need no model, and the suspects hold the culprit, so halving them
+        takes fewer runs than halving the day (batches).
+\end{enumerate}
+
+\section{Conclusion and future work}
+\label{sec:conclusion}
+
+After a change to an agent system, most tests send the model nothing it has not already answered. Replaying the
+recorded answers finds those tests without a model, gives their outcome, and leaves the tests the change reaches,
+which are few for most changes. The mechanism is old; used as test selection, with its condition measured and a
+stopping rule whose miss rate is bounded, it turns the question ``which tests should run'' from a prediction into
+an observation, and leaves prediction the smaller job of ordering the reached tests and deciding when to stop.
+
+Three things come next:
+\begin{enumerate}
+  \item a second application not built for the purpose, tau-bench's airline domain
+        \cite{yao2024taubench,barres2025tau2}, whose single policy prompt is the hard case for the replay;
+  \item real version histories beside the mutants, with the changes a team shipped and the tests that caught them,
+        so that the thresholds are calibrated on practice;
+  \item models whose answers vary under identical conditions: repetitions after the divergence point
+        \cite{miller2024error,bjarnason2026randomness}, with the empty change as the noise floor, and what a
+        hosted model that changes without notice does to a cassette.
+\end{enumerate}
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\appendix
+\section{The strategies in detail}
+\label{sec:appendix}
+
+This appendix gives the constants of the strategies, then their algorithms.
+
+\paragraph{The constants, and when they were set.} Table~\ref{tab:constants} lists every constant.
+\begin{itemize}
+  \item The constants of \strat{adaptive\_bayes} were set while the hand-written changes were being evaluated.
+  \item The generated changes were recorded afterwards, and the recording keeps a digest of the strategies' code
+        as evidence that nothing was set on them.
+  \item The calibrated threshold of Section~\ref{sec:stopping} came after that recording, as an option that
+        leaves the method's default run as it was. Its measurements set the threshold on one part of the
+        generated changes and measure it on another.
+\end{itemize}
+
+\paragraph{The strategies without an algorithm below.} Three rows of Table~\ref{tab:strategies} are stated in
+words:
+\begin{itemize}
+  \item \strat{observed\_diverse} takes the tests \strat{observed} selects one behaviour group at a time (the
+        agents and tools of a test's first baseline run, faulty or not), the riskiest group first;
+  \item \strat{history\_ml} fits a logistic regression with a ridge penalty and balanced classes on one row per
+        (other change, test), with the static impact of the change on the test by kind of component, the test's
+        cost, risk and shape, and ranks by probability times risk over cost;
+  \item \strat{cheapest} and \strat{late\_divergence} sort the reached tests by the bound on $c_\Delta(t)$, and
+        by the share of the test that replays before its divergence point.
+\end{itemize}
+
+\begin{table}[H]
 \centering\small
 \caption{The constants of the strategies.}
 \label{tab:constants}
@@ -441,43 +1467,14 @@ strategy & constant & value & role \\
 & $m_0$ & 2 & padding of the reveal ratio and of the lift \\
 & $s_{\mathrm{ind}}$; clip & 0.02; $[0.02, 0.9]$ & sensitivity of a test with no link to the component; bounds of Equation~\ref{eq:sens} \\
 & $\gamma$ & 0.25 & risk tilt $1 + \gamma(\rho_t - 1)$ of the information gain \\
-& $\delta$ & 0.35 & discount of the near-duplicates of a test that passed \\
+& $\eta$ & 0.35 & discount of the near-duplicates of a test that passed \\
 & $\varepsilon$ & 0.05 & stop with \clean{} when $1 - P(\mathbf{0}) < \varepsilon$ \\
 & $|C(\Delta)|$ & at most 8 & the likeliest components are kept when there are more \\
 \strat{casper\_slices} & $n_s$, $n_{\min}$, $w$, $K_r$ & 8, 4, 3, 2 & slice size, minimum size, outcome weight, representatives per slice \\
-\strat{risk\_aware\_ts} & $\alpha$, $\lambda$ & 2, 1 & weight of the regression's estimate in the Beta prior; ridge penalty \\
+\strat{risk\_aware\_ts} & $\omega$, $\lambda$ & 2, 1 & weight of the regression's estimate in the Beta prior; ridge penalty \\
 \bottomrule
 \end{tabular}
 \end{table}
-
-\begin{table}[tp]
-\centering\small
-\caption{What each strategy is good and bad at.}
-\label{tab:goodbad}
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{lp{62mm}p{62mm}}
-\toprule
-strategy & good at & bad at \\
-\midrule
-\strat{declared} & cheap, explainable, safe when the metadata is complete & caps at what the authors declared, which leaves out what Section~\ref{sec:setup} says nobody declares, so it tops out whatever the budget \\
-\strat{ir\_tfidf} & no instrumentation; strong wherever tests, skills and settings share vocabulary & never stops, so it spends the whole budget on every change; blind to code reached without a shared word \\
-\strat{observed} & selects everything the traces show the change can reach, from one traced run per test & does not stop within its selection; treats a covered component as an affected one, so it spends on tests that execute the changed line without being able to notice the change \\
-\strat{cost\_aware} & affected tests first, cheap before expensive, the rest after them, so the budget is always used & never stops; its history factor $(1 + f_t)$ pushes forward the tests the model already fails, which it then reports as failures the change did not cause \\
-\strat{casper\_slices} & needs no diff, so it applies to a model upgrade, a provider's silent update or a prompt-level change in a system whose code the testing team does not own; a fixed number of representatives per slice samples a large suite as cheaply as a small one; the slices are a map of the suite's behaviours & blind to an edit, so an edit gives it no signal until the representatives have run; no stopping rule; a representative the model answers unstably drags its whole slice forward \\
-\strat{risk\_aware\_ts} & learns from the outcomes it sees and weighs them by impact, so it finds the high-risk failures first once a few have been seen & any failure is a reward, so a test the model already fails counts as a find; ignores the diff; with no outcome yet it has only the risk to go on; no stopping rule, no verdict \\
-\strat{adaptive\_bayes} & selection, prioritization and stopping from one model: returns the budget it does not need, gives a verdict with a probability, discounts the tests the model already fails, tests every affected mandatory property before calling a change clean & a narrow regression, which few tests reveal, where it can become confident that nothing broke before reaching them (Section~\ref{sec:evaluation} counts these); needs a traced baseline and a record of earlier changes; its stopping rule assumes greedy decoding \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\begin{figure}[t]
-  \centering
-  \resizebox{\textwidth}{!}{\input{overview}}
-  \caption{From a diff to a verdict. The three inputs on the left exist before the change is tested: the diff,
-  a traced run of the current version, and earlier changes with their known outcomes. The loop on the right
-  runs one test at a time on the changed version.}
-  \label{fig:overview}
-\end{figure}
 
 \subsection{Four non-adaptive orders}
 
@@ -496,9 +1493,9 @@ cost.
   \State \Return $S$ sorted by $\rho_t$ descending, then $a_t$ descending, then $c(t)$ ascending
 \EndProcedure
 \Procedure{\strat{ir\_tfidf}}{the text of the change; the text of every $t$}
-  \State $q \gets$ TF-IDF vector of the change text over the vocabulary of the tests' texts;\ $v_t \gets$ TF-IDF
-    vector of the text of $t$
-  \State \Return $T$ sorted by $\cos(q, v_t)$ descending
+  \State $v_\Delta \gets$ TF-IDF vector of the change text over the vocabulary of the tests' texts;\
+    $v_t \gets$ TF-IDF vector of the text of $t$
+  \State \Return $T$ sorted by $\cos(v_\Delta, v_t)$ descending
 \EndProcedure
 \Procedure{\strat{observed}}{$C(\Delta)$; $D^{\mathrm{obs}}_t$, $\phi_t$, $\rho_t$, $c(t)$ for every $t$}
   \State $S \gets \{t : D^{\mathrm{obs}}_t \text{ matches some } c \in C(\Delta)\}$;\ $a_t \gets \sum_{c
@@ -512,17 +1509,22 @@ cost.
 \end{algorithmic}
 \end{algorithm}
 
-\subsection{CASPER's slices, reproduced: \strat{casper\_slices}}
+\subsection{CASPER's slices, adapted: \strat{casper\_slices}}
 
 CASPER \cite{muse2026casper} mines signals from the logs of the current version, cuts the suite into slices that
 are coherent in signal space and consistent in outcome, runs a few representatives of every slice on the new
-version, and ranks the slices by how much their behaviour moved. Here (Algorithm~\ref{alg:casper}) the signals are
-ten per test (turns, tool calls, distinct tools, the share of the most-called tool, the entropy of the calls,
-hand-offs, skills loaded, settings read, the size of the run and the share the model wrote); the slices come from
-k-means \cite{lloyd1982least} with the baseline outcome as a heavier column, in place of the paper's evolutionary
-search; and, because a replay (Section~\ref{sec:evaluation}) returns an outcome and a cost, not a trace, a slice is
-scored by the shift of its representatives' failure rate. For the prioritization metrics its order is that of a
-run without a budget limit in which every test passes.
+version, and ranks the slices by how much their behaviour moved. The adaptation (Algorithm~\ref{alg:casper})
+differs in three places:
+\begin{itemize}
+  \item \emph{the signals} are ten per test: turns, tool calls, distinct tools, the share of the most-called tool,
+        the entropy of the calls, hand-offs, skills loaded, settings read, the size of the run and the share the
+        model wrote;
+  \item \emph{the slices} come from k-means \cite{lloyd1982least} with the baseline outcome as a heavier column,
+        in place of CASPER's evolutionary search;
+  \item \emph{a slice's score} is the shift of its representatives' failure rate, because the evaluator
+        (Section~\ref{sec:evaluation}) answers a strategy with a recorded outcome and a cost, not a trace.
+\end{itemize}
+For the prioritization metrics its order is that of a run without a budget limit in which every test passes.
 
 \begin{algorithm}[!htbp]
 \caption{\strat{casper\_slices}}
@@ -535,7 +1537,8 @@ run without a budget limit in which every test passes.
 \State $Z \gets$ the standardized signals of every test, with $w \cdot$ (standardized pass rate) as an extra column
 \State slices $\gets$ k-means$(Z, \lceil |T| / n_s \rceil)$; merge every slice smaller than $n_{\min}$ into the
   slice whose centre is nearest
-\State $\mathrm{reps}_j \gets$ the member of slice $j$ nearest its centre, then farthest-point sampling, $K_r$ in all
+\State $\mathrm{reps}_j \gets$ the member of slice $j$ nearest its centre, then farthest-point sampling, $K_r$ in
+  all
 \Phase{Probe the changed version}
 \State run $\mathrm{reps}_j$ of every slice $j$ on $V_1$, cheapest slices first, while the budget allows
 \State $\mathrm{shift}_j \gets$ failure rate of $\mathrm{reps}_j$ on $V_1$ minus their failure rate on $V_0$
@@ -545,22 +1548,25 @@ run without a budget limit in which every test passes.
 \end{algorithmic}
 \end{algorithm}
 
-\subsection{Risk-aware adaptive evaluation, reproduced: \strat{risk\_aware\_ts}}
+\subsection{Risk-aware adaptive evaluation, adapted: \strat{risk\_aware\_ts}}
 
 Risk-aware adaptive evaluation \cite{maji2026risk} is a contextual Thompson-sampling bandit
-\cite{thompson1933likelihood,chapelle2011empirical}: the reward of a trial is impact times failure; each round, a
-logistic regression on every outcome so far gives every scenario a failure probability, a Beta posterior per
-scenario mixes it with the scenario's own outcomes, and one draw per scenario, times the impact, picks the next.
-Here (Algorithm~\ref{alg:bandit}) the scenarios are the tests, each with a context vector $x_t$ (features of its
-definition and of the shape of its baseline runs, standardized, with an intercept) and an impact $\iota_t =
-\rho_t$; the budget is in tokens, each test runs once, and $\sigma$ is the logistic function. For the
+\cite{thompson1933likelihood,chapelle2011empirical}. The reward of a trial is impact times failure. Each round:
+\begin{itemize}
+  \item a logistic regression on every outcome so far gives every scenario a failure probability;
+  \item a Beta posterior per scenario mixes it with the scenario's own outcomes;
+  \item one draw per scenario, times the impact, picks the next.
+\end{itemize}
+In the adaptation (Algorithm~\ref{alg:bandit}) the scenarios are the tests, each with a context vector $x_t$
+(features of its definition and of the shape of its baseline runs, standardized, with an intercept) and an impact
+$\iota_t = \rho_t$. The budget is in tokens, each test runs once, and $\sigma$ is the logistic function. For the
 prioritization metrics its order is static: by impact, cheapest first.
 
 \begin{algorithm}[!htbp]
 \caption{\strat{risk\_aware\_ts}}
 \label{alg:bandit}
 \begin{algorithmic}[1]
-\Require context $x_t$, impact $\iota_t$ and cost $c(t)$ of every test; mixing weight $\alpha$, ridge penalty
+\Require context $x_t$, impact $\iota_t$ and cost $c(t)$ of every test; mixing weight $\omega$, ridge penalty
   $\lambda$; budget $B$
 \Ensure the tests run on $V_1$, in order
 \State $n_t \gets 0$, $k_t \gets 0$ for every $t$;\ $b \gets B$ \Comment{runs and failures seen per test}
@@ -569,127 +1575,23 @@ prioritization metrics its order is static: by impact, cheapest first.
   \Phase{fit, sample, pick}
   \State $\beta \gets \arg\min_\beta \sum_{t:\, n_t > 0} \mathrm{logloss}(\sigma(\beta^\top x_t), k_t)
     + \tfrac{\lambda}{2}\|\beta\|^2$ \Comment{Newton's method, warm start}
-  \State $\mu_t \gets \sigma(\beta^\top x_t)$ and $\theta_t \sim \mathrm{Beta}\big(1 + \alpha \mu_t + k_t,\
-    1 + \alpha (1 - \mu_t) + n_t - k_t\big)$ for every unrun $t$ with $c(t) \le b$
+  \State $\mu_t \gets \sigma(\beta^\top x_t)$ and $\theta_t \sim \mathrm{Beta}\big(1 + \omega \mu_t + k_t,\
+    1 + \omega (1 - \mu_t) + n_t - k_t\big)$ for every unrun $t$ with $c(t) \le b$
   \State $t^\star \gets \arg\max_t \iota_t\, \theta_t$;\ run it on $V_1$ at cost $\kappa$
   \State $n_{t^\star} \gets 1$;\ $k_{t^\star} \gets [\text{failed}]$;\ $b \gets b - \kappa$
 \EndWhile
 \end{algorithmic}
 \end{algorithm}
 
-\subsection{The proposed method: \strat{adaptive\_bayes}}
-\label{sec:adaptive}
+\subsection{The adaptive order and its calibration}
 
-\paragraph{Hypotheses.} Each changed component $c \in C(\Delta)$ is broken with a prior $\pi_c$ that depends on its
-kind (Table~\ref{tab:constants}): high for code, skill procedures, configuration and agent fields, low for prompt
-wording and skill prose. Tool and line components are views of a code change, not separate causes, and are folded
-into it. The posterior is kept exactly over all $2^{|C(\Delta)|}$ subsets $h \in \{0,1\}^{C(\Delta)}$.
-
-\paragraph{Likelihood.}
-A test passes only if it would pass on the current version and none of the broken components makes it fail:
-\begin{equation}
-  q_t(h) = P(t\ \text{fails} \mid h) = 1 - (1 - f_t) \prod_{c:\, h_c = 1} (1 - s_{tc}).
-  \label{eq:likelihood}
-\end{equation}
-A test the model already fails ($f_t$ near 1) fails under every hypothesis, so its outcome carries no
-information, which is what keeps the method from mistaking the model's mistakes for regressions.
-
-\paragraph{Sensitivity.}
-Covering a component is weak evidence by itself: most tests that execute a changed function do not fail when it
-breaks. The sensitivity is therefore a product of four factors, calibrated (Algorithm~\ref{alg:sens}) from the
-earlier changes whose outcomes are known, never from the change under test:
-\begin{equation}
-  s_{tc} = \mathrm{clip}\big(r_{k(c)} \cdot \ell_{t,k(c)} \cdot \phi_t(c) \cdot \tau_t,\ 0.02,\ 0.9\big).
-  \label{eq:sens}
-\end{equation}
+Two algorithms complete Section~\ref{sec:adaptive} and Figure~\ref{fig:overview}:
 \begin{itemize}
-  \item $r_k$ is the reveal ratio of the component's kind $k$: among the tests that statically looked impacted by
-        earlier changes of that kind, the share that revealed them, padded toward a default $r^0_k$. The kinds
-        separate a test that executed a changed line from one that only called the changed function, and agent
-        fields are calibrated per field.
-  \item $\ell_{tk} = (O_{tk} + m_0) / (E_{tk} + m_0)$ is the test's own lift on that kind: $O_{tk}$ the earlier
-        changes of kind $k$ it revealed, $E_{tk}$ the number an average impacted test would have revealed (the sum
-        of those changes' reveal rates), $m_0$ a padding that keeps a short record from moving the lift far. A
-        change that breaks most of the suite says little about each test it breaks; a change that one test alone
-        caught says a lot about that test.
-  \item $\phi_t(c)$ is how often the baseline runs exercised the component: for code, the changed line they
-        executed most often, or 1 when they only called the changed function; for an agent that lost tools or
-        skills, how often $t$ used one of the lost items.
-  \item $\tau_t = 0.5 + \mathrm{text}(t, \Delta) + 0.5\,[\text{declared}] \in [0.5, 2]$ tilts the sensitivity up
-        for a test whose text shares vocabulary with the diff and for one whose author declared the dependency;
-        $\mathrm{text}(t, \Delta) \in [0, 1]$ is the cosine of the word sets of the test and of the change, scaled
-        so that the closest test gets 1.
+  \item Algorithm~\ref{alg:sens} is the calibration of the sensitivities from the other changes;
+  \item Algorithm~\ref{alg:adaptive} is the loop, which uses them.
 \end{itemize}
-A test with no link to the component gets the small constant $s_{\mathrm{ind}}$; one declared but never observed
-gets half the kind's ratio.
 
-\paragraph{Selection and stopping.} Algorithm~\ref{alg:adaptive} runs the loop:
-\begin{itemize}
-  \item \emph{next test}: the one with the largest expected reduction of the posterior's entropy
-        \cite{lindley1956measure} per token, the gain multiplied by $1 + \gamma (\rho_t - 1)$ so that risk tilts
-        the choice. Each test runs at most once: the models decode greedily, so a rerun would almost always repeat
-        the answer;
-  \item \emph{after a pass}: tests with the same behaviour signature as the one that passed have their
-        sensitivities discounted by $\delta$, because near-duplicates give correlated evidence rather than
-        independent draws;
-  \item \regression{}: at the first failure of a test that passed on the current version, because under greedy
-        decoding that failure is a changed behaviour, which is what the ground truth calls revealing;
-  \item \clean{}: when $1 - P(h = \mathbf{0}) < \varepsilon$; \budget{}: when the budget is spent or no test can
-        still move the posterior;
-  \item \emph{the mandatory rule}: before a run ends without a regression, every mandatory property in
-        $\mathcal{P}(\Delta)$ with no test yet gets the cheapest test of that property that passes on the current
-        version, while the budget allows. A failure there is a regression like any other.
-\end{itemize}
-For the prioritization metrics, which score a complete order, the method's order is the greedy sequence it would
-pick if every test passed, with no stopping, followed by the untouched tests in cost-aware order.
-
-\begin{algorithm}[tp]
-\caption{\strat{adaptive\_bayes}: adaptive Bayesian selection with stopping}
-\label{alg:adaptive}
-\begin{algorithmic}[1]
-\Require components $C(\Delta)$ with priors $\pi_c$; for every test $c(t)$, $f_t$, $\rho_t$, $\mathrm{props}(t)$
-  and $s_{tc}$ (Algorithm~\ref{alg:sens}); near-duplicate groups; the affected mandatory properties; budget $B$;
-  $\varepsilon$, $\delta$, $\gamma$
-\Ensure the tests run $R$, a verdict, and $1 - P(\mathbf{0})$, the probability that some component is broken
-\State $P(h) \propto \prod_{c} \pi_c^{h_c} (1 - \pi_c)^{1 - h_c}$ for $h \in \{0,1\}^{C(\Delta)}$
-  \Comment{$h = \mathbf{0}$: nothing is broken}
-\State $R \gets \emptyset$;\ $b \gets B$
-\Loop
-  \If{$1 - P(\mathbf{0}) < \varepsilon$} \Return \Call{Finish}{\clean} \EndIf
-  \State $t^\star \gets$ \Call{Pick}{}; \Return \Call{Finish}{\budget} if there is none
-  \If{\Call{Observe}{$t^\star$} $= \regression$} \Return \regression{} \EndIf
-\EndLoop
-\Statex
-\Function{Pick}{}
-  \State $p_t \gets \sum_h P(h)\, q_t(h)$ for every unrun $t$ \Comment{$P(t$ fails$)$; $q_t$ from
-    Equation~\ref{eq:likelihood}}
-  \State $g_t \gets H(P) - p_t\, H(P \mid t\ \text{fails}) - (1 - p_t)\, H(P \mid t\ \text{passes})$
-    \Comment{expected information gain}
-  \State \Return $\arg\max\{\, g_t\, (1 + \gamma (\rho_t - 1)) / c(t) : t \notin R,\ c(t) \le b,\ g_t > 0 \,\}$
-\EndFunction
-\Statex
-\Function{Observe}{$t$}
-  \State run $t$ on $V_1$: outcome $x$, cost $\kappa$;\ $R \gets R \cup \{t\}$;\ $b \gets b - \kappa$
-  \State $P(h) \gets P(h)\, q_t(h)$ if $x = \text{fail}$, else $P(h)\,(1 - q_t(h))$; normalize
-  \If{$x = \text{fail}$ and $f_t < \tfrac12$} \Return \regression{} \Comment{a test that used to pass has
-    failed} \EndIf
-  \If{$x = \text{pass}$} $s_{uc} \gets \delta\, s_{uc}$ for every unrun $u$ in the group of $t$
-    \Comment{correlated evidence} \EndIf
-  \State \Return $x$
-\EndFunction
-\Statex
-\Function{Finish}{verdict}
-  \ForAll{affected mandatory properties $p$ that no test in $R$ checks, in id order}
-    \State $u \gets$ the cheapest $u \notin R$ with $p \in \mathrm{props}(u)$, $f_u < \tfrac12$, $c(u) \le b$;
-      skip $p$ if there is none
-    \If{\Call{Observe}{$u$} $= \regression$} \Return \regression{} \EndIf
-  \EndFor
-  \State \Return verdict, with $1 - P(\mathbf{0})$
-\EndFunction
-\end{algorithmic}
-\end{algorithm}
-
-\begin{algorithm}[tp]
+\begin{algorithm}[H]
 \caption{Calibration of the sensitivities from the earlier changes}
 \label{alg:sens}
 \begin{algorithmic}[1]
@@ -709,506 +1611,58 @@ pick if every test passed, with no stopping, followed by the untouched tests in 
 \Phase{Apply to the change under test}
 \ForAll{tests $t$ and components $c \in C(\Delta)$ of kind $k$}
   \State $\ell_{tk} \gets (O_{tk} + m_0) / (E_{tk} + m_0)$;\quad
-    $\tau_t \gets 0.5 + \mathrm{text}(t, \Delta) + 0.5\,[\text{declared}]$
-  \State $s_{tc} \gets \mathrm{clip}(r_k\, \ell_{tk}\, \phi_t(c)\, \tau_t,\ 0.02,\ 0.9)$ if $\phi_t(c) > 0$;\
-    $\tfrac12 r_k$ if declared only;\ $s_{\mathrm{ind}}$ otherwise
+    $\mathrm{bonus}_t \gets 0.5 + \mathrm{text}(t, \Delta) + 0.5\,[\text{declared}]$
+  \State $s_{tc} \gets \mathrm{clip}(r_k\, \ell_{tk}\, \phi_t(c)\, \mathrm{bonus}_t,\ 0.02,\ 0.9)$ if
+    $\phi_t(c) > 0$;\ $\tfrac12 r_k$ if declared only;\ $s_{\mathrm{ind}}$ otherwise
 \EndFor
 \end{algorithmic}
 \end{algorithm}
 
-\section{Evaluation}
-\label{sec:evaluation}
+\begin{algorithm}[H]
+\caption{\strat{adaptive\_bayes}: adaptive Bayesian selection with stopping}
+\label{alg:adaptive}
+\begin{algorithmic}[1]
+\Require components $C(\Delta)$ with priors $\pi_c$; for every test $c(t)$, $f_t$, $\rho_t$, $\mathrm{props}(t)$
+  and $s_{tc}$ (Algorithm~\ref{alg:sens}); near-duplicate groups; the affected mandatory properties; budget $B$;
+  $\varepsilon$, $\eta$, $\gamma$
+\Ensure the tests run $R$, a verdict, and $1 - P(\mathbf{0})$, the probability that some component is broken
+\State $P(h) \propto \prod_{c} \pi_c^{h_c} (1 - \pi_c)^{1 - h_c}$ for $h \in \{0,1\}^{C(\Delta)}$
+  \Comment{$h = \mathbf{0}$: nothing is broken}
+\State $R \gets \emptyset$;\ $b \gets B$
+\Loop
+  \If{$1 - P(\mathbf{0}) < \varepsilon$} \Return \Call{Finish}{\clean} \EndIf
+  \State $t^\star \gets$ \Call{Pick}{}; \Return \Call{Finish}{\budget} if there is none
+  \If{\Call{Observe}{$t^\star$} $= \regression$} \Return \regression{} \EndIf
+\EndLoop
+\Statex
+\Function{Pick}{}
+  \State $\bar p_t \gets \sum_h P(h)\, p_t(h)$ for every unrun $t$ \Comment{$P(t$ fails$)$; $p_t(h)$ from
+    Equation~\ref{eq:likelihood}}
+  \State $g_t \gets H(P) - \bar p_t\, H(P \mid t\ \text{fails}) - (1 - \bar p_t)\, H(P \mid t\ \text{passes})$
+    \Comment{expected information gain}
+  \State \Return $\arg\max\{\, g_t\, (1 + \gamma (\rho_t - 1)) / c(t) : t \notin R,\ c(t) \le b,\ g_t > 0 \,\}$
+\EndFunction
+\Statex
+\Function{Observe}{$t$}
+  \State run $t$ on $V_1$: outcome $x$, cost $\kappa$;\ $R \gets R \cup \{t\}$;\ $b \gets b - \kappa$
+  \State $P(h) \gets P(h)\, p_t(h)$ if $x = \text{fail}$, else $P(h)\,(1 - p_t(h))$; normalize
+  \If{$x = \text{fail}$ and $f_t < \tfrac12$} \Return \regression{} \Comment{a test that used to pass has
+    failed} \EndIf
+  \If{$x = \text{pass}$} $s_{uc} \gets \eta\, s_{uc}$ for every unrun $u$ in the group of $t$
+    \Comment{correlated evidence} \EndIf
+  \State \Return $x$
+\EndFunction
+\Statex
+\Function{Finish}{verdict}
+  \ForAll{affected mandatory properties $p$ that no test in $R$ checks, in id order}
+    \State $u \gets$ the cheapest $u \notin R$ with $p \in \mathrm{props}(u)$, $f_u < \tfrac12$, $c(u) \le b$;
+      skip $p$ if there is none
+    \If{\Call{Observe}{$u$} $= \regression$} \Return \regression{} \EndIf
+  \EndFor
+  \State \Return verdict, with $1 - P(\mathbf{0})$
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
 
-\paragraph{Questions.}
-\begin{itemize}
-  \item \textbf{RQ1} Can the tests relevant to a change be identified, and what do declared and observed
-        dependencies each give?
-  \item \textbf{RQ2} Can the tests be ordered so that regressions are found earlier?
-  \item \textbf{RQ3} How much budget can be returned while detection and coverage hold, and does the stopping
-        rule give the right verdict?
-  \item \textbf{RQ4} What do the two published methods, which do not read the change, find on the same testbed?
-\end{itemize}
-
-Figure~\ref{fig:protocol} and Table~\ref{tab:protocol} give the protocol.
-
-\begin{figure}[t]
-  \centering
-  \resizebox{\textwidth}{!}{\input{protocol}}
-  \caption{Recording and replay. The top two rows are recorded once per model; the replay below runs every
-  strategy, budget and seed against the recordings.}
-  \label{fig:protocol}
-\end{figure}
-
-\begin{table}[H]
-\centering\small
-\caption{The protocol.}
-\label{tab:protocol}
-\begin{tabular}{lp{104mm}}
-\toprule
-repetitions $K$ & 5 per version \\
-recording & the current version one test at a time, so that coverage can follow each test; each of the 43 changed copies many tests at once \\
-budgets & 2, 5, 10, 20, 30, 50 and 100\% of the full-suite tokens \\
-seeds & 5; a seed chooses which recorded run answers each test and drives the strategies that draw at random \\
-calibration & on the other 42 changes, never on the one under test \\
-replays & 1,505 per strategy: 43 changes, 7 budgets, 5 seeds \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\paragraph{Ground truth.} On the current version 172 of 180 tests pass. The eight failures are the model's own
-mistakes, which clearer wording of the requests does not fix (Table~\ref{tab:mistakes}). Of the 34 regressions, 29
-are revealed by at least one test: the five others remove a guard the model does not act on with or without the
-change, so it behaves the same, wrongly, on both versions (Table~\ref{tab:unrevealed}). No benign change fails a
-test. Across the 43 changes the five runs disagreed on four (change, test) pairs, which the majority vote absorbs,
-and the noise floor is zero: the change whose change set is empty, recorded fifteen more times, flips no test
-against the baseline and has no test whose runs disagree, at any number of runs from three to fifteen. The 29
-revealed regressions and the 14 changes no test reveals are the population below; a second recording of the whole
-experiment, on other GPUs, moves 4 of the 7,740 labels (A second recording, below).
-
-\begin{table}[H]
-\centering\small
-\caption{The eight tests the model fails on the current version.}
-\label{tab:mistakes}
-\begin{tabular}{lp{118mm}}
-\toprule
-test & what the model does \\
-\midrule
-PUB-10, WF1-01 & requests the review, as it should, then schedules the page anyway \\
-AUT-04 & after an edit, requests a review nobody asked for \\
-CFG-01 & requests a review on a platform that does not require one \\
-SEO-02 & applies an 83-character title over the 60-character limit \\
-WF2-03 & sends three pages to publishing in one step; publishing stops at the broken one, and it reports all three as republished \\
-WF5-02 & after the restored version fails its link check, sends the page to publishing anyway; publishing's own check refuses it \\
-WF6-02 & after the export is refused for lack of consent, stops the whole plan, although the other steps do not depend on it \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\begin{table}[H]
-\centering\small
-\caption{The five regressions no test reveals under Gemma.}
-\label{tab:unrevealed}
-\begin{tabular}{p{54mm}p{30mm}p{60mm}}
-\toprule
-change & guard removed & why no test reveals it \\
-\midrule
-review not required (configuration); an edit keeps the review flag (code) & the review flag & it schedules without an approved review and requests reviews nobody asked for, with and without the change \\
-a title limit of twenty (configuration); the SEO skill without its length guard & the title length limit & it applies the over-long title whatever the limit \\
-link validation that ignores asset references (skill) & a non-blocking asset reference & it stops at a broken asset reference even when the skill says it does not block \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\begin{table}[!htbp]
-\centering\small
-\caption{Detection of the 29 revealed regressions by nominal budget (share of the full-suite tokens), and the
-tokens actually spent: on regressions at a 20\% and a 100\% budget, and on the 14 changes no test reveals at 100\%.
-Five seeds; the last three columns are shares of the full-suite tokens.}
-\label{tab:detection}
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{lcccccc ccc}
-\toprule
-strategy & 2\% & 5\% & 10\% & 20\% & 50\% & 100\% & spent@20 & spent@100 & unrevealed@100 \\
-\midrule
-\strat{full}            & 0.00 & 0.14 & 0.24 & 0.34 & 0.90 & 1.00 & 0.20 & 0.98 & 1.00 \\
-\strat{random}          & 0.09 & 0.22 & 0.37 & 0.56 & 0.86 & 1.00 & 0.20 & 0.98 & 1.00 \\
-\strat{declared}        & 0.45 & 0.59 & 0.55 & 0.62 & 0.62 & 0.62 & 0.07 & 0.11 & 0.14 \\
-\strat{ir\_tfidf}       & 0.59 & 0.69 & 0.76 & 0.93 & 1.00 & 1.00 & 0.20 & 0.98 & 0.99 \\
-\strat{observed}        & 0.48 & 0.62 & 0.69 & 0.86 & 0.86 & 1.00 & 0.15 & 0.49 & 0.33 \\
-\strat{cost\_aware}     & 0.38 & 0.55 & 0.62 & 0.86 & 0.86 & 1.00 & 0.20 & 0.98 & 0.99 \\
-\strat{casper\_slices}  & 0.17 & 0.28 & 0.52 & 0.59 & 0.90 & 1.00 & 0.20 & 0.98 & 1.00 \\
-\strat{risk\_aware\_ts} & 0.11 & 0.28 & 0.35 & 0.57 & 0.83 & 1.00 & 0.20 & 0.98 & 1.00 \\
-\strat{adaptive\_bayes} & 0.61 & 0.74 & 0.78 & 0.78 & 0.81 & 0.81 & 0.03 & 0.03 & 0.20 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\begin{table}[t]
-\centering\small
-\caption{Order quality and verdicts. APFD and $\mathrm{APFD}_c$ of the complete order; cost to the first true
-detection as a share of the full suite (detected cases); detection of the 21 regressions that break a safety
-property at a 10\% and a 20\% budget; share of replays, over all budgets, in which the strategy saw a failure on
-one of the 14 changes no test reveals.}
-\label{tab:order}
-\begin{tabular}{lccc cc c}
-\toprule
-strategy & APFD & $\mathrm{APFD}_c$ & first detection & safety@10 & safety@20 & false alarm \\
-\midrule
-\strat{full}            & 0.63 & 0.58 & 0.19 & 0.14 & 0.24 & 0.72 \\
-\strat{random}          & 0.54 & 0.54 & 0.14 & 0.41 & 0.60 & 0.69 \\
-\strat{declared}        & 0.81 & 0.76 & 0.028 & 0.52 & 0.57 & 0.58 \\
-\strat{ir\_tfidf}       & 0.78 & 0.77 & 0.040 & 0.86 & 1.00 & 0.71 \\
-\strat{observed}        & 0.75 & 0.79 & 0.049 & 0.57 & 0.81 & 0.58 \\
-\strat{cost\_aware}     & 0.74 & 0.77 & 0.060 & 0.57 & 0.81 & 0.94 \\
-\strat{casper\_slices}  & 0.58 & 0.52 & 0.12 & 0.62 & 0.71 & 0.57 \\
-\strat{risk\_aware\_ts} & 0.60 & 0.60 & 0.14 & 0.47 & 0.71 & 0.76 \\
-\strat{adaptive\_bayes} & 0.83 & 0.81 & 0.017 & 0.84 & 0.84 & 0.00 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\begin{figure}[t]
-  \centering
-  \includegraphics[width=0.85\textwidth]{../results/gemma7/figures/detection_vs_cost.png}
-  \caption{Detection of the 29 revealed regressions against the tokens actually spent, every strategy and
-  budget. The adaptive method sits at the left: it stops.}
-  \label{fig:detection}
-\end{figure}
-
-\paragraph{Selection (RQ1).} Declared metadata caps detection at 62\% however large the budget
-(Table~\ref{tab:detection}), because shared skills reached through an include, harness code and most configuration
-keys are not declared. The observed dependencies select every revealing test for half the suite's tokens and reach
-86\% within a 20\% budget. The argument for trace-informed selection holds.
-
-\paragraph{Prioritization (RQ2).} The change-aware strategies raise $\mathrm{APFD}_c$ from 0.54 (random) to
-0.76--0.81 (Table~\ref{tab:order}). The adaptive method's order is the best and finds the first regression soonest,
-after 1.7\% of the suite's tokens. The two reproduced methods order near random (0.52 and 0.60 against 0.54) and
-find their first regression after 12--14\% of the suite, where the change-aware strategies need under 2\% to 6\%.
-
-\paragraph{Budget and verdicts (RQ3).} The adaptive method is the only strategy that stops; \strat{declared} and
-\strat{observed} return budget only by running out of selected tests. It finds 74\% of the regressions at a 5\%
-budget and 78\% at 20\%, for under 3\% of the tokens, and spends a fifth of the suite on a change no test reveals
-even with the whole budget (Table~\ref{tab:detection}). TF-IDF over the diff is the strongest selector at 20\%
-(93\%) and the strongest on the safety-breaking changes (all of them), and it spends the whole budget every time,
-on changes no test reveals too. The adaptive method's ceiling is 81\%: 145 of the 1,015 replays of regressions
-ended \clean{}, all on regressions that one to five tests reveal, where it became confident that nothing broke
-before reaching them. Table~\ref{tab:misses} lists what it misses at 20\%.
-
-\begin{table}[H]
-\centering\small
-\caption{The regressions the adaptive method misses at a 20\% budget: how many tests reveal each, in how many of
-the five seeds a revealing test failed, and how the run ended.}
-\label{tab:misses}
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{p{58mm}ccp{50mm}}
-\toprule
-change & revealing tests & caught & how the run ended \\
-\midrule
-a delegation drops the ids of earlier steps & 4 & 0 of 5 & \clean{}: confident before reaching them \\
-retries drop idempotency keys & 5 & 0 of 5 & \clean{} \\
-the agent loop stops six steps early & 5 & 0 of 5 & \clean{} \\
-the authoring skill drops its metadata step & 1 & 0 of 5 & \clean{} \\
-the routing skill drops the brand gate & 1 & 0 of 5 & \clean{} \\
-the combined change & 1 & 0 of 5 & no test could still move the estimate \\
-the governance skill drops the consent check & 5 & 3 of 5 & \regression{} in every seed, on a revealing test in three \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-The eight tests that fail on the current version fail on nearly every changed copy too. A strategy that runs one
-sees a failure the change did not cause: on the 14 changes no test reveals, this happens to \strat{full} in 72\% of
-its replays, to \strat{cost\_aware} in 94\%, to the bandit in 76\% and to CASPER's slices in 57\%
-(Table~\ref{tab:order}). The adaptive method discounts a test by its failures on the current version
-(Equation~\ref{eq:likelihood}) and stops only on a test that used to pass, so in 490 replays on these changes it
-neither ran a test that failed (Table~\ref{tab:order}) nor gave a \regression{} verdict.
-
-\paragraph{Live against replay.} The prototype, which runs the adaptive method with the model live instead of
-looking outcomes up, was run on all 43 changes at a 20\% budget, one check at a time. On 42 it gave the verdict of
-the replay's five seeds, with the same tests and the same tokens to within a few hundred. The exception is a live
-false alarm on the benign rewording of the orchestrator's prompt: a workflow test failed live, with the
-orchestrator skipping an approval, where its five recorded runs pass. Recorded five more times one test at a time,
-as the check runs, the test passes every time, and no test changes its majority under that change in any of its
-recordings. The live failure is a one-off of the model on a test whose outcome hangs on one decision; the replay,
-which reads the majority of five runs, absorbs it, and the live check, which reads one run, does not. The 43 checks
-took 21 minutes of model time: six tests and 1.9\% of the suite's tokens per check at the median. The replay is a
-faithful stand-in for the live prototype, and the one false alarm is what a stopping rule that acts on a single run
-has to tolerate. On the twenty batches drawn at random (below), checked live the same way, the live verdict is the
-replay's on 19.
-
-\paragraph{The text factor.} The tilt $\tau_t$ can use word overlap (the default), the TF-IDF similarity of
-\strat{ir\_tfidf}, or no text at all (Table~\ref{tab:text}). TF-IDF brings forward the one test that reveals a
-narrow change and gains up to five points while spending less; without any text the method loses ten to seventeen
-points. Text matters, and coverage and history carry most of the result. Word overlap stays the default until a
-second application, with tests and changes worded differently, shows whether TF-IDF's gain holds there too.
-
-\begin{table}[H]
-\centering\small
-\caption{Detection by the method with three text measures, with the tokens spent in parentheses, against
-\strat{ir\_tfidf} alone.}
-\label{tab:text}
-\begin{tabular}{lcccc}
-\toprule
-budget & word overlap & TF-IDF & no text & \strat{ir\_tfidf} alone \\
-\midrule
-5\%  & 0.74 (2.1\%) & 0.79 (1.9\%) & 0.57 (2.4\%) & 0.69 (5\%) \\
-20\% & 0.78 (2.9\%) & 0.83 (2.4\%) & 0.68 (3.5\%) & 0.93 (20\%) \\
-50\% & 0.81 (2.9\%) & 0.83 (2.4\%) & 0.68 (4.6\%) & 1.00 (50\%) \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\paragraph{The mandatory rule.} Table~\ref{tab:mandatory}. The rule is also a detector: it catches the publishing
-skill without its link validation, which the method without the rule calls clean, because the method must test the
-mandatory property ``no broken publish'' before ending, and that test fails. The rule never caused a false verdict.
-Below a 10\% budget it often cannot afford the extra test.
-
-\paragraph{Batches of changes.} A nightly run sees a day's merges at once. Three batches of catalog changes,
-recorded like the single ones (Table~\ref{tab:batches}), say what the strategies make of that. The nightly batch,
-six regressions and two harmless edits, every change-aware strategy finds within a 5\% budget; the adaptive method
-after one test, and the live check names the SEO agent's lost tool as the component to blame, with the posterior's
-marginal probability per component, while the other members stay near their prior, untested, because the check
-stops at the first failure. The pull request of three related changes on the publishing path it finds after two
-tests, blaming the link check and the publishing skill. The batch of all nine benign changes is revealed by one
-test: the orchestrator's prompt reworded and its routing guidance reordered, harmless alone, make the orchestrator
-drop the broken link from the answer it relays. The ground truth of a batch is not the union of its members', and
-the adaptive method spends its whole budget on that batch without reaching the test, since one member adds a tool
-no agent may use, which no test can reach and nothing can clear.
-
-\begin{table}[H]
-\centering\small
-\caption{The mandatory rule at a 20\% budget.}
-\label{tab:mandatory}
-\begin{tabular}{p{92mm}cc}
-\toprule
- & without the rule & with the rule \\
-\midrule
-runs that ended without a regression having tested every affected mandatory property & 33\% & 90\% \\
-extra tests per change & 0 & 0.8 \\
-detection & 74\% & 78\% \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\paragraph{The reproduced methods (RQ4).} CASPER's slices and the risk-aware bandit find 59\% and 57\% of the
-regressions at a 20\% budget, close to random (56\%) and far from the strategies that read the diff and the traces
-(78--93\%; declared metadata alone 62\%). The bandit's impact is the test's risk, so it does better on the changes
-that break a safety property (71\% at 20\% and 98\% at 50\%, against 57\% and 83\% over all regressions), and it
-rewards any failure, so it runs the tests the model already fails early (76\% false alarms, Table~\ref{tab:order}).
-Neither stops. These numbers measure what the diff is worth, not CASPER in its own setting
-(Table~\ref{tab:goodbad}): a platform sees changes with a diff, which the change-aware strategies cover, and model
-or provider updates without one, where CASPER's representatives are the natural first pass. The two could be
-combined: the slices can serve as the near-duplicate groups of the adaptive method, and a slice whose
-representatives drifted can enter the model as a changed component. On this testbed every change has a diff and the
-suite is small (180 tests, twelve slices), which is the case slicing has least to offer.
-
-\begin{table}[H]
-\centering\small
-\caption{Three batches of changes: what they bundle, the tests that reveal them, and the adaptive method on them at
-a 20\% budget, replayed over five seeds and live.}
-\label{tab:batches}
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{p{30mm}p{46mm}cp{50mm}}
-\toprule
-batch & bundles & revealing tests & the adaptive method \\
-\midrule
-a day's merges & six regressions across tools, harness, skills, an agent definition and a service; two harmless edits & 28 & \regression{} after one test, 0.3\% of the suite; blames the SEO agent's lost tool (0.77) \\
-a pull request & three related changes on the publishing path & 9 & \regression{} after two tests, 1.2\%; blames the link check (0.68) and the publishing skill (0.59) \\
-a day of harmless edits & all nine benign changes & 1 & \budget{} after 34 tests, 20\%, $P = 0.32$; does not reach the revealing test \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\paragraph{Batches of any size.} Twenty more batches, drawn at random with two to eight members each (three of each
-size up to seven and two of eight, the members editing disjoint files, four batches from the harmless changes only)
-and recorded the same way, say whether the size matters (Table~\ref{tab:sweep}). It does not: the adaptive method
-finds every batch with a regression member in all five seeds at a 5\% budget, after one or two tests and 0.2--0.9\%
-of the suite, and the live check finds every one after one to five tests; the other strategies find 40--76\% of the
-batches with a revealing test at 5\% and at most 94\% at 20\%, spending the budget. The blame is right: on every
-regression verdict the component blamed most belongs to a member that is a regression on its own, and on 14 of the
-16 the failed test is one that reveals that very member alone; the two others are a tie between two members and a
-test that reveals two members. One of the four harmless batches fails the same test as the batch of nine benign
-changes, in every run, with the same pair of prompt edits among its members, and only the bandit reaches it.
-Batches also hide what their members reveal: in two of the twenty, a test that reveals a member alone passes under
-the batch, once the one test that reveals the routing skill's lost brand gate. Sixteen of the twenty have exactly
-the union of their members' revealing tests.
-
-\begin{table}[H]
-\centering\small
-\caption{Twenty batches drawn at random, by size: how many hold a regression, how many of those the adaptive
-method finds at a 5\% budget (seeds in which it does) and live, and how many batches a test reveals that no member
-has alone ($+$) or that hides a test a member has ($-$).}
-\label{tab:sweep}
-\begin{tabular}{lccccl}
-\toprule
-size & batches & with a regression & found at 5\% & found live & differ from the members' union \\
-\midrule
-2 & 3 & 2 & 2 (5/5) & 2 & 0 \\
-3 & 3 & 2 & 2 (5/5) & 2 & 0 \\
-4 & 3 & 3 & 3 (5/5) & 3 & 1 ($+$) \\
-5 & 3 & 3 & 3 (5/5) & 3 & 0 \\
-6 & 3 & 1 & 1 (5/5) & 1 & 1 ($+$, a harmless batch) \\
-7 & 3 & 3 & 3 (5/5) & 3 & 0 \\
-8 & 2 & 2 & 2 (5/5) & 2 & 2 ($-$) \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\paragraph{Other models.} The same application was recorded with Qwen3.8-27B and with gpt-oss-120b, served as they
-are, with greedy decoding and five repetitions, like Gemma (Table~\ref{tab:models}). Neither recording is a clean
-ground truth, and the five repetitions do not settle either vote: every benign change is ``revealed'' by a few
-tests, the change whose change set is empty included. Seven tests carry Qwen's variation: one of the two cases a
-model judges against a rubric, the title at the length limit, four long workflows and one authoring case. Thirteen
-tests carry gpt-oss's; two of them pass on the current version and fail on nearly every changed copy, whichever the
-change. The baseline runs one test at a time and the changed copies many at once. The empty change, recorded one
-test at a time and recorded fifteen times in batches, separates the batch from the model and says whether more runs
-settle the vote (Table~\ref{tab:noise}). Qwen's variation is batching: one test at a time its runs agree with the
-baseline on every test, and in batches five or six tests flip at any number of runs from three to fifteen, two of
-them in every run, so more batched runs converge to the batch's labels, not the baseline's. gpt-oss's variation is
-the model and the server: one test at a time, five or six tests disagree with themselves within a recording, and
-ten flip between the baseline and a new start of the server, six of them with every run agreeing on each side;
-batching adds flips of its own. Gemma's floor is zero either way. vLLM's batch-invariant mode, which would make
-batched decoding exactly repeatable, serves neither Qwen's linear-attention layers nor Gemma's 512-dimension
-attention heads, and the empty change recorded in batches, taken as the reference, still leaves every other benign
-change flipping tests (two to five under Qwen, one to four under gpt-oss).
-
-\begin{table}[H]
-\centering\small
-\caption{The three recordings. Tests that pass on the current version; tests that ``reveal'' a benign change,
-under the majority over five runs and over the first three; (change, test) pairs on which the two votes differ;
-pairs on which a change's own five runs disagree; tests that carry the variation.}
-\label{tab:models}
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{lccccc}
-\toprule
-model & pass on $V_0$ & benign ``revealed'', 5 / 3 runs & votes differ & runs disagree & varying tests \\
-\midrule
-Gemma~4 E4B  & 172 & 0 / 0         & 2  & 4   & 0 \\
-Qwen3.8-27B  & 173 & 3--6 / 2--4   & 75 & 357 & 7 \\
-gpt-oss-120b & 153 & 2--5 / 1--4   & 95 & 577 & 13 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\begin{table}[H]
-\centering\small
-\caption{A change that alters no behaviour, against each model's baseline: tests whose majority flips and tests
-whose runs disagree, recorded one test at a time (five runs for Gemma and Qwen, three for gpt-oss) and in batches
-(fifteen runs for Gemma and Qwen, five for gpt-oss). The change is the one whose change set is empty, except
-Gemma's one test at a time, which is the benign rewording of the orchestrator's prompt (above).}
-\label{tab:noise}
-\begin{tabular}{lcccc}
-\toprule
- & \multicolumn{2}{c}{one test at a time} & \multicolumn{2}{c}{in batches} \\
-\cmidrule(lr){2-3}\cmidrule(lr){4-5}
-model & flips & runs disagree & flips & runs disagree \\
-\midrule
-Gemma~4 E4B  & 0  & 0 & 0 & 0 \\
-Qwen3.8-27B  & 0  & 1 & 5 & 9 \\
-gpt-oss-120b & 10 & 5 & 8 & 11 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\paragraph{A second recording.} The whole experiment was recorded a second time from scratch, with the same
-command, on a cluster job with a copy of the model on each of its two GPUs instead of the GPU server
-(Table~\ref{tab:second}). The current version comes out the same run for run: 860 of 900 runs pass, the same eight
-tests fail, and no test's five runs disagree, though 103 runs differ in their token count. On the changed copies 4
-of the 7,740 (change, test) labels move and 23 of the 38,700 runs end differently. Each recording counts 29
-regressions, 28 of them shared: the regression revealed by a single test (the routing skill's lost brand gate)
-loses it, and one benign change (the routing guidance reordered) is ``revealed'' by one test in which two of five
-runs pass, the test the nine benign changes break together. Detection at a 20\% budget does not move for the
-adaptive method, \strat{observed}, \strat{cost\_aware}, \strat{full} and \strat{random}; \strat{declared} and
-\strat{ir\_tfidf} lose the one-test regression; CASPER's slices fall from 59\% to 48\%, because they are drawn from
-behavioural signals of the baseline runs, which differ slightly on 37 tests, so that 3 of the 12 slices come out
-the same. What moves between two recordings of a stable model rests on one test: a regression one test reveals, and
-a benign change one test near the majority line ``reveals''.
-
-\begin{table}[H]
-\centering\small
-\caption{The same experiment recorded twice with Gemma, on the GPU server (the results above) and on a cluster job;
-detection at a 20\% budget over five replay seeds.}
-\label{tab:second}
-\begin{tabular}{lcc}
-\toprule
- & first recording & second recording \\
-\midrule
-runs that pass on the current version & 860 of 900 & 860 of 900 \\
-tests the model fails on the current version & 8 & the same 8 \\
-(change, test) labels that differ & \multicolumn{2}{c}{4 of 7,740} \\
-runs that end differently & \multicolumn{2}{c}{23 of 38,700} \\
-changes counted as regressions & 29 & 29, 28 of them the same \\
-benign changes ``revealed'' & 0 & 1 \\
-pairs whose five runs disagree & 4 & 7 \\
-detection: \strat{adaptive\_bayes} & 0.78 & 0.78 \\
-detection: \strat{observed}, \strat{cost\_aware} & 0.86 & 0.86 \\
-detection: \strat{ir\_tfidf} & 0.93 & 0.90 \\
-detection: \strat{declared} & 0.62 & 0.59 \\
-detection: \strat{casper\_slices} & 0.59 & 0.48 \\
-detection: \strat{risk\_aware\_ts} & 0.57 & 0.59 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\paragraph{Threats to validity.}
-\begin{itemize}
-  \item The regressions are mutants, not real changes; they were written to resemble regressions a team would
-        ship, and the testbed does not yet pair them with a version history. The tests and the changes were
-        written by the same people.
-  \item One primary application, built for the purpose, and one model with a stable ground truth; the second and
-        third models show that the ground truth depends on the model and on how it is served. Gemma's noise floor
-        is zero under this serving setup and a second recording on other GPUs moves 4 of 7,740 labels; another
-        batch size or version of the model may differ.
-  \item The testbed is textual, which favours the text factor and \strat{ir\_tfidf}; a second application with
-        differently worded tests and changes (tau-bench \cite{yao2024taubench,barres2025tau2}) is future work
-        (Section~\ref{sec:conclusion}).
-  \item The calibration uses the other recorded changes, so leakage is controlled by leaving the change under test
-        out, but the 42 training changes are few, which is why every learned ratio is padded toward a default.
-  \item The stopping rule assumes greedy decoding; with sampling, a single failure would need repetitions
-        \cite{miller2024error,bjarnason2026randomness}.
-\end{itemize}
-
-\section{Take-aways}
-\label{sec:takeaways}
-
-What the experiments say, in the order a team would act on them.
-\begin{enumerate}
-  \item \textbf{Record traces; do not maintain a map.} Hand-written dependency metadata misses what shared skills,
-        harness code and settings reach; dependencies read from traces recover it (RQ1). One instrumentation of the
-        agent runtime replaces a test-to-component map that nobody keeps current.
-  \item \textbf{Read the diff.} The strategies that read the diff and the traces find most regressions early; the
-        two that do not, CASPER's slices and the risk-aware bandit, sit near a random order and find their first
-        revealing test late (RQ2, RQ4).
-  \item \textbf{Stop when confident, with a safety net.} The adaptive method finds more than any other strategy at
-        equal tokens spent, and most of what the best full-budget strategy finds, for a small fraction of its
-        tokens; it returns the rest. Its price is a ceiling on narrow regressions (RQ3). The mandatory rule covers
-        the safety properties for under one extra test per change and catches a change the stopping rule alone
-        misses. The catalog of properties is where that decision lives: whoever sets the mandatory flag decides
-        what the pipeline never skips.
-  \item \textbf{Discount the tests the model already fails.} Every other strategy reports some of the model's own
-        failures as the change's (RQ3). A pipeline should keep each test's fail rate and act only on a flip.
-  \item \textbf{Measure the model's noise before trusting a verdict.} An empty change, recorded like the others and
-        once more one test at a time, measures the noise floor of a model under a serving setup and says whether it
-        is the batch or the model (Table~\ref{tab:noise}): Gemma's floor is zero at any number of runs, Qwen's is
-        batching and more runs do not lower it, gpt-oss's is the model and the server's start. Record it before
-        trusting a majority vote or a stopping rule; expect a single live run to show a one-off that the majority
-        absorbs, and a second recording to move the labels that rest on one test (Table~\ref{tab:second}).
-  \item \textbf{Text is a strong, cheap baseline.} TF-IDF similarity between the diff and the tests' text has the
-        best detection when the whole budget is spent, and it never stops; it is the fallback order to keep in any
-        pipeline.
-  \item \textbf{Check the day's changes as one batch, then ask who is to blame.} A batch is checked like a change,
-        whatever its size, and the posterior's marginal per component names the member to blame, which is what a
-        nightly pipeline needs after a red run: on the twenty batches drawn at random it named a member that is a
-        regression on its own every time. Harmless edits are not harmless together, and a batch can hide what a
-        member alone reveals: two prompt rewordings broke a test that neither broke alone, and two batches of eight
-        passed a test a member fails, so a nightly batch needs its own recording, not the sum of the day's
-        single-change checks.
-\end{enumerate}
-
-\section{Conclusion and future work}
-\label{sec:conclusion}
-
-After a change to an agent system, the diff is worth reading. Mapped to tests through the dependencies observed in
-traces, it finds most of the regressions within a fifth of the suite's tokens, where hand-written metadata and the
-two closest published methods, which do not read it, find far fewer. A Bayesian model over the changed components,
-with sensitivities calibrated from the record of earlier changes, turns selection, prioritization and stopping into
-one decision: it returns most of the budget, orders the suite best, gives no false verdict on the changes no test
-reveals, and tests every mandatory property a change may affect before it calls the change clean. The price is a
-ceiling on narrow regressions, which the mandatory rule lowers for the properties that matter most.
-
-Three things come next:
-\begin{enumerate}
-  \item a second system under test, tau-bench's airline domain \cite{yao2024taubench,barres2025tau2}, with the
-        same open model playing both the agent and the user, to see whether the text factor and the calibration
-        hold where tests and changes are worded differently;
-  \item real version histories beside the mutants, with the changes a team shipped and the tests that caught them,
-        so that the reveal ratios are learned from practice;
-  \item a ground truth for Qwen with the changed copies recorded one test at a time, which its noise floor says is
-        enough, and for gpt-oss the repetitions and the single start of the server that a model whose answers vary
-        under identical conditions needs, with the empty change as the instrument: how many runs, under which
-        serving setup, before a majority vote is a ground truth and a single failure is a verdict.
-\end{enumerate}
-
-\bibliographystyle{plainnat}
-\bibliography{refs}
 
 \end{document}

@@ -29,7 +29,7 @@ vLLM serves both with FlashAttention 4; batch invariance rules version 4 out, so
 full-attention layer, while vLLM captures its CUDA graphs to measure their memory, fails. Serving with one of the
 other two attention backends the log lists (`TRITON_ATTN`, `FLEX_ATTENTION`) was not tried.
 
-So Gemma 4 E4B, like Qwen3.8, whose linear-attention layers the mode refuses (`docs/RESEARCH_PLAN.md` §5.4), cannot
+So Gemma 4 E4B, like Qwen3.8, whose linear-attention layers the mode refuses (`docs/RESEARCH_PLAN.md` §5.8), cannot
 be served batch-invariant with this vLLM, and whether its outcomes and token counts would then repeat the
 baseline's stays open. Gemma is served as for every other recording. Its noise floor under that setup is zero: over
 fifteen repetitions of the empty change in batches, no test flips against the baseline and no test's runs disagree

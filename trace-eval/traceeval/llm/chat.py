@@ -25,9 +25,21 @@ from types import SimpleNamespace
 from .cache import CachedClient
 
 DEFAULT_MODEL = "google/gemma-4-E4B-it"
+# Gemma as ``scripts/gpu_remote.sh up gemma`` serves it (GPU0, port 18100); the vllm backend's default endpoint.
+GEMMA_URL = "http://127.0.0.1:18100/v1"
 # Qwen as ``scripts/gpu_remote.sh up qwen`` serves it (GPU1, port 18101); the llm backend's default endpoint.
 QWEN_MODEL = "Qwen/Qwen3.8-27B-FP8"
 QWEN_URL = "http://127.0.0.1:18101/v1"
+
+
+def server_urls(engine: str) -> list[str]:
+    """The addresses of the servers behind ``engine``: those ``TRACEEVAL_VLLM_URL`` lists for "vllm" and
+    ``TRACEEVAL_LLM_BASE_URL`` for "llm", or the tunnel ``scripts/gpu_remote.sh up`` opens; none for an engine
+    that asks no server ("hf", "replay")."""
+    if engine not in ("vllm", "llm"):
+        return []
+    name, default = {"vllm": ("TRACEEVAL_VLLM_URL", GEMMA_URL), "llm": ("TRACEEVAL_LLM_BASE_URL", QWEN_URL)}[engine]
+    return [u.strip() for u in os.environ.get(name, default).split(",") if u.strip()]
 
 
 def to_template_messages(messages: list[dict]) -> list[dict]:
@@ -173,11 +185,14 @@ class HFChatClient(GemmaChat):
 
 
 class Servers:
-    """Several OpenAI-compatible servers of one model behind a single client. ``urls`` is a comma-separated list,
-    and each call goes to the next server in turn, so one run can use the GPUs of several machines (fmi0 and the
-    SLURM cluster, ``scripts/gpu_remote.sh``). Decoding is greedy, so the servers give the same answers up to the
-    rare one-off difference that batching causes; spreading a run over servers makes those somewhat more frequent
-    (Qwen: docs/EXPERIMENT.md §7)."""
+    """Several OpenAI-compatible servers of one model behind a single client, so that one run can use the GPUs of
+    several machines (fmi0 and the SLURM cluster, ``scripts/gpu_remote.sh``). ``urls`` is a comma-separated list.
+
+    Each thread keeps to one server, the next in turn when it makes its first call: the calls of a test, the
+    judge's included, all go to that server. With as many threads as servers (``--workers``), each server then
+    answers one test at a time, and without its prefix cache every answer repeats (docs/EXPERIMENT.md §3). A
+    server listed twice gets twice the threads. Decoding is greedy, so the servers give the same answers up to the
+    rare one-off difference that batching causes."""
 
     def __init__(self, urls: str, model_id: str, api_key: str = "EMPTY"):
         """One OpenAI client per URL in ``urls``; ``api_key`` is whatever the servers expect (vLLM takes any)."""
@@ -187,7 +202,8 @@ class Servers:
         # A long timeout: a batched server may take minutes over a long prompt. A failed request is sent twice more.
         clients = [OpenAI(base_url=u.strip(), api_key=api_key, timeout=600, max_retries=2) for u in urls.split(",")]
         self._turn = itertools.cycle(clients)
-        self._lock = threading.Lock()  # the threads of a run take turns from the same cycle
+        self._lock = threading.Lock()  # the threads take their servers from the same cycle, one at a time
+        self._mine = threading.local()  # the server this thread was given
         # The two call shapes in use: completions (Gemma, sent as token ids) and chat completions (Qwen).
         self.completions = SimpleNamespace(create=lambda **kw: self._next().completions.create(**kw))
         self.chat = SimpleNamespace(
@@ -195,9 +211,13 @@ class Servers:
         )
 
     def _next(self):
-        """The server whose turn it is; the threads of a run take turns one at a time."""
-        with self._lock:
-            return next(self._turn)
+        """This thread's server: the next in turn at its first call, the same one at every call after it. The
+        threads of a run start together, so those running at once are given different servers."""
+        server = getattr(self._mine, "server", None)
+        if server is None:
+            with self._lock:
+                server = self._mine.server = next(self._turn)
+        return server
 
 
 class VLLMChatClient(GemmaChat):
@@ -207,7 +227,7 @@ class VLLMChatClient(GemmaChat):
     def __init__(self, model_id: str):
         """The tokenizer loads locally (``GemmaChat``); the weights are the server's, reached through ``Servers``."""
         super().__init__(model_id)
-        self.client = Servers(os.environ.get("TRACEEVAL_VLLM_URL", "http://127.0.0.1:18100/v1"), model_id)
+        self.client = Servers(",".join(server_urls("vllm")), model_id)
 
     def _generate(self, ids, temperature, max_tokens):
         # The prompt goes to the plain completions endpoint as token ids, so the server sees exactly the prompt
@@ -233,45 +253,61 @@ _SHARED_LOCK = threading.Lock()
 CASSETTE = Path(__file__).resolve().parents[2] / "tests" / "cassettes" / "gemma.jsonl"
 
 
-def shared_client(engine: str):
-    """The process-wide client of ``engine``, created on first use. "hf" or "vllm" runs the model named by
-    ``TRACEEVAL_HF_MODEL`` (Gemma 4 E4B by default) and "replay" only answers from its recorded answers. "llm"
-    reaches the servers in ``TRACEEVAL_LLM_BASE_URL`` (Qwen on the GPU server by default), with the model name
-    ``TRACEEVAL_LLM_MODEL`` and the key ``TRACEEVAL_LLM_API_KEY``.
+def model_name(engine: str) -> str:
+    """The model the requests of ``engine`` name: ``TRACEEVAL_LLM_MODEL`` for "llm" (Qwen by default), and
+    ``TRACEEVAL_HF_MODEL`` for "hf", "vllm" and "replay" (Gemma 4 E4B by default)."""
+    if engine == "llm":
+        return os.environ.get("TRACEEVAL_LLM_MODEL", QWEN_MODEL)
+    return os.environ.get("TRACEEVAL_HF_MODEL", DEFAULT_MODEL)
+
+
+def new_client(engine: str):
+    """A client of ``engine``. "hf" or "vllm" runs Gemma and "replay" only answers from its recorded answers. "llm"
+    reaches the servers in ``TRACEEVAL_LLM_BASE_URL`` (Qwen on the GPU server by default), with the key
+    ``TRACEEVAL_LLM_API_KEY``. ``model_name`` says which model each engine names.
 
     When ``TRACEEVAL_CACHE`` names a file, the model's answers go through that cache (``cache.py``): a request it
     has recorded is answered from it, and any other is asked of the model and recorded. "replay" reads that file,
     or the test suite's cassette when the variable is not set, and builds Gemma's prompts. "llm" is cached under
     keys that number the tool calls instead of carrying the ids its servers make up, since those ids go back into
     later prompts; a run whose every answer is recorded needs no server."""
+    model_id = model_name(engine)
+    cache = os.environ.get("TRACEEVAL_CACHE")
+    if engine == "llm":
+        # Qwen or gpt-oss through vLLM's own chat API: the server builds the prompt and parses the answer
+        # itself; the cache in front of it keys on canonical tool-call ids (cache.py).
+        client = Servers(",".join(server_urls("llm")), model_id, os.environ.get("TRACEEVAL_LLM_API_KEY", "EMPTY"))
+        return CachedClient(client, cache, model_id, canonical_ids=True) if cache else client
+    if engine == "replay":
+        # The recorded answers alone: no model behind them, a request they lack is a CacheMiss.
+        return CachedClient(None, cache or CASSETTE, model_id)
+    # Gemma, in-process or served; the cache in front of it records what the model answers.
+    client = {"hf": HFChatClient, "vllm": VLLMChatClient}[engine](model_id)
+    return CachedClient(client, cache, model_id) if cache else client
+
+
+def shared_client(engine: str):
+    """The process-wide client of ``engine`` (``new_client``), created on first use: every case and every changed
+    copy of the app a process runs share it, and so does the judge."""
     with _SHARED_LOCK:  # the threads of a run may ask at the same moment; the model must load only once
         if engine not in _SHARED:
-            model_id = os.environ.get("TRACEEVAL_HF_MODEL", DEFAULT_MODEL)
-            cache = os.environ.get("TRACEEVAL_CACHE")
-            if engine == "llm":
-                # Qwen or gpt-oss through vLLM's own chat API: the server builds the prompt and parses the answer
-                # itself; the cache in front of it keys on canonical tool-call ids (cache.py).
-                client = Servers(
-                    os.environ.get("TRACEEVAL_LLM_BASE_URL", QWEN_URL),
-                    os.environ.get("TRACEEVAL_LLM_MODEL", QWEN_MODEL),
-                    os.environ.get("TRACEEVAL_LLM_API_KEY", "EMPTY"),
-                )
-                if cache:
-                    client = CachedClient(client, cache, client.model_id, canonical_ids=True)
-            elif engine == "replay":
-                # The recorded answers alone: no model behind them, a request they lack is a CacheMiss.
-                client = CachedClient(None, cache or CASSETTE, model_id)
-            else:
-                # Gemma, in-process or served; the cache in front of it records what the model answers.
-                client = {"hf": HFChatClient, "vllm": VLLMChatClient}[engine](model_id)
-                if cache:
-                    client = CachedClient(client, cache, model_id)
-            _SHARED[engine] = client
+            _SHARED[engine] = new_client(engine)
         return _SHARED[engine]
 
 
+def set_shared_client(engine: str, client):
+    """Make ``client`` the process-wide client of ``engine`` and return the one it replaces (None when there was
+    none; passing None back forgets the engine's client). Replay-first testing puts its own clients in front of
+    the model this way (``cache.py``), so that the agents' calls and the judge's both go through them."""
+    with _SHARED_LOCK:
+        previous = _SHARED.pop(engine, None)
+        if client is not None:
+            _SHARED[engine] = client
+        return previous
+
+
 def judge_client(backend: str):
-    """The model that judges answers, as (client, model name to send).
+    """The model that judges answers, as (client, model name to send, token limit of its answer).
 
     ``TRACEEVAL_JUDGE`` picks it, "gemma" or "qwen"; by default it is the model that plays the agents (Qwen
     with the llm backend, Gemma with the others). Gemma judges through the engine that plays the agents (its
@@ -284,4 +320,6 @@ def judge_client(backend: str):
     # (so that a replay finds its verdicts in the cassette); when Qwen plays them, Gemma's vLLM server is used.
     engine = "llm" if name == "qwen" else (backend if backend in ("hf", "vllm", "replay") else "vllm")
     client = shared_client(engine)
-    return client, client.model_id
+    # Gemma answers in a few words; a model of the llm backend may reason first, so it gets that backend's room
+    limit = int(os.environ.get("TRACEEVAL_LLM_MAX_TOKENS", "700")) if engine == "llm" else 80
+    return client, client.model_id, limit

@@ -1,6 +1,6 @@
 """Deterministic scorers over (final state, trace, final message) plus an optional judge step.
 
-Result classification follows the TRACE-Eval handoff, extended with the tool boundary:
+A run is classified as one of:
     PASS           every expectation holds
     TOOL_ERROR     a tool call crashed, or failed with an error the case does not allow and was not recovered
     AGENT_FAILURE  tool calls behaved as allowed, but an expectation failed
@@ -137,6 +137,11 @@ def score_case(case, trace: dict, state: dict, run: dict, error: str | None = No
         add(f"forbidden:{tool}", tool not in ok_tools, f"ok tools: {sorted(ok_tools)}")
     for tool in exp.get("tools_not_attempted", []):
         add(f"not_attempted:{tool}", tool not in attempted, f"attempted: {sorted(attempted)}")
+    # A case about a refusal wants more than nothing done: the agent must have tried the call that is refused. An
+    # item that is a list names alternatives, any one of which will do.
+    for item in exp.get("tools_attempted", []):
+        options = [item] if isinstance(item, str) else list(item)
+        add(f"attempted:{options[0]}", bool(attempted & set(options)), f"attempted: {sorted(attempted)}")
     if "agents_in_order" in exp:
         targets = [target for _, target in trace.get("routes", [])]
         add("agents_in_order", _in_order(targets, exp["agents_in_order"]), f"delegated to: {targets}")
@@ -232,10 +237,12 @@ JUDGE_PROMPT = (
 )
 
 
-def judge_answer(case, message: str, client, model: str) -> dict:
+def judge_answer(case, message: str, client, model: str, max_tokens: int = 80) -> dict:
     """The judge step of a case with a ``judge`` block: the model behind ``client`` reads the request, the rubric
     and the answer, and says PASS or FAIL. It decodes greedily, so the same answer always gets the same verdict;
-    its tokens count in the test's cost."""
+    its tokens count in the test's cost. ``ok`` is True for PASS, False for FAIL and None when the answer gives
+    no verdict (it is empty, or opens with something else): the run then says nothing about the agent.
+    ``max_tokens`` is the room the judge has: a model that reasons before it answers needs more."""
     rubric = case.judge["rubric"]
     resp = client.chat.completions.create(
         model=model,
@@ -244,12 +251,14 @@ def judge_answer(case, message: str, client, model: str) -> dict:
             {"role": "user", "content": f"Request: {case.request}\n\nRubric: {rubric}\n\nAnswer: {message}"},
         ],
         temperature=0.0,
-        max_tokens=80,
+        max_tokens=max_tokens,
     )
     verdict = (resp.choices[0].message.content or "").strip()
-    found = re.search(r"\b(PASS|FAIL)\b", verdict.upper())  # whichever word comes first decides
+    # The verdict is the answer's first word, as the prompt asks; markup around it is let through. A sentence
+    # that merely contains one of the two words is not a verdict.
+    first = re.match(r"[\W_]*(PASS|FAIL)\b", verdict, re.IGNORECASE)
     return {
-        "ok": bool(found) and found.group(1) == "PASS",  # an answer with neither word fails
+        "ok": None if first is None else first.group(1).upper() == "PASS",
         "tokens": resp.usage.prompt_tokens + resp.usage.completion_tokens,  # added to the test's cost
         "rubric": rubric,
         "verdict": verdict,

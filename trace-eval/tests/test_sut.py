@@ -17,6 +17,7 @@ from traceeval.experiment.executor import run_case
 from traceeval.experiment.history import TestStats as RunStats  # not a test class for pytest
 from traceeval.experiment.sutloader import copy_sut, load_sut
 from traceeval.scoring import score_case
+from traceeval.scoring.scorers import judge_answer
 from traceeval.sut import SUT_ROOT
 from traceeval.sut.harness.skills import parse_skill
 from traceeval.tracing.recorder import TraceRecorder
@@ -58,14 +59,17 @@ class ScriptedClient:
     """A stand-in for a chat client: each agent makes the tool calls of its script in order, then answers
     ``final``. An entry ``("final", text)`` answers ``text`` in the middle of a script, for an agent that is
     delegated to more than once. An agent is recognised by the first script key found in the first line of its
-    system prompt; ``done`` counts the calls each agent made. A scripted call must be one of the tools the agent
-    is offered."""
+    system prompt; ``done`` counts the calls each agent made and ``requests`` keeps what it was sent. A scripted
+    call must be one of the tools the agent is offered, unless ``offered_only`` is off (a model can ask for any
+    tool it knows the name of)."""
 
-    def __init__(self, script: dict[str, list[tuple[str, dict]]], final: str = "Done."):
-        self.script, self.final, self.done = script, final, {}
+    def __init__(self, script: dict[str, list[tuple[str, dict]]], final: str = "Done.", offered_only: bool = True):
+        self.script, self.final, self.done, self.requests = script, final, {}, []
+        self.offered_only = offered_only
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=self.create))
 
     def create(self, **request):
+        self.requests.append(request)
         first = request["messages"][0]["content"].split("\n", 1)[0].lower()
         agent = next(a for a in self.script if a in first)
         i = self.done.get(agent, 0)
@@ -74,7 +78,8 @@ class ScriptedClient:
             msg = SimpleNamespace(content=self.script[agent][i][1], tool_calls=None)
         elif i < len(self.script[agent]):
             name, args = self.script[agent][i]
-            assert name in {t["function"]["name"] for t in request.get("tools", [])}, name
+            offered = {t["function"]["name"] for t in request.get("tools", [])}
+            assert name in offered or not self.offered_only, name
             call = SimpleNamespace(id=f"{agent}-{i}", function=SimpleNamespace(name=name, arguments=json.dumps(args)))
             msg = SimpleNamespace(content=None, tool_calls=[call])
         else:
@@ -339,6 +344,111 @@ def test_idempotency_keys_follow_the_operation(sut):
 def test_route_only_items_do_not_execute_specialists(sut, cases):
     rec = run_case(sut, cases["DS-ROUTING/r01"])
     assert rec["passed"] and rec["tools"] == []
+
+
+def test_harness_switches_stay_out_of_the_prompt(sut, cases):
+    """A slot that starts with an underscore is a switch for the harness: it works, and the model is not shown it."""
+    client = ScriptedClient({"orchestrator": [("route_to_agent", {"agent": "authoring"})]})
+    rec = run_case(sut, cases["DS-ROUTING/r39"], backend="llm", llm_client=client)
+    assert cases["DS-ROUTING/r39"].context["_route_only"]
+    assert "_route_only" not in client.requests[0]["messages"][1]["content"]
+    assert rec["agents"] == ["orchestrator"] and rec["routes"] == [("orchestrator", "authoring")]
+
+
+def test_delegation_goes_through_the_gates(sut, cases):
+    """Only an agent whose definition lists route_to_agent may delegate, and the settings can switch delegation
+    off. A refused delegation runs no agent."""
+    script = {
+        "authoring agent": [("route_to_agent", {"agent": "publishing", "context": {"page_id": "p4"}})],
+        "publishing agent": [("publish_page", {"page_id": "p4"})],
+    }
+    client = ScriptedClient(script, offered_only=False)  # the authoring agent is not offered the delegation
+    rec = run_case(sut, cases["AUT-12"], backend="llm", llm_client=client, keep_state=True)
+    assert rec["agents"] == ["authoring"] and rec["tools"] == [] and rec["routes"] == []
+    refused = [e for e in rec["events"] if e["kind"] == "agent.route"]
+    assert [(e["status"], e["reason"]) for e in refused] == [("error", "tool_not_available")]
+    assert rec["final_state"]["pages"]["p4"]["status"] != "published"
+    # the orchestrator may delegate, until the settings say otherwise
+    script = {"orchestrator": [("route_to_agent", {"agent": "publishing"})], "publishing agent": []}
+    off = {"tools.disabled": ["route_to_agent"]}
+    rec = run_case(sut, cases["PUB-01"], backend="llm", llm_client=ScriptedClient(script), config_overrides=off)
+    assert rec["agents"] == ["orchestrator"] and rec["routes"] == []
+
+
+def test_a_delegation_cannot_change_who_asks(sut, cases):
+    """The user, the approval token and the harness's switches are the harness's to carry: what a model passes on
+    for them is dropped, and the rest of the context goes through."""
+    passed_on = {"user_id": "carol", "approval_token": "APPR-CAROL-7731", "_route_only": True, "subject_id": "s1"}
+    script = {
+        "orchestrator": [("route_to_agent", {"agent": "governance", "context": passed_on})],
+        "governance agent": [("export_user_data", {"subject_id": "s1"})],
+    }
+    base = cases["GOV-04"]  # dave, a viewer, asks; the model tries to act as carol, with her token
+    case = type(base)(**{**base.__dict__, "context": {"user_id": "dave", "subject_id": "s1"}, "expect": {}})
+    rec = run_case(sut, case, backend="llm", llm_client=ScriptedClient(script), keep_state=True)
+    route = next(e for e in rec["events"] if e["kind"] == "agent.route")
+    assert route["status"] == "ok" and route["context"] == {"subject_id": "s1"}
+    assert rec["agents"] == ["orchestrator", "governance"]  # the specialist ran: _route_only was not the model's to set
+    export = next(e for e in rec["events"] if e["kind"] == "tool.call")
+    assert (export["status"], export["error"]) == ("error", "approval_required")
+    assert not [e for e in rec["final_state"]["audit"] if e["action"] == "export_user_data"]
+
+
+def test_a_badly_typed_argument_is_refused_not_a_crash(sut, cases):
+    """A word where the schema asks for a number is the agent's mistake: the tool raises on it, and the call is
+    answered ``invalid_arguments`` instead of ``tool_crash``."""
+    script = {"maintenance agent": [("rollback_page", {"page_id": "p5", "version": "two"})]}
+    base = cases["AUT-12"]
+    case = type(base)(**{**base.__dict__, "agent": "maintenance", "context": {"user_id": "carol"}, "expect": {}})
+    rec = run_case(sut, case, backend="llm", llm_client=ScriptedClient(script), keep_state=True)
+    call = next(e for e in rec["events"] if e["kind"] == "tool.call")
+    assert (call["status"], call["error"]) == ("error", "invalid_arguments") and "version" in call["message"]
+
+
+def test_a_run_depends_on_the_tools_its_agents_were_offered_and_on_its_fixture(sut, cases):
+    """What the model is sent is a dependency: the schema of every tool an agent was offered, called or not."""
+    deps = set(run_case(sut, cases["PUB-01"])["deps"])
+    assert "fixture:base" in deps
+    assert {"tool:publish_page", "tool:publish_page#schema", "tool:route_to_agent#schema"} <= deps
+    assert "tool:schedule_publish#schema" in deps and "tool:schedule_publish" not in deps  # offered, never called
+
+
+def test_a_refusal_case_wants_the_refused_call_attempted():
+    """``tools_attempted``: the agent must have tried the call, whatever came of it; a list names alternatives."""
+    expect = {"tools_attempted": ["unpublish_page", ["rollback_page", "list_versions"]], "tool_errors": "*"}
+    case = SimpleNamespace(expect=expect)
+    refused = {"tool": "unpublish_page", "status": "error", "error": "approval_required"}
+    listed = {"tool": "list_versions", "status": "ok", "error": None}
+    assert score_case(case, {"tool_calls": [refused, listed]}, {}, {}).passed
+    assert score_case(case, {"tool_calls": [refused]}, {}, {}).failed_checks() == ["attempted:rollback_page"]
+    assert not score_case(case, {"tool_calls": []}, {}, {}).passed  # an agent that does nothing fails
+
+
+def test_the_judge_gives_a_verdict_or_none(sut, cases, monkeypatch):
+    """The verdict is the first word of the judge's answer. An answer with no verdict says nothing about the
+    agent: the run is left out like one the environment broke."""
+
+    def judge(text):
+        """A judge that answers ``text`` to whatever it is asked."""
+        answer = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=text))])
+        answer.usage = SimpleNamespace(prompt_tokens=10, completion_tokens=2)
+        return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **_: answer)))
+
+    case = cases["SEO-07"]
+    verdicts = {
+        "PASS. The answer states the score.": True,
+        "**fail**: no score.": False,
+        "The answer does not pass the rubric.": None,
+        "I would not say FAIL here; PASS.": None,
+        "": None,
+    }
+    for text, ok in verdicts.items():
+        assert judge_answer(case, "answer", judge(text), "judge")["ok"] is ok, text
+    # in a run whose own checks pass: a judge that gives no verdict makes the run invalid, not a failure
+    assert run_case(sut, case)["passed"]
+    monkeypatch.setattr("traceeval.llm.chat.judge_client", lambda backend: (judge("Hard to say."), "judge", 80))
+    rec = run_case(sut, case)
+    assert rec["classification"] == "INFRA_INVALID" and rec["failed_checks"] == ["judge"]
 
 
 def test_harness_error_is_classified(sut, cases):

@@ -2,61 +2,53 @@
 
 
 def apfd(order: list[str], revealing: set[str]) -> float | None:
-    """Average Percentage of Faults Detected. Each revealing test is treated as one fault; the suite
-    contains ``order`` (the complete prioritized suite). Returns None when nothing is revealing."""
-    n, m = len(order), len(revealing)
-    if n == 0 or m == 0:
+    """Average Percentage of Faults Detected of ``order`` (the complete prioritized suite) for one change. The
+    change is one fault, found by the first of its revealing tests in the order. Returns None when nothing is
+    revealing."""
+    n = len(order)
+    if n == 0 or not revealing:
         return None
-    # the 1-based position at which each fault (one per revealing test) is detected
-    pos = {t: i + 1 for i, t in enumerate(order)}
-    tf = [pos[t] for t in revealing if t in pos]
-    if len(tf) < m:
-        tf += [n + 1] * (m - len(tf))  # not in the suite: counts as never detected
-    # Rothermel et al.'s formula: 1 - (sum of the detection positions) / (n m) + 1 / (2 n)
-    return 1.0 - sum(tf) / (n * m) + 1.0 / (2 * n)
+    # the 1-based position of the first revealing test; none in the order counts as never detected
+    first = next((i + 1 for i, t in enumerate(order) if t in revealing), n + 1)
+    # Rothermel et al.'s formula with one fault: 1 - (its detection position) / n + 1 / (2 n)
+    return 1.0 - first / n + 1.0 / (2 * n)
 
 
-def apfdc(order: list[str], revealing: set[str], cost: dict[str, float], severity: dict[str, float]) -> float | None:
-    """Cost-cognizant APFD (Elbaum et al. 2001): cumulative severity detected against cumulative cost."""
-    m = len(revealing)
-    if not order or m == 0:
+def apfdc(order: list[str], revealing: set[str], cost: dict[str, float]) -> float | None:
+    """Cost-cognizant APFD (Elbaum et al. 2001) for one change, taken as one fault: the share of the order's cost
+    left unspent when the first revealing test finds it, plus half of that test's own cost. With a single fault
+    its severity cancels out."""
+    if not order or not revealing:
         return None
-    total_cost = sum(cost[t] for t in order)
-    revealing = sorted(revealing)  # a fixed order, so the float sums are the same in every process
-    total_sev = sum(severity.get(t, 1.0) for t in revealing)
-    # 0-based positions here: cum[i] is the cost spent through the i-th test of the order
-    pos = {t: i for i, t in enumerate(order)}
-    cum = []
-    acc = 0.0
+    total = sum(cost[t] for t in order)
+    spent = 0.0
     for t in order:
-        acc += cost[t]
-        cum.append(acc)
-    # a fault found at position i earns the cost left unspent after its test (plus half of that test's own cost),
-    # weighted by the test's severity; a revealing test outside the order earns nothing
-    num = 0.0
-    for t in revealing:
-        if t not in pos:
-            continue
-        i = pos[t]
-        num += severity.get(t, 1.0) * ((total_cost - cum[i]) + 0.5 * cost[t])
-    return num / (total_cost * total_sev)
+        if t in revealing:
+            return (total - spent - 0.5 * cost[t]) / total
+        spent += cost[t]
+    return 0.0  # no revealing test in the order: the fault is never found
 
 
 def evaluate_log(
-    log, variant: str, history, catalog, budget: float, props=None, affected=None, affected_wf=None
+    log, variant: str, history, catalog, budget: float, props=None, affected=None, affected_wf=None, known=()
 ) -> dict:
     """One row of replay.csv: what a strategy's execution log detected, at what cost, and how it stopped.
-    A failure of a test outside the ground truth (one that fails on the original app too) is a false alarm,
-    not a detection. Given the catalog of properties (``props``), the row also gets the change coverage of the
-    executed tests (``coverage.change_coverage``), which needs no ground truth; ``affected`` and ``affected_wf``
-    are the change's affected properties and workflows when the caller already has them."""
+    A failure of a revealing test is a detection. A failure of a test that passes on the original app and does not
+    reveal the change (a run that differs from its test's majority) is a false alarm: the run stops on it with a
+    regression verdict the ground truth does not back. Given the catalog of properties (``props``), the row also
+    gets the change coverage of the executed tests (``coverage.change_coverage``), which needs no ground truth;
+    ``affected`` and ``affected_wf`` are the change's affected properties and workflows when the caller already
+    has them. ``known`` names the tests whose outcome on the changed copy was known without running them
+    (replay-first): for the coverage columns they count as run."""
     # the ground truth: the change is a regression when at least one test reveals it
     revealing = history.revealing_tests(variant)
     is_regression = len(revealing) > 0
     executed = log.executed
+    # for coverage: the tests run, and those whose outcome was known beforehand
+    covering = executed + sorted(set(known) - set(executed))
     full_cost = history.total_cost()
-    # walk the executed tests in order: a failing revealing test is a detection, any other failure a false alarm,
-    # and the tokens spent up to the first detection are the cost to detect
+    # walk the executed tests in order: a failing revealing test is a detection, and the tokens spent up to the
+    # first one are the cost to detect; a failure of any other test that passes on the original app is a false alarm
     first_detect_cost = None
     acc = 0.0
     true_fails, false_alarms = set(), set()
@@ -67,13 +59,13 @@ def evaluate_log(
                 true_fails.add(t)
                 if first_detect_cost is None:
                     first_detect_cost = acc
-            else:
+            elif history.baseline_pass_rate(t) >= 0.5:
                 false_alarms.add(t)
     # a change one of whose revealing tests checks a safety property is a critical regression
     safety_revealing = {t for t in revealing if catalog[t].is_safety}
     # the properties the change breaks (those of its revealing tests), and those the strategy ran a test of
     broken = {p for t in revealing for p in catalog[t].properties}
-    exercised = {p for t in executed for p in catalog[t].properties}
+    exercised = {p for t in covering for p in catalog[t].properties}
     out = {
         "variant": variant,
         "strategy": log.strategy,
@@ -92,16 +84,17 @@ def evaluate_log(
         "cost_to_detect_fraction": (first_detect_cost / full_cost) if first_detect_cost is not None else None,
         # run time: the executed tests' mean time on the original app, as a share of the whole suite's
         "time_fraction": sum(history.seconds(t) for t in executed) / history.total_seconds(),
-        # a failure outside the ground truth: a test that fails on the original app too
+        # a failure of a test that passes on the original app and does not reveal the change
         "false_alarm": bool(false_alarms),
         # set only for a change that breaks a safety property (one of its revealing tests checks one)
         "safety_recall": (len(true_fails & safety_revealing) / len(safety_revealing)) if safety_revealing else None,
         # the share of the properties the change breaks that an executed test checks
         "property_coverage": (len(broken & exercised) / len(broken)) if broken else None,
-        # budget | exhausted | clean | regression | uninformative | no_components (selection/base.py)
+        # regression | exhausted | budget | clean | uninformative | no_components (selection/base.py)
         "stop_reason": log.stop_reason,
         # did the strategy end with the right conclusion? "clean"/"regression" are explicit verdicts; any other
-        # stop is judged by whether it found a true failure; with no components, "clean" is implied
+        # stop is judged by whether it found a true failure (a run that ran everything it selected and found none
+        # is right on a change no test reveals); with no components, "clean" is implied
         "stop_correct": (
             (log.stop_reason == "clean" and not is_regression)
             or (log.stop_reason == "regression" and is_regression)
@@ -115,6 +108,6 @@ def evaluate_log(
         from .coverage import change_coverage
 
         out.update(
-            change_coverage(history.changesets[variant], executed, history, catalog, props, affected, affected_wf)
+            change_coverage(history.changesets[variant], covering, history, catalog, props, affected, affected_wf)
         )
     return out

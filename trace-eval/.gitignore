@@ -6,17 +6,18 @@ __pycache__/
 runs/
 dist/
 .venv/
+.env
 
-# LaTeX build files of the paper draft (docs/paper); main.tex, refs.bib, the figure and the PDF are kept
-docs/paper/*.aux
-docs/paper/*.bbl
-docs/paper/*.blg
-docs/paper/*.log
-docs/paper/*.out
-docs/paper/*.fls
-docs/paper/*.fdb_latexmk
-docs/paper/*.synctex.gz
-docs/paper/*.toc
+# LaTeX build files of the paper draft (docs/paper) and the summary (docs/summary); the sources and PDFs are kept
+docs/*/*.aux
+docs/*/*.bbl
+docs/*/*.blg
+docs/*/*.log
+docs/*/*.out
+docs/*/*.fls
+docs/*/*.fdb_latexmk
+docs/*/*.synctex.gz
+docs/*/*.toc
 
 # drafts of the catalog of properties, under review (traceeval properties draft)
 traceeval/catalog/properties.draft.*

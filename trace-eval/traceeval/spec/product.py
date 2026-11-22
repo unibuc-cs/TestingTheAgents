@@ -1,6 +1,6 @@
 """The product model: what the harness knows about the system without reading it all.
 
-Static part (from the SUT tree, tool-extracted): files and their token counts, functions per file (AST),
+Static part (read from the files of the SUT): files and their token counts, functions per file (AST),
 registered tools and their kinds, skill procedures (parsed ``## Procedure`` blocks), the effective
 configuration. Dynamic part (from recorded baseline runs): which cases exercise which tools and which
 code functions each case executed. Both are queried by the checkers and by the agent brief; neither

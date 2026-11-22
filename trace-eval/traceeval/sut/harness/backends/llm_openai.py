@@ -94,10 +94,11 @@ def build_system_prompt(agent, session, runtime) -> str:
 def build_user_message(session) -> str:
     """The first user message: the request, then the request context (user, page, ...) as JSON.
 
-    The ``request`` slot is left out of the JSON because the request already has its own line. Values that
-    JSON cannot encode are written with ``str``.
+    The ``request`` slot is left out of the JSON because the request already has its own line, and so are the
+    slots that start with an underscore: they are switches for the harness (``_route_only``), which the model
+    must not see. Values that JSON cannot encode are written with ``str``.
     """
-    slots = {k: v for k, v in session.ctx.items() if k != "request"}
+    slots = {k: v for k, v in session.ctx.items() if k != "request" and not k.startswith("_")}
     return f"Request: {session.request}\nContext: {json.dumps(slots, default=str)}"
 
 

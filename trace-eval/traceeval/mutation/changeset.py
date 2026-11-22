@@ -1,23 +1,30 @@
 """Change-set extraction: baseline SUT tree vs. variant tree -> changed *components*.
 
-This is the only information about a change that the selectors receive (they never see the
+This is the only information about a change that the strategies receive (they never see the
 mutation label). Components use the same identifiers as observed/declared dependencies:
 
     code:<relpath>::<qualname>      function-level code change (AST-normalised, docstrings ignored)
     code:<relpath>                  module-level change outside any function (class attributes included)
     tool:<name>                     a changed function is a registered tool adapter
+    tool:<name>#schema              what the model is told about that tool changed (description, parameters)
     line:<relpath>:<n>              baseline code line <n> inside a changed hunk
     skill:<name>#procedure|#prose|#meta
     agent:<name>.<key>              changed key of an agent definition (tools, triggers, system_prompt, ...)
+    agent:<name>.specialists        the specialists an orchestrator is shown changed (one added or taken away)
     config:<dotted.key>             changed effective configuration value
     fixture:<name>
 
 Comments do not count. An edit that provably cannot change what the harness does (comments, docstrings,
 blank lines and formatting, YAML comments, the order of config mappings) adds nothing to the change set:
-no component, no file and no diff line, so no selector and no probability depends on it. For the same
+no component, no file and no diff line, so no strategy and no probability depends on it. For the same
 reason the diff and the line components are computed on the code alone, with comments, docstrings and
-blank lines removed. Skill files are prompts that the model reads word for word, so all of their text
-counts."""
+blank lines removed.
+
+What the model is sent counts as it is sent. A skill file goes into the prompt word for word, so its front
+matter and its prose are compared as text, line breaks included; its procedure is shown as numbered steps
+written from the parsed YAML, so it is compared parsed, with the order of the steps and of each call's
+arguments, which are shown in that order. A tool's description and parameters reach every agent that is
+offered the tool, whether it calls it or not, hence a component of their own."""
 
 import ast
 import copy
@@ -148,11 +155,13 @@ def _python_code_lines(source: str) -> list[tuple[int, str]]:
     return code
 
 
-def _function_dumps(source: str) -> tuple[dict[str, str], str, dict[str, str]]:
-    """qualname -> normalised dump; module-level dump (functions/classes removed); tool-name map."""
+def _function_dumps(source: str) -> tuple[dict[str, str], str, dict[str, str], dict[str, str]]:
+    """qualname -> normalised dump; module-level dump (functions/classes removed); tool-name map; and, for a
+    tool adapter, qualname -> what its schema is made from."""
     tree = _strip_docstrings(ast.parse(source))
     dumps: dict[str, str] = {}
     tools: dict[str, str] = {}
+    schemas: dict[str, str] = {}
 
     # qualified names as tracing/codecov.py builds them (Class.method, outer.inner), so the ids match
     def visit(node, prefix=""):
@@ -169,6 +178,11 @@ def _function_dumps(source: str) -> tuple[dict[str, str], str, dict[str, str]]:
                         and isinstance(deco.args[0], ast.Constant)
                     ):
                         tools[name] = deco.args[0].value
+                        # The schema the model reads (sut/tools/registry.py::ToolSpec.schema) is written from the
+                        # decorator (name, description, a hint per parameter) and from the signature (the
+                        # parameters, their types, which are required). Both are kept whole, so the tool's kind
+                        # and the value of a default count too: a little more than the schema, never less.
+                        schemas[name] = ast.dump(deco) + ast.dump(child.args)
                 visit(child, name + ".")
             elif isinstance(child, ast.ClassDef):
                 visit(child, f"{prefix}{child.name}.")
@@ -178,7 +192,7 @@ def _function_dumps(source: str) -> tuple[dict[str, str], str, dict[str, str]]:
     visit(tree)
     # The module level on its own: what runs at import, with the functions (dumped above) taken out.
     module_dump = ast.dump(ast.Module(body=_without_functions(tree.body), type_ignores=[]), include_attributes=False)
-    return dumps, module_dump, tools
+    return dumps, module_dump, tools, schemas
 
 
 def _without_functions(body: list[ast.stmt]) -> list[ast.stmt]:
@@ -214,8 +228,8 @@ def _python_components(rel: str, old: str, new: str) -> list[ChangedComponent]:
     """code:, tool: and line: components of a Python file; a variant that does not parse is one module change."""
     comps: list[ChangedComponent] = []
     try:
-        od, om, ot = _function_dumps(old)
-        nd, nm, nt = _function_dumps(new)
+        od, om, ot, old_schemas = _function_dumps(old)
+        nd, nm, nt, new_schemas = _function_dumps(new)
     except SyntaxError as exc:
         return [ChangedComponent(f"code:{rel}", "code", rel, f"syntax error: {exc}")]
     if od == nd and om == nm:
@@ -229,6 +243,12 @@ def _python_components(rel: str, old: str, new: str) -> list[ChangedComponent]:
             tool_name = nt.get(name) or ot.get(name)
             if tool_name:
                 comps.append(ChangedComponent(f"tool:{tool_name}", "tool", rel, f"adapter {status}"))
+                # The adapter's body reaches the tests that call the tool. What the model is told about the tool
+                # reaches every test in which an agent is offered it: a component of its own, which the traces
+                # match by the tools each agent was offered (tool:<name>#schema).
+                if old_schemas.get(name) != new_schemas.get(name):
+                    detail = "description or parameters changed"
+                    comps.append(ChangedComponent(f"tool:{tool_name}#schema", "tool-schema", rel, detail))
     if om != nm:
         comps.append(ChangedComponent(f"code:{rel}", "code", rel, "module-level change"))
     comps.extend(_line_components(rel, _python_code_lines(old), _python_code_lines(new)))
@@ -280,20 +300,31 @@ def _skill_parts(text: str) -> tuple[str, str, str]:
     return front, proc, prose
 
 
+def _steps(procedure: str) -> str:
+    """The steps of a procedure block as the model is shown them, as text to compare. A step is read by the names
+    of its keys (``call``, ``when``, ...), so their order in the file is not shown; the arguments of a call and the
+    slots of a ``set`` are shown in the order they are written, so that order is kept."""
+    steps = yaml.safe_load(procedure or "[]") or []
+    return _ordered([{k: s[k] for k in sorted(s)} if isinstance(s, dict) else s for s in steps])
+
+
 def _skill_components(rel: str, old: str, new: str) -> list[ChangedComponent]:
     """The ``skill:<name>#procedure``, ``#meta`` and ``#prose`` components of a SKILL.md, each part on its own."""
     name = Path(rel).parent.name
     of, op_, opr = _skill_parts(old)
     nf, np_, npr = _skill_parts(new)
     comps = []
-    # procedure and front matter are compared as parsed YAML; prose word for word, whitespace collapsed
-    if yaml.safe_load(op_ or "[]") != yaml.safe_load(np_ or "[]"):
+    # The procedure reaches the model as steps written from the parsed YAML (sut/harness/skills.py), so it is
+    # compared parsed. A comment or a re-indented line in the block changes nothing the model reads.
+    if _steps(op_) != _steps(np_):
         comps.append(ChangedComponent(f"skill:{name}#procedure", "skill", rel, "procedure block changed"))
-    if yaml.safe_load(of or "{}") != yaml.safe_load(nf or "{}"):
+    # The front matter and the prose go into the prompt as they are written: a quoted value or a re-wrapped
+    # paragraph is another prompt, so both are compared as text.
+    if of != nf:
         comps.append(ChangedComponent(f"skill:{name}#meta", "skill", rel, "front matter changed"))
-    if " ".join(opr.split()) != " ".join(npr.split()):
+    if opr != npr:
         comps.append(ChangedComponent(f"skill:{name}#prose", "skill-prose", rel, "instruction prose changed"))
-    return comps  # empty for a whitespace-only change
+    return comps  # empty when only the procedure block's comments or layout changed
 
 
 def _ordered(value) -> str:
@@ -319,6 +350,31 @@ def _agent_components(rel: str, old: str, new: str) -> list[ChangedComponent]:
                     detail = "removed: " + " ".join(f"{key[:-1]}:{x}" for x in sorted(old_items - new_items))
             comps.append(ChangedComponent(f"agent:{name}.{key}", kind, rel, detail))
     return comps  # empty for a comment- or format-only change
+
+
+def _roster(root: Path) -> tuple[set[str], set[str]]:
+    """The agent definitions of a copy of the app, by file name: its orchestrators, and its specialists (every
+    other agent), which each orchestrator is shown with their descriptions and triggers."""
+    orchestrators, specialists = set(), set()
+    for path in sorted((Path(root) / "agents").glob("*.yaml")):
+        definition = yaml.safe_load(path.read_text()) or {}
+        (orchestrators if definition.get("orchestrator") else specialists).add(path.stem)
+    return orchestrators, specialists
+
+
+def _roster_components(baseline: Path, variant: Path) -> list[ChangedComponent]:
+    """``agent:<orchestrator>.specialists`` when the two copies do not have the same specialists. A new agent file
+    has no test that depends on it, yet every request the orchestrator routes is now routed among one more."""
+    old_orchestrators, old = _roster(baseline)
+    new_orchestrators, new = _roster(variant)
+    if old == new:
+        return []
+    added, gone = [f"added: agent:{a}" for a in sorted(new - old)], [f"gone: agent:{a}" for a in sorted(old - new)]
+    detail = " ".join(added + gone)
+    return [
+        ChangedComponent(f"agent:{name}.specialists", "agent", f"agents/{name}.yaml", detail)
+        for name in sorted(old_orchestrators | new_orchestrators)
+    ]
 
 
 def _flatten(d, prefix="") -> dict[str, str]:
@@ -402,5 +458,7 @@ def compute_changeset(baseline: Path, variant: Path, name: str = "variant") -> C
         a = [text + "\n" for _, text in _code_lines(rel, old)]
         b = [text + "\n" for _, text in _code_lines(rel, new)]
         diffs.append("".join(difflib.unified_diff(a, b, f"a/{rel}", f"b/{rel}")))
+    # one more component when the copies differ in which agents exist: the orchestrator's prompt lists them
+    cs.components.extend(_roster_components(baseline, variant))
     cs.diff = "".join(diffs)
     return cs

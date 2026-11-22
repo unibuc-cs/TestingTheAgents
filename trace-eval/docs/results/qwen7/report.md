@@ -54,60 +54,118 @@ Testbed sanity (every regression revealed by at least one test, no benign change
 
 ## 2. Detection within a budget
 
-Fraction of regression-inducing changes detected, by nominal budget (% of full-suite tokens):
+Every strategy is run the same way: a test that fails on the original app is not run, and a run ends at its first failure.
+
+Fraction of the revealed regressions detected, by nominal budget (% of full-suite tokens):
 
 | strategy | 2% | 5% | 10% | 20% | 30% | 50% | 100% |
 |---|---|---|---|---|---|---|---|
-| full | 0.00 | 0.12 | 0.79 | 0.84 | 0.85 | 0.98 | 1.00 |
-| random | 0.13 | 0.28 | 0.45 | 0.64 | 0.80 | 0.93 | 1.00 |
-| declared | 0.28 | 0.38 | 0.37 | 0.46 | 0.47 | 0.47 | 0.48 |
-| ir_tfidf | 0.37 | 0.53 | 0.67 | 0.75 | 0.82 | 0.93 | 1.00 |
-| observed | 0.38 | 0.49 | 0.57 | 0.69 | 0.74 | 0.83 | 0.90 |
-| cost_aware | 0.31 | 0.49 | 0.53 | 0.67 | 0.73 | 0.83 | 1.00 |
-| casper_slices | 0.16 | 0.19 | 0.80 | 0.90 | 0.99 | 1.00 | 1.00 |
-| risk_aware_ts | 0.07 | 0.28 | 0.45 | 0.67 | 0.80 | 0.92 | 1.00 |
+| full | 0.00 | 0.12 | 0.80 | 0.85 | 0.85 | 0.94 | 0.95 |
+| random | 0.13 | 0.29 | 0.46 | 0.61 | 0.76 | 0.84 | 0.86 |
+| declared | 0.33 | 0.37 | 0.39 | 0.44 | 0.44 | 0.44 | 0.44 |
+| ir_tfidf | 0.38 | 0.52 | 0.69 | 0.76 | 0.80 | 0.87 | 0.90 |
+| observed | 0.38 | 0.49 | 0.57 | 0.70 | 0.75 | 0.84 | 0.86 |
+| observed_diverse | 0.37 | 0.41 | 0.57 | 0.74 | 0.77 | 0.79 | 0.79 |
+| cost_aware | 0.38 | 0.49 | 0.57 | 0.70 | 0.75 | 0.87 | 0.93 |
+| history_ml | 0.42 | 0.52 | 0.64 | 0.71 | 0.84 | 0.93 | 0.94 |
+| casper_slices | 0.16 | 0.19 | 0.84 | 0.92 | 0.93 | 0.93 | 0.93 |
+| risk_aware_ts | 0.08 | 0.31 | 0.48 | 0.62 | 0.72 | 0.76 | 0.78 |
 | adaptive_bayes | 0.54 | 0.67 | 0.75 | 0.75 | 0.75 | 0.75 | 0.75 |
 
-Tokens actually spent on those changes (fraction of the full suite):
+Tokens spent, as a mean over all changes, revealed or not (fraction of the full suite):
 
 | strategy | 2% | 5% | 10% | 20% | 30% | 50% | 100% |
 |---|---|---|---|---|---|---|---|
-| full | 0.020 | 0.050 | 0.100 | 0.200 | 0.300 | 0.500 | 0.936 |
-| random | 0.020 | 0.050 | 0.100 | 0.200 | 0.300 | 0.500 | 0.933 |
-| declared | 0.011 | 0.025 | 0.044 | 0.069 | 0.088 | 0.109 | 0.109 |
-| ir_tfidf | 0.020 | 0.050 | 0.100 | 0.200 | 0.300 | 0.499 | 0.936 |
-| observed | 0.018 | 0.042 | 0.083 | 0.146 | 0.201 | 0.294 | 0.417 |
-| cost_aware | 0.020 | 0.050 | 0.100 | 0.199 | 0.299 | 0.499 | 0.936 |
-| casper_slices | 0.020 | 0.050 | 0.100 | 0.200 | 0.300 | 0.500 | 0.937 |
-| risk_aware_ts | 0.020 | 0.050 | 0.100 | 0.200 | 0.300 | 0.500 | 0.938 |
+| full | 0.020 | 0.049 | 0.068 | 0.083 | 0.094 | 0.100 | 0.101 |
+| random | 0.018 | 0.042 | 0.071 | 0.107 | 0.126 | 0.136 | 0.139 |
+| declared | 0.008 | 0.016 | 0.022 | 0.025 | 0.025 | 0.026 | 0.026 |
+| ir_tfidf | 0.015 | 0.030 | 0.048 | 0.068 | 0.082 | 0.101 | 0.105 |
+| observed | 0.014 | 0.028 | 0.049 | 0.074 | 0.088 | 0.106 | 0.109 |
+| observed_diverse | 0.014 | 0.036 | 0.058 | 0.074 | 0.078 | 0.081 | 0.081 |
+| cost_aware | 0.015 | 0.032 | 0.055 | 0.088 | 0.111 | 0.145 | 0.152 |
+| history_ml | 0.015 | 0.030 | 0.050 | 0.081 | 0.097 | 0.103 | 0.104 |
+| casper_slices | 0.019 | 0.044 | 0.055 | 0.062 | 0.063 | 0.064 | 0.064 |
+| risk_aware_ts | 0.019 | 0.039 | 0.061 | 0.085 | 0.095 | 0.102 | 0.106 |
+| adaptive_bayes | 0.011 | 0.018 | 0.022 | 0.026 | 0.030 | 0.035 | 0.038 |
+
+At a budget of 5%, over the 43 revealed regressions (intervals: bootstrap over the changes; a difference whose interval holds 0 is not established):
+
+| strategy | detected | 95% interval | tokens, all changes | difference to the best | 95% interval |
+|---|---|---|---|---|---|
+| full | 0.12 | 0.02 to 0.23 | 0.049 | -0.56 | -0.70 to -0.41 |
+| random | 0.29 | 0.21 to 0.38 | 0.042 | -0.38 | -0.51 to -0.25 |
+| declared | 0.37 | 0.23 to 0.51 | 0.016 | -0.31 | -0.45 to -0.16 |
+| ir_tfidf | 0.52 | 0.38 to 0.67 | 0.030 | -0.15 | -0.28 to -0.03 |
+| observed | 0.49 | 0.35 to 0.64 | 0.028 | -0.18 | -0.31 to -0.06 |
+| observed_diverse | 0.41 | 0.28 to 0.55 | 0.036 | -0.26 | -0.41 to -0.12 |
+| cost_aware | 0.49 | 0.35 to 0.64 | 0.032 | -0.18 | -0.31 to -0.06 |
+| history_ml | 0.52 | 0.37 to 0.66 | 0.030 | -0.16 | -0.28 to -0.04 |
+| casper_slices | 0.19 | 0.09 to 0.30 | 0.044 | -0.49 | -0.63 to -0.34 |
+| risk_aware_ts | 0.31 | 0.22 to 0.41 | 0.039 | -0.36 | -0.49 to -0.23 |
+| adaptive_bayes | 0.67 | 0.54 to 0.80 | 0.018 | best |  |
+
+At a budget of 20%, over the 43 revealed regressions (intervals: bootstrap over the changes; a difference whose interval holds 0 is not established):
+
+| strategy | detected | 95% interval | tokens, all changes | difference to the best | 95% interval |
+|---|---|---|---|---|---|
+| full | 0.85 | 0.76 to 0.92 | 0.083 | -0.07 | -0.15 to -0.00 |
+| random | 0.61 | 0.53 to 0.69 | 0.107 | -0.31 | -0.40 to -0.22 |
+| declared | 0.44 | 0.30 to 0.58 | 0.025 | -0.48 | -0.62 to -0.34 |
+| ir_tfidf | 0.76 | 0.64 to 0.87 | 0.068 | -0.16 | -0.27 to -0.06 |
+| observed | 0.70 | 0.56 to 0.82 | 0.074 | -0.22 | -0.36 to -0.09 |
+| observed_diverse | 0.74 | 0.63 to 0.84 | 0.074 | -0.18 | -0.28 to -0.09 |
+| cost_aware | 0.70 | 0.56 to 0.82 | 0.088 | -0.22 | -0.36 to -0.09 |
+| history_ml | 0.71 | 0.58 to 0.83 | 0.081 | -0.21 | -0.34 to -0.09 |
+| casper_slices | 0.92 | 0.88 to 0.96 | 0.062 | best |  |
+| risk_aware_ts | 0.62 | 0.53 to 0.71 | 0.085 | -0.30 | -0.39 to -0.21 |
+| adaptive_bayes | 0.75 | 0.63 to 0.87 | 0.026 | -0.17 | -0.27 to -0.07 |
+
+Tokens spent on the revealed regressions only:
+
+| strategy | 2% | 5% | 10% | 20% | 30% | 50% | 100% |
+|---|---|---|---|---|---|---|---|
+| full | 0.020 | 0.049 | 0.068 | 0.083 | 0.094 | 0.100 | 0.101 |
+| random | 0.018 | 0.042 | 0.071 | 0.107 | 0.126 | 0.136 | 0.139 |
+| declared | 0.008 | 0.016 | 0.022 | 0.025 | 0.025 | 0.026 | 0.026 |
+| ir_tfidf | 0.015 | 0.030 | 0.048 | 0.068 | 0.082 | 0.101 | 0.105 |
+| observed | 0.014 | 0.028 | 0.049 | 0.074 | 0.088 | 0.106 | 0.109 |
+| observed_diverse | 0.014 | 0.036 | 0.058 | 0.074 | 0.078 | 0.081 | 0.081 |
+| cost_aware | 0.015 | 0.032 | 0.055 | 0.088 | 0.111 | 0.145 | 0.152 |
+| history_ml | 0.015 | 0.030 | 0.050 | 0.081 | 0.097 | 0.103 | 0.104 |
+| casper_slices | 0.019 | 0.044 | 0.055 | 0.062 | 0.063 | 0.064 | 0.064 |
+| risk_aware_ts | 0.019 | 0.039 | 0.061 | 0.085 | 0.095 | 0.102 | 0.106 |
 | adaptive_bayes | 0.011 | 0.018 | 0.022 | 0.026 | 0.030 | 0.035 | 0.038 |
 
 Time spent on those changes (fraction of the full suite's run time, from each test's mean time on the original app):
 
 | strategy | 2% | 5% | 10% | 20% | 30% | 50% | 100% |
 |---|---|---|---|---|---|---|---|
-| full | 0.020 | 0.049 | 0.099 | 0.197 | 0.279 | 0.473 | 1.000 |
-| random | 0.019 | 0.050 | 0.104 | 0.211 | 0.318 | 0.536 | 1.000 |
-| declared | 0.013 | 0.030 | 0.054 | 0.085 | 0.105 | 0.126 | 0.126 |
-| ir_tfidf | 0.019 | 0.050 | 0.109 | 0.226 | 0.334 | 0.540 | 1.000 |
-| observed | 0.017 | 0.042 | 0.088 | 0.153 | 0.206 | 0.310 | 0.468 |
-| cost_aware | 0.020 | 0.050 | 0.109 | 0.214 | 0.314 | 0.507 | 1.000 |
-| casper_slices | 0.022 | 0.055 | 0.110 | 0.246 | 0.377 | 0.568 | 1.000 |
-| risk_aware_ts | 0.021 | 0.062 | 0.126 | 0.256 | 0.381 | 0.598 | 1.000 |
+| full | 0.020 | 0.048 | 0.069 | 0.084 | 0.092 | 0.098 | 0.099 |
+| random | 0.017 | 0.041 | 0.071 | 0.109 | 0.128 | 0.140 | 0.143 |
+| declared | 0.008 | 0.018 | 0.027 | 0.031 | 0.031 | 0.032 | 0.032 |
+| ir_tfidf | 0.014 | 0.029 | 0.050 | 0.073 | 0.087 | 0.104 | 0.107 |
+| observed | 0.013 | 0.026 | 0.048 | 0.072 | 0.084 | 0.101 | 0.103 |
+| observed_diverse | 0.014 | 0.040 | 0.070 | 0.095 | 0.099 | 0.102 | 0.102 |
+| cost_aware | 0.014 | 0.029 | 0.054 | 0.086 | 0.106 | 0.136 | 0.144 |
+| history_ml | 0.015 | 0.030 | 0.051 | 0.079 | 0.095 | 0.100 | 0.101 |
+| casper_slices | 0.022 | 0.047 | 0.059 | 0.069 | 0.072 | 0.072 | 0.072 |
+| risk_aware_ts | 0.019 | 0.046 | 0.074 | 0.104 | 0.118 | 0.125 | 0.128 |
 | adaptive_bayes | 0.012 | 0.019 | 0.023 | 0.028 | 0.031 | 0.035 | 0.038 |
 
 Critical regressions: the same detection rate, over the changes that break a safety property only:
 
 | strategy | 2% | 5% | 10% | 20% | 30% | 50% | 100% |
 |---|---|---|---|---|---|---|---|
-| full | 0.00 | 0.12 | 0.79 | 0.84 | 0.85 | 0.98 | 1.00 |
-| random | 0.13 | 0.28 | 0.45 | 0.64 | 0.80 | 0.93 | 1.00 |
-| declared | 0.28 | 0.38 | 0.37 | 0.46 | 0.47 | 0.47 | 0.48 |
-| ir_tfidf | 0.37 | 0.53 | 0.67 | 0.75 | 0.82 | 0.93 | 1.00 |
-| observed | 0.38 | 0.49 | 0.57 | 0.69 | 0.74 | 0.83 | 0.90 |
-| cost_aware | 0.31 | 0.49 | 0.53 | 0.67 | 0.73 | 0.83 | 1.00 |
-| casper_slices | 0.16 | 0.19 | 0.80 | 0.90 | 0.99 | 1.00 | 1.00 |
-| risk_aware_ts | 0.07 | 0.28 | 0.45 | 0.67 | 0.80 | 0.92 | 1.00 |
+| full | 0.00 | 0.12 | 0.80 | 0.85 | 0.85 | 0.94 | 0.95 |
+| random | 0.13 | 0.29 | 0.46 | 0.61 | 0.76 | 0.84 | 0.86 |
+| declared | 0.33 | 0.37 | 0.39 | 0.44 | 0.44 | 0.44 | 0.44 |
+| ir_tfidf | 0.38 | 0.52 | 0.69 | 0.76 | 0.80 | 0.87 | 0.90 |
+| observed | 0.38 | 0.49 | 0.57 | 0.70 | 0.75 | 0.84 | 0.86 |
+| observed_diverse | 0.37 | 0.41 | 0.57 | 0.74 | 0.77 | 0.79 | 0.79 |
+| cost_aware | 0.38 | 0.49 | 0.57 | 0.70 | 0.75 | 0.87 | 0.93 |
+| history_ml | 0.42 | 0.52 | 0.64 | 0.71 | 0.84 | 0.93 | 0.94 |
+| casper_slices | 0.16 | 0.19 | 0.84 | 0.92 | 0.93 | 0.93 | 0.93 |
+| risk_aware_ts | 0.08 | 0.31 | 0.48 | 0.62 | 0.72 | 0.76 | 0.78 |
 | adaptive_bayes | 0.54 | 0.67 | 0.75 | 0.75 | 0.75 | 0.75 | 0.75 |
 
 ![detection vs cost](figures/detection_vs_cost.png)
@@ -116,44 +174,76 @@ Cost until the first true detection (fraction of the full suite, detected cases 
 
 | strategy | cost_to_first_detection |
 |---|---|
-| full | 0.083 |
-| random | 0.112 |
-| declared | 0.039 |
-| ir_tfidf | 0.067 |
-| observed | 0.064 |
-| cost_aware | 0.084 |
-| casper_slices | 0.068 |
-| risk_aware_ts | 0.106 |
+| full | 0.077 |
+| random | 0.093 |
+| declared | 0.029 |
+| ir_tfidf | 0.051 |
+| observed | 0.058 |
+| observed_diverse | 0.063 |
+| cost_aware | 0.068 |
+| history_ml | 0.060 |
+| casper_slices | 0.056 |
+| risk_aware_ts | 0.074 |
 | adaptive_bayes | 0.016 |
 
-## 3. Changes no test reveals — wasted budget and stopping
+## 3. Changes no test reveals, and verdicts
+
+Tokens spent on the changes no test reveals:
 
 | strategy |
 |---|
 
 ![tokens spent on changes no test reveals](figures/benign_waste.png)
 
-Stop reasons of `adaptive_bayes` (rows: is the change a regression?):
+Verdicts at a budget of 5% (shares of the runs):
 
-| is_regression | budget | clean | no_components | regression | uninformative |
-|---|---|---|---|---|---|
-| True | 92 | 278 | 70 | 1049 | 16 |
+| strategy | regressions: found | called clean | no verdict | other changes: called clean | called regression | no verdict | clean verdicts on a regression |
+|---|---|---|---|---|---|---|---|
+| full | 0.12 | 0.00 | 0.88 |  |  |  |  |
+| random | 0.31 | 0.00 | 0.69 |  |  |  |  |
+| declared | 0.38 | 0.45 | 0.17 |  |  |  | 1.00 |
+| ir_tfidf | 0.54 | 0.00 | 0.46 |  |  |  |  |
+| observed | 0.49 | 0.05 | 0.46 |  |  |  | 1.00 |
+| observed_diverse | 0.43 | 0.06 | 0.52 |  |  |  | 1.00 |
+| cost_aware | 0.49 | 0.00 | 0.51 |  |  |  |  |
+| history_ml | 0.52 | 0.00 | 0.48 |  |  |  |  |
+| casper_slices | 0.20 | 0.00 | 0.80 |  |  |  |  |
+| risk_aware_ts | 0.40 | 0.00 | 0.60 |  |  |  |  |
+| adaptive_bayes | 0.68 | 0.20 | 0.11 |  |  |  | 1.00 |
+
+Verdicts at a budget of 20% (shares of the runs):
+
+| strategy | regressions: found | called clean | no verdict | other changes: called clean | called regression | no verdict | clean verdicts on a regression |
+|---|---|---|---|---|---|---|---|
+| full | 0.88 | 0.00 | 0.12 |  |  |  |  |
+| random | 0.73 | 0.00 | 0.27 |  |  |  |  |
+| declared | 0.50 | 0.49 | 0.00 |  |  |  | 1.00 |
+| ir_tfidf | 0.83 | 0.00 | 0.17 |  |  |  |  |
+| observed | 0.72 | 0.09 | 0.19 |  |  |  | 1.00 |
+| observed_diverse | 0.84 | 0.11 | 0.05 |  |  |  | 1.00 |
+| cost_aware | 0.71 | 0.00 | 0.29 |  |  |  |  |
+| history_ml | 0.75 | 0.00 | 0.25 |  |  |  |  |
+| casper_slices | 0.98 | 0.00 | 0.02 |  |  |  |  |
+| risk_aware_ts | 0.82 | 0.00 | 0.18 |  |  |  |  |
+| adaptive_bayes | 0.73 | 0.23 | 0.04 |  |  |  | 1.00 |
 
 ## 4. Prioritization and selection quality
 
-APFD / cost-cognizant APFD of the complete order; selection recall = revealing tests inside the selected subset; selected cost = what that subset costs:
+APFD / cost-cognizant APFD of the complete order, each change one fault found by the first of its revealing tests (an order drawn at random: the mean over the seeds); selection recall = revealing tests inside the selected subset; selected cost = what that subset costs:
 
 | strategy | apfd | apfdc | selection_recall | selected_cost_fraction |
 |---|---|---|---|---|
-| full | 0.619 | 0.494 | 1.000 | 1.000 |
-| random | 0.523 | 0.491 | 1.000 | 1.000 |
-| declared | 0.675 | 0.575 | 0.246 | 0.121 |
-| ir_tfidf | 0.621 | 0.615 | 1.000 | 1.000 |
-| observed | 0.634 | 0.606 | 0.705 | 0.461 |
-| cost_aware | 0.479 | 0.542 | 1.000 | 1.000 |
-| casper_slices | 0.693 | 0.634 | 1.000 | 1.000 |
-| risk_aware_ts | 0.527 | 0.585 | 1.000 | 1.000 |
-| adaptive_bayes | 0.632 | 0.616 | 1.000 | 1.000 |
+| full | 0.918 | 0.921 | 1.000 | 0.900 |
+| random | 0.852 | 0.857 | 1.000 | 0.900 |
+| declared | 0.943 | 0.932 | 0.246 | 0.106 |
+| ir_tfidf | 0.884 | 0.882 | 1.000 | 0.900 |
+| observed | 0.843 | 0.884 | 0.705 | 0.404 |
+| observed_diverse | 0.950 | 0.911 | 0.705 | 0.404 |
+| cost_aware | 0.777 | 0.840 | 1.000 | 0.900 |
+| history_ml | 0.903 | 0.894 | 1.000 | 0.900 |
+| casper_slices | 0.912 | 0.943 | 1.000 | 0.900 |
+| risk_aware_ts | 0.892 | 0.857 | 1.000 | 0.900 |
+| adaptive_bayes | 0.913 | 0.921 | 1.000 | 0.900 |
 
 ![apfdc](figures/apfdc.png)
 
@@ -183,14 +273,16 @@ Coverage of the affected properties (those of a change's revealing tests) by the
 
 | strategy | 2% | 5% | 10% | 20% | 30% | 50% | 100% |
 |---|---|---|---|---|---|---|---|
-| full | 0.27 | 0.29 | 0.42 | 0.43 | 0.62 | 1.00 | 1.00 |
-| random | 0.32 | 0.50 | 0.71 | 0.85 | 0.92 | 0.97 | 1.00 |
-| declared | 0.29 | 0.38 | 0.41 | 0.41 | 0.42 | 0.42 | 0.42 |
-| ir_tfidf | 0.32 | 0.46 | 0.66 | 0.79 | 0.82 | 0.95 | 1.00 |
-| observed | 0.24 | 0.38 | 0.55 | 0.80 | 0.84 | 0.85 | 0.88 |
-| cost_aware | 0.30 | 0.41 | 0.59 | 0.84 | 0.90 | 0.94 | 1.00 |
-| casper_slices | 0.26 | 0.61 | 0.68 | 0.85 | 0.91 | 0.99 | 1.00 |
-| risk_aware_ts | 0.42 | 0.69 | 0.78 | 0.84 | 0.86 | 0.88 | 1.00 |
+| full | 0.27 | 0.29 | 0.29 | 0.29 | 0.31 | 0.34 | 0.34 |
+| random | 0.29 | 0.43 | 0.57 | 0.65 | 0.66 | 0.66 | 0.67 |
+| declared | 0.20 | 0.28 | 0.29 | 0.30 | 0.30 | 0.30 | 0.30 |
+| ir_tfidf | 0.27 | 0.33 | 0.41 | 0.45 | 0.45 | 0.48 | 0.49 |
+| observed | 0.18 | 0.23 | 0.35 | 0.49 | 0.50 | 0.50 | 0.51 |
+| observed_diverse | 0.27 | 0.49 | 0.64 | 0.63 | 0.64 | 0.64 | 0.64 |
+| cost_aware | 0.18 | 0.23 | 0.37 | 0.53 | 0.55 | 0.55 | 0.55 |
+| history_ml | 0.30 | 0.37 | 0.53 | 0.54 | 0.55 | 0.55 | 0.55 |
+| casper_slices | 0.25 | 0.54 | 0.56 | 0.58 | 0.58 | 0.58 | 0.58 |
+| risk_aware_ts | 0.40 | 0.63 | 0.67 | 0.69 | 0.69 | 0.69 | 0.69 |
 | adaptive_bayes | 0.24 | 0.34 | 0.37 | 0.37 | 0.37 | 0.37 | 0.37 |
 
 ## 6. Coverage
@@ -306,72 +398,82 @@ Changed components exercised:
 
 | strategy | 2% | 5% | 10% | 20% | 30% | 50% | 100% |
 |---|---|---|---|---|---|---|---|
-| full | 0.37 | 0.49 | 0.59 | 0.68 | 0.85 | 0.97 | 0.97 |
-| random | 0.62 | 0.75 | 0.87 | 0.94 | 0.96 | 0.97 | 0.97 |
-| declared | 0.65 | 0.67 | 0.67 | 0.67 | 0.67 | 0.67 | 0.67 |
-| ir_tfidf | 0.92 | 0.97 | 0.94 | 0.97 | 0.97 | 0.97 | 0.97 |
+| full | 0.37 | 0.49 | 0.51 | 0.54 | 0.57 | 0.57 | 0.57 |
+| random | 0.58 | 0.72 | 0.81 | 0.85 | 0.87 | 0.87 | 0.87 |
+| declared | 0.67 | 0.67 | 0.67 | 0.67 | 0.67 | 0.67 | 0.67 |
+| ir_tfidf | 0.92 | 0.95 | 0.94 | 0.95 | 0.95 | 0.95 | 0.95 |
 | observed | 0.97 | 0.97 | 0.97 | 0.97 | 0.97 | 0.97 | 0.97 |
+| observed_diverse | 0.97 | 0.97 | 0.97 | 0.97 | 0.97 | 0.97 | 0.97 |
 | cost_aware | 0.97 | 0.97 | 0.97 | 0.97 | 0.97 | 0.97 | 0.97 |
-| casper_slices | 0.61 | 0.78 | 0.87 | 0.97 | 0.97 | 0.97 | 0.97 |
-| risk_aware_ts | 0.60 | 0.75 | 0.85 | 0.92 | 0.96 | 0.97 | 0.97 |
+| history_ml | 0.97 | 0.97 | 0.97 | 0.97 | 0.97 | 0.97 | 0.97 |
+| casper_slices | 0.61 | 0.78 | 0.87 | 0.87 | 0.87 | 0.87 | 0.87 |
+| risk_aware_ts | 0.61 | 0.71 | 0.81 | 0.84 | 0.85 | 0.85 | 0.85 |
 | adaptive_bayes | 0.97 | 0.97 | 0.97 | 0.97 | 0.97 | 0.97 | 0.97 |
 
 Affected properties checked:
 
 | strategy | 2% | 5% | 10% | 20% | 30% | 50% | 100% |
 |---|---|---|---|---|---|---|---|
-| full | 0.29 | 0.40 | 0.51 | 0.55 | 0.68 | 1.00 | 1.00 |
-| random | 0.33 | 0.48 | 0.67 | 0.82 | 0.89 | 0.96 | 1.00 |
-| declared | 0.25 | 0.34 | 0.37 | 0.39 | 0.42 | 0.43 | 0.43 |
-| ir_tfidf | 0.36 | 0.52 | 0.69 | 0.80 | 0.85 | 0.94 | 1.00 |
-| observed | 0.34 | 0.51 | 0.67 | 0.87 | 0.92 | 0.95 | 1.00 |
-| cost_aware | 0.37 | 0.55 | 0.68 | 0.86 | 0.92 | 0.97 | 1.00 |
-| casper_slices | 0.29 | 0.56 | 0.68 | 0.81 | 0.85 | 0.96 | 1.00 |
-| risk_aware_ts | 0.40 | 0.59 | 0.70 | 0.79 | 0.83 | 0.90 | 1.00 |
+| full | 0.29 | 0.40 | 0.41 | 0.41 | 0.42 | 0.43 | 0.43 |
+| random | 0.31 | 0.42 | 0.53 | 0.60 | 0.62 | 0.62 | 0.62 |
+| declared | 0.20 | 0.25 | 0.25 | 0.26 | 0.26 | 0.26 | 0.26 |
+| ir_tfidf | 0.30 | 0.38 | 0.43 | 0.45 | 0.46 | 0.46 | 0.47 |
+| observed | 0.27 | 0.35 | 0.43 | 0.54 | 0.55 | 0.55 | 0.56 |
+| observed_diverse | 0.30 | 0.50 | 0.57 | 0.57 | 0.58 | 0.58 | 0.58 |
+| cost_aware | 0.27 | 0.35 | 0.45 | 0.54 | 0.55 | 0.55 | 0.56 |
+| history_ml | 0.33 | 0.41 | 0.51 | 0.54 | 0.54 | 0.54 | 0.54 |
+| casper_slices | 0.28 | 0.50 | 0.54 | 0.56 | 0.56 | 0.56 | 0.56 |
+| risk_aware_ts | 0.38 | 0.53 | 0.58 | 0.61 | 0.61 | 0.61 | 0.61 |
 | adaptive_bayes | 0.30 | 0.37 | 0.40 | 0.40 | 0.40 | 0.40 | 0.40 |
 
 Runs that found no regression and tested every affected mandatory property (the method's step 5):
 
 | strategy | 2% | 5% | 10% | 20% | 30% | 50% | 100% |
 |---|---|---|---|---|---|---|---|
-| full | 0.05 | 0.05 | 0.05 | 0.05 | 0.05 | 1.00 | 1.00 |
-| random | 0.06 | 0.06 | 0.15 | 0.42 | 0.68 | 0.94 | 1.00 |
-| declared | 0.12 | 0.20 | 0.23 | 0.26 | 0.33 | 0.33 | 0.33 |
-| ir_tfidf | 0.05 | 0.13 | 0.33 | 0.44 | 0.51 | 0.72 | 1.00 |
-| observed | 0.09 | 0.21 | 0.48 | 0.78 | 0.82 | 0.94 | 1.00 |
-| cost_aware | 0.16 | 0.21 | 0.54 | 0.77 | 0.82 | 0.93 | 1.00 |
-| casper_slices | 0.05 | 0.05 | 0.19 | 1.00 | 1.00 | 1.00 | 1.00 |
-| risk_aware_ts | 0.07 | 0.16 | 0.38 | 0.80 | 0.96 | 1.00 | 1.00 |
+| full | 0.05 | 0.05 | 0.08 | 0.12 | 0.13 | 1.00 | nan |
+| random | 0.05 | 0.06 | 0.16 | 0.46 | 0.81 | 1.00 | nan |
+| declared | 0.10 | 0.13 | 0.15 | 0.17 | 0.18 | 0.17 | 0.17 |
+| ir_tfidf | 0.08 | 0.18 | 0.35 | 0.54 | 0.59 | 0.38 | nan |
+| observed | 0.07 | 0.14 | 0.41 | 0.84 | 0.98 | 1.00 | 1.00 |
+| observed_diverse | 0.08 | 0.23 | 0.82 | 1.00 | 1.00 | 1.00 | 1.00 |
+| cost_aware | 0.07 | 0.14 | 0.47 | 0.84 | 0.98 | 1.00 | nan |
+| history_ml | 0.08 | 0.14 | 0.65 | 0.66 | 0.83 | 1.00 | nan |
+| casper_slices | 0.05 | 0.05 | 0.03 | 0.25 | 1.00 | nan | nan |
+| risk_aware_ts | 0.06 | 0.19 | 0.31 | 0.76 | 0.94 | 1.00 | nan |
 | adaptive_bayes | 0.21 | 0.63 | 0.95 | 1.00 | 1.00 | 1.00 | 1.00 |
 
 Affected workflows run (the workflows of the tests that exercised a changed component):
 
 | strategy | 2% | 5% | 10% | 20% | 30% | 50% | 100% |
 |---|---|---|---|---|---|---|---|
-| full | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.25 | 1.00 |
-| random | 0.03 | 0.08 | 0.20 | 0.42 | 0.61 | 0.85 | 1.00 |
-| declared | 0.15 | 0.26 | 0.35 | 0.39 | 0.43 | 0.43 | 0.43 |
-| ir_tfidf | 0.03 | 0.21 | 0.43 | 0.64 | 0.74 | 0.84 | 1.00 |
-| observed | 0.07 | 0.24 | 0.42 | 0.55 | 0.62 | 0.77 | 1.00 |
-| cost_aware | 0.15 | 0.27 | 0.49 | 0.61 | 0.70 | 0.81 | 1.00 |
-| casper_slices | 0.00 | 0.11 | 0.24 | 0.88 | 0.98 | 1.00 | 1.00 |
-| risk_aware_ts | 0.09 | 0.26 | 0.48 | 0.80 | 0.95 | 1.00 | 1.00 |
+| full | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.01 |
+| random | 0.01 | 0.05 | 0.12 | 0.20 | 0.25 | 0.26 | 0.27 |
+| declared | 0.07 | 0.22 | 0.28 | 0.29 | 0.29 | 0.29 | 0.29 |
+| ir_tfidf | 0.03 | 0.10 | 0.17 | 0.21 | 0.23 | 0.24 | 0.24 |
+| observed | 0.02 | 0.07 | 0.13 | 0.17 | 0.18 | 0.18 | 0.19 |
+| observed_diverse | 0.10 | 0.38 | 0.52 | 0.60 | 0.60 | 0.60 | 0.60 |
+| cost_aware | 0.02 | 0.07 | 0.14 | 0.17 | 0.18 | 0.18 | 0.19 |
+| history_ml | 0.04 | 0.09 | 0.18 | 0.20 | 0.21 | 0.22 | 0.22 |
+| casper_slices | 0.00 | 0.09 | 0.14 | 0.20 | 0.20 | 0.20 | 0.20 |
+| risk_aware_ts | 0.05 | 0.20 | 0.34 | 0.45 | 0.47 | 0.47 | 0.47 |
 | adaptive_bayes | 0.03 | 0.09 | 0.10 | 0.10 | 0.10 | 0.10 | 0.10 |
 
 Affected features reached (the features with a tool or a part the change touches), over the changes that affect one:
 
 | strategy | 2% | 5% | 10% | 20% | 30% | 50% | 100% |
 |---|---|---|---|---|---|---|---|
-| full | 0.13 | 0.29 | 0.41 | 0.52 | 0.79 | 1.00 | 1.00 |
-| random | 0.37 | 0.64 | 0.87 | 0.96 | 0.98 | 0.99 | 1.00 |
-| declared | 0.61 | 0.63 | 0.66 | 0.67 | 0.70 | 0.70 | 0.70 |
-| ir_tfidf | 0.88 | 0.94 | 0.95 | 0.98 | 1.00 | 1.00 | 1.00 |
-| observed | 0.73 | 0.76 | 0.87 | 1.00 | 1.00 | 1.00 | 1.00 |
-| cost_aware | 0.77 | 0.77 | 0.90 | 1.00 | 1.00 | 1.00 | 1.00 |
-| casper_slices | 0.27 | 0.60 | 0.87 | 0.97 | 0.99 | 1.00 | 1.00 |
-| risk_aware_ts | 0.36 | 0.70 | 0.85 | 0.93 | 0.99 | 1.00 | 1.00 |
+| full | 0.13 | 0.29 | 0.31 | 0.35 | 0.38 | 0.39 | 0.39 |
+| random | 0.35 | 0.61 | 0.77 | 0.82 | 0.85 | 0.85 | 0.85 |
+| declared | 0.59 | 0.60 | 0.61 | 0.62 | 0.62 | 0.62 | 0.62 |
+| ir_tfidf | 0.85 | 0.91 | 0.93 | 0.94 | 0.94 | 0.94 | 0.94 |
+| observed | 0.71 | 0.73 | 0.82 | 0.91 | 0.91 | 0.91 | 0.91 |
+| observed_diverse | 0.74 | 0.76 | 0.94 | 0.94 | 0.94 | 0.94 | 0.94 |
+| cost_aware | 0.71 | 0.73 | 0.84 | 0.91 | 0.91 | 0.91 | 0.91 |
+| history_ml | 0.80 | 0.82 | 0.91 | 0.91 | 0.91 | 0.91 | 0.91 |
+| casper_slices | 0.27 | 0.58 | 0.80 | 0.80 | 0.80 | 0.80 | 0.80 |
+| risk_aware_ts | 0.39 | 0.63 | 0.76 | 0.80 | 0.81 | 0.81 | 0.81 |
 | adaptive_bayes | 0.82 | 0.84 | 0.85 | 0.85 | 0.85 | 0.85 | 0.85 |
 
 ## How to read this
 
-`detected` counts *changes* (one failing revealing test is enough). Compare strategies at equal tokens *spent*, not equal nominal budget: `declared`/`observed` select and run out of tests, `adaptive_bayes` stops when it is confident, the others always spend the whole budget. A good strategy is high in section 2 and low in section 3.
+`detected` counts *changes* (one failing revealing test is enough). Compare strategies at equal tokens *spent*, not equal nominal budget: every run ends at its first failure, the selecting strategies also run out of tests, and `adaptive_bayes` also stops when it is confident. A good strategy is high in the first table of section 2 and low in the second. The sample is the changes: the seeds only draw which recorded run answers a test and the choices of the strategies that draw at random, so an interval is over the changes. A clean verdict is worth what the last column of the verdict tables says.

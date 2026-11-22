@@ -21,12 +21,15 @@ Agent Orchestrator deck and Adobe's public documentation:
   Governance or Brand Governance Agent (brand, security and regulatory policy checks, permissions), the Site
   Optimization Agent (detects and deploys website fixes: traffic, engagement, broken links), the Data Insights
   Agent (analytics questions), the LLM Optimization Agent, the Product Support Agent.
-- **What they do not have yet and want in the prototype** (their answers to our follow-up questions): workflows
-  (they only have features), a catalog of evaluators and properties with thresholds ("prompt, properties and
-  threshold do not exist, but they would like it, and a category of properties too"), per-test metadata (agents,
-  skills, tools, workflows, risk, history, cost), budgets with early stopping, trace assertions (agent order, tool
-  order, forbidden actions, turn limits, final state), and OpenTelemetry traces including "cognition events".
-  Failures caused by the environment (a service down) must not count against the agent.
+- **What they do not have yet and want in the prototype** (their answers to our follow-up questions):
+  - workflows (they only have features);
+  - a catalog of evaluators and properties with thresholds ("prompt, properties and threshold do not exist, but
+    they would like it, and a category of properties too");
+  - per-test metadata (agents, skills, tools, workflows, risk, history, cost);
+  - budgets with early stopping;
+  - trace assertions (agent order, tool order, forbidden actions, turn limits, final state);
+  - OpenTelemetry traces including "cognition events";
+  - failures caused by the environment (a service down) must not count against the agent.
 
 ## 2. Where the testbed stands
 
@@ -41,8 +44,8 @@ Agent Orchestrator deck and Adobe's public documentation:
 | coverage over the requirements' dimensions, declared, observed and required | yes: suite coverage per dimension and change coverage per strategy in the report and in `traceeval check`; the method tests every mandatory property a change may affect (§3.5) | none |
 | per-test metadata (agents, skills, tools, workflow, risk, cost, history) | yes (declared + observed + history; a workflow test names its workflow) | none |
 | trace assertions | yes: final state, required and forbidden tools, attempts, audit, step limit, termination, agent order and tool order (`agents_in_order`, `tools_in_order`) | none |
-| budgets and early stopping | yes (`adaptive_bayes`, `traceeval check`) | none |
-| a day's changes checked at once, with the culprit named | yes: batches of changes, three by hand and twenty drawn at random ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.6); the live check prints the components the method blames, a member that is a regression on its own on every regression batch | none |
+| budgets and early stopping | yes: a change is replayed first, which settles the tests it cannot reach (`traceeval replay-first`; [RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.2); the method then stops within a budget (`adaptive_bayes`, `traceeval check`) | none |
+| a day's changes checked at once, with the culprit named | yes: batches of changes, three by hand and twenty drawn at random ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.5); the check replays each member alone first, with no model: which tests each reaches and which members need no model at all; for a failing test it prints the suspects, the members whose own replay reaches it, which held every culprit, and the components the method blames | none |
 | OpenTelemetry | yes: `traceeval run --otel` exports a run as OTLP JSON spans, with the plan, the routing decisions and the approvals as span events (§3.6) | pushing to a collector, if wanted |
 | environment failures kept apart | yes: such a run is `INFRA_INVALID` and left out of pass rates, the ground truth and the replays ([USER_GUIDE.md](USER_GUIDE.md) §8) | none |
 | agents like AEM's | yes: authoring, publishing, assets (with asset search), SEO, translation, governance, maintenance, and brand governance, data insights, site optimization | none |
@@ -95,12 +98,13 @@ sequenceDiagram
 - `route_to_agent(agent, task, context)` gives the specialist its own instruction instead of the user's whole
   request, and in `context` the values it needs (the ids earlier steps reported). The specialist runs
   on a copy of the request context with those values; its answer comes back to the orchestrator for the next step.
-- `request_approval(summary)` stands for the human in the loop. The answer is in the starting data (the fixture,
-  `approvals`: who approves, and whether), so a run is repeatable; a test refuses with
-  `fixture_patch: {approvals.decision: refuse}`. An approval holds for the rest of the request: the runtime adds
-  the approver and their approval token to the orchestrator's context, so the steps after it carry them. Guarded
-  tools such as `unpublish_page` need the token, and the publishing skill has the approver approve a page's review
-  (`approve_review`) instead of only requesting one.
+- `request_approval(summary)` stands for the human in the loop.
+  - The answer is in the starting data (the fixture, `approvals`: who approves, and whether), so a run is
+    repeatable; a test refuses with `fixture_patch: {approvals.decision: refuse}`.
+  - An approval holds for the rest of the request: the runtime adds the approver and their approval token to the
+    orchestrator's context, so the steps after it carry them.
+  - Guarded tools such as `unpublish_page` need the token, and the publishing skill has the approver approve a
+    page's review (`approve_review`) instead of only requesting one.
 - The routing skill states the rules a plan must keep: a campaign page passes the brand check before it is
   scheduled or published; a person approves before anything is published, scheduled or taken down, and a refusal
   stops those steps; a failed step stops the steps that depend on it, while the same action on other pages goes on;
@@ -226,7 +230,7 @@ On Gemma's recording:
 
 - every feature has a test; the thinnest are the site health check (five tests), then scheduling, page analytics
   and rollback (six each);
-- the tests reach 15 of the 31 places where a tool refuses: no test asks for the data of a person the platform does
+- the tests reach 15 of the 32 places where a tool refuses: no test asks for the data of a person the platform does
   not know, has a service refuse a user for a missing role, or sends the dispatcher an unknown tool or malformed
   arguments.
 
@@ -235,7 +239,7 @@ publishing without a required review, scheduling switched off, and the link chec
 the five settings at a non-default value; no case runs with idempotency keys or the required meta description
 switched off.
 
-The report, and `traceeval coverage --history runs/gemma7` in the terminal, also give for each agent, skill, tool
+The report, and `traceeval coverage --history runs/gemma8` in the terminal, also give for each agent, skill, tool
 and feature the number of tests that declare it and the number that invoke it. On Gemma's recording the two counts
 disagree in telling ways:
 
@@ -261,19 +265,21 @@ before stopping"), so `traceeval check` prints it after its verdict:
 - the share of the refusals in the changed code they reached, for a change to a function that can refuse a tool
   call. `traceeval check` names the ones no executed test reached.
 
-`traceeval check` also prints what its tests invoked, out of what the application has ("invoked: 2 of 11 agents, 2
-of 13 skills, 4 of 32 tools, 4 of 19 features").
+`traceeval check` replays the change before it runs any test with the model ([RESEARCH_PLAN.md](RESEARCH_PLAN.md)
+§3.3), so its coverage counts every test whose outcome on the changed app is known, replayed or run. It also prints
+what those tests invoked, out of what the application has ("invoked: 8 of 11 agents, 10 of 13 skills, 22 of 32
+tools, 16 of 19 features").
 
 On Gemma's recording, at a budget of 20% of the suite's tokens, the tests the adaptive method runs reach 89% of the
-affected features: it stops once it is confident. The trace-based strategy (`observed`) reaches all of them, for
-five times the tokens.
+affected features and those of the trace-based strategy (`observed`) 91%. No strategy reaches all of them: a run
+ends at its first failure, and the adaptive method also stops once it is confident.
 
 The replay also measures it against the ground truth: the properties of the revealing tests (`property_coverage`,
 report section 5).
 
 **3. Coverage in the method.** The mandatory flag is also a stopping rule (the `mandatory` row of §3.4): the method
 tests every affected mandatory property before it calls a change clean, for under one extra test per change
-([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.3); `adaptive_bayes_nomandatory` is the method without it.
+([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.7); `adaptive_bayes_nomandatory` is the method without it.
 
 ### 3.6 OpenTelemetry export
 
@@ -359,7 +365,7 @@ What the recordings show:
 The branch is merged once that decision is made. Gemma's known mistakes change with it, and the replay answers are
 recorded again.
 
-gpt-oss-120b varies more from run to run than the other two models ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4),
+gpt-oss-120b varies more from run to run than the other two models ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.8),
 so its column is the least firm.
 
 ### 4.2 Order
@@ -377,7 +383,7 @@ Three limits go with the results:
   they cannot reveal a change; WF2-03 among them, which replays in the demo ([DEMO.md](DEMO.md) §3);
 - a one-off difference between runs can make a benign change look revealed or a regression look invisible, which
   the report's sanity line shows as VIOLATED; several repetitions and the majority vote absorb most of it
-  ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.4);
+  ([RESEARCH_PLAN.md](RESEARCH_PLAN.md) §5.8);
 - the ground truth belongs to the model: Qwen gets some of Gemma's cases right and makes mistakes of its own.
 
 Sources: [Overview of agents in AEM](https://experienceleague.adobe.com/en/docs/experience-manager-cloud-service/content/ai-in-aem/agents/overview),

@@ -17,6 +17,12 @@ sources (in the catalog of properties) the change touches, and those of the test
 component on the original app. The workflows it may affect (``affected_workflows``) are those of the same tests.
 The features it affects (``affected_features``) are those with a tool or a part it touches (``features.yaml``).
 
+The **coverage floor** of a change (``coverage_floor``) is the cheapest set of tests that covers what the change
+touches: every changed component some test exercised on the original app, and every affected mandatory property
+some test checks. The tests whose outcome is already known (with replay-first, those that replay to the end) cover
+for free, so the floor is chosen among the others, by a greedy weighted set cover. A strategy that stops early runs
+it before a clean verdict, so that "clean" never leaves a changed component or a release blocker untested.
+
 A tool error path (``ErrorPath``) is one place where the application refuses a tool call, found by reading the code
 (``error_paths``); a test reaches it when its run executes that statement, which the baseline's line coverage
 records.
@@ -89,7 +95,7 @@ def tools_called(history, tests) -> set[str]:
     """The tools (``tool:<name>``) the tests' baseline runs called. A delegation is recorded as a route, not as a
     tool call, so a run with a route counts as calling ``route_to_agent``."""
     deps = set().union(*(history.deps(t) for t in tests)) if tests else set()
-    out = {d for d in deps if d.startswith("tool:")}
+    out = {d for d in deps if d.startswith("tool:") and "#" not in d}  # tool:x#schema: offered, not called
     if any(r.get("routes") for t in tests for r in history.baseline[t].runs):
         out.add("tool:route_to_agent")
     return out
@@ -126,6 +132,43 @@ def change_coverage(
         # the share of the refusals in the changed code some executed test reached
         "error_path_coverage": (sum(p.reached(deps) for p in paths) / len(paths)) if paths else None,
     }
+
+
+def floor_items(change, history, catalog, props, tests) -> dict[str, set[str]]:
+    """What each of ``tests`` covers of what the change touches: the changed components it exercised on the original
+    app, and the affected mandatory properties it checks (as ``property:<id>``). A test that fails on the original
+    app covers nothing: it checks nothing there."""
+    comps = changed_components(change)
+    mandatory = {p for p in affected_properties(change, history, catalog, props) if p in props and props[p].mandatory}
+    out = {}
+    for t in tests:
+        if history.baseline_pass_rate(t) < 0.5:
+            out[t] = set()
+            continue
+        deps = history.deps(t)
+        checks = set(catalog[t].properties) if t in catalog else set()
+        out[t] = {c.id for c in comps if matches(c, deps)} | {f"property:{p}" for p in mandatory & checks}
+    return out
+
+
+def coverage_floor(change, history, catalog, props, candidates, known=(), cost=None) -> list[str]:
+    """The coverage floor of a change: the cheapest set of ``candidates`` that, with the ``known`` tests (those whose
+    outcome is already known, or that have already run), covers every item some of them covers (``floor_items``).
+    A greedy weighted set cover: the next test is the one that adds the most uncovered items per token (``cost``, a
+    function of the test; one per test if None), the cheaper first on a tie. Returned in the order chosen."""
+    weight = cost or (lambda t: 1.0)
+    covers = floor_items(change, history, catalog, props, list(dict.fromkeys([*candidates, *known])))
+    # what is left to cover: what the candidates can cover and the known tests do not already
+    left = set().union(*(covers[t] for t in candidates)) - set().union(*(covers[t] for t in known))
+    # cheapest first, so that on a tie the cheaper test is chosen; the id breaks the remaining ties
+    pool = sorted((t for t in candidates if covers[t] & left), key=lambda t: (weight(t), t))
+    chosen = []
+    while left:
+        best = max(pool, key=lambda t: len(covers[t] & left) / max(weight(t), 1e-9))
+        chosen.append(best)
+        left -= covers[best]
+        pool = [t for t in pool if t != best and covers[t] & left]
+    return chosen
 
 
 def _crosses(run: dict, agents: list[str]) -> bool:
